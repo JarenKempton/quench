@@ -11,9 +11,12 @@
    usage-event ingestion. Content-addressed skill versions server-side; the local app
    always materializes into local git, so users own their data if the service dies.
 3. **Distribution**: machines pull desired state, push telemetry. Per-project manifest
-   (`~/.hone/projects/<key>.json` — machine-local, never in the project repo; see
-   decisions.md) materialized into `.claude/skills`/agents dirs (Ephemeral pattern:
-   derived, excluded via `.git/info/exclude`, ownership inferred from symlink targets).
+   splits by owner — committed `./.hone/manifest.json` (what's *available*: sources +
+   menu; a PR to change) and personal `~/.hone/projects/<key>.json` (what *you* activate,
+   at what tree SHA). Source skills materialize into `.claude/skills`/agents dirs
+   (Ephemeral pattern: copied at their pinned tree, excluded via `.git/info/exclude`,
+   ownership recorded in the manifest). Skills committed to the project sit in the same
+   dirs, tracked by the project's own git. See decisions.md.
 
 ## Sources model (version control)
 
@@ -46,7 +49,15 @@ bypassable (Trail of Bits) — hence pinning+review, not scanning promises.
 
 ## Harness adapters
 
-Claude Code (~/.claude/skills, CLAUDE.md, hooks), Codex (AGENTS.md only — no skill
-loader; render an index), Pi (git packages, loads skills/ wholesale), Hermes
+Claude Code (~/.claude/skills, CLAUDE.md, hooks), Codex (AGENTS.md **plus skills** —
+`[[skills.config]]` in `~/.codex/config.toml`; the old "no skill loader, render an index"
+note is refuted), Pi (git packages, loads skills/ **by index** — frontmatter → XML
+`<available_skills>`, bodies lazily; the old "wholesale" note is refuted), Hermes
 (~/.hermes/skills + profiles). Context-window table per model with source
 (config-override | model-spec | assumed-labeled).
+
+**Per-user deselect is not uniform** and Hone must degrade honestly: Claude Code is clean
+(`skillOverrides` in the auto-gitignored `.claude/settings.local.json`); Codex is
+global-only (`~/.codex/config.toml`) and its project-local skill filtering is broken
+(codex#20210); Pi's project `.pi/settings.json` is *committed* with no gitignored local
+layer; Hermes has no per-skill toggle at all.
