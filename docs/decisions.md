@@ -12,12 +12,16 @@
   (tooltips), human harness names
 - Name: **Hone** (provisional — Hono proximity noted; rename cheap until launch)
 - No orchestrator framing, ever
+- Port strategy (hone#5): **Rust-native from day one** — no bundled Python (the
+  command_center POC retires at parity, hone#11). Git ops **shell out to the system
+  `git` binary** (proven POC invocations; not git2/gitoxide). UI boundary is **Tauri
+  `invoke` commands** — POC JSON contract kept as serde structs, HTTP transport dropped
+  (no open port). Incremental: scaffold ports only the scanner.
 
 ## Open
 
 - [ ] Repo/app identifiers while name is provisional (bundle id, binary name) — pick
       neutral-ish or commit to hone?
-- [ ] Port strategy: shell out to Python agentkit from Rust vs incremental Rust rewrite
 - [ ] Per-project manifest format + location (`.hone/manifest.json`? `.agents/`?) —
       must not collide with existing conventions
 - [ ] Claude Code native AGENTS.md support status (contested as of 2026-07) — verify
