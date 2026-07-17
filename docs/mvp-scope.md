@@ -10,7 +10,13 @@
    restore) — ported from command center
 4. Security v1: pin-by-hash, diff-on-update, provenance, allowed-tools display, honest
    lint. Not a malware scanner.
-5. Local-only default; multi-machine via git (existing state-branch sync)
+5. Local-only default; multi-machine via **any git remote** — pull + materialize. GitHub
+   is never required: a bare repo on a NAS/USB, a folder in iCloud/Dropbox/Syncthing
+   (`file://`), an SSH/tailnet peer, or self-hosted Gitea all work, because the sync only
+   ever names `origin`. Hone's cloud is one optional remote among these, never the one you
+   must use (principle 2). **Not** the state branches — those carry only a `state.json` of
+   status counters (fleet telemetry, no skill content); the earlier "existing state-branch
+   sync" note conflated the two. See `docs/research/prior-art-audit.md:96`.
 6. Install rail: wrap `npx skills add`, import/emit marketplace.json, review-before-add
 7. Tauri v2, tray + window
 
