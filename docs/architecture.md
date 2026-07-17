@@ -11,7 +11,9 @@
    usage-event ingestion. Content-addressed skill versions server-side; the local app
    always materializes into local git, so users own their data if the service dies.
 3. **Distribution**: machines pull desired state, push telemetry. Per-project manifest
-   materialized into `.claude/skills`/agents dirs (Ephemeral pattern).
+   (`~/.hone/projects/<key>.json` — machine-local, never in the project repo; see
+   decisions.md) materialized into `.claude/skills`/agents dirs (Ephemeral pattern:
+   derived, excluded via `.git/info/exclude`, ownership inferred from symlink targets).
 
 ## Sources model (version control)
 

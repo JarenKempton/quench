@@ -12,14 +12,21 @@
   (tooltips), human harness names
 - Name: **Hone** (provisional — Hono proximity noted; rename cheap until launch)
 - No orchestrator framing, ever
+- **Per-project state: Hone writes nothing into the project repo**
+  ([#9](https://github.com/JarenKempton/hone/issues/9)) — desired
+  state lives at `~/.hone/projects/<key>.json` (JSON, Hone-written, never hand-edited,
+  pointers only). `.claude/skills/` is derived and excluded via `.git/info/exclude`,
+  never `.gitignore`. Skills live in a **separate git repo** and are never committed
+  into the consuming project: committed skills have no upstream to pin or diff against,
+  so "pinned and reviewed" becomes theater and updates break teammates by default.
+  Ownership of materialized links is inferred from symlink targets, never recorded —
+  observed state can't drift. Amends the `./.hone/` bucket in the identifiers decision.
 
 ## Open
 
 - [ ] Repo/app identifiers while name is provisional (bundle id, binary name) — pick
       neutral-ish or commit to hone?
 - [ ] Port strategy: shell out to Python agentkit from Rust vs incremental Rust rewrite
-- [ ] Per-project manifest format + location (`.hone/manifest.json`? `.agents/`?) —
-      must not collide with existing conventions
 - [ ] Claude Code native AGENTS.md support status (contested as of 2026-07) — verify
       against changelog before building the dedupe view
 - [ ] Pi skill-loading behavior (index vs full-body) — verify before showing token costs
