@@ -43,16 +43,101 @@
   repo") — never `git update-index --skip-worktree`, which git's own docs say "does not
   work as expected".
 
+- **Monorepo: desktop and cloud share one tree** ([#8]) — user overruled the
+  separate-repo recommendation; the shared client/server contract won. Consequence: the
+  "cloud is never load-bearing" principle is now a *discipline*, not a structural fact,
+  so it needs a mechanical guardrail — `hone-core` never depends on the cloud package,
+  and **the desktop app must build and run green with `apps/cloud/` deleted**. Checkable
+  in CI; not yet wired.
+- **Repo layout** ([#8]) — pnpm + Cargo workspaces over one tree:
+
+  ```
+  hone/
+  ├── Cargo.toml              # workspace root — [profile.release] LIVES HERE
+  ├── package.json            # pnpm workspace root
+  ├── crates/
+  │   └── hone-core/          # scanner, git, provenance — pure Rust, no Tauri
+  ├── apps/
+  │   ├── desktop/            # stock create-tauri-app layout, one level down
+  │   │   ├── package.json    # the real frontend
+  │   │   ├── index.html, vite.config.ts, src/
+  │   │   └── src-tauri/      # thin: Builder, generate_context!, commands
+  │   └── cloud/              # phase 3 — Workers + D1 + wrangler.toml
+  └── docs/
+  ```
+
+  Cargo workspace members: `apps/desktop/src-tauri`, `crates/hone-core` (explicit, not
+  globbed). No Python vendored anywhere — [#5] settled Rust-native.
+- **`src-tauri/` nests inside `apps/desktop/`** ([#8]) — not hoisted to `crates/`. The
+  Tauri CLI takes `$cwd` as the frontend if `$cwd` has a `package.json`, else **walks
+  downward** and takes the *first* one it finds (depth 3) — so `apps/cloud/package.json`
+  can silently hijack frontend detection. Running from `apps/desktop/` hits both the
+  frontend and `$cwd/src-tauri` on the first try: **no `TAURI_APP_PATH` /
+  `TAURI_FRONTEND_PATH` needed**, and the tree inside `apps/desktop/` is byte-identical
+  to `create-tauri-app` output, so stock docs apply and the default
+  `"frontendDist": "../dist"` is already correct.
+- **`hone-core` split from day one** ([#8]) — a boundary that can't be accidentally
+  crossed: logic there physically cannot reach `AppHandle` or Tauri state, so it stays
+  pure by construction. [#5]'s port is incremental (scanner now; x-ray/apply/heartbeat
+  later), so this crate is where nearly all of Hone eventually lives. Keeps a headless
+  consumer possible without a rewrite — which matters because the thing Hone replaces
+  (`bootstrap.sh` + `agentkit`) *is* a CLI, and [#11] must define parity against it.
+  Note: the usual "you need a separate crate to unit-test" argument is **false** — Tauri
+  v2 already generates `src-tauri` as lib+bin, so `cargo test` works flat. The split
+  earns its place on boundary discipline, not testability.
+- **pnpm, not npm workspaces** ([#8]) — npm hoists all deps into one flat root
+  `node_modules/`, so `apps/desktop` could import something only `apps/cloud` declared
+  (a phantom dependency) and it would just work — the exact principle-2 erosion path the
+  monorepo opens. pnpm's strict symlinked `node_modules` makes a desktop→cloud import
+  fail at import time, not in review. Cost: needs `corepack enable` on every machine/CI
+  runner.
+
+### Tauri v2 facts verified for [#8] (primary sources)
+
+- **`[profile.*]` must live at the Cargo workspace root.** Cargo *only* reads profiles
+  from the workspace-root manifest ([cargo ref]); yet Tauri's own [size guide] tells you
+  to put `[profile.release]` in `src-tauri/Cargo.toml`. Inside a workspace that no-ops
+  with a **warning, not an error** — release builds are quietly unoptimized. Tauri's docs
+  never mention this. Reproduced on cargo 1.93.0.
+- **`src-tauri` as a workspace member is supported** — one line in the [project structure]
+  docs. `target/` moves to the workspace root.
+- **Declare `tauri = "2"` literally in `src-tauri/Cargo.toml`**, not `workspace = true` —
+  the CLI cannot auto-manage its feature flags through a workspace inheritance and
+  silently degrades to a notice.
+- **`#[tauri::command]` fns CAN live outside `src-tauri`.** The widely-repeated claim that
+  they must share a crate with `generate_handler!` is **false in v2** — verified by
+  compiling against `tauri 2.11.5`. The real constraint is **visibility**: command fns
+  must be `pub` (a `pub(crate)` fn fails with `error[E0603]: macro __cmd__<name> is
+  private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.conf.json`
+  relative to its own manifest dir. `tauri dev` watches workspace path-dependencies, so
+  editing `hone-core` triggers a rebuild.
+- **Don't alias commands** — `use x::greet as g; generate_handler![g]` fails; the macro
+  rewrites only the last path segment ([tauri#8513], closed not-planned).
+
+[#5]: https://github.com/JarenKempton/hone/issues/5
+[#8]: https://github.com/JarenKempton/hone/issues/8
 [#9]: https://github.com/JarenKempton/hone/issues/9
+[#11]: https://github.com/JarenKempton/hone/issues/11
+[cargo ref]: https://doc.rust-lang.org/cargo/reference/profiles.html
+[size guide]: https://v2.tauri.app/concept/size/
+[project structure]: https://v2.tauri.app/start/project-structure/
+[tauri#8513]: https://github.com/tauri-apps/tauri/issues/8513
 
 ## Open
 
-- [ ] Repo/app identifiers while name is provisional (bundle id, binary name) — pick
-      neutral-ish or commit to hone?
-- [ ] Port strategy: shell out to Python agentkit from Rust vs incremental Rust rewrite
-- [ ] Claude Code native AGENTS.md support status (contested as of 2026-07) — verify
-      against changelog before building the dedupe view
-- [ ] Pi skill-loading behavior (index vs full-body) — verify before showing token costs
-- [ ] Cloud auth: GitHub OAuth only vs + magic-link email at launch of phase 3
 - [ ] Migration: agent-skills repo becomes first source; command center retires when
-      app reaches parity — define the cutover checklist
+      app reaches parity — define the cutover checklist ([#11])
+
+<!-- Resolved and moved to Settled / the map's Decisions-so-far: repo & app identifiers
+     (#6), port strategy (#5), Claude Code AGENTS.md support (#3), Pi skill loading (#4),
+     cloud auth (#10), repo layout (#8). The map (issue #1) is the index of record. -->
+
+## Fog surfaced by [#8]
+
+- **Does Hone ship a CLI, and what replaces `bootstrap.sh` on a fresh machine?** The
+  `hone-core` split keeps a headless path *possible*; nothing decides whether it exists.
+  If materializing skills requires launching a GUI, that's a product decision — it should
+  be made deliberately, not inherited from a build file. Folds into [#11] (parity is
+  defined against a CLI).
+- **The principle-2 CI guardrail** ("desktop builds green with `apps/cloud/` deleted") is
+  agreed but unwired; it has no home until CI exists.
