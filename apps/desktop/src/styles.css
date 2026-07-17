@@ -201,6 +201,250 @@ body {
   max-width: 60ch;
 }
 
+/* ---- scanner: x-ray + matrix (hone#13) ---- */
+.panel--wide {
+  max-width: 1040px;
+}
+
+.stub-badge--live {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.3);
+  background: var(--accent-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.harness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.hcard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hcard--absent {
+  opacity: 0.55;
+}
+
+.hcard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.hcard-name {
+  font-size: 15px;
+  font-weight: 620;
+}
+
+.tag {
+  flex: none;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag--live {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.3);
+  background: var(--accent-soft);
+}
+
+.hcard-path,
+.hcard-context {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hcard-context {
+  color: var(--muted);
+}
+
+.skill-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skill-row {
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+  min-width: 0;
+}
+
+.skill-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.skill-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-name {
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.skill-origin {
+  flex: none;
+  max-width: 55%;
+  font-size: 10.5px;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-origin--linked {
+  color: var(--accent);
+}
+
+.skill-desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.hcard-danger {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: #e0894b;
+}
+
+.notice {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 14px 16px;
+}
+
+.notice--error {
+  border-color: rgba(224, 137, 75, 0.5);
+}
+
+.notice-lead {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notice-body {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.strays {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.strays-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 620;
+}
+
+.strays-sub {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- matrix ---- */
+.matrix-scroll {
+  overflow-x: auto;
+}
+
+.matrix {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.matrix th,
+.matrix td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+}
+
+.matrix-corner,
+.matrix-col {
+  background: var(--rail);
+  font-weight: 560;
+  color: var(--muted);
+  text-align: left;
+}
+
+.matrix-col {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.matrix-skill {
+  text-align: left;
+  font-weight: 540;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matrix-cell {
+  text-align: center;
+  width: 92px;
+}
+
+.matrix-dup .matrix-skill {
+  color: var(--accent);
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f7f8fa;
