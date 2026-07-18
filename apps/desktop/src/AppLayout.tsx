@@ -11,10 +11,12 @@ const NAV = [
 export function AppLayout() {
   const coreVersion = useShellStore((s) => s.coreVersion);
   const connect = useShellStore((s) => s.connect);
+  const runScan = useShellStore((s) => s.runScan);
 
   useEffect(() => {
     connect();
-  }, [connect]);
+    runScan();
+  }, [connect, runScan]);
 
   return (
     <div className="shell">

@@ -15,6 +15,15 @@ fn app_info() -> hone_core::AppInfo {
     hone_core::app_info()
 }
 
+/// Scan this machine for harnesses and their skills, with honest provenance
+/// (hone#13). The core does the real filesystem work; this command just hands
+/// the result across the invoke bridge as a serde struct. No fabricated data —
+/// every count the frontend renders traces to a path the core actually read.
+#[tauri::command]
+fn scan() -> hone_core::Scan {
+    hone_core::scan_this_machine()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -22,7 +31,7 @@ pub fn run() {
             build_tray(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_info])
+        .invoke_handler(tauri::generate_handler![app_info, scan])
         .run(tauri::generate_context!())
         .expect("error while running the Hone application");
 }
