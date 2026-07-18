@@ -6,10 +6,12 @@
    context x-ray, skill/instruction editors, matrix (skill × harness × machine ×
    project) with staged apply, local git backing. Rust core watches filesystems;
    webview reuses the command-center UI patterns.
-2. **Cloud service** (optional, phase 3): Cloudflare Workers + D1 + R2. Accounts
-   (GitHub OAuth, magic-link later), machines, circles (work/friends), skill publishing,
-   usage-event ingestion. Content-addressed skill versions server-side; the local app
-   always materializes into local git, so users own their data if the service dies.
+2. **Cloud service** (optional, phase 3): Cloudflare Workers + D1 + R2. Accounts via
+   **Better Auth (GitHub + Google, auto-link on verified email)** — sign-in is split from
+   the GitHub *grant* for repo features; magic-link is **not** planned (#10). Better Auth
+   runs on Workers + D1, version-pinned (#14). Machines, circles (work/friends), skill
+   publishing, usage-event ingestion. Content-addressed skill versions server-side; the
+   local app always materializes into local git, so users own their data if the service dies.
 3. **Distribution**: machines pull desired state, push telemetry. Per-project manifest
    splits by owner — committed `./.hone/manifest.json` (what's *available*: sources +
    menu; a PR to change) and personal `~/.hone/projects/<key>.json` (what *you* activate,
