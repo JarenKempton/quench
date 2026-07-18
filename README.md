@@ -35,5 +35,43 @@ equipped with.
 
 ## Stack
 
-Tauri v2 (Rust core + webview), tray + window in one binary. Cloud (phase 3):
+Tauri v2 (Rust core + webview), tray + window in one binary. Frontend is React 19 +
+TypeScript + Vite + TanStack Router (hash history) + Zustand. Cloud (phase 3):
 Cloudflare Workers + D1 + R2, GitHub OAuth.
+
+## Repository layout
+
+A pnpm + Cargo workspace (see hone#8):
+
+- `crates/hone-core/` — pure Rust: scanner, git, provenance. No Tauri dependency, so a
+  headless consumer stays possible and "cloud never load-bearing" is a boundary, not a
+  discipline. The scaffold ships only a version probe — no real scanner yet.
+- `apps/desktop/` — the Tauri app. React frontend at the top; `src-tauri/` **nested
+  inside** it (the Tauri CLI resolves the frontend by walking *down* to the first
+  `package.json`, so running from `apps/desktop/` needs no `TAURI_APP_PATH`).
+- `apps/cloud/` — phase 3, not built yet. Desktop must build green with it deleted.
+- `[profile.release]` lives at the **workspace root** — Cargo honors it only there;
+  in `src-tauri/Cargo.toml` it would silently no-op.
+
+## Running the scaffold
+
+Prerequisites: Node ≥ 20, pnpm, and the Rust toolchain (`rustup`). On macOS the WebKit
+webview ships with the OS; Linux needs `webkit2gtk`.
+
+```sh
+pnpm install          # from the repo root, once — installs the JS workspace
+
+# then, either:
+pnpm dev              # from the repo root — launches the desktop app (window + tray)
+
+# or, equivalently, from the app directory:
+cd apps/desktop
+pnpm tauri dev
+```
+
+`pnpm dev` opens the **Hone** window and a tray icon (menu: Show / Quit) from one
+binary, with the x-ray / matrix / skill-editor panels as stub shells. First run
+compiles the Rust workspace, so give it a minute.
+
+Other commands: `pnpm web` (frontend only, in a browser at `localhost:1420`),
+`pnpm build` (bundle the desktop app), `cargo test -p hone-core`.
