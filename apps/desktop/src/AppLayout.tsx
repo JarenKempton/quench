@@ -13,7 +13,9 @@ export function AppLayout() {
   const connect = useShellStore((s) => s.connect);
 
   useEffect(() => {
-    connect();
+    // Fire-and-forget: the store swallows failures into `coreVersion: null`.
+    // `void` marks the floating promise as intentional (oxlint no-floating-promises).
+    void connect();
   }, [connect]);
 
   return (

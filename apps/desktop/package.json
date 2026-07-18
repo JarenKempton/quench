@@ -1,12 +1,12 @@
 {
   "name": "@hone/desktop",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "dev": "vp dev",
+    "build": "tsc --noEmit && vp build",
+    "preview": "vp preview",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -20,8 +20,9 @@
     "@tauri-apps/cli": "^2.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.0.3",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

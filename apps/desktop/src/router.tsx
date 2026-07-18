@@ -32,11 +32,7 @@ const skillEditorRoute = createRoute({
   component: SkillEditorPanel,
 });
 
-const routeTree = rootRoute.addChildren([
-  xrayRoute,
-  matrixRoute,
-  skillEditorRoute,
-]);
+const routeTree = rootRoute.addChildren([xrayRoute, matrixRoute, skillEditorRoute]);
 
 export const router = createRouter({
   routeTree,
