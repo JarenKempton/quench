@@ -5,9 +5,15 @@
 //! consumer possible and turns principle 2 ("cloud never load-bearing") into a
 //! boundary that can't be crossed rather than a discipline (hone#8).
 //!
-//! The scaffold ships only a version probe — there is no real scanning yet
-//! (hone#12). When the scanner lands it lives here, behind honest provenance:
-//! every value this crate returns is a real fact, never a fabricated count.
+//! The scanner (hone#13) lives here, behind honest provenance: every value this
+//! crate returns is a real fact traceable to a path on disk, never a fabricated
+//! count. See [`scan`].
+
+mod scan;
+
+pub use scan::{
+    scan, scan_this_machine, ContextFile, Harness, Origin, Probe, ProjectScan, Scan, Skill,
+};
 
 use serde::Serialize;
 

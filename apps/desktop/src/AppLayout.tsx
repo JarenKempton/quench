@@ -11,12 +11,15 @@ const NAV = [
 export function AppLayout() {
   const coreVersion = useShellStore((s) => s.coreVersion);
   const connect = useShellStore((s) => s.connect);
+  const runScan = useShellStore((s) => s.runScan);
 
   useEffect(() => {
-    // Fire-and-forget: the store swallows failures into `coreVersion: null`.
-    // `void` marks the floating promise as intentional (oxlint no-floating-promises).
+    // Fire-and-forget: the store swallows failures into `coreVersion: null` and an
+    // honest scan-error state. `void` marks the floating promises as intentional
+    // (oxlint no-floating-promises).
     void connect();
-  }, [connect]);
+    void runScan();
+  }, [connect, runScan]);
 
   return (
     <div className="shell">
