@@ -1,0 +1,41 @@
+# Issue tracker: GitHub
+
+Issues and PRDs for this repo live as GitHub issues on `JarenKempton/hone`. Use the `gh` CLI for all operations.
+
+## Conventions
+
+- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
+- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **Comment on an issue**: `gh issue comment <number> --body "..."`
+- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Close**: `gh issue close <number> --comment "..."`
+
+Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+
+## ⚠️ This environment: gh auth workaround
+
+A stale `GITHUB_TOKEN` is baked into the shell environment (was exported from `~/.zshrc`, now commented out) and overrides the working keyring login, making `gh` fail with `invalid character '<'` (an HTML error page). **Prefix every `gh` call with `env -u GITHUB_TOKEN`**, and retry a few times — the sandbox network intermittently returns HTML (`<!DOCTYPE`) for otherwise-valid calls. The old token should be revoked at github.com/settings/tokens.
+
+## Pull requests as a triage surface
+
+**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests.)_
+
+## When a skill says "publish to the issue tracker"
+
+Create a GitHub issue.
+
+## When a skill says "fetch the relevant ticket"
+
+Run `gh issue view <number> --comments`.
+
+## Wayfinding operations
+
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+
+- **Map**: a single issue labelled `wayfinder:map`, holding the Destination / Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`. This repo's active map is issue **#1** ("Wayfinder map: Hone running scaffold").
+- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the `issues/<map>/sub_issues` endpoint with the child's numeric **database id**). Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
+- **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/JarenKempton/hone/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/JarenKempton/hone/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). A ticket is unblocked when every blocker is closed.
+- **Frontier query**: list the map's open children, drop any with an open blocker or an assignee; first in map order wins.
+- **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
+- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far. Editing the map body via bash string-substitution is fragile (em-dashes/backticks fail to match) — fetch the body to a file and edit it with a real tool, then `gh issue edit 1 --body-file`.

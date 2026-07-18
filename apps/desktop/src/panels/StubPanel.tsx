@@ -5,11 +5,7 @@ import type { ReactNode } from "react";
  * its identity and an honest "not built yet" state — never fabricated data, per
  * Hone's standing stance that every number has provenance.
  */
-export function StubPanel(props: {
-  title: string;
-  tagline: string;
-  planned: ReactNode;
-}) {
+export function StubPanel(props: { title: string; tagline: string; planned: ReactNode }) {
   return (
     <section className="panel">
       <header className="panel-head">

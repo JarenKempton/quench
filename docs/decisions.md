@@ -91,6 +91,19 @@
   monorepo opens. pnpm's strict symlinked `node_modules` makes a desktop→cloud import
   fail at import time, not in review. Cost: needs `corepack enable` on every machine/CI
   runner.
+- **Frontend stack inside the webview** ([#7]) — React 19 + TypeScript + Vite +
+  **TanStack Router** (hash history — a Tauri webview has no server to answer path-based
+  deep links) + **Zustand**. Vanilla ruled out (the `invoke` switch rewrites the prior-art
+  JS anyway); Next.js / TanStack Start structurally excluded (no Node server in a Tauri
+  bundle); Svelte deferred.
+- **Frontend toolchain: Vite+ (`vp`)** — one CLI for install/dev/build/lint/format/test,
+  replacing split pnpm + Vite + tsc. Low lock-in: `vp` *wraps* pnpm (lockfile + resolution
+  stay pnpm), MIT-licensed. `vite` is catalog-aliased to Vite+'s Vite-8 core, and `vp` is a
+  local `node_modules/.bin`, so `tauri.conf.json`'s `pnpm dev` / `pnpm build` route to it
+  with no vp-specific wiring and no global install needed to run the app. Its type-aware
+  `vp check` (oxlint) is a real gate — it caught a floating promise and a missing
+  `vite-env.d.ts` the plain `tsc` build had passed. Caveat: Vite+ is **beta** (v0.2.x) —
+  pinned; CI would use `setup-vp`. (Refines [#7].)
 
 ### Tauri v2 facts verified for [#8] (primary sources)
 
@@ -114,10 +127,14 @@
 - **Don't alias commands** — `use x::greet as g; generate_handler![g]` fails; the macro
   rewrites only the last path segment ([tauri#8513], closed not-planned).
 
+[#1]: https://github.com/JarenKempton/hone/issues/1
 [#5]: https://github.com/JarenKempton/hone/issues/5
+[#7]: https://github.com/JarenKempton/hone/issues/7
 [#8]: https://github.com/JarenKempton/hone/issues/8
 [#9]: https://github.com/JarenKempton/hone/issues/9
+[#10]: https://github.com/JarenKempton/hone/issues/10
 [#11]: https://github.com/JarenKempton/hone/issues/11
+[#14]: https://github.com/JarenKempton/hone/issues/14
 [cargo ref]: https://doc.rust-lang.org/cargo/reference/profiles.html
 [size guide]: https://v2.tauri.app/concept/size/
 [project structure]: https://v2.tauri.app/start/project-structure/
@@ -125,19 +142,25 @@
 
 ## Open
 
-- [ ] Migration: agent-skills repo becomes first source; command center retires when
-      app reaches parity — define the cutover checklist ([#11])
+_No standing architectural decision is open here. Live open questions — the **X-ray panel
+redesign** (the panel currently shows an inventory, not the per-project × harness *pre-flight*
+the differentiator calls for), whether Hone ships a CLI, CI shape, PR-authoring, and
+fleet/heartbeat scope — are tracked as the wayfinder map's frontier and fog ([#1]), the
+index of record._
 
 <!-- Resolved and moved to Settled / the map's Decisions-so-far: repo & app identifiers
      (#6), port strategy (#5), Claude Code AGENTS.md support (#3), Pi skill loading (#4),
-     cloud auth (#10), repo layout (#8). The map (issue #1) is the index of record. -->
+     cloud auth (#10), repo layout (#8), frontend stack + toolchain (#7). Migration cutover
+     (#11) is DISSOLVED — the command-center POC was never adopted, so there is no parity
+     bar and no cutover checklist; Hone reimplements the ideas, it doesn't match a POC. -->
 
 ## Fog surfaced by [#8]
 
 - **Does Hone ship a CLI, and what replaces `bootstrap.sh` on a fresh machine?** The
   `hone-core` split keeps a headless path *possible*; nothing decides whether it exists.
   If materializing skills requires launching a GUI, that's a product decision — it should
-  be made deliberately, not inherited from a build file. Folds into [#11] (parity is
-  defined against a CLI).
+  be made deliberately, not inherited from a build file. No longer entangled with a parity
+  bar: [#11] established there is no incumbent CLI to match, so this is a clean
+  forward-looking choice.
 - **The principle-2 CI guardrail** ("desktop builds green with `apps/cloud/` deleted") is
   agreed but unwired; it has no home until CI exists.
