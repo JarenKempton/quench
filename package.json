@@ -1,11 +1,22 @@
 {
   "name": "hone",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "description": "Hone — cross-harness visibility and control over AI coding agent context",
   "scripts": {
     "dev": "pnpm --filter @hone/desktop run tauri dev",
     "build": "pnpm --filter @hone/desktop run tauri build",
     "web": "pnpm --filter @hone/desktop run dev"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.14.0",
+      "onFail": "download"
+    }
   }
 }
