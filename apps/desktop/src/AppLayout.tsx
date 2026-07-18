@@ -14,8 +14,11 @@ export function AppLayout() {
   const runScan = useShellStore((s) => s.runScan);
 
   useEffect(() => {
-    connect();
-    runScan();
+    // Fire-and-forget: the store swallows failures into `coreVersion: null` and an
+    // honest scan-error state. `void` marks the floating promises as intentional
+    // (oxlint no-floating-promises).
+    void connect();
+    void runScan();
   }, [connect, runScan]);
 
   return (

@@ -18,8 +18,8 @@ export function XrayPanel() {
         <div>
           <h1 className="panel-title">X-ray</h1>
           <p className="panel-tagline">
-            Everything entering an agent's context, read live off this machine with
-            honest provenance.
+            Everything entering an agent's context, read live off this machine with honest
+            provenance.
           </p>
         </div>
         <ScanBadge status={status} count={scan?.harnesses.length ?? 0} />
@@ -45,12 +45,11 @@ export function XrayPanel() {
               <div className="notice">
                 <p className="notice-lead">
                   {scan.duplicate_names.length} skill
-                  {scan.duplicate_names.length === 1 ? "" : "s"} appear across more than
-                  one harness
+                  {scan.duplicate_names.length === 1 ? "" : "s"} appear across more than one harness
                 </p>
                 <p className="notice-body">
-                  {scan.duplicate_names.join(", ")} — the same name resolved by multiple
-                  harnesses. See the Matrix for where each is active.
+                  {scan.duplicate_names.join(", ")} — the same name resolved by multiple harnesses.
+                  See the Matrix for where each is active.
                 </p>
               </div>
             )}
@@ -76,9 +75,7 @@ function HarnessCard({ harness }: { harness: Harness }) {
       {harness.home.present ? (
         <>
           <p className="hcard-path" title={harness.skills_dir.path}>
-            {harness.skills_dir.present
-              ? tildeify(harness.skills_dir.path)
-              : "no skills dir"}
+            {harness.skills_dir.present ? tildeify(harness.skills_dir.path) : "no skills dir"}
           </p>
 
           {harness.context_files.map((c) => (
@@ -116,9 +113,7 @@ function SkillRow({ skill }: { skill: Skill }) {
       <div className="skill-line">
         <span className="skill-name">{skill.name}</span>
         <span
-          className={`skill-origin ${
-            skill.origin.kind === "linked" ? "skill-origin--linked" : ""
-          }`}
+          className={`skill-origin ${skill.origin.kind === "linked" ? "skill-origin--linked" : ""}`}
           title={label}
         >
           {skill.origin.kind === "linked" ? "↳ " : ""}
@@ -139,9 +134,7 @@ function ProjectStrays({ scan }: { scan: Scan }) {
         skills committed inside the launched project — {tildeify(project.root)}
       </p>
       {project.skills.length === 0 ? (
-        <p className="muted">
-          None found. This project defines no local skills of its own.
-        </p>
+        <p className="muted">None found. This project defines no local skills of its own.</p>
       ) : (
         <ul className="skill-list">
           {project.skills.map((s) => (

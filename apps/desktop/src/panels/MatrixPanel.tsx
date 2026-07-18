@@ -20,8 +20,8 @@ export function MatrixPanel() {
         <div>
           <h1 className="panel-title">Matrix</h1>
           <p className="panel-tagline">
-            Every skill on this machine against every harness — filled only where the
-            scanner really found it.
+            Every skill on this machine against every harness — filled only where the scanner really
+            found it.
           </p>
         </div>
         {scan && (
@@ -93,5 +93,7 @@ function buildRows(scan: Scan): Row[] {
       }
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  return [...byName.values()].sort((a, b) =>
+    a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+  );
 }
