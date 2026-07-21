@@ -1,6 +1,6 @@
 # Research: Does Claude Code natively read AGENTS.md?
 
-**Ticket:** JarenKempton/hone#3
+**Ticket:** JarenKempton/quench#3
 **Date researched:** 2026-07-16
 **Verdict:** NO — Claude Code does not natively read `AGENTS.md`. It reads `CLAUDE.md` only. There is no automatic fallback to `AGENTS.md`.
 
@@ -25,7 +25,7 @@ Both make AGENTS.md content reach Claude Code, but only via a `CLAUDE.md` entryp
 
 Cursor, Windsurf, and Cline reportedly read a project-root `AGENTS.md` directly. Claude Code is the outlier that still requires the import/symlink bridge.
 
-## Implication for Hone's x-ray
+## Implication for Quench's x-ray
 
 Do **not** treat `AGENTS.md` as a native Claude Code input. Treat it as an input **only if** the repo also has a `CLAUDE.md` that `@`-imports it, or a `CLAUDE.md -> AGENTS.md` symlink. Detect those two bridges explicitly rather than assuming AGENTS.md is read.
 

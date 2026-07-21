@@ -1,4 +1,4 @@
-// Mirrors quench_core::scan (serde-serialized across the invoke bridge, hone#13).
+// Mirrors quench_core::scan (serde-serialized across the invoke bridge, quench#13).
 // Field names are snake_case to match the Rust structs exactly; PathBufs arrive
 // as strings, Option<T> as T | null.
 

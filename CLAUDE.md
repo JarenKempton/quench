@@ -6,7 +6,7 @@ Cross-harness desktop app (Tauri v2) for visibility and control over everything 
 
 ### Issue tracker
 
-Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/hone`), operated via the `gh` CLI. The active `/wayfinder` map is issue **#1**. ⚠️ Prefix every `gh` call with `env -u GITHUB_TOKEN` in this environment (a stale token overrides auth). See `docs/agents/issue-tracker.md`.
+Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/quench`), operated via the `gh` CLI. The active `/wayfinder` map is issue **#1**. ⚠️ Prefix every `gh` call with `env -u GITHUB_TOKEN` in this environment (a stale token overrides auth). See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

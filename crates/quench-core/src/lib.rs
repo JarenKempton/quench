@@ -3,9 +3,9 @@
 //! Holds the scanner, git integration, and provenance logic. It has **no**
 //! dependency on Tauri (no `AppHandle` reachable), which keeps a headless
 //! consumer possible and turns principle 2 ("cloud never load-bearing") into a
-//! boundary that can't be crossed rather than a discipline (hone#8).
+//! boundary that can't be crossed rather than a discipline (quench#8).
 //!
-//! The scanner (hone#13) lives here, behind honest provenance: every value this
+//! The scanner (quench#13) lives here, behind honest provenance: every value this
 //! crate returns is a real fact traceable to a path on disk, never a fabricated
 //! count. See [`scan`].
 

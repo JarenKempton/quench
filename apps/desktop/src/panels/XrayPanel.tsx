@@ -2,7 +2,7 @@ import { useShellStore } from "../store";
 import { originLabel, tildeify, type Harness, type Scan, type Skill } from "../scan";
 
 /**
- * X-ray: the first panel with real data (hone#13). Every harness, every skill,
+ * X-ray: the first panel with real data (quench#13). Every harness, every skill,
  * every count here is read live off this machine's filesystem with honest
  * provenance — a symlinked skill shows the source repo it resolves to, a broken
  * link is surfaced rather than hidden, and nothing is ever fabricated.

@@ -202,7 +202,7 @@ body {
   max-width: 60ch;
 }
 
-/* ---- scanner: x-ray + matrix (hone#13) ---- */
+/* ---- scanner: x-ray + matrix (quench#13) ---- */
 .panel--wide {
   max-width: 1040px;
 }

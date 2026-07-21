@@ -1,7 +1,7 @@
 //! `cargo run -p quench-core --example scan` — run the real scanner against this
 //! machine and print a summary. This is the same `scan_this_machine()` call the
 //! desktop's `scan` command makes, so it proves the data is real end-to-end
-//! without launching the GUI (hone#13).
+//! without launching the GUI (quench#13).
 
 fn main() {
     let scan = quench_core::scan_this_machine();
