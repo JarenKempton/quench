@@ -1,8 +1,8 @@
 [package]
-name = "hone-core"
+name = "quench-core"
 version = "0.0.0"
 edition = "2021"
-description = "Pure-Rust core for Hone: scanner, git, provenance. No Tauri dependency."
+description = "Pure-Rust core for Quench: scanner, git, provenance. No Tauri dependency."
 publish = false
 
 [dependencies]

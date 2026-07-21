@@ -1,8 +1,8 @@
-//! The scanner — Hone's first real look at a machine (hone#13).
+//! The scanner — Quench's first real look at a machine (hone#13).
 //!
 //! It reports what harnesses live on this machine and which skills each one
 //! sees, **with honest provenance**: every value carries the real path it came
-//! from, so no count is ever fabricated (Hone's standing "no fake data" stance).
+//! from, so no count is ever fabricated (Quench's standing "no fake data" stance).
 //! A skill that is a symlink into a source repo reports that repo as its origin;
 //! a symlink whose target is gone is surfaced as `dangling`, never hidden.
 //!
@@ -13,7 +13,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-/// One harness Hone knows how to look for, and where its facts live on disk.
+/// One harness Quench knows how to look for, and where its facts live on disk.
 struct HarnessSpec {
     id: &'static str,
     name: &'static str,
@@ -60,7 +60,7 @@ const HARNESSES: &[HarnessSpec] = &[
     },
 ];
 
-/// A path Hone looked for and whether it was actually there — the provenance of
+/// A path Quench looked for and whether it was actually there — the provenance of
 /// a "present / absent" claim.
 #[derive(Debug, Clone, Serialize)]
 pub struct Probe {
@@ -75,7 +75,7 @@ impl Probe {
     }
 }
 
-/// Where a skill physically lives and how Hone knows — the honesty contract in
+/// Where a skill physically lives and how Quench knows — the honesty contract in
 /// one value. A count of skills is a count of these, each traceable to disk.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -128,7 +128,7 @@ pub struct Harness {
 #[derive(Debug, Clone, Serialize)]
 pub struct ProjectScan {
     pub root: PathBuf,
-    /// The project-local skill dirs Hone looked in (e.g. `<root>/.claude/skills`).
+    /// The project-local skill dirs Quench looked in (e.g. `<root>/.claude/skills`).
     pub probed: Vec<Probe>,
     pub skills: Vec<Skill>,
     pub dangling: Vec<PathBuf>,
@@ -348,7 +348,7 @@ fn duplicate_names(harnesses: &[Harness]) -> Vec<String> {
 
 /// Parse `name:` and `description:` out of a SKILL.md's leading `---` frontmatter.
 /// Deliberately minimal: single-line scalars, optional surrounding quotes. Values
-/// Hone can't read fall back to `None`, never to a guess.
+/// Quench can't read fall back to `None`, never to a guess.
 fn parse_frontmatter(manifest: &Path) -> (Option<String>, Option<String>) {
     let text = match std::fs::read_to_string(manifest) {
         Ok(t) => t,
@@ -417,7 +417,7 @@ fn dir_name_opt(path: &Path) -> Option<&str> {
 }
 
 /// Home dir from the environment. macOS/Linux use `HOME`; Windows `USERPROFILE`.
-/// Kept dependency-free (hone-core stays serde-only).
+/// Kept dependency-free (quench-core stays serde-only).
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -436,7 +436,7 @@ mod tests {
     fn temp_root(tag: &str) -> PathBuf {
         let mut base = std::env::temp_dir();
         // Unique-enough without Math.random/time: pid + tag.
-        base.push(format!("hone-scan-test-{}-{}", std::process::id(), tag));
+        base.push(format!("quench-scan-test-{}-{}", std::process::id(), tag));
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).unwrap();
         base

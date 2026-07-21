@@ -11,8 +11,8 @@ use tauri::{
 /// App-defined commands are not gated by the capability ACL — only core and
 /// plugin commands are — so this needs no permission entry.
 #[tauri::command]
-fn app_info() -> hone_core::AppInfo {
-    hone_core::app_info()
+fn app_info() -> quench_core::AppInfo {
+    quench_core::app_info()
 }
 
 /// Scan this machine for harnesses and their skills, with honest provenance
@@ -20,8 +20,8 @@ fn app_info() -> hone_core::AppInfo {
 /// the result across the invoke bridge as a serde struct. No fabricated data —
 /// every count the frontend renders traces to a path the core actually read.
 #[tauri::command]
-fn scan() -> hone_core::Scan {
-    hone_core::scan_this_machine()
+fn scan() -> quench_core::Scan {
+    quench_core::scan_this_machine()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,19 +33,19 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![app_info, scan])
         .run(tauri::generate_context!())
-        .expect("error while running the Hone application");
+        .expect("error while running the Quench application");
 }
 
 /// One binary, one tray icon: a menu with Show / Quit, wired to the main window.
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show Hone", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Hone", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Quench", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Quench", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
-    TrayIconBuilder::with_id("hone-tray")
+    TrayIconBuilder::with_id("quench-tray")
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
-        .tooltip("Hone")
+        .tooltip("Quench")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {

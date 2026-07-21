@@ -1,13 +1,13 @@
-# Hone
+# Quench
 
-*(working name — renameable until launch; see docs/naming.md)*
+*(formerly Hone — see [docs/naming.md](docs/naming.md) for the naming decision)*
 
 A desktop app that turns the chaos of AI agent configuration into order. See exactly
 what enters each coding agent's context — skills, instruction files, MCP servers — per
 project, per harness, per machine. Control it, version it, share it. You're the driver,
 not the passenger.
 
-**Not an orchestrator.** Hone never runs or commands agents. It governs what they're
+**Not an orchestrator.** Quench never runs or commands agents. It governs what they're
 equipped with.
 
 ## Principles
@@ -43,7 +43,7 @@ Cloudflare Workers + D1 + R2, GitHub OAuth.
 
 A pnpm + Cargo workspace (see hone#8):
 
-- `crates/hone-core/` — pure Rust: scanner, git, provenance. No Tauri dependency, so a
+- `crates/quench-core/` — pure Rust: scanner, git, provenance. No Tauri dependency, so a
   headless consumer stays possible and "cloud never load-bearing" is a boundary, not a
   discipline. The scaffold ships only a version probe — no real scanner yet.
 - `apps/desktop/` — the Tauri app. React frontend at the top; `src-tauri/` **nested
@@ -69,9 +69,9 @@ cd apps/desktop
 pnpm tauri dev
 ```
 
-`pnpm dev` opens the **Hone** window and a tray icon (menu: Show / Quit) from one
+`pnpm dev` opens the **Quench** window and a tray icon (menu: Show / Quit) from one
 binary, with the x-ray / matrix / skill-editor panels as stub shells. First run
 compiles the Rust workspace, so give it a minute.
 
 Other commands: `pnpm web` (frontend only, in a browser at `localhost:1420`),
-`pnpm build` (bundle the desktop app), `cargo test -p hone-core`.
+`pnpm build` (bundle the desktop app), `cargo test -p quench-core`.

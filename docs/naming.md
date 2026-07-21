@@ -1,5 +1,15 @@
 # Naming Brief — Desktop App for AI Agent Skill Control
 
+## Decision: Quench
+
+**The hunt is retired.** The product's name is **Quench** — decided in
+[#30](https://github.com/JarenKempton/hone/issues/30) after this brief's process ran to
+~225 candidates across 7 gauntlet sweeps plus a brute-force registry scan of all 3,739
+common 4–6-letter English words. See #30 for the full rationale (Quench's collision
+profile, the pre-launch trademark/registrar checklist) and [docs/decisions.md](decisions.md)
+for the ADR. The constraints, taste notes, and kill-list below are kept as the historical
+record of how the hunt got there — not a live search anymore.
+
 ## What the product is
 
 A cross-harness desktop app (Tauri) that gives a developer **visibility and control over

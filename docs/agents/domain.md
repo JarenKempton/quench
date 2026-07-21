@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`docs/`** — the canonical domain docs for Hone:
+- **`docs/`** — the canonical domain docs for Quench:
   - `docs/architecture.md` — three tiers, sources model, usage tracking, security layer
   - `docs/mvp-scope.md` — what's in/out of v1, build phases
   - `docs/decisions.md` — the settled/open decision log (this repo's ADR-equivalent; decisions are recorded here rather than in `docs/adr/`)
