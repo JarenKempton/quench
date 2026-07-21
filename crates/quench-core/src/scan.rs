@@ -1,4 +1,4 @@
-//! The scanner — Quench's first real look at a machine (hone#13).
+//! The scanner — Quench's first real look at a machine (quench#13).
 //!
 //! It reports what harnesses live on this machine and which skills each one
 //! sees, **with honest provenance**: every value carries the real path it came
@@ -6,7 +6,7 @@
 //! A skill that is a symlink into a source repo reports that repo as its origin;
 //! a symlink whose target is gone is surfaced as `dangling`, never hidden.
 //!
-//! The whole crate is a lens over the filesystem (hone#2's prior-art audit).
+//! The whole crate is a lens over the filesystem (quench#2's prior-art audit).
 //! Git integration and the sources/manifest model are later, Phase-2 work; this
 //! is pure `std::fs`.
 
@@ -26,9 +26,9 @@ struct HarnessSpec {
 }
 
 /// The four harnesses in scope for the scaffold. Paths are the real canonical
-/// locations verified on this machine (hone#13). Codex and Pi *do* carry a
+/// locations verified on this machine (quench#13). Codex and Pi *do* carry a
 /// skills dir now — the prior-art audit's "Codex has no skill loader" is stale
-/// (hone#11 already flagged it), so both are scanned like the others.
+/// (quench#11 already flagged it), so both are scanned like the others.
 const HARNESSES: &[HarnessSpec] = &[
     HarnessSpec {
         id: "claude-code",
@@ -123,7 +123,7 @@ pub struct Harness {
 }
 
 /// Project-local skills — the "strays" that live inside a project rather than a
-/// harness's global dir (hone#13). Probed relative to the launch root; empty is
+/// harness's global dir (quench#13). Probed relative to the launch root; empty is
 /// the honest answer when the launched project defines none.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProjectScan {
@@ -193,7 +193,7 @@ fn scan_harness(home: &Path, spec: &HarnessSpec) -> Harness {
     }
 }
 
-/// Discover skills under a skills dir. Two real-world layouts coexist (hone#13):
+/// Discover skills under a skills dir. Two real-world layouts coexist (quench#13):
 /// flat `<skill>/SKILL.md` (Claude, Pi) and nested `<category>/<skill>/SKILL.md`
 /// (Hermes). Hidden entries (`.DS_Store`, Codex's `.system`) are skipped, matching
 /// the prior art's non-recursive glob. Symlinks are followed so vendored skills
@@ -324,7 +324,7 @@ fn scan_project(root: &Path) -> ProjectScan {
 }
 
 /// Skill names appearing in more than one harness — the real cross-harness
-/// duplication the prior art surfaced as conflicts (hone#2).
+/// duplication the prior art surfaced as conflicts (quench#2).
 fn duplicate_names(harnesses: &[Harness]) -> Vec<String> {
     use std::collections::BTreeMap;
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -344,7 +344,7 @@ fn duplicate_names(harnesses: &[Harness]) -> Vec<String> {
         .collect()
 }
 
-// ---- small filesystem helpers (no regex, no yaml dep — hone#2) ----
+// ---- small filesystem helpers (no regex, no yaml dep — quench#2) ----
 
 /// Parse `name:` and `description:` out of a SKILL.md's leading `---` frontmatter.
 /// Deliberately minimal: single-line scalars, optional surrounding quotes. Values

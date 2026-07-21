@@ -9,7 +9,7 @@ import { XrayPanel } from "./panels/XrayPanel";
 import { MatrixPanel } from "./panels/MatrixPanel";
 import { SkillEditorPanel } from "./panels/SkillEditorPanel";
 
-// hone#7: hash history. A Tauri webview serves the frontend from tauri://
+// quench#7: hash history. A Tauri webview serves the frontend from tauri://
 // (or file://) where the browser's path-based history has no server to answer
 // deep links — hash routing keeps navigation entirely client-side.
 const rootRoute = createRootRoute({ component: AppLayout });

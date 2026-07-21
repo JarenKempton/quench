@@ -5,7 +5,7 @@ edition = "2021"
 description = "Quench — visibility and control over everything entering AI coding agents' context"
 publish = false
 
-# hone#8: Tauri v2 generates src-tauri as lib+bin. The lib carries the app so a
+# quench#8: Tauri v2 generates src-tauri as lib+bin. The lib carries the app so a
 # mobile entry point (and integration tests) can reach it; main.rs is a thin shim.
 [lib]
 name = "quench_lib"

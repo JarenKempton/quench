@@ -1,6 +1,6 @@
 # Research: How does Pi load skills (index vs full body)?
 
-**Ticket:** JarenKempton/hone#4
+**Ticket:** JarenKempton/quench#4
 **Date:** 2026-07-16
 **Verdict:** Pi loads skills as an **INDEX only** (name + description + file path), not full bodies.
 **Confidence:** High — read directly from the installed Pi source (primary source, not docs).
@@ -51,7 +51,7 @@ misleading for token cost**:
   chooses to `read` a specific SKILL.md. The "wholesale" applies to disk
   checkout, not context loading.
 
-## Implication for Hone's context x-ray
+## Implication for Quench's context x-ray
 
 The honest baseline (always-on) token cost for Pi skills = the XML index:
 ~a few lines per skill (name + description ≤1024 chars + absolute path), plus a

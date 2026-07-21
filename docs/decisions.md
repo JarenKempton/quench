@@ -10,8 +10,8 @@
 - Sources model: everything git-backed incl. invisible app-managed local repo
 - Staged mutations (tray + one Apply), calm-tool UI register, no provenance dots
   (tooltips), human harness names
-- Name: **Quench** (settled — see [#30](https://github.com/JarenKempton/hone/issues/30);
-  supersedes the working name Hone. Rename executed in [#31](https://github.com/JarenKempton/hone/issues/31).)
+- Name: **Quench** (settled — see [#30](https://github.com/JarenKempton/quench/issues/30);
+  supersedes the working name Hone. Rename executed in [#31](https://github.com/JarenKempton/quench/issues/31).)
 - No orchestrator framing, ever
 - **The project repo is itself a source** ([#9]) — every skill is
   `(source, path, pinned tree SHA)`, so skills committed into a project are just skills
@@ -128,14 +128,14 @@
 - **Don't alias commands** — `use x::greet as g; generate_handler![g]` fails; the macro
   rewrites only the last path segment ([tauri#8513], closed not-planned).
 
-[#1]: https://github.com/JarenKempton/hone/issues/1
-[#5]: https://github.com/JarenKempton/hone/issues/5
-[#7]: https://github.com/JarenKempton/hone/issues/7
-[#8]: https://github.com/JarenKempton/hone/issues/8
-[#9]: https://github.com/JarenKempton/hone/issues/9
-[#10]: https://github.com/JarenKempton/hone/issues/10
-[#11]: https://github.com/JarenKempton/hone/issues/11
-[#14]: https://github.com/JarenKempton/hone/issues/14
+[#1]: https://github.com/JarenKempton/quench/issues/1
+[#5]: https://github.com/JarenKempton/quench/issues/5
+[#7]: https://github.com/JarenKempton/quench/issues/7
+[#8]: https://github.com/JarenKempton/quench/issues/8
+[#9]: https://github.com/JarenKempton/quench/issues/9
+[#10]: https://github.com/JarenKempton/quench/issues/10
+[#11]: https://github.com/JarenKempton/quench/issues/11
+[#14]: https://github.com/JarenKempton/quench/issues/14
 [cargo ref]: https://doc.rust-lang.org/cargo/reference/profiles.html
 [size guide]: https://v2.tauri.app/concept/size/
 [project structure]: https://v2.tauri.app/start/project-structure/
