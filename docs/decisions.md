@@ -10,22 +10,23 @@
 - Sources model: everything git-backed incl. invisible app-managed local repo
 - Staged mutations (tray + one Apply), calm-tool UI register, no provenance dots
   (tooltips), human harness names
-- Name: **Hone** (provisional — Hono proximity noted; rename cheap until launch)
+- Name: **Quench** (settled — see [#30](https://github.com/JarenKempton/hone/issues/30);
+  supersedes the working name Hone. Rename executed in [#31](https://github.com/JarenKempton/hone/issues/31).)
 - No orchestrator framing, ever
 - **The project repo is itself a source** ([#9]) — every skill is
   `(source, path, pinned tree SHA)`, so skills committed into a project are just skills
   sourced from *that* project. One model, no second mechanism. Source kinds: the project
   repo · a shared team skills repo · your own private/local git repo · app-managed
-  `~/.hone/local.git`.
+  `~/.quench/local.git`.
 - **Per-project state splits by owner, not by location** ([#9]):
-  - **Committed `./.hone/manifest.json`** — *what's available*: source repos + the menu
+  - **Committed `./.quench/manifest.json`** — *what's available*: source repos + the menu
     of skills drawn from them. Changing it is a PR. **Only exists if the project uses
     sources** — a team that only commits skills never sees this file.
-  - **Personal `~/.hone/projects/<key>.json`** — *what you activate and what version
+  - **Personal `~/.quench/projects/<key>.json`** — *what you activate and what version
     you're on*. Never committed.
 
   Skills materialize into the **harness-native dir** (`.claude/skills/` etc., per team
-  agreement). `.hone/` holds pointers, never content — there is no `.hone/skills/`
+  agreement). `.quench/` holds pointers, never content — there is no `.quench/skills/`
   composition folder.
 - **Pins are per-skill and personal, via git tree SHAs** ([#9]) — every directory in git
   already has a content-addressed tree SHA (`git rev-parse HEAD:<path>`), so different
@@ -46,17 +47,17 @@
 - **Monorepo: desktop and cloud share one tree** ([#8]) — user overruled the
   separate-repo recommendation; the shared client/server contract won. Consequence: the
   "cloud is never load-bearing" principle is now a *discipline*, not a structural fact,
-  so it needs a mechanical guardrail — `hone-core` never depends on the cloud package,
+  so it needs a mechanical guardrail — `quench-core` never depends on the cloud package,
   and **the desktop app must build and run green with `apps/cloud/` deleted**. Checkable
   in CI; not yet wired.
 - **Repo layout** ([#8]) — pnpm + Cargo workspaces over one tree:
 
   ```
-  hone/
+  quench/
   ├── Cargo.toml              # workspace root — [profile.release] LIVES HERE
   ├── package.json            # pnpm workspace root
   ├── crates/
-  │   └── hone-core/          # scanner, git, provenance — pure Rust, no Tauri
+  │   └── quench-core/        # scanner, git, provenance — pure Rust, no Tauri
   ├── apps/
   │   ├── desktop/            # stock create-tauri-app layout, one level down
   │   │   ├── package.json    # the real frontend
@@ -66,7 +67,7 @@
   └── docs/
   ```
 
-  Cargo workspace members: `apps/desktop/src-tauri`, `crates/hone-core` (explicit, not
+  Cargo workspace members: `apps/desktop/src-tauri`, `crates/quench-core` (explicit, not
   globbed). No Python vendored anywhere — [#5] settled Rust-native.
 - **`src-tauri/` nests inside `apps/desktop/`** ([#8]) — not hoisted to `crates/`. The
   Tauri CLI takes `$cwd` as the frontend if `$cwd` has a `package.json`, else **walks
@@ -76,11 +77,11 @@
   `TAURI_FRONTEND_PATH` needed**, and the tree inside `apps/desktop/` is byte-identical
   to `create-tauri-app` output, so stock docs apply and the default
   `"frontendDist": "../dist"` is already correct.
-- **`hone-core` split from day one** ([#8]) — a boundary that can't be accidentally
+- **`quench-core` split from day one** ([#8]) — a boundary that can't be accidentally
   crossed: logic there physically cannot reach `AppHandle` or Tauri state, so it stays
   pure by construction. [#5]'s port is incremental (scanner now; x-ray/apply/heartbeat
-  later), so this crate is where nearly all of Hone eventually lives. Keeps a headless
-  consumer possible without a rewrite — which matters because the thing Hone replaces
+  later), so this crate is where nearly all of Quench eventually lives. Keeps a headless
+  consumer possible without a rewrite — which matters because the thing Quench replaces
   (`bootstrap.sh` + `agentkit`) *is* a CLI, and [#11] must define parity against it.
   Note: the usual "you need a separate crate to unit-test" argument is **false** — Tauri
   v2 already generates `src-tauri` as lib+bin, so `cargo test` works flat. The split
@@ -123,7 +124,7 @@
   must be `pub` (a `pub(crate)` fn fails with `error[E0603]: macro __cmd__<name> is
   private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.conf.json`
   relative to its own manifest dir. `tauri dev` watches workspace path-dependencies, so
-  editing `hone-core` triggers a rebuild.
+  editing `quench-core` triggers a rebuild.
 - **Don't alias commands** — `use x::greet as g; generate_handler![g]` fails; the macro
   rewrites only the last path segment ([tauri#8513], closed not-planned).
 
@@ -144,7 +145,7 @@
 
 _No standing architectural decision is open here. Live open questions — the **X-ray panel
 redesign** (the panel currently shows an inventory, not the per-project × harness *pre-flight*
-the differentiator calls for), whether Hone ships a CLI, CI shape, PR-authoring, and
+the differentiator calls for), whether Quench ships a CLI, CI shape, PR-authoring, and
 fleet/heartbeat scope — are tracked as the wayfinder map's frontier and fog ([#1]), the
 index of record._
 
@@ -152,12 +153,12 @@ index of record._
      (#6), port strategy (#5), Claude Code AGENTS.md support (#3), Pi skill loading (#4),
      cloud auth (#10), repo layout (#8), frontend stack + toolchain (#7). Migration cutover
      (#11) is DISSOLVED — the command-center POC was never adopted, so there is no parity
-     bar and no cutover checklist; Hone reimplements the ideas, it doesn't match a POC. -->
+     bar and no cutover checklist; Quench reimplements the ideas, it doesn't match a POC. -->
 
 ## Fog surfaced by [#8]
 
-- **Does Hone ship a CLI, and what replaces `bootstrap.sh` on a fresh machine?** The
-  `hone-core` split keeps a headless path *possible*; nothing decides whether it exists.
+- **Does Quench ship a CLI, and what replaces `bootstrap.sh` on a fresh machine?** The
+  `quench-core` split keeps a headless path *possible*; nothing decides whether it exists.
   If materializing skills requires launching a GUI, that's a product decision — it should
   be made deliberately, not inherited from a build file. No longer entangled with a parity
   bar: [#11] established there is no incumbent CLI to match, so this is a clean

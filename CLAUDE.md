@@ -1,4 +1,4 @@
-# Hone
+# Quench
 
 Cross-harness desktop app (Tauri v2) for visibility and control over everything entering AI coding agents' context. See `README.md` for the pitch and `docs/` for architecture, scope, decisions, and naming.
 

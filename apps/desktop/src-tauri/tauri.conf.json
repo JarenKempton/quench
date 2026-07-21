@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hone",
+  "productName": "Quench",
   "version": "0.0.0",
-  "identifier": "dev.hone.app",
+  "identifier": "sh.quench.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Hone",
+        "title": "Quench",
         "width": 1100,
         "height": 720,
         "minWidth": 720,

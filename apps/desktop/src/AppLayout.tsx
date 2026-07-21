@@ -25,8 +25,8 @@ export function AppLayout() {
     <div className="shell">
       <aside className="rail">
         <div className="brand">
-          <span className="brand-mark">H</span>
-          <span className="brand-name">Hone</span>
+          <span className="brand-mark">Q</span>
+          <span className="brand-name">Quench</span>
         </div>
         <nav className="nav">
           {NAV.map((n) => (

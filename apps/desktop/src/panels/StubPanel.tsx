@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * The scaffold's panels are deliberately empty shells (hone#12). A stub renders
  * its identity and an honest "not built yet" state — never fabricated data, per
- * Hone's standing stance that every number has provenance.
+ * Quench's standing stance that every number has provenance.
  */
 export function StubPanel(props: { title: string; tagline: string; planned: ReactNode }) {
   return (

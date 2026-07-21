@@ -1,4 +1,4 @@
-//! hone-core — the pure-Rust core for Hone.
+//! quench-core — the pure-Rust core for Quench.
 //!
 //! Holds the scanner, git integration, and provenance logic. It has **no**
 //! dependency on Tauri (no `AppHandle` reachable), which keeps a headless
@@ -28,7 +28,7 @@ pub struct AppInfo {
 /// No scanning, no harness counts, no fake data.
 pub fn app_info() -> AppInfo {
     AppInfo {
-        name: "Hone",
+        name: "Quench",
         core_version: env!("CARGO_PKG_VERSION"),
     }
 }
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn app_info_reports_the_linked_core_version() {
         let info = app_info();
-        assert_eq!(info.name, "Hone");
+        assert_eq!(info.name, "Quench");
         assert_eq!(info.core_version, env!("CARGO_PKG_VERSION"));
     }
 }

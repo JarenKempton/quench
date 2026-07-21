@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type { Scan } from "./scan";
 
-// Mirrors hone_core::AppInfo (serde-serialized across the invoke bridge).
+// Mirrors quench_core::AppInfo (serde-serialized across the invoke bridge).
 interface AppInfo {
   name: string;
   core_version: string;
