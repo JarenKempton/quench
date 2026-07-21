@@ -41,7 +41,7 @@ Cloudflare Workers + D1 + R2, GitHub OAuth.
 
 ## Repository layout
 
-A pnpm + Cargo workspace (see hone#8):
+A pnpm + Cargo workspace (see quench#8):
 
 - `crates/quench-core/` — pure Rust: scanner, git, provenance. No Tauri dependency, so a
   headless consumer stays possible and "cloud never load-bearing" is a boundary, not a

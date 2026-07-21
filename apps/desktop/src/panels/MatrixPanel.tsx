@@ -3,10 +3,10 @@ import { useShellStore } from "../store";
 import type { Scan } from "../scan";
 
 /**
- * Matrix: every discovered skill against every harness (hone#13) — its first
+ * Matrix: every discovered skill against every harness (quench#13) — its first
  * real data too. A cell is filled only where the scanner actually found that
  * skill under that harness; staging activation as a mutation to apply is later
- * (the Zustand tray model is still fog, hone#7). Read-only and honest for now.
+ * (the Zustand tray model is still fog, quench#7). Read-only and honest for now.
  */
 export function MatrixPanel() {
   const scan = useShellStore((s) => s.scan);

@@ -5,7 +5,7 @@ use tauri::{
 };
 
 /// The one command the scaffold exposes: hand the frontend the core's honest
-/// identity so the invoke bridge is proven end-to-end (hone#5's JSON contract,
+/// identity so the invoke bridge is proven end-to-end (quench#5's JSON contract,
 /// now serde structs over `invoke` instead of HTTP). No scanning yet.
 ///
 /// App-defined commands are not gated by the capability ACL — only core and
@@ -16,7 +16,7 @@ fn app_info() -> quench_core::AppInfo {
 }
 
 /// Scan this machine for harnesses and their skills, with honest provenance
-/// (hone#13). The core does the real filesystem work; this command just hands
+/// (quench#13). The core does the real filesystem work; this command just hands
 /// the result across the invoke bridge as a serde struct. No fabricated data —
 /// every count the frontend renders traces to a path the core actually read.
 #[tauri::command]

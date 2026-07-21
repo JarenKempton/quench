@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * The scaffold's panels are deliberately empty shells (hone#12). A stub renders
+ * The scaffold's panels are deliberately empty shells (quench#12). A stub renders
  * its identity and an honest "not built yet" state — never fabricated data, per
  * Quench's standing stance that every number has provenance.
  */
