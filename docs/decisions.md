@@ -3,7 +3,7 @@
 ## Settled
 
 - Build own app (not contribute to skills-manager) — differentiators: whole-context
-  view, provenance/pinning, existing agentkit backend
+  view, provenance/pinning, existing agentkit backend (the author's earlier skills CLI)
 - Tauri v2, tray + window in one binary
 - Cloud: yes, optional tier (user overruled git/tailscale-only staging) — Cloudflare,
   minimal, maybe paid later
@@ -189,11 +189,10 @@ private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.c
 
 ## Open
 
-_No standing architectural decision is open here. Live open questions — the **X-ray panel
-redesign** (the panel currently shows an inventory, not the per-project × harness *pre-flight*
-the differentiator calls for), whether Quench ships a CLI, CI shape, PR-authoring, and
-fleet/heartbeat scope — are tracked as the wayfinder map's frontier and fog ([#1]), the
-index of record._
+_No standing architectural decision is open here. Live open questions — which frontend
+(Tauri or GPUI) is retired, whether Quench ships a CLI, PR-authoring, multi-machine sync of
+`~/.quench/state/`, and fleet/heartbeat scope — are tracked as the wayfinder map's frontier
+and fog ([#1]), the index of record._
 
 <!-- Resolved and moved to Settled / the map's Decisions-so-far: repo & app identifiers
      (#6), port strategy (#5), Claude Code AGENTS.md support (#3), Pi skill loading (#4),

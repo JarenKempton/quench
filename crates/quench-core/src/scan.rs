@@ -25,7 +25,7 @@ struct HarnessSpec {
     context: &'static [&'static str],
 }
 
-/// The four harnesses in scope for the scaffold. Paths are the real canonical
+/// The four harnesses Quench scans. Paths are the real canonical
 /// locations verified on this machine (quench#13). Codex and Pi *do* carry a
 /// skills dir now — the prior-art audit's "Codex has no skill loader" is stale
 /// (quench#11 already flagged it), so both are scanned like the others.

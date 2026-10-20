@@ -2,12 +2,12 @@
 
 ## In
 
-1. Context x-ray per project × harness (the differentiator — nobody does pre-flight,
-   cross-harness)
+1. Per-project context view for each harness — what loads and what it costs (the
+   differentiator: nobody shows this across harnesses)
 2. Inventory + control: skills, CLAUDE.md/AGENTS.md, MCP servers (MCP read-only in v1);
    staged changes, one Apply
 3. Skill editor (Name/Description/Tags fields + body, edit/preview, version history,
-   restore) — ported from command center
+   restore) — ported from the author's earlier command-center prototype
 4. Security v1: pin-by-hash, diff-on-update, provenance, allowed-tools display, honest
    lint. Not a malware scanner.
 5. Local-only default; multi-machine via **any git remote** — pull + materialize. GitHub
@@ -28,8 +28,8 @@
 
 ## Phases
 
-1. **Local core** — Tauri shell, scanner, inventory, x-ray, editor, local git backing,
-   matrix + staged apply (ports agentkit logic; useful with zero account)
+1. **Local core** — desktop shell, scanner, context view, editor, local git backing,
+   per-skill control + staged apply (useful with zero account)
 2. **Sources + safety** — external repos, skills.sh browser, pinning, diffs, provenance,
    lint
 3. **Cloud** — Workers service, OAuth, machine sync, circles, usage aggregation

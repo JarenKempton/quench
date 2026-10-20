@@ -193,7 +193,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-
 .skill-list {
   list-style: none;
   margin: 8px 0 0;
@@ -236,7 +235,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 
 .skill-desc {
   margin: 2px 0 0;

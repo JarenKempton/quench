@@ -1,12 +1,12 @@
 # Quench
 
-Cross-harness desktop app (Tauri v2) for visibility and control over everything entering AI coding agents' context. See `README.md` for the pitch and `docs/` for architecture, scope, decisions, and naming.
+Cross-harness desktop app (Tauri v2 and GPUI frontends over one Rust core) for visibility and control over everything entering AI coding agents' context. See `README.md` for the pitch and `docs/` for architecture, scope, decisions, and naming.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/quench`), operated via the `gh` CLI. The active `/wayfinder` map is issue **#1**. ⚠️ Prefix every `gh` call with `env -u GITHUB_TOKEN` in this environment (a stale token overrides auth). See `docs/agents/issue-tracker.md`.
+Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/quench`), operated via the `gh` CLI. The active `/wayfinder` map is issue **#1**. If a stale `GITHUB_TOKEN` in your shell overrides `gh` auth, prefix calls with `env -u GITHUB_TOKEN`. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

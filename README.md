@@ -6,21 +6,38 @@ skills on or off without hand-editing settings files.
 Quench is a local desktop app. Open a project and it shows what **Claude Code**
 loads there, with a cost for each item:
 
-- **Always loaded:** `~/.claude/CLAUDE.md`, every `CLAUDE.md` / `.claude/CLAUDE.md` /
-  `CLAUDE.local.md` from the filesystem root down to the project, `@imports`, and the
-  project's auto-memory `MEMORY.md`. Symlinked or identical files are counted once.
+- **Always loaded**, following [Claude Code's memory docs](https://code.claude.com/docs/en/memory):
+  - The managed policy `CLAUDE.md`, `~/.claude/CLAUDE.md` and `~/.claude/rules/`.
+  - Every `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` from the filesystem root
+    down to the project. If there are none, `AGENTS.md` / `.claude/AGENTS.md` instead.
+  - `.claude/rules/`. Rules with `paths:` only load when matching files are touched.
+  - `@imports`, up to four hops. Code spans, fences and HTML comments aren't imported or
+    counted.
+  - The first 200 lines (max 25 KB) of the project's auto-memory `MEMORY.md`.
+
+  A symlinked file is counted once. Identical copies both count, and are flagged.
+
 - **Skills:** each skill's index entry (name + description) is always loaded; its body
   only when used. Skills with `disable-model-invocation` and overridden skills are
   priced the way Claude Code treats them.
 - **MCP servers:** user, local and project (`.mcp.json`) servers, with approval state.
-  Secrets are never read into the app: URLs lose credentials and query strings,
-  commands show only the program name, env and header values are dropped.
+  When one name appears in several scopes, the one Claude Code uses is marked.
+  - URLs show only `scheme://host`.
+  - Commands show only the program name.
+  - Env and header values are never read into the app.
 
 Per skill you can pick **Inherit / On / Name only / Slash only / Off** for this
-project. Changes queue up, show the exact file diff, and apply together. Quench
-writes only the project's `.claude/settings.local.json` (Claude Code's personal,
-auto-gitignored settings file), keeps every other key, backs up the old file, and
-can undo the last apply.
+project. Changes queue up, show the exact file diff, and apply together.
+
+Quench writes only `.claude/settings.local.json`, Claude Code's personal per-project
+settings file, in the same place Claude Code keeps it:
+
+- At the repository root.
+- For a worktree, at the main checkout's root.
+- Outside git, or when the repo root is your home folder, in the project folder itself.
+
+Every other key in that file is kept. Undo reverses only Quench's own change, so edits
+Claude Code made in between survive.
 
 **Not an orchestrator.** Quench never runs agents. It governs what they load.
 
@@ -43,9 +60,16 @@ journaled with its project, machine and harness) but not built.
 
 There are no prebuilt releases yet. Build from source:
 
-Prerequisites: Rust (stable, via `rustup`), Node ≥ 20, pnpm 11 (`npm i -g pnpm@11`
-or `corepack enable`). Linux also needs the WebKitGTK and GPU libraries listed in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Prerequisites:
+
+- Rust (stable, via `rustup`).
+- Node 22.18+ or 24.11+.
+- pnpm 11. Install it from outside the repository (`cd ~ && npm i -g pnpm@11`): npm
+  refuses to run inside the repo because of `devEngines`.
+- On Linux, the WebKitGTK and GPU libraries listed in
+  [`.github/workflows/ci.yml`](.github/workflows/ci.yml). The GPUI app's folder picker
+  also needs an xdg-desktop-portal backend with a file chooser, such as
+  `xdg-desktop-portal-gtk`.
 
 ```sh
 pnpm install
@@ -65,13 +89,14 @@ cargo run -p quench-app --example toggle -- <project> undo
 
 ## What Quench writes
 
-| Path                                    | Contents                                                    |
-| --------------------------------------- | ----------------------------------------------------------- |
-| `<project>/.claude/settings.local.json` | `skillOverrides` entries you applied (other keys untouched) |
-| `~/.quench/local/machine.json`          | A random machine id and its label                           |
-| `~/.quench/local/recent.json`           | Recently opened projects                                    |
-| `~/.quench/local/journal.jsonl`         | One line per applied or undone change                       |
-| `~/.quench/local/backups/`              | The settings file as it was before each apply               |
+| Path                                           | Contents                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `.claude/settings.local.json` (location above) | `skillOverrides` entries you applied (other keys untouched)        |
+| `.git/info/exclude`                            | One line keeping that file out of git, if Quench created it        |
+| `~/.quench/local/machine.json`                 | A random machine id and its label                                  |
+| `~/.quench/local/recent.json`                  | Recently opened projects                                           |
+| `~/.quench/local/journal.jsonl`                | One line per applied or undone change                              |
+| `~/.quench/local/backups/`                     | The settings file as it was before each apply, for manual recovery |
 
 Set `QUENCH_HOME` to use a different directory than `~/.quench`.
 

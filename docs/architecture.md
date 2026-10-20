@@ -3,9 +3,10 @@
 ## Three tiers
 
 1. **Local app** (Tauri): scanner (find harnesses + skills incl. project strays),
-   context x-ray, skill/instruction editors, matrix (skill × harness × machine ×
-   project) with staged apply, local git backing. Rust core watches filesystems;
-   webview reuses the command-center UI patterns.
+   a per-project context view (what each harness loads and what it costs),
+   skill/instruction editors, per-skill control with staged apply, local git backing.
+   Rust core (`quench-core`, `quench-app`) owns all logic; the Tauri and GPUI
+   frontends only render it.
 2. **Cloud service** (optional, phase 3): Cloudflare Workers + D1 + R2. Accounts via
    **Better Auth (GitHub + Google, auto-link on verified email)** — sign-in is split from
    the GitHub _grant_ for repo features; magic-link is **not** planned (#10). Better Auth
@@ -52,11 +53,11 @@ bypassable (Trail of Bits) — hence pinning+review, not scanning promises.
 
 ## Harness adapters
 
-Claude Code (~~/.claude/skills, CLAUDE.md, hooks), Codex (AGENTS.md **plus skills** —
+Claude Code (`~/.claude/skills`, CLAUDE.md, hooks), Codex (AGENTS.md **plus skills** —
 `[[skills.config]]` in `~/.codex/config.toml`; the old "no skill loader, render an index"
 note is refuted), Pi (git packages, loads skills/ **by index** — frontmatter → XML
 `<available_skills>`, bodies lazily; the old "wholesale" note is refuted), Hermes
-(~~/.hermes/skills + profiles). Context-window table per model with source
+(`~/.hermes/skills` + profiles). Context-window table per model with source
 (config-override | model-spec | assumed-labeled).
 
 **Per-user deselect is not uniform** and Quench must degrade honestly: Claude Code is clean
