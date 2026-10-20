@@ -1,42 +1,74 @@
+use quench_app::{App, ContextView, MachineView, RecentView};
+use std::path::PathBuf;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Manager, State,
 };
+use tauri_plugin_dialog::DialogExt;
 
-/// The one command the scaffold exposes: hand the frontend the core's honest
-/// identity so the invoke bridge is proven end-to-end (quench#5's JSON contract,
-/// now serde structs over `invoke` instead of HTTP). No scanning yet.
-///
-/// App-defined commands are not gated by the capability ACL — only core and
-/// plugin commands are — so this needs no permission entry.
 #[tauri::command]
 fn app_info() -> quench_core::AppInfo {
     quench_core::app_info()
 }
 
-/// Scan this machine for harnesses and their skills, with honest provenance
-/// (quench#13). The core does the real filesystem work; this command just hands
-/// the result across the invoke bridge as a serde struct. No fabricated data —
-/// every count the frontend renders traces to a path the core actually read.
 #[tauri::command]
-fn scan() -> quench_core::Scan {
-    quench_core::scan_this_machine()
+fn machine(app: State<App>) -> MachineView {
+    app.machine()
+}
+
+#[tauri::command]
+fn recent(app: State<App>) -> Vec<RecentView> {
+    app.recent()
+}
+
+#[tauri::command]
+fn launch_project() -> Option<String> {
+    std::env::args().nth(1)
+}
+
+#[tauri::command]
+fn open_project(app: State<App>, path: String) -> Result<ContextView, String> {
+    let path = PathBuf::from(path);
+    if !path.is_dir() {
+        return Err(format!("{} is not a folder", path.display()));
+    }
+    app.open_project(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn pick_project(handle: tauri::AppHandle) -> Option<String> {
+    handle
+        .dialog()
+        .file()
+        .set_title("Open a project folder")
+        .blocking_pick_folder()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let app = App::for_this_user().expect("Quench could not create ~/.quench/local");
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(app)
         .setup(|app| {
             build_tray(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_info, scan])
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            machine,
+            recent,
+            launch_project,
+            open_project,
+            pick_project
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the Quench application");
 }
 
-/// One binary, one tray icon: a menu with Show / Quit, wired to the main window.
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show Quench", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Quench", true, None::<&str>)?;

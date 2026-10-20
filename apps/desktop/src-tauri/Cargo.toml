@@ -17,3 +17,5 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 quench-core = { path = "../../../crates/quench-core" }
+quench-app = { path = "../../../crates/quench-app" }
+tauri-plugin-dialog = "2"

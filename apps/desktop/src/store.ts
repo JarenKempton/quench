@@ -1,54 +1,55 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Scan } from "./scan";
+import type { ContextView } from "./generated/ContextView";
+import type { MachineView } from "./generated/MachineView";
+import type { RecentView } from "./generated/RecentView";
 
-// Mirrors quench_core::AppInfo (serde-serialized across the invoke bridge).
-interface AppInfo {
-  name: string;
-  core_version: string;
-}
-
-type ScanStatus = "idle" | "scanning" | "ready" | "error";
+type Status = "idle" | "loading" | "ready" | "error";
 
 interface ShellState {
-  /** Real core version once the bridge answers; null until then. No placeholder value. */
-  coreVersion: string | null;
-  /** Ask the Rust core who it is — proves the invoke contract end-to-end (quench#5). */
-  connect: () => Promise<void>;
-
-  /** Real scan of this machine once the core answers; null until then (quench#13). */
-  scan: Scan | null;
-  scanStatus: ScanStatus;
-  /** Error text if the scan failed — surfaced honestly, not swallowed into empty data. */
-  scanError: string | null;
-  /** Run the real scanner in the core and hold its honest result. */
-  runScan: () => Promise<void>;
+  machine: MachineView | null;
+  recent: RecentView[];
+  view: ContextView | null;
+  openPath: string | null;
+  status: Status;
+  error: string | null;
+  init: () => Promise<void>;
+  open: (path: string) => Promise<void>;
+  pick: () => Promise<void>;
 }
 
-// quench#7: Zustand is the shell's state tool. It now holds the scan (quench#13);
-// the staged-mutation tray model that will also live here is still fog.
-export const useShellStore = create<ShellState>((set) => ({
-  coreVersion: null,
-  connect: async () => {
+export const useShellStore = create<ShellState>((set, get) => ({
+  machine: null,
+  recent: [],
+  view: null,
+  openPath: null,
+  status: "idle",
+  error: null,
+
+  init: async () => {
+    const [machine, recent, launch] = await Promise.all([
+      invoke<MachineView>("machine"),
+      invoke<RecentView[]>("recent"),
+      invoke<string | null>("launch_project"),
+    ]);
+    set({ machine, recent });
+    const first = launch ?? recent[0]?.path;
+    if (first) await get().open(first);
+  },
+
+  open: async (path) => {
+    set({ status: "loading", error: null, openPath: path });
     try {
-      const info = await invoke<AppInfo>("app_info");
-      set({ coreVersion: info.core_version });
-    } catch {
-      set({ coreVersion: null });
+      const view = await invoke<ContextView>("open_project", { path });
+      const recent = await invoke<RecentView[]>("recent");
+      set({ view, recent, status: "ready" });
+    } catch (err) {
+      set({ status: "error", error: String(err) });
     }
   },
 
-  scan: null,
-  scanStatus: "idle",
-  scanError: null,
-  runScan: async () => {
-    set({ scanStatus: "scanning", scanError: null });
-    try {
-      const scan = await invoke<Scan>("scan");
-      set({ scan, scanStatus: "ready" });
-    } catch (err) {
-      // No fake data on failure — show the error, keep the panels honestly empty.
-      set({ scanStatus: "error", scanError: String(err) });
-    }
+  pick: async () => {
+    const path = await invoke<string | null>("pick_project");
+    if (path) await get().open(path);
   },
 }));

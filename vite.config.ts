@@ -1,7 +1,7 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
-  fmt: { ignorePatterns: ["apps/desktop/src/generated/**"] },
+  fmt: { ignorePatterns: ["apps/desktop/src/generated/**", "crates/*/tests/contract/**"] },
   lint: {
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },

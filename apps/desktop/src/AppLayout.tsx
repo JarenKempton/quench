@@ -1,25 +1,21 @@
 import { useEffect } from "react";
-import { Link, Outlet } from "@tanstack/react-router";
+import { Outlet } from "@tanstack/react-router";
 import { useShellStore } from "./store";
 
-const NAV = [
-  { to: "/", label: "X-ray", hint: "What's entering context" },
-  { to: "/matrix", label: "Matrix", hint: "Skills × harnesses" },
-  { to: "/skills", label: "Skill editor", hint: "Author & stage" },
-] as const;
-
 export function AppLayout() {
-  const coreVersion = useShellStore((s) => s.coreVersion);
-  const connect = useShellStore((s) => s.connect);
-  const runScan = useShellStore((s) => s.runScan);
+  const machine = useShellStore((s) => s.machine);
+  const recent = useShellStore((s) => s.recent);
+  const openPath = useShellStore((s) => s.openPath);
+  const view = useShellStore((s) => s.view);
+  const init = useShellStore((s) => s.init);
+  const open = useShellStore((s) => s.open);
+  const pick = useShellStore((s) => s.pick);
 
   useEffect(() => {
-    // Fire-and-forget: the store swallows failures into `coreVersion: null` and an
-    // honest scan-error state. `void` marks the floating promises as intentional
-    // (oxlint no-floating-promises).
-    void connect();
-    void runScan();
-  }, [connect, runScan]);
+    void init();
+  }, [init]);
+
+  const current = view?.project.path;
 
   return (
     <div className="shell">
@@ -28,25 +24,28 @@ export function AppLayout() {
           <span className="brand-mark">Q</span>
           <span className="brand-name">Quench</span>
         </div>
-        <nav className="nav">
-          {NAV.map((n) => (
-            <Link
-              key={n.to}
-              to={n.to}
-              className="nav-item"
-              activeProps={{ className: "nav-item nav-item--active" }}
-              activeOptions={{ exact: n.to === "/" }}
+        <button type="button" className="open-button" onClick={() => void pick()}>
+          Open project…
+        </button>
+        <nav className="nav" aria-label="Projects">
+          {recent.map((p) => (
+            <button
+              type="button"
+              key={p.path}
+              className={`nav-item ${p.path === openPath || p.label === current ? "nav-item--active" : ""}`}
+              title={p.path}
+              onClick={() => void open(p.path)}
             >
-              <span className="nav-label">{n.label}</span>
-              <span className="nav-hint">{n.hint}</span>
-            </Link>
+              <span className="nav-label">{p.label}</span>
+              <span className="nav-hint">{p.path}</span>
+            </button>
           ))}
         </nav>
         <footer className="rail-foot">
-          {coreVersion ? (
-            <span className="core-badge core-badge--live">core {coreVersion}</span>
-          ) : (
-            <span className="core-badge">core: not connected</span>
+          {machine && (
+            <span className="core-badge" title={machine.id}>
+              {machine.label}
+            </span>
           )}
         </footer>
       </aside>
