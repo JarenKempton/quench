@@ -55,10 +55,16 @@ pub fn project_key(working_copy: &Path) -> ProjectKey {
             )
         });
 
+    let top = git(&path, &["rev-parse", "--show-toplevel"])
+        .map(|t| std::fs::canonicalize(&t).unwrap_or_else(|_| t.into()));
+    let within = |id: String| match top.as_deref().and_then(|t| path.strip_prefix(t).ok()) {
+        Some(rel) if !rel.as_os_str().is_empty() => format!("{id}/{}", rel.display()),
+        _ => id,
+    };
     let (method, value) = if let Some(root) = root_commit(&path) {
-        (IdentityMethod::RootCommit, root)
+        (IdentityMethod::RootCommit, within(root))
     } else if let Some(remote) = remote {
-        (IdentityMethod::Remote, remote)
+        (IdentityMethod::Remote, within(remote))
     } else {
         (
             IdentityMethod::Path,
@@ -115,11 +121,13 @@ fn preferred_remote(dir: &Path, names: &str) -> Option<String> {
 
 pub fn normalize_remote(url: &str) -> Option<String> {
     let url = url.trim();
+    let drive =
+        url.len() > 2 && url.as_bytes()[1] == b':' && url.as_bytes()[0].is_ascii_alphabetic();
     if url.is_empty()
-        || url.starts_with('/')
-        || url.starts_with('.')
+        || url.starts_with(['/', '.', '~'])
         || url.starts_with("file:")
-        || url == "."
+        || url.contains('\\')
+        || drive
     {
         return None;
     }
@@ -256,6 +264,23 @@ mod tests {
     }
 
     #[test]
+    fn folders_inside_a_repo_are_their_own_projects() {
+        let r = root("nested");
+        let outer = r.join("outer");
+        repo(&outer);
+        fs::create_dir_all(outer.join("notes")).unwrap();
+        fs::create_dir_all(outer.join("packages/api")).unwrap();
+        let top = project_key(&outer);
+        let notes = project_key(&outer.join("notes"));
+        let api = project_key(&outer.join("packages/api"));
+        assert_eq!(notes.method, IdentityMethod::RootCommit);
+        assert_eq!(notes.value, format!("{}/notes", top.value));
+        assert_eq!(api.value, format!("{}/packages/api", top.value));
+        assert_ne!(notes, api);
+        let _ = fs::remove_dir_all(&r);
+    }
+
+    #[test]
     fn non_git_directories_are_keyed_by_their_real_path() {
         let r = root("plain");
         let dir = r.join("notes");
@@ -290,7 +315,14 @@ mod tests {
                 "{url}"
             );
         }
-        for local in [".", "/srv/repo.git", "../sibling", "file:///tmp/x"] {
+        for local in [
+            ".",
+            "/srv/repo.git",
+            "../sibling",
+            "file:///tmp/x",
+            "~/x/repo",
+            r"C:\code\repo",
+        ] {
             assert_eq!(normalize_remote(local), None, "{local}");
         }
     }
