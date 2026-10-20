@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/quench-core",
+    "crates/quench-app",
     "apps/desktop/src-tauri",
 ]
 

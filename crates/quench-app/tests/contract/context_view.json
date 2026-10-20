@@ -1,0 +1,126 @@
+{
+  "harness": "Claude Code",
+  "project": {
+    "label": "proj",
+    "path": "<root>/proj",
+    "identity": "this folder's path (not a git repo)"
+  },
+  "always_tokens": 27,
+  "token_method": "estimated, bytes/3",
+  "sections": [
+    {
+      "id": "instructions",
+      "title": "Always loaded",
+      "rows": [
+        {
+          "id": "file:<root>/home/.claude/CLAUDE.md",
+          "title": "CLAUDE.md",
+          "detail": null,
+          "location": "~/.claude/CLAUDE.md",
+          "scope": "This machine",
+          "cost": {
+            "kind": "estimated",
+            "always_tokens": 4,
+            "on_demand_tokens": 0
+          },
+          "notes": []
+        },
+        {
+          "id": "file:<root>/proj/CLAUDE.md",
+          "title": "CLAUDE.md",
+          "detail": null,
+          "location": "./CLAUDE.md",
+          "scope": "Project",
+          "cost": {
+            "kind": "estimated",
+            "always_tokens": 10,
+            "on_demand_tokens": 0
+          },
+          "notes": []
+        },
+        {
+          "id": "file:<root>/proj/docs/style.md",
+          "title": "style.md",
+          "detail": null,
+          "location": "./docs/style.md",
+          "scope": "Project",
+          "cost": {
+            "kind": "estimated",
+            "always_tokens": 4,
+            "on_demand_tokens": 0
+          },
+          "notes": [
+            "imported by <root>/proj/CLAUDE.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "title": "Skills",
+      "rows": [
+        {
+          "id": "skill:<root>/home/.claude/skills/review/SKILL.md",
+          "title": "review",
+          "detail": "Review a pull request.",
+          "location": "~/.claude/skills/review/SKILL.md",
+          "scope": "This machine",
+          "cost": {
+            "kind": "estimated",
+            "always_tokens": 10,
+            "on_demand_tokens": 23
+          },
+          "notes": []
+        },
+        {
+          "id": "skill:<root>/proj/.claude/skills/ship/SKILL.md",
+          "title": "ship",
+          "detail": "Ship it.",
+          "location": "./.claude/skills/ship/SKILL.md",
+          "scope": "Project",
+          "cost": {
+            "kind": "estimated",
+            "always_tokens": 0,
+            "on_demand_tokens": 26
+          },
+          "notes": [
+            "hidden from the model (disable-model-invocation)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "title": "MCP servers",
+      "rows": [
+        {
+          "id": "mcp:<root>/home/.claude.json#docs",
+          "title": "docs",
+          "detail": "http · https://mcp.example.com/v1",
+          "location": "~/.claude.json",
+          "scope": "This machine",
+          "cost": {
+            "kind": "unknown"
+          },
+          "notes": [
+            "user config"
+          ]
+        },
+        {
+          "id": "mcp:<root>/proj/.mcp.json#db",
+          "title": "db",
+          "detail": "stdio · db-mcp",
+          "location": "./.mcp.json",
+          "scope": "Project",
+          "cost": {
+            "kind": "unknown"
+          },
+          "notes": [
+            "project .mcp.json",
+            "awaiting approval"
+          ]
+        }
+      ]
+    }
+  ]
+}

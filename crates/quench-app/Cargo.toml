@@ -1,0 +1,12 @@
+[package]
+name = "quench-app"
+version = "0.0.0"
+edition = "2021"
+description = "Frontend-agnostic Quench app layer: state, commands and view models shared by every UI."
+publish = false
+
+[dependencies]
+quench-core = { path = "../quench-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = "12"
