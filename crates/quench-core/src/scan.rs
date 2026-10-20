@@ -96,6 +96,7 @@ pub struct Skill {
     pub origin: Origin,
     /// The SKILL.md whose bytes produced `name`/`description`.
     pub manifest: PathBuf,
+    pub model_invocable: bool,
 }
 
 /// A context file (CLAUDE.md / AGENTS.md) present on disk, measured — the token
@@ -155,7 +156,10 @@ pub fn scan_this_machine() -> Scan {
 /// Scan with explicit roots — the testable core (`home` supplies the global
 /// harness dirs, `project_root` the project-local strays).
 pub fn scan(home: &Path, project_root: &Path) -> Scan {
-    let harnesses: Vec<Harness> = HARNESSES.iter().map(|spec| scan_harness(home, spec)).collect();
+    let harnesses: Vec<Harness> = HARNESSES
+        .iter()
+        .map(|spec| scan_harness(home, spec))
+        .collect();
 
     let duplicate_names = duplicate_names(&harnesses);
     let project = scan_project(project_root);
@@ -198,7 +202,7 @@ fn scan_harness(home: &Path, spec: &HarnessSpec) -> Harness {
 /// (Hermes). Hidden entries (`.DS_Store`, Codex's `.system`) are skipped, matching
 /// the prior art's non-recursive glob. Symlinks are followed so vendored skills
 /// resolve; a symlink whose target is gone becomes a `dangling` entry.
-fn collect_skills(dir: &Path, skills: &mut Vec<Skill>, dangling: &mut Vec<PathBuf>) {
+pub(crate) fn collect_skills(dir: &Path, skills: &mut Vec<Skill>, dangling: &mut Vec<PathBuf>) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
@@ -246,13 +250,13 @@ fn collect_skills(dir: &Path, skills: &mut Vec<Skill>, dangling: &mut Vec<PathBu
 
 /// Build a `Skill` from a skill dir and its SKILL.md, recording provenance.
 fn read_skill(dir: &Path, manifest: PathBuf) -> Skill {
-    let (name, description) = parse_frontmatter(&manifest);
-    let name = name.unwrap_or_else(|| dir_name(dir));
+    let front = parse_frontmatter(&manifest);
     Skill {
-        name,
-        description,
+        name: front.name.unwrap_or_else(|| dir_name(dir)),
+        description: front.description,
         origin: origin_of(dir),
         manifest,
+        model_invocable: !front.disable_model_invocation,
     }
 }
 
@@ -346,35 +350,79 @@ fn duplicate_names(harnesses: &[Harness]) -> Vec<String> {
 
 // ---- small filesystem helpers (no regex, no yaml dep — quench#2) ----
 
-/// Parse `name:` and `description:` out of a SKILL.md's leading `---` frontmatter.
-/// Deliberately minimal: single-line scalars, optional surrounding quotes. Values
-/// Quench can't read fall back to `None`, never to a guess.
-fn parse_frontmatter(manifest: &Path) -> (Option<String>, Option<String>) {
-    let text = match std::fs::read_to_string(manifest) {
-        Ok(t) => t,
-        Err(_) => return (None, None),
-    };
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Frontmatter {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub disable_model_invocation: bool,
+}
 
+fn parse_frontmatter(manifest: &Path) -> Frontmatter {
+    std::fs::read_to_string(manifest)
+        .map(|t| frontmatter_fields(&t))
+        .unwrap_or_default()
+}
+
+pub(crate) fn frontmatter_fields(text: &str) -> Frontmatter {
+    let mut front = Frontmatter::default();
     let mut lines = text.lines();
-    // Frontmatter must open on the first line with a `---` fence.
     if lines.next().map(str::trim) != Some("---") {
-        return (None, None);
+        return front;
     }
+    let block: Vec<&str> = lines.take_while(|l| l.trim() != "---").collect();
 
-    let mut name = None;
-    let mut description = None;
-    for line in lines {
-        let trimmed = line.trim_end();
-        if trimmed.trim() == "---" {
-            break; // end of frontmatter
+    let mut i = 0;
+    while i < block.len() {
+        let line = block[i].trim_end();
+        i += 1;
+        let Some((key, raw)) = line.split_once(':') else {
+            continue;
+        };
+        if key.starts_with(char::is_whitespace) {
+            continue;
         }
-        if let Some(v) = trimmed.strip_prefix("name:") {
-            name = scalar(v);
-        } else if let Some(v) = trimmed.strip_prefix("description:") {
-            description = scalar(v);
+        let value = match raw.trim() {
+            indicator @ (">" | ">-" | ">+" | "|" | "|-" | "|+") => {
+                let start = i;
+                while i < block.len()
+                    && (block[i].trim().is_empty() || block[i].starts_with(char::is_whitespace))
+                {
+                    i += 1;
+                }
+                block_scalar(&block[start..i], indicator.starts_with('>'))
+            }
+            _ => scalar(raw),
+        };
+        match key {
+            "name" => front.name = value,
+            "description" => front.description = value,
+            "disable-model-invocation" => {
+                front.disable_model_invocation = value.as_deref() == Some("true")
+            }
+            _ => {}
         }
     }
-    (name, description)
+    front
+}
+
+fn block_scalar(lines: &[&str], folded: bool) -> Option<String> {
+    let trimmed: Vec<&str> = lines.iter().map(|l| l.trim()).collect();
+    let text = if folded {
+        trimmed
+            .split(|l| l.is_empty())
+            .filter(|para| !para.is_empty())
+            .map(|para| para.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        trimmed.join("\n")
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
 }
 
 /// Trim a YAML scalar value: surrounding whitespace and one layer of quotes.
@@ -404,8 +452,7 @@ fn is_hidden(path: &Path) -> bool {
 
 /// True only for a symlink whose target does not exist.
 fn is_dangling_symlink(path: &Path) -> bool {
-    matches!(std::fs::symlink_metadata(path), Ok(m) if m.file_type().is_symlink())
-        && !path.exists()
+    matches!(std::fs::symlink_metadata(path), Ok(m) if m.file_type().is_symlink()) && !path.exists()
 }
 
 fn dir_name(path: &Path) -> String {
@@ -418,7 +465,7 @@ fn dir_name_opt(path: &Path) -> Option<&str> {
 
 /// Home dir from the environment. macOS/Linux use `HOME`; Windows `USERPROFILE`.
 /// Kept dependency-free (quench-core stays serde-only).
-fn home_dir() -> Option<PathBuf> {
+pub(crate) fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -470,15 +517,26 @@ mod tests {
 
         let scan = scan(&home, &root.join("empty-project"));
 
-        let claude_h = scan.harnesses.iter().find(|h| h.id == "claude-code").unwrap();
+        let claude_h = scan
+            .harnesses
+            .iter()
+            .find(|h| h.id == "claude-code")
+            .unwrap();
         assert!(claude_h.home.present && claude_h.skills_dir.present);
         assert_eq!(claude_h.skills.len(), 2, "flat + linked");
 
         // The linked skill reports the source repo as its origin, not the link.
-        let linked = claude_h.skills.iter().find(|s| s.name == "grill-me").unwrap();
+        let linked = claude_h
+            .skills
+            .iter()
+            .find(|s| s.name == "grill-me")
+            .unwrap();
         match &linked.origin {
             Origin::Linked { target, .. } => {
-                assert!(target.ends_with("planning/grill-me"), "resolves to source repo");
+                assert!(
+                    target.ends_with("planning/grill-me"),
+                    "resolves to source repo"
+                );
             }
             other => panic!("expected Linked origin, got {other:?}"),
         }
@@ -486,7 +544,10 @@ mod tests {
 
         let hermes_h = scan.harnesses.iter().find(|h| h.id == "hermes").unwrap();
         assert_eq!(hermes_h.skills.len(), 2, "nested apple-notes + grill-me");
-        assert!(hermes_h.skills.iter().all(|s| matches!(s.origin, Origin::Local { .. })));
+        assert!(hermes_h
+            .skills
+            .iter()
+            .all(|s| matches!(s.origin, Origin::Local { .. })));
 
         // grill-me is in both Claude and Hermes → a real cross-harness duplicate.
         assert!(scan.duplicate_names.contains(&"grill-me".to_string()));
@@ -503,7 +564,11 @@ mod tests {
         std::os::unix::fs::symlink(root.join("gone"), claude.join("ghost")).unwrap();
 
         let scan = scan(&home, &root.join("noproj"));
-        let claude_h = scan.harnesses.iter().find(|h| h.id == "claude-code").unwrap();
+        let claude_h = scan
+            .harnesses
+            .iter()
+            .find(|h| h.id == "claude-code")
+            .unwrap();
         assert!(claude_h.skills.is_empty(), "a broken link is not a skill");
         assert_eq!(claude_h.dangling.len(), 1, "but it is surfaced");
 
@@ -527,11 +592,35 @@ mod tests {
     }
 
     #[test]
+    fn block_scalar_descriptions_are_read_not_shown_as_indicators() {
+        let folded = "---\nname: crash\ndescription: >\n  Diagnose why a program\n  crashed.\nmetadata:\n  x: 1\n---\n";
+        let f = frontmatter_fields(folded);
+        assert_eq!(f.name.as_deref(), Some("crash"));
+        assert_eq!(
+            f.description.as_deref(),
+            Some("Diagnose why a program crashed.")
+        );
+        let literal = "---\ndescription: |-\n  line one\n  line two\nname: lit\n---\n";
+        assert_eq!(
+            frontmatter_fields(literal).description.as_deref(),
+            Some("line one\nline two")
+        );
+        let quoted = "---\nname: 'q'\ndescription: \"plain: with colon\"\ndisable-model-invocation: true\n---\n";
+        let f = frontmatter_fields(quoted);
+        assert_eq!(f.description.as_deref(), Some("plain: with colon"));
+        assert!(f.disable_model_invocation);
+    }
+
+    #[test]
     fn project_strays_are_found_under_the_root() {
         let root = temp_root("project");
         let home = root.join("home");
         let proj = root.join("proj");
-        write_skill(&proj.join(".claude/skills/local-helper"), "local-helper", "stray");
+        write_skill(
+            &proj.join(".claude/skills/local-helper"),
+            "local-helper",
+            "stray",
+        );
 
         let scan = scan(&home, &proj);
         assert_eq!(scan.project.skills.len(), 1);

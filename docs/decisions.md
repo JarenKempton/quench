@@ -106,6 +106,40 @@
   `vite-env.d.ts` the plain `tsc` build had passed. Caveat: Vite+ is **beta** (v0.2.x) —
   pinned; CI would use `setup-vp`. (Refines [#7].)
 
+- **Intent vs observed state** (2026-10-20, v0 review) — what you *want* is intent; what is
+  on disk in a checkout is observed. Intent is per project (or machine-wide), defaults to
+  **all my machines**, with optional per-machine overrides. Observed state is per working
+  copy, read from disk, never synced. This reframes [#23]: working copies hold observed
+  state only; activation and pins are intent. Reverses [#17]'s "this machine only" default.
+- **Harness files are derived outputs** — `.claude/settings.local.json`, `.claude/skills/`,
+  `~/.claude/skills/` are written *from* intent and read back as observed state. Drift is
+  shown with its reason, never silently fixed.
+- **Storage split** — `~/.quench/local/` is this machine only (`machine.json` with a random
+  UUID + label — never hostname, `recent.json`, append-only `journal.jsonl`, `backups/`).
+  `~/.quench/state/` is personal intent that can sync (`global.json`,
+  `projects/<method>-<value>.json`, `machines/<id>.json`, `sources.json`). Every file
+  carries `"v": 1`. Project keys are `{method, value, label}`, never a bare path.
+- **Every Apply is journaled** — each staged change carries `{project, machine, harness}`
+  and Apply appends one line to `journal.jsonl`, so "apply on all machines" is later an
+  addition, not reverse-engineering per-machine harness files.
+- **Cloud is a git remote, never a registry** — multi-machine sync is `~/.quench/state/`
+  (and `local.git`) pushed to any git remote; Quench's cloud is one optional remote plus
+  usage aggregation. Supersedes `architecture.md` placing Machines in D1.
+- **Materialization: copy-at-pin by default, symlinks adopted in place** — each entry
+  records `materialization: copy | symlink`; an existing symlink-into-a-repo setup is
+  adopted, not migrated. Loose skill dirs are an `unmanaged` source kind; putting them
+  under version control is an explicit action.
+- **Frontends are swappable over one core** — `quench-core` (facts) and `quench-app` (state,
+  commands, view models) hold all logic; `apps/desktop` (Tauri + React) and `apps/gpui`
+  only render view models. Both ship until one is cut. GPUI spike numbers in the v0 PRs.
+- **Naming** — the per-project context view is `ContextLoad`; scope is `Machine | Project`
+  ("This Mac" in UI per [#34]); "pre-flight" and the Matrix are retired ([#34]).
+- **Token counts are estimates** — bytes are measured; tokens are `ceil(bytes / 3)` and
+  always labeled estimated. Calibrated 2026-10-20 against `claude -p "/context"`: skill index
+  entries ran 2.93 B/token (26 skills), CLAUDE.md files 2.4–2.7 B/token; `bytes / 4`
+  undercounted by ~35%. Claude Code's own `/context` is the measured source to prefer when
+  the CLI is present. MCP tool-definition cost is `unknown` until measured.
+
 ### Tauri v2 facts verified for [#8] (primary sources)
 
 - **`[profile.*]` must live at the Cargo workspace root.** Cargo *only* reads profiles
@@ -136,6 +170,9 @@
 [#10]: https://github.com/JarenKempton/quench/issues/10
 [#11]: https://github.com/JarenKempton/quench/issues/11
 [#14]: https://github.com/JarenKempton/quench/issues/14
+[#17]: https://github.com/JarenKempton/quench/issues/17
+[#23]: https://github.com/JarenKempton/quench/issues/23
+[#34]: https://github.com/JarenKempton/quench/issues/34
 [cargo ref]: https://doc.rust-lang.org/cargo/reference/profiles.html
 [size guide]: https://v2.tauri.app/concept/size/
 [project structure]: https://v2.tauri.app/start/project-structure/

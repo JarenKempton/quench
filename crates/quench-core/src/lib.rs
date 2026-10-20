@@ -9,7 +9,13 @@
 //! crate returns is a real fact traceable to a path on disk, never a fabricated
 //! count. See [`scan`].
 
+mod context;
 mod scan;
+
+pub use context::{
+    claude_code_context, context_for_this_machine, ContextItem, ContextLoad, Estimate, ItemKind,
+    Scope,
+};
 
 pub use scan::{
     scan, scan_this_machine, ContextFile, Harness, Origin, Probe, ProjectScan, Scan, Skill,

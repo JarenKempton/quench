@@ -12,6 +12,7 @@ export interface Skill {
   description: string | null;
   origin: Origin;
   manifest: string;
+  model_invocable: boolean;
 }
 
 /** A path the scanner looked for, and whether it was actually there. */
