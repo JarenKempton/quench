@@ -1,77 +1,93 @@
 # Quench
 
-*(formerly Hone — see [docs/naming.md](docs/naming.md) for the naming decision)*
+See exactly what enters your coding agent's context in each project, and turn
+skills on or off without hand-editing settings files.
 
-A desktop app that turns the chaos of AI agent configuration into order. See exactly
-what enters each coding agent's context — skills, instruction files, MCP servers — per
-project, per harness, per machine. Control it, version it, share it. You're the driver,
-not the passenger.
+Quench is a local desktop app. Open a project and it shows what **Claude Code**
+loads there, with a cost for each item:
 
-**Not an orchestrator.** Quench never runs or commands agents. It governs what they're
-equipped with.
+- **Always loaded:** `~/.claude/CLAUDE.md`, every `CLAUDE.md` / `.claude/CLAUDE.md` /
+  `CLAUDE.local.md` from the filesystem root down to the project, `@imports`, and the
+  project's auto-memory `MEMORY.md`. Symlinked or identical files are counted once.
+- **Skills:** each skill's index entry (name + description) is always loaded; its body
+  only when used. Skills with `disable-model-invocation` and overridden skills are
+  priced the way Claude Code treats them.
+- **MCP servers:** user, local and project (`.mcp.json`) servers, with approval state.
+  Secrets are never read into the app: URLs lose credentials and query strings,
+  commands show only the program name, env and header values are dropped.
 
-## Principles
+Per skill you can pick **Inherit / On / Name only / Slash only / Off** for this
+project. Changes queue up, show the exact file diff, and apply together. Quench
+writes only the project's `.claude/settings.local.json` (Claude Code's personal,
+auto-gitignored settings file), keeps every other key, backs up the old file, and
+can undo the last apply.
 
-1. **No fake data.** Every number carries provenance: measured, configured (source
-   shown), known spec, assumed (labeled), or honestly unknown.
-2. **Local-first.** Fully functional with no account. Cloud adds sync/sharing, never
-   becomes load-bearing.
-3. **Align, don't fork.** SKILL.md per agentskills.io, AGENTS.md, marketplace.json,
-   MCP registry. No invented formats; app data lives in `metadata:` or sidecars.
-4. **Pinned and reviewed.** Skills pin by content hash; updates arrive as diffs you
-   approve. Provenance ledger for everything. No "malware scanner" promises — pinning
-   and review can't be evaded, scanners can.
-5. **Hand-maintained wins.** The app helps you write and groom your own skills; the
-   community registry is an install rail with review, not a firehose.
+**Not an orchestrator.** Quench never runs agents. It governs what they load.
 
-## Layout
+## Honest numbers
 
-- `docs/architecture.md` — three tiers, sources model, usage tracking, security layer
-- `docs/mvp-scope.md` — what's in/out of v1, build phases
-- `docs/decisions.md` — open decisions (wayfinder-style map)
-- `docs/naming.md` — naming brief + kill list
-- Prior art to port: `~/Documents/programming/agent-skills` (agentkit CLI + command
-  center — the proven scanner/xray/apply/heartbeat logic this app absorbs)
+| What you see  | Where it comes from                                                                                                                            |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bytes         | Measured from disk                                                                                                                             |
+| Tokens        | Estimated as `bytes / 3`, calibrated against Claude Code's own `/context` (instruction files ran 2.4–2.7 bytes/token, skill index entries 2.9) |
+| MCP tool cost | Shown as **unknown**: config alone can't tell whether a server connected or how big its tools are                                              |
+| Plugins       | Listed as **not yet scanned**                                                                                                                  |
 
-## Stack
+## Status
 
-Tauri v2 (Rust core + webview), tray + window in one binary. Frontend is React 19 +
-TypeScript + Vite + TanStack Router (hash history) + Zustand. Cloud (phase 3):
-Cloudflare Workers + D1 + R2, GitHub OAuth.
+v0, Claude Code only. Built and tested on Linux; macOS should work but is untested. Codex, Pi and Hermes are scanned by the
+core but not yet shown. Multi-machine sync is designed for (every change is
+journaled with its project, machine and harness) but not built.
+
+## Install
+
+There are no prebuilt releases yet. Build from source:
+
+Prerequisites: Rust (stable, via `rustup`), Node ≥ 20, pnpm 11 (`npm i -g pnpm@11`
+or `corepack enable`). Linux also needs the WebKitGTK and GPU libraries listed in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+```sh
+pnpm install
+pnpm dev                      # Tauri app (window + tray)
+cargo run -p quench-gpui      # the same app as a native GPUI window
+```
+
+Pass a project path to open it directly, e.g. `cargo run -p quench-gpui -- ~/code/my-app`.
+
+Headless, for scripts or bug reports:
+
+```sh
+cargo run -p quench-app --example context_view -- <project>   # JSON of the view
+cargo run -p quench-app --example toggle -- <project> <skill> off
+cargo run -p quench-app --example toggle -- <project> undo
+```
+
+## What Quench writes
+
+| Path                                    | Contents                                                    |
+| --------------------------------------- | ----------------------------------------------------------- |
+| `<project>/.claude/settings.local.json` | `skillOverrides` entries you applied (other keys untouched) |
+| `~/.quench/local/machine.json`          | A random machine id and its label                           |
+| `~/.quench/local/recent.json`           | Recently opened projects                                    |
+| `~/.quench/local/journal.jsonl`         | One line per applied or undone change                       |
+| `~/.quench/local/backups/`              | The settings file as it was before each apply               |
+
+Set `QUENCH_HOME` to use a different directory than `~/.quench`.
 
 ## Repository layout
 
-A pnpm + Cargo workspace (see quench#8):
+- `crates/quench-core` — what loads, from disk: instruction chain, skills, MCP
+  servers, project identity, settings layers. No UI.
+- `crates/quench-app` — app state, commands and the view models every UI renders.
+  TypeScript types are generated into `apps/desktop/src/generated` by `cargo test`.
+- `apps/desktop` — Tauri v2 + React frontend.
+- `apps/gpui` — GPUI frontend. Both frontends ship until one is retired.
+- `docs/` — architecture, scope and the decision log (`docs/decisions.md`).
 
-- `crates/quench-core/` — pure Rust: scanner, git, provenance. No Tauri dependency, so a
-  headless consumer stays possible and "cloud never load-bearing" is a boundary, not a
-  discipline. The scaffold ships only a version probe — no real scanner yet.
-- `apps/desktop/` — the Tauri app. React frontend at the top; `src-tauri/` **nested
-  inside** it (the Tauri CLI resolves the frontend by walking *down* to the first
-  `package.json`, so running from `apps/desktop/` needs no `TAURI_APP_PATH`).
-- `apps/cloud/` — phase 3, not built yet. Desktop must build green with it deleted.
-- `[profile.release]` lives at the **workspace root** — Cargo honors it only there;
-  in `src-tauri/Cargo.toml` it would silently no-op.
+Checks: `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+`pnpm exec vp check`.
 
-## Running the scaffold
+## License
 
-Prerequisites: Node ≥ 20, pnpm, and the Rust toolchain (`rustup`). On macOS the WebKit
-webview ships with the OS; Linux needs `webkit2gtk`.
-
-```sh
-pnpm install          # from the repo root, once — installs the JS workspace
-
-# then, either:
-pnpm dev              # from the repo root — launches the desktop app (window + tray)
-
-# or, equivalently, from the app directory:
-cd apps/desktop
-pnpm tauri dev
-```
-
-`pnpm dev` opens the **Quench** window and a tray icon (menu: Show / Quit) from one
-binary, with the x-ray / matrix / skill-editor panels as stub shells. First run
-compiles the Rust workspace, so give it a minute.
-
-Other commands: `pnpm web` (frontend only, in a browser at `localhost:1420`),
-`pnpm build` (bundle the desktop app), `cargo test -p quench-core`.
+MIT — see [LICENSE](LICENSE).

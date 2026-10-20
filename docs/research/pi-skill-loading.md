@@ -31,8 +31,8 @@ Authoritative file:
      </skill>
    </available_skills>
    ```
-   with the instruction: *"Use the read tool to load a skill's file when the task
-   matches its description."*
+   with the instruction: _"Use the read tool to load a skill's file when the task
+   matches its description."_
 3. `system-prompt.js` injects this index **only if the `read` tool is available**
    (`customPromptHasRead && skills.length > 0`). The skill **body is loaded lazily,
    on demand, via the normal `read` tool** — i.e. progressive disclosure, the
@@ -42,8 +42,9 @@ Authoritative file:
 
 ## Verdict on the prior-art note
 
-The note *"Pi (git packages, loads skills/ wholesale)"* is **half right and
+The note _"Pi (git packages, loads skills/ wholesale)"_ is **half right and
 misleading for token cost**:
+
 - "git packages": correct — skills ship as installed git packages, and the whole
   `skills/` tree is **materialized on disk** wholesale.
 - "loads … wholesale": **refuted for context**. Only the index (name + description +

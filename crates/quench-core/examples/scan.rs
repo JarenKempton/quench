@@ -17,7 +17,10 @@ fn main() {
             h.context_files.len(),
         );
         if let Some(first) = h.skills.first() {
-            println!("             e.g. {} — origin {:?}", first.name, first.origin);
+            println!(
+                "             e.g. {} — origin {:?}",
+                first.name, first.origin
+            );
         }
     }
 

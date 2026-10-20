@@ -15,30 +15,31 @@
 - No orchestrator framing, ever
 - **The project repo is itself a source** ([#9]) — every skill is
   `(source, path, pinned tree SHA)`, so skills committed into a project are just skills
-  sourced from *that* project. One model, no second mechanism. Source kinds: the project
+  sourced from _that_ project. One model, no second mechanism. Source kinds: the project
   repo · a shared team skills repo · your own private/local git repo · app-managed
   `~/.quench/local.git`.
 - **Per-project state splits by owner, not by location** ([#9]):
-  - **Committed `./.quench/manifest.json`** — *what's available*: source repos + the menu
+  - **Committed `./.quench/manifest.json`** — _what's available_: source repos + the menu
     of skills drawn from them. Changing it is a PR. **Only exists if the project uses
     sources** — a team that only commits skills never sees this file.
-  - **Personal `~/.quench/projects/<key>.json`** — *what you activate and what version
-    you're on*. Never committed.
+  - **Personal `~/.quench/projects/<key>.json`** — _what you activate and what version
+    you're on_. Never committed.
 
   Skills materialize into the **harness-native dir** (`.claude/skills/` etc., per team
   agreement). `.quench/` holds pointers, never content — there is no `.quench/skills/`
   composition folder.
+
 - **Pins are per-skill and personal, via git tree SHAs** ([#9]) — every directory in git
   already has a content-addressed tree SHA (`git rev-parse HEAD:<path>`), so different
   skills from one repo can sit at different revisions, and a commit touching an unrelated
-  skill yields an identical tree SHA (zero false-update noise). This *is* architecture.md's
+  skill yields an identical tree SHA (zero false-update noise). This _is_ architecture.md's
   "pinned content hash". Personal pins mean teammates see "update available" and **opt in
   per skill** — nobody moves silently. Cost: per-skill pins kill the symlink trick (no
   single checkout to point at), so skills are copied out at their pinned tree and
   **ownership is recorded in the manifest, not observed**.
 - **The PR is the mechanism, and it must be explicit in the UI** ([#9]) — editing or
   removing a committed project skill opens a **PR against the project repo**, batched
-  across edits. Editing a source skill commits to *its* source repo. Personal deselect of
+  across edits. Editing a source skill commits to _its_ source repo. Personal deselect of
   a committed skill uses Claude Code's **`skillOverrides`** in the auto-gitignored
   `.claude/settings.local.json` (purpose-built for "skills checked into a shared project
   repo") — never `git update-index --skip-worktree`, which git's own docs say "does not
@@ -46,7 +47,7 @@
 
 - **Monorepo: desktop and cloud share one tree** ([#8]) — user overruled the
   separate-repo recommendation; the shared client/server contract won. Consequence: the
-  "cloud is never load-bearing" principle is now a *discipline*, not a structural fact,
+  "cloud is never load-bearing" principle is now a _discipline_, not a structural fact,
   so it needs a mechanical guardrail — `quench-core` never depends on the cloud package,
   and **the desktop app must build and run green with `apps/cloud/` deleted**. Checkable
   in CI; not yet wired.
@@ -69,9 +70,10 @@
 
   Cargo workspace members: `apps/desktop/src-tauri`, `crates/quench-core` (explicit, not
   globbed). No Python vendored anywhere — [#5] settled Rust-native.
+
 - **`src-tauri/` nests inside `apps/desktop/`** ([#8]) — not hoisted to `crates/`. The
   Tauri CLI takes `$cwd` as the frontend if `$cwd` has a `package.json`, else **walks
-  downward** and takes the *first* one it finds (depth 3) — so `apps/cloud/package.json`
+  downward** and takes the _first_ one it finds (depth 3) — so `apps/cloud/package.json`
   can silently hijack frontend detection. Running from `apps/desktop/` hits both the
   frontend and `$cwd/src-tauri` on the first try: **no `TAURI_APP_PATH` /
   `TAURI_FRONTEND_PATH` needed**, and the tree inside `apps/desktop/` is byte-identical
@@ -82,7 +84,7 @@
   pure by construction. [#5]'s port is incremental (scanner now; x-ray/apply/heartbeat
   later), so this crate is where nearly all of Quench eventually lives. Keeps a headless
   consumer possible without a rewrite — which matters because the thing Quench replaces
-  (`bootstrap.sh` + `agentkit`) *is* a CLI, and [#11] must define parity against it.
+  (`bootstrap.sh` + `agentkit`) _is_ a CLI, and [#11] must define parity against it.
   Note: the usual "you need a separate crate to unit-test" argument is **false** — Tauri
   v2 already generates `src-tauri` as lib+bin, so `cargo test` works flat. The split
   earns its place on boundary discipline, not testability.
@@ -98,7 +100,7 @@
   JS anyway); Next.js / TanStack Start structurally excluded (no Node server in a Tauri
   bundle); Svelte deferred.
 - **Frontend toolchain: Vite+ (`vp`)** — one CLI for install/dev/build/lint/format/test,
-  replacing split pnpm + Vite + tsc. Low lock-in: `vp` *wraps* pnpm (lockfile + resolution
+  replacing split pnpm + Vite + tsc. Low lock-in: `vp` _wraps_ pnpm (lockfile + resolution
   stay pnpm), MIT-licensed. `vite` is catalog-aliased to Vite+'s Vite-8 core, and `vp` is a
   local `node_modules/.bin`, so `tauri.conf.json`'s `pnpm dev` / `pnpm build` route to it
   with no vp-specific wiring and no global install needed to run the app. Its type-aware
@@ -106,13 +108,13 @@
   `vite-env.d.ts` the plain `tsc` build had passed. Caveat: Vite+ is **beta** (v0.2.x) —
   pinned; CI would use `setup-vp`. (Refines [#7].)
 
-- **Intent vs observed state** (2026-10-20, v0 review) — what you *want* is intent; what is
+- **Intent vs observed state** (2026-10-20, v0 review) — what you _want_ is intent; what is
   on disk in a checkout is observed. Intent is per project (or machine-wide), defaults to
   **all my machines**, with optional per-machine overrides. Observed state is per working
   copy, read from disk, never synced. This reframes [#23]: working copies hold observed
   state only; activation and pins are intent. Reverses [#17]'s "this machine only" default.
 - **Harness files are derived outputs** — `.claude/settings.local.json`, `.claude/skills/`,
-  `~/.claude/skills/` are written *from* intent and read back as observed state. Drift is
+  `~/.claude/skills/` are written _from_ intent and read back as observed state. Drift is
   shown with its reason, never silently fixed.
 - **Storage split** — `~/.quench/local/` is this machine only (`machine.json` with a random
   UUID + label — never hostname, `recent.json`, append-only `journal.jsonl`, `backups/`).
@@ -149,7 +151,7 @@
 
 ### Tauri v2 facts verified for [#8] (primary sources)
 
-- **`[profile.*]` must live at the Cargo workspace root.** Cargo *only* reads profiles
+- **`[profile.*]` must live at the Cargo workspace root.** Cargo _only_ reads profiles
   from the workspace-root manifest ([cargo ref]); yet Tauri's own [size guide] tells you
   to put `[profile.release]` in `src-tauri/Cargo.toml`. Inside a workspace that no-ops
   with a **warning, not an error** — release builds are quietly unoptimized. Tauri's docs
@@ -163,7 +165,7 @@
   they must share a crate with `generate_handler!` is **false in v2** — verified by
   compiling against `tauri 2.11.5`. The real constraint is **visibility**: command fns
   must be `pub` (a `pub(crate)` fn fails with `error[E0603]: macro __cmd__<name> is
-  private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.conf.json`
+private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.conf.json`
   relative to its own manifest dir. `tauri dev` watches workspace path-dependencies, so
   editing `quench-core` triggers a rebuild.
 - **Don't alias commands** — `use x::greet as g; generate_handler![g]` fails; the macro
@@ -202,7 +204,7 @@ index of record._
 ## Fog surfaced by [#8]
 
 - **Does Quench ship a CLI, and what replaces `bootstrap.sh` on a fresh machine?** The
-  `quench-core` split keeps a headless path *possible*; nothing decides whether it exists.
+  `quench-core` split keeps a headless path _possible_; nothing decides whether it exists.
   If materializing skills requires launching a GUI, that's a product decision — it should
   be made deliberately, not inherited from a build file. No longer entangled with a parity
   bar: [#11] established there is no incumbent CLI to match, so this is a clean

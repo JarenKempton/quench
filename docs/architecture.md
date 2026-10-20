@@ -8,13 +8,13 @@
    webview reuses the command-center UI patterns.
 2. **Cloud service** (optional, phase 3): Cloudflare Workers + D1 + R2. Accounts via
    **Better Auth (GitHub + Google, auto-link on verified email)** — sign-in is split from
-   the GitHub *grant* for repo features; magic-link is **not** planned (#10). Better Auth
+   the GitHub _grant_ for repo features; magic-link is **not** planned (#10). Better Auth
    runs on Workers + D1, version-pinned (#14). Machines, circles (work/friends), skill
    publishing, usage-event ingestion. Content-addressed skill versions server-side; the
    local app always materializes into local git, so users own their data if the service dies.
 3. **Distribution**: machines pull desired state, push telemetry. Per-project manifest
-   splits by owner — committed `./.quench/manifest.json` (what's *available*: sources +
-   menu; a PR to change) and personal `~/.quench/projects/<key>.json` (what *you* activate,
+   splits by owner — committed `./.quench/manifest.json` (what's _available_: sources +
+   menu; a PR to change) and personal `~/.quench/projects/<key>.json` (what _you_ activate,
    at what tree SHA). Source skills materialize into `.claude/skills`/agents dirs
    (Ephemeral pattern: copied at their pinned tree, excluded via `.git/info/exclude`,
    ownership recorded in the manifest). Skills committed to the project sit in the same
@@ -23,6 +23,7 @@
 ## Sources model (version control)
 
 Every skill belongs to a **source**; every source is git:
+
 - external repo (pinned by SHA, read-only, diff-on-update)
 - own repo (e.g. existing agent-skills catalog)
 - circle repo (shared org)
@@ -51,15 +52,15 @@ bypassable (Trail of Bits) — hence pinning+review, not scanning promises.
 
 ## Harness adapters
 
-Claude Code (~/.claude/skills, CLAUDE.md, hooks), Codex (AGENTS.md **plus skills** —
+Claude Code (~~/.claude/skills, CLAUDE.md, hooks), Codex (AGENTS.md **plus skills** —
 `[[skills.config]]` in `~/.codex/config.toml`; the old "no skill loader, render an index"
 note is refuted), Pi (git packages, loads skills/ **by index** — frontmatter → XML
 `<available_skills>`, bodies lazily; the old "wholesale" note is refuted), Hermes
-(~/.hermes/skills + profiles). Context-window table per model with source
+(~~/.hermes/skills + profiles). Context-window table per model with source
 (config-override | model-spec | assumed-labeled).
 
 **Per-user deselect is not uniform** and Quench must degrade honestly: Claude Code is clean
 (`skillOverrides` in the auto-gitignored `.claude/settings.local.json`); Codex is
 global-only (`~/.codex/config.toml`) and its project-local skill filtering is broken
-(codex#20210); Pi's project `.pi/settings.json` is *committed* with no gitignored local
+(codex#20210); Pi's project `.pi/settings.json` is _committed_ with no gitignored local
 layer; Hermes has no per-skill toggle at all.

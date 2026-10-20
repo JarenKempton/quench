@@ -245,7 +245,7 @@ pub(crate) fn collect_skills(dir: &Path, skills: &mut Vec<Skill>, dangling: &mut
         }
     }
 
-    skills.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    skills.sort_by_key(|s| s.name.to_lowercase());
 }
 
 /// Build a `Skill` from a skill dir and its SKILL.md, recording provenance.
@@ -317,7 +317,7 @@ fn scan_project(root: &Path) -> ProjectScan {
         probed.push(probe);
     }
 
-    skills.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    skills.sort_by_key(|s| s.name.to_lowercase());
 
     ProjectScan {
         root: root.to_path_buf(),
