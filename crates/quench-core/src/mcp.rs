@@ -222,7 +222,7 @@ mod tests {
         )
         .unwrap();
 
-        let servers = claude_code_mcp_servers(&home, &proj, &[proj.clone()]);
+        let servers = claude_code_mcp_servers(&home, &proj, std::slice::from_ref(&proj));
         let names: Vec<(&str, McpScope, Option<Approval>)> = servers
             .iter()
             .map(|s| (s.name.as_str(), s.config_scope, s.approval))
@@ -277,7 +277,7 @@ mod tests {
             r#"{"mcpServers": {"x": {"command": "x"}, "y": {"command": "y"}}}"#,
         )
         .unwrap();
-        let servers = claude_code_mcp_servers(&home, &proj, &[proj.clone()]);
+        let servers = claude_code_mcp_servers(&home, &proj, std::slice::from_ref(&proj));
         assert_eq!(servers[0].approval, Some(Approval::Denied));
         assert_eq!(servers[1].approval, Some(Approval::Approved));
         let _ = fs::remove_dir_all(&r);
