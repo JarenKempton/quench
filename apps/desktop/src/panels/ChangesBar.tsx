@@ -34,7 +34,7 @@ export function ChangesBar() {
       {changes.items.length > 0 && (
         <ul className="changes-list">
           {changes.items.map((c) => (
-            <li key={`${c.project}:${c.skill}`}>
+            <li key={`${c.file}:${c.skill}`}>
               {c.project} · <strong>{c.skill}</strong> {c.from} → {c.to}
             </li>
           ))}

@@ -105,7 +105,7 @@ function ToggleSelect({ toggle }: { toggle: Toggle }) {
     >
       {VALUES.map(([value, label]) => (
         <option key={value} value={value}>
-          {value === "inherit" ? `${label} (${toggle.local ? "default" : toggle.value})` : label}
+          {value === "inherit" ? `${label} (${toggle.inherited})` : label}
         </option>
       ))}
     </select>

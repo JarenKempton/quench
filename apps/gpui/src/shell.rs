@@ -108,12 +108,22 @@ impl Shell {
             "undo" => self.quench.undo_last(),
             _ => Ok(self.quench.discard()),
         };
-        match result {
-            Ok(changes) => self.changes = changes,
-            Err(e) => self.error = Some(e.to_string()),
-        }
+        let failed = match result {
+            Ok(changes) => {
+                self.changes = changes;
+                None
+            }
+            Err(e) => {
+                self.changes = self.quench.changes();
+                Some(format!("{command} failed: {e}"))
+            }
+        };
         if let Some(path) = self.open_path.clone() {
             self.open(&path, cx);
+        }
+        if failed.is_some() {
+            self.error = failed;
+            cx.notify();
         }
     }
 
@@ -409,7 +419,11 @@ fn toggle_buttons(row: &Row, entity: &Entity<Shell>) -> Option<AnyElement> {
                             entity.update(cx, |shell, cx| shell.stage_skill(&skill, value, cx));
                         })
                     })
-                    .child(*label)
+                    .child(if *value == "inherit" {
+                        format!("Inherit ({})", toggle.inherited)
+                    } else {
+                        label.to_string()
+                    })
             }))
             .into_any_element(),
     )
