@@ -1,5 +1,6 @@
 use crate::identity::{project_key, ProjectKey};
 use crate::mcp::{claude_code_mcp_servers, McpScope, McpServer};
+use crate::overrides::{resolve_overrides, ResolvedOverride, SkillOverride};
 use crate::scan::frontmatter_fields;
 use crate::scan::{collect_skills, home_dir, Origin};
 use serde::Serialize;
@@ -36,6 +37,7 @@ pub enum ItemKind {
         description: Option<String>,
         origin: Origin,
         model_invocable: bool,
+        setting: ResolvedOverride,
     },
     McpServer(McpServer),
     Unscanned {
@@ -126,6 +128,7 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
     ctx.rules(Scope::Project, &project_root.join(".claude/rules"));
     ctx.memory(&auto_memory(home, &project_root));
 
+    let overrides = resolve_overrides(home, &project_root);
     for (scope, dir) in [
         (Scope::Machine, home.join(".claude/skills")),
         (Scope::Project, project_root.join(".claude/skills")),
@@ -137,11 +140,16 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
             let on_demand = std::fs::metadata(&skill.manifest)
                 .map(|m| m.len())
                 .unwrap_or(0);
-            let index = if skill.model_invocable {
-                (skill.name.len() + skill.description.as_ref().map_or(0, String::len)) as u64
-            } else {
-                0
-            };
+            let setting = overrides
+                .get(&skill.name)
+                .cloned()
+                .unwrap_or_else(ResolvedOverride::default_on);
+            let description = skill.description.as_ref().map_or(0, String::len);
+            let index = match (skill.model_invocable, setting.value) {
+                (false, _) | (_, SkillOverride::Off | SkillOverride::UserInvocableOnly) => 0,
+                (true, SkillOverride::NameOnly) => skill.name.len(),
+                (true, SkillOverride::On) => skill.name.len() + description,
+            } as u64;
             let duplicate_of = seen.claim_path(&skill.manifest);
             if duplicate_of.as_deref() == Some(skill.manifest.as_path()) {
                 continue;
@@ -154,6 +162,7 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
                     description: skill.description,
                     origin: skill.origin,
                     model_invocable: skill.model_invocable,
+                    setting,
                 },
                 always_bytes: index,
                 on_demand_bytes: on_demand,
@@ -839,6 +848,41 @@ mod tests {
         fs::write(&mem, "- remembered").unwrap();
         let load = claude_code_context(&home, &wt);
         assert!(load.items.iter().any(|i| i.path == mem));
+        let _ = fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn skill_overrides_change_what_a_skill_costs() {
+        let r = root("overrides");
+        let home = r.join("home");
+        let proj = r.join("proj");
+        for name in ["full", "named", "gone", "slash"] {
+            let dir = home.join(".claude/skills").join(name);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(
+                dir.join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: twelve chars\n---\n"),
+            )
+            .unwrap();
+        }
+        fs::create_dir_all(proj.join(".claude")).unwrap();
+        fs::write(
+            proj.join(".claude/settings.local.json"),
+            r#"{"skillOverrides":{"named":"name-only","gone":"off","slash":"user-invocable-only"}}"#,
+        )
+        .unwrap();
+        let load = claude_code_context(&home, &proj);
+        let cost = |n: &str| {
+            load.items
+                .iter()
+                .find(|i| matches!(&i.kind, ItemKind::Skill { name, .. } if name == n))
+                .unwrap()
+                .always_bytes
+        };
+        assert_eq!(cost("full"), 4 + 12);
+        assert_eq!(cost("named"), 5);
+        assert_eq!(cost("gone"), 0);
+        assert_eq!(cost("slash"), 0);
         let _ = fs::remove_dir_all(&r);
     }
 

@@ -1,5 +1,6 @@
 use quench_core::{
-    Approval, ContextLoad, IdentityMethod, ItemKind, McpScope, Origin, Scope, Transport,
+    local_settings, read_overrides, Approval, ContextLoad, IdentityMethod, ItemKind, McpScope,
+    Origin, Scope, SettingsLayer, SkillOverride, Transport,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -45,6 +46,18 @@ pub struct Row {
     pub scope: String,
     pub cost: Cost,
     pub notes: Vec<String>,
+    pub toggle: Option<Toggle>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Toggle {
+    pub skill: String,
+    pub value: String,
+    pub source: String,
+    pub local: Option<String>,
+    pub locked: bool,
+    pub pending: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -80,6 +93,10 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
     let mut skills = Vec::new();
     let mut mcp = Vec::new();
     let mut unscanned = Vec::new();
+    let local: std::collections::HashMap<String, SkillOverride> =
+        read_overrides(&local_settings(&load.project_root))
+            .into_iter()
+            .collect();
     for item in &load.items {
         let location = match item.path.strip_prefix(&load.project_root) {
             Ok(rel) => format!("./{}", rel.display()),
@@ -137,6 +154,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                     scope,
                     cost,
                     notes,
+                    toggle: None,
                 });
             }
             ItemKind::Skill {
@@ -144,6 +162,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                 description,
                 origin,
                 model_invocable,
+                setting,
             } => {
                 let id = format!("skill:{path_id}");
                 if !model_invocable {
@@ -152,6 +171,21 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                 if let Origin::Linked { target, .. } = origin {
                     notes.push(format!("linked from {}", tilde(target, home)));
                 }
+                if setting.value != SkillOverride::On {
+                    notes.push(format!(
+                        "{} via {}",
+                        setting.value.as_str(),
+                        layer_label(setting.layer)
+                    ));
+                }
+                let toggle = Some(Toggle {
+                    skill: name.clone(),
+                    value: setting.value.as_str().to_string(),
+                    source: layer_label(setting.layer).to_string(),
+                    local: local.get(name).map(|v| v.as_str().to_string()),
+                    locked: setting.layer == Some(SettingsLayer::Managed),
+                    pending: None,
+                });
                 skills.push(Row {
                     id,
                     title: name.clone(),
@@ -160,6 +194,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                     scope,
                     cost,
                     notes,
+                    toggle,
                 });
             }
             ItemKind::McpServer(server) => {
@@ -218,6 +253,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                     scope,
                     cost: Cost::Unknown,
                     notes,
+                    toggle: None,
                 });
             }
             ItemKind::Unscanned { what } => {
@@ -230,6 +266,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                     scope,
                     cost: Cost::Unknown,
                     notes,
+                    toggle: None,
                 });
             }
         }
@@ -272,6 +309,16 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
             .sum(),
         token_method: format!("estimated, {}", load.always_tokens.method),
         sections,
+    }
+}
+
+fn layer_label(layer: Option<SettingsLayer>) -> &'static str {
+    match layer {
+        None => "default",
+        Some(SettingsLayer::Managed) => "managed settings",
+        Some(SettingsLayer::Local) => "this project, only you",
+        Some(SettingsLayer::Project) => "project settings (shared)",
+        Some(SettingsLayer::User) => "your user settings (all projects)",
     }
 }
 

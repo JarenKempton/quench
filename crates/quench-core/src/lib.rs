@@ -12,10 +12,15 @@
 mod context;
 mod identity;
 mod mcp;
+mod overrides;
 mod scan;
 
 pub use identity::{normalize_remote, project_key, IdentityMethod, ProjectKey};
 pub use mcp::{claude_code_mcp_servers, Approval, McpScope, McpServer, Transport};
+pub use overrides::{
+    local_settings, plan_local_write, read_overrides, resolve_overrides, settings_layers,
+    write_through, ResolvedOverride, SettingsLayer, SkillOverride, WritePlan,
+};
 
 pub use context::{
     claude_code_context, context_for_this_machine, ContextItem, ContextLoad, Estimate, ItemKind,

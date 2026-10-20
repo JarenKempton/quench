@@ -24,7 +24,8 @@
             "always_tokens": 4,
             "on_demand_tokens": 0
           },
-          "notes": []
+          "notes": [],
+          "toggle": null
         },
         {
           "id": "file:<root>/proj/CLAUDE.md",
@@ -37,7 +38,8 @@
             "always_tokens": 10,
             "on_demand_tokens": 0
           },
-          "notes": []
+          "notes": [],
+          "toggle": null
         },
         {
           "id": "file:<root>/proj/docs/style.md",
@@ -52,7 +54,8 @@
           },
           "notes": [
             "imported by <root>/proj/CLAUDE.md"
-          ]
+          ],
+          "toggle": null
         }
       ]
     },
@@ -71,7 +74,15 @@
             "always_tokens": 10,
             "on_demand_tokens": 23
           },
-          "notes": []
+          "notes": [],
+          "toggle": {
+            "skill": "review",
+            "value": "on",
+            "source": "default",
+            "local": null,
+            "locked": false,
+            "pending": null
+          }
         },
         {
           "id": "skill:<root>/proj/.claude/skills/ship/SKILL.md",
@@ -86,7 +97,15 @@
           },
           "notes": [
             "hidden from the model (disable-model-invocation)"
-          ]
+          ],
+          "toggle": {
+            "skill": "ship",
+            "value": "on",
+            "source": "default",
+            "local": null,
+            "locked": false,
+            "pending": null
+          }
         }
       ]
     },
@@ -105,7 +124,8 @@
           },
           "notes": [
             "user config"
-          ]
+          ],
+          "toggle": null
         },
         {
           "id": "mcp:project:<root>/proj/.mcp.json#db",
@@ -119,7 +139,8 @@
           "notes": [
             "project .mcp.json",
             "awaiting approval"
-          ]
+          ],
+          "toggle": null
         }
       ]
     }
