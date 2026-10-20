@@ -355,6 +355,7 @@ pub(crate) struct Frontmatter {
     pub name: Option<String>,
     pub description: Option<String>,
     pub disable_model_invocation: bool,
+    pub has_paths: bool,
 }
 
 fn parse_frontmatter(manifest: &Path) -> Frontmatter {
@@ -369,7 +370,11 @@ pub(crate) fn frontmatter_fields(text: &str) -> Frontmatter {
     if lines.next().map(str::trim) != Some("---") {
         return front;
     }
-    let block: Vec<&str> = lines.take_while(|l| l.trim() != "---").collect();
+    let rest: Vec<&str> = lines.collect();
+    let Some(close) = rest.iter().position(|l| l.trim() == "---") else {
+        return front;
+    };
+    let block = &rest[..close];
 
     let mut i = 0;
     while i < block.len() {
@@ -391,11 +396,26 @@ pub(crate) fn frontmatter_fields(text: &str) -> Frontmatter {
                 }
                 block_scalar(&block[start..i], indicator.starts_with('>'))
             }
-            _ => scalar(raw),
+            _ => {
+                let mut value = raw.trim().to_string();
+                while i < block.len()
+                    && !block[i].trim().is_empty()
+                    && block[i].starts_with(char::is_whitespace)
+                    && !block[i].trim_start().starts_with('-')
+                {
+                    if !value.is_empty() {
+                        value.push(' ');
+                    }
+                    value.push_str(block[i].trim());
+                    i += 1;
+                }
+                scalar(&value)
+            }
         };
         match key {
             "name" => front.name = value,
             "description" => front.description = value,
+            "paths" => front.has_paths = true,
             "disable-model-invocation" => {
                 front.disable_model_invocation = value.as_deref() == Some("true")
             }
@@ -609,6 +629,23 @@ mod tests {
         let f = frontmatter_fields(quoted);
         assert_eq!(f.description.as_deref(), Some("plain: with colon"));
         assert!(f.disable_model_invocation);
+    }
+
+    #[test]
+    fn plain_multiline_values_fold_and_unclosed_frontmatter_is_ignored() {
+        let plain =
+            "---\nname: wrap\ndescription: first part\n  second part\nmetadata:\n  - x\n---\n";
+        assert_eq!(
+            frontmatter_fields(plain).description.as_deref(),
+            Some("first part second part")
+        );
+        let next_line = "---\ndescription:\n  only here\n---\n";
+        assert_eq!(
+            frontmatter_fields(next_line).description.as_deref(),
+            Some("only here")
+        );
+        let unclosed = "---\nname: nope\ndescription: never closed\n";
+        assert_eq!(frontmatter_fields(unclosed), Frontmatter::default());
     }
 
     #[test]

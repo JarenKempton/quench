@@ -1,5 +1,10 @@
 # Research: Does Claude Code natively read AGENTS.md?
 
+> **Superseded (2026-10-20).** Claude Code v2.1.277+ reads `AGENTS.md` and `.claude/AGENTS.md`
+> from the working directory and its ancestors when no `CLAUDE.md`, `.claude/CLAUDE.md` or
+> `CLAUDE.local.md` exists there (`~/.claude/CLAUDE.md` doesn't count). Source:
+> code.claude.com/docs/en/memory#agents-md. Quench's context load follows the new rule.
+
 **Ticket:** JarenKempton/quench#3
 **Date researched:** 2026-07-16
 **Verdict:** NO — Claude Code does not natively read `AGENTS.md`. It reads `CLAUDE.md` only. There is no automatic fallback to `AGENTS.md`.

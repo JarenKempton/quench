@@ -134,6 +134,13 @@
   only render view models. Both ship until one is cut. GPUI spike numbers in the v0 PRs.
 - **Naming** — the per-project context view is `ContextLoad`; scope is `Machine | Project`
   ("This Mac" in UI per [#34]); "pre-flight" and the Matrix are retired ([#34]).
+- **What Claude Code loads follows its docs, checked against `/context`**
+  (code.claude.com/docs/en/memory): managed `CLAUDE.md`, `~/.claude/CLAUDE.md` and
+  `~/.claude/rules/`, then root-to-project `CLAUDE.md` / `.claude/CLAUDE.md` /
+  `CLAUDE.local.md` — or `AGENTS.md` / `.claude/AGENTS.md` when none of those exist — then
+  `.claude/rules/` (rules with `paths:` load on demand) and the first 200 lines / 25 KB of
+  auto memory. `@imports` go four hops deep and skip code spans, fences and HTML comments,
+  which are also not counted. Only the same file is deduplicated; identical copies both load.
 - **Token counts are estimates** — bytes are measured; tokens are `ceil(bytes / 3)` and
   always labeled estimated. Calibrated 2026-10-20 against `claude -p "/context"`: skill index
   entries ran 2.93 B/token (26 skills), CLAUDE.md files 2.4–2.7 B/token; `bytes / 4`

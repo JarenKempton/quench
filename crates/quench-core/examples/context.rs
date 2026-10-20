@@ -16,8 +16,11 @@ fn main() {
         let what = match &item.kind {
             ItemKind::Instructions {
                 imported_by: Some(by),
+                ..
             } => format!("instructions (imported by {})", by.display()),
-            ItemKind::Instructions { imported_by: None } => "instructions".to_string(),
+            ItemKind::Instructions {
+                imported_by: None, ..
+            } => "instructions".to_string(),
             ItemKind::Skill { name, .. } => format!("skill {name}"),
             ItemKind::Unscanned { what } => format!("not yet scanned: {what}"),
         };
