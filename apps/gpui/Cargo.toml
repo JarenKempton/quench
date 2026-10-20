@@ -1,0 +1,10 @@
+[package]
+name = "quench-gpui"
+version = "0.0.0"
+edition = "2021"
+description = "Quench GPUI frontend: renders quench-app view models natively."
+publish = false
+
+[dependencies]
+quench-app = { path = "../../crates/quench-app" }
+gpui-kit = "0.8.0"

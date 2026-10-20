@@ -4,6 +4,7 @@ members = [
     "crates/quench-core",
     "crates/quench-app",
     "apps/desktop/src-tauri",
+    "apps/gpui",
 ]
 
 # quench#8: Cargo honors [profile.*] ONLY at the workspace root. Tauri's size guide
