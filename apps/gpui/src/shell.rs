@@ -69,7 +69,7 @@ impl Shell {
                 self.recent = self.quench.recent();
                 self.error = None;
             }
-            Err(e) => self.error = Some(e.to_string()),
+            Err(e) => self.error = Some(format!("{}: {e}", path.display())),
         }
         cx.notify();
     }
@@ -82,17 +82,30 @@ impl Shell {
             prompt: Some("Open project".into()),
         });
         cx.spawn(async move |this, cx| {
-            if let Ok(Ok(Some(mut picked))) = paths.await {
-                if let Some(path) = picked.pop() {
-                    let _ = this.update(cx, |shell, cx| shell.open(&path, cx));
-                }
-            }
+            let error = match paths.await {
+                Ok(Ok(Some(mut picked))) => match picked.pop() {
+                    Some(path) => {
+                        let _ = this.update(cx, |shell, cx| shell.open(&path, cx));
+                        return;
+                    }
+                    None => return,
+                },
+                Ok(Ok(None)) => return,
+                Ok(Err(e)) => format!(
+                    "The folder picker failed ({e}). On Linux it needs an xdg-desktop-portal backend with a file chooser, such as xdg-desktop-portal-gtk. You can also pass a folder: quench-gpui <path>"
+                ),
+                Err(_) => "The folder picker closed unexpectedly.".to_string(),
+            };
+            let _ = this.update(cx, |shell, cx| {
+                shell.error = Some(error);
+                cx.notify();
+            });
         })
         .detach();
     }
 
     fn rail(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let current = self.view.as_ref().map(|v| v.project.label.clone());
+        let current = self.view.as_ref().map(|v| v.project.root.clone());
         div()
             .w(px(232.))
             .h_full()
@@ -120,7 +133,7 @@ impl Shell {
             .child(div().id("recent").flex_1().overflow_y_scroll().children(
                 self.recent.iter().enumerate().map(|(ix, r)| {
                     let path = PathBuf::from(&r.path);
-                    let active = current.as_deref() == Some(r.label.as_str());
+                    let active = current.as_deref() == Some(r.path.as_str());
                     div()
                         .id(("recent", ix))
                         .p_2()
