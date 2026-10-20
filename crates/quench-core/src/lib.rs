@@ -18,8 +18,9 @@ mod scan;
 pub use identity::{normalize_remote, project_key, IdentityMethod, ProjectKey};
 pub use mcp::{claude_code_mcp_servers, Approval, McpScope, McpServer, Transport};
 pub use overrides::{
-    local_settings, plan_local_write, read_overrides, resolve_overrides, settings_layers,
-    write_through, ResolvedOverride, SettingsLayer, SkillOverride, WritePlan,
+    keep_out_of_git, link_target, local_settings, plan_settings_write, read_overrides,
+    resolve_overrides, settings_layers, write_through, ResolvedOverride, SettingsLayer,
+    SkillOverride, WritePlan,
 };
 
 pub use context::{

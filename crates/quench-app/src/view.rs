@@ -56,6 +56,7 @@ pub struct Toggle {
     pub value: String,
     pub source: String,
     pub local: Option<String>,
+    pub inherited: String,
     pub locked: bool,
     pub pending: Option<String>,
 }
@@ -94,7 +95,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
     let mut mcp = Vec::new();
     let mut unscanned = Vec::new();
     let local: std::collections::HashMap<String, SkillOverride> =
-        read_overrides(&local_settings(&load.project_root))
+        read_overrides(&local_settings(home, &load.project_root))
             .into_iter()
             .collect();
     for item in &load.items {
@@ -183,6 +184,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                     value: setting.value.as_str().to_string(),
                     source: layer_label(setting.layer).to_string(),
                     local: local.get(name).map(|v| v.as_str().to_string()),
+                    inherited: setting.inherited.as_str().to_string(),
                     locked: setting.layer == Some(SettingsLayer::Managed),
                     pending: None,
                 });

@@ -67,12 +67,13 @@ impl App {
         let load = quench_core::claude_code_context(&self.home, path);
         let _ = Recent::touch(&self.quench, &load.project_root, &load.project);
         let mut view = context_view(&load, &self.home);
+        let file = quench_core::local_settings(&self.home, &load.project_root);
         let pending = self.pending();
         for row in view.sections.iter_mut().flat_map(|s| s.rows.iter_mut()) {
             if let Some(toggle) = row.toggle.as_mut() {
                 toggle.pending = pending
                     .iter()
-                    .find(|c| c.working_copy == load.project_root && c.skill == toggle.skill)
+                    .find(|c| c.file == file && c.skill == toggle.skill)
                     .map(|c| changes::label(&c.to));
             }
         }
@@ -94,18 +95,20 @@ impl App {
             }
         }
         let root = std::fs::canonicalize(path)?;
-        let from = quench_core::read_overrides(&quench_core::local_settings(&root))
+        let file = quench_core::local_settings(&self.home, &root);
+        let from = quench_core::read_overrides(&file)
             .into_iter()
             .find(|(name, _)| name == skill)
             .map(|(_, v)| v.as_str().to_string());
         let to = to.map(str::to_string);
         {
             let mut pending = self.pending.lock().expect("pending lock");
-            pending.retain(|c| !(c.working_copy == root && c.skill == skill));
+            pending.retain(|c| !(c.file == file && c.skill == skill));
             if from != to {
                 pending.push(StagedChange {
                     project: quench_core::project_key(&root),
                     working_copy: root,
+                    file,
                     machine: self.machine.id.clone(),
                     harness: "claude-code".to_string(),
                     skill: skill.to_string(),

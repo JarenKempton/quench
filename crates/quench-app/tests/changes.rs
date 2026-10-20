@@ -106,8 +106,8 @@ fn stage_apply_journal_and_undo_round_trip() {
     let undone = app.undo_last().unwrap();
     assert!(!undone.can_undo);
     assert_eq!(
-        fs::read_to_string(proj.join(".claude/settings.local.json")).unwrap(),
-        original
+        json(&proj.join(".claude/settings.local.json")),
+        serde_json::from_str::<serde_json::Value>(&original).unwrap()
     );
     assert_eq!(app.open_project(&proj).unwrap().always_tokens, before_total);
     let _ = fs::remove_dir_all(&root);
@@ -131,5 +131,71 @@ fn undo_removes_a_settings_file_quench_created_and_restaging_the_current_value_c
     assert!(proj.join(".claude/settings.local.json").exists());
     app.undo_last().unwrap();
     assert!(!proj.join(".claude/settings.local.json").exists());
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn json(path: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+#[test]
+fn undo_keeps_edits_made_after_apply() {
+    let (root, home, proj) = setup("later-edit");
+    let app = App::new(&home, QuenchHome::at(root.join("quench"))).unwrap();
+    app.stage_skill(&proj, "grill", Some("off")).unwrap();
+    app.apply().unwrap();
+    let file = proj.join(".claude/settings.local.json");
+    let mut v = json(&file);
+    v["permissions"]["allow"]
+        .as_array_mut()
+        .unwrap()
+        .push("Bash(npm test)".into());
+    fs::write(&file, v.to_string()).unwrap();
+    app.undo_last().unwrap();
+    let after = json(&file);
+    assert_eq!(
+        after["permissions"]["allow"],
+        serde_json::json!(["Bash(ls)", "Bash(npm test)"])
+    );
+    assert!(after.get("skillOverrides").is_none());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn undo_keeps_a_created_file_that_gained_other_settings() {
+    let (root, home, proj) = setup("created-later");
+    let file = proj.join(".claude/settings.local.json");
+    fs::remove_file(&file).unwrap();
+    let app = App::new(&home, QuenchHome::at(root.join("quench"))).unwrap();
+    app.stage_skill(&proj, "grill", Some("off")).unwrap();
+    app.apply().unwrap();
+    let mut v = json(&file);
+    v["permissions"] = serde_json::json!({"allow": ["Bash(make)"]});
+    fs::write(&file, v.to_string()).unwrap();
+    app.undo_last().unwrap();
+    assert_eq!(
+        json(&file),
+        serde_json::json!({"permissions": {"allow": ["Bash(make)"]}})
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_failed_undo_changes_nothing_and_stays_undoable() {
+    let (root, home, proj) = setup("undo-fail");
+    let other = root.join("other");
+    fs::create_dir_all(other.join(".claude")).unwrap();
+    fs::write(other.join(".claude/settings.local.json"), "{}").unwrap();
+    let app = App::new(&home, QuenchHome::at(root.join("quench"))).unwrap();
+    app.stage_skill(&proj, "grill", Some("off")).unwrap();
+    app.stage_skill(&other, "ship", Some("off")).unwrap();
+    app.apply().unwrap();
+    fs::write(other.join(".claude/settings.local.json"), "not json").unwrap();
+    assert!(app.undo_last().is_err());
+    assert_eq!(
+        json(&proj.join(".claude/settings.local.json"))["skillOverrides"]["grill"],
+        "off"
+    );
+    assert!(app.changes().can_undo);
     let _ = fs::remove_dir_all(&root);
 }

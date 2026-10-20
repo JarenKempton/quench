@@ -244,7 +244,7 @@ fn managed_dir() -> PathBuf {
     }
 }
 
-fn main_checkout(project_root: &Path) -> PathBuf {
+pub(crate) fn main_checkout(project_root: &Path) -> PathBuf {
     let top = project_root.ancestors().find(|d| d.join(".git").exists());
     let Some(top) = top else {
         return project_root.to_path_buf();
