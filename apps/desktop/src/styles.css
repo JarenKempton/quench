@@ -193,11 +193,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.tag--live {
-  color: var(--accent);
-  border-color: rgba(110, 168, 254, 0.3);
-  background: var(--accent-soft);
-}
 
 .skill-list {
   list-style: none;
@@ -242,9 +237,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.skill-origin--linked {
-  color: var(--accent);
-}
 
 .skill-desc {
   margin: 2px 0 0;

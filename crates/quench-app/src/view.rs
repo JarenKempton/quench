@@ -22,6 +22,7 @@ pub struct ContextView {
 #[ts(export)]
 pub struct ProjectHeader {
     pub label: String,
+    pub root: String,
     pub path: String,
     pub identity: String,
 }
@@ -253,6 +254,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
         harness: "Claude Code".to_string(),
         project: ProjectHeader {
             label: load.project.label.clone(),
+            root: load.project_root.display().to_string(),
             path: tilde(&load.project_root, home),
             identity: match load.project.method {
                 IdentityMethod::RootCommit => format!("root commit {}", short(&load.project.value)),

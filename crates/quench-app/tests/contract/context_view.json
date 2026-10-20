@@ -2,6 +2,7 @@
   "harness": "Claude Code",
   "project": {
     "label": "proj",
+    "root": "<root>/proj",
     "path": "<root>/proj",
     "identity": "this folder's path (not a git repo)"
   },

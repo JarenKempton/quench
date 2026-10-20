@@ -26,33 +26,3 @@ pub use scan::{
     home_dir, scan, scan_this_machine, ContextFile, Harness, Origin, Probe, ProjectScan, Scan,
     Skill,
 };
-
-use serde::Serialize;
-
-/// Honest identity/build facts the desktop shell can render without inventing data.
-#[derive(Debug, Clone, Serialize)]
-pub struct AppInfo {
-    pub name: &'static str,
-    pub core_version: &'static str,
-}
-
-/// The one fact the scaffold can state truthfully: which version of the core is linked.
-/// No scanning, no harness counts, no fake data.
-pub fn app_info() -> AppInfo {
-    AppInfo {
-        name: "Quench",
-        core_version: env!("CARGO_PKG_VERSION"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn app_info_reports_the_linked_core_version() {
-        let info = app_info();
-        assert_eq!(info.name, "Quench");
-        assert_eq!(info.core_version, env!("CARGO_PKG_VERSION"));
-    }
-}

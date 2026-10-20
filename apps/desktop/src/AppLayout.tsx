@@ -6,7 +6,6 @@ export function AppLayout() {
   const machine = useShellStore((s) => s.machine);
   const recent = useShellStore((s) => s.recent);
   const openPath = useShellStore((s) => s.openPath);
-  const view = useShellStore((s) => s.view);
   const init = useShellStore((s) => s.init);
   const open = useShellStore((s) => s.open);
   const pick = useShellStore((s) => s.pick);
@@ -14,8 +13,6 @@ export function AppLayout() {
   useEffect(() => {
     void init();
   }, [init]);
-
-  const current = view?.project.path;
 
   return (
     <div className="shell">
@@ -32,7 +29,7 @@ export function AppLayout() {
             <button
               type="button"
               key={p.path}
-              className={`nav-item ${p.path === openPath || p.label === current ? "nav-item--active" : ""}`}
+              className={`nav-item ${p.path === openPath ? "nav-item--active" : ""}`}
               title={p.path}
               onClick={() => void open(p.path)}
             >

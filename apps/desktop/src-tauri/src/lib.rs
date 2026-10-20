@@ -8,11 +8,6 @@ use tauri::{
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
-fn app_info() -> quench_core::AppInfo {
-    quench_core::app_info()
-}
-
-#[tauri::command]
 fn machine(app: State<App>) -> MachineView {
     app.machine()
 }
@@ -24,11 +19,13 @@ fn recent(app: State<App>) -> Vec<RecentView> {
 
 #[tauri::command]
 fn launch_project() -> Option<String> {
-    std::env::args().nth(1)
+    std::env::args()
+        .nth(1)
+        .filter(|a| !a.starts_with('-') && PathBuf::from(a).is_dir())
 }
 
 #[tauri::command]
-fn open_project(app: State<App>, path: String) -> Result<ContextView, String> {
+async fn open_project(app: State<'_, App>, path: String) -> Result<ContextView, String> {
     let path = PathBuf::from(path);
     if !path.is_dir() {
         return Err(format!("{} is not a folder", path.display()));
@@ -58,7 +55,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            app_info,
             machine,
             recent,
             launch_project,

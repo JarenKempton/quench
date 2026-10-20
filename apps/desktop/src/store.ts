@@ -27,24 +27,28 @@ export const useShellStore = create<ShellState>((set, get) => ({
   error: null,
 
   init: async () => {
-    const [machine, recent, launch] = await Promise.all([
-      invoke<MachineView>("machine"),
-      invoke<RecentView[]>("recent"),
-      invoke<string | null>("launch_project"),
-    ]);
-    set({ machine, recent });
-    const first = launch ?? recent[0]?.path;
-    if (first) await get().open(first);
+    try {
+      const [machine, recent, launch] = await Promise.all([
+        invoke<MachineView>("machine"),
+        invoke<RecentView[]>("recent"),
+        invoke<string | null>("launch_project"),
+      ]);
+      set({ machine, recent });
+      const first = launch ?? recent[0]?.path;
+      if (first) await get().open(first);
+    } catch (err) {
+      set({ status: "error", error: String(err) });
+    }
   },
 
   open: async (path) => {
-    set({ status: "loading", error: null, openPath: path });
+    set({ status: "loading", error: null });
     try {
       const view = await invoke<ContextView>("open_project", { path });
       const recent = await invoke<RecentView[]>("recent");
-      set({ view, recent, status: "ready" });
+      set({ view, recent, openPath: view.project.root, status: "ready" });
     } catch (err) {
-      set({ status: "error", error: String(err) });
+      set({ status: "error", error: `${path}: ${String(err)}` });
     }
   },
 
