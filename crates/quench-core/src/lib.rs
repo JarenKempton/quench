@@ -10,7 +10,10 @@
 //! count. See [`scan`].
 
 mod context;
+mod mcp;
 mod scan;
+
+pub use mcp::{claude_code_mcp_servers, Approval, McpScope, McpServer, Transport};
 
 pub use context::{
     claude_code_context, context_for_this_machine, ContextItem, ContextLoad, Estimate, ItemKind,

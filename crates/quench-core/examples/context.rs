@@ -22,6 +22,13 @@ fn main() {
                 imported_by: None, ..
             } => "instructions".to_string(),
             ItemKind::Skill { name, .. } => format!("skill {name}"),
+            ItemKind::McpServer(s) => format!(
+                "mcp {} ({:?}, {:?}{}) tool cost unknown",
+                s.name,
+                s.config_scope,
+                s.transport,
+                s.approval.map(|a| format!(", {a:?}")).unwrap_or_default()
+            ),
             ItemKind::Unscanned { what } => format!("not yet scanned: {what}"),
         };
         let dup = item

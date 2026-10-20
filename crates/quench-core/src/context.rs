@@ -1,3 +1,4 @@
+use crate::mcp::{claude_code_mcp_servers, McpScope, McpServer};
 use crate::scan::frontmatter_fields;
 use crate::scan::{collect_skills, home_dir, Origin};
 use serde::Serialize;
@@ -35,6 +36,7 @@ pub enum ItemKind {
         origin: Origin,
         model_invocable: bool,
     },
+    McpServer(McpServer),
     Unscanned {
         what: String,
     },
@@ -156,26 +158,40 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
         }
     }
 
-    for (what, path) in [
-        ("MCP servers", home.join(".claude.json")),
-        (
-            "plugin skills, commands and agents",
-            home.join(".claude/plugins"),
-        ),
-    ] {
-        if path.exists() {
-            items.push(ContextItem {
-                scope: Scope::Machine,
-                path,
-                kind: ItemKind::Unscanned {
-                    what: what.to_string(),
-                },
-                always_bytes: 0,
-                on_demand_bytes: 0,
-                duplicate_of: None,
-                same_content_as: None,
-            });
-        }
+    let mut keys = vec![project_root.clone()];
+    let main = main_checkout(&project_root);
+    if main != project_root {
+        keys.push(main);
+    }
+    for server in claude_code_mcp_servers(home, &project_root, &keys) {
+        items.push(ContextItem {
+            scope: if server.config_scope == McpScope::User {
+                Scope::Machine
+            } else {
+                Scope::Project
+            },
+            path: server.source.clone(),
+            kind: ItemKind::McpServer(server),
+            always_bytes: 0,
+            on_demand_bytes: 0,
+            duplicate_of: None,
+            same_content_as: None,
+        });
+    }
+
+    let plugins = home.join(".claude/plugins");
+    if plugins.exists() {
+        items.push(ContextItem {
+            scope: Scope::Machine,
+            path: plugins,
+            kind: ItemKind::Unscanned {
+                what: "plugin skills, commands, agents and MCP servers".to_string(),
+            },
+            always_bytes: 0,
+            on_demand_bytes: 0,
+            duplicate_of: None,
+            same_content_as: None,
+        });
     }
 
     let always_bytes = items
