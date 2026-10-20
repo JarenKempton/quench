@@ -1,3 +1,4 @@
+use crate::identity::{project_key, ProjectKey};
 use crate::mcp::{claude_code_mcp_servers, McpScope, McpServer};
 use crate::scan::frontmatter_fields;
 use crate::scan::{collect_skills, home_dir, Origin};
@@ -72,6 +73,7 @@ impl Estimate {
 #[derive(Debug, Clone, Serialize)]
 pub struct ContextLoad {
     pub harness: &'static str,
+    pub project: ProjectKey,
     pub project_root: PathBuf,
     pub items: Vec<ContextItem>,
     pub always_bytes: u64,
@@ -201,6 +203,7 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
         .sum();
     ContextLoad {
         harness: "claude-code",
+        project: project_key(&project_root),
         project_root,
         items,
         always_bytes,

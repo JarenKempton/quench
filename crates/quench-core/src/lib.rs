@@ -10,9 +10,11 @@
 //! count. See [`scan`].
 
 mod context;
+mod identity;
 mod mcp;
 mod scan;
 
+pub use identity::{normalize_remote, project_key, IdentityMethod, ProjectKey};
 pub use mcp::{claude_code_mcp_servers, Approval, McpScope, McpServer, Transport};
 
 pub use context::{

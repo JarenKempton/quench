@@ -12,6 +12,10 @@ fn main() {
         load.harness,
         load.project_root.display()
     );
+    println!(
+        "project {} ({:?}: {})",
+        load.project.label, load.project.method, load.project.value
+    );
     for item in &load.items {
         let what = match &item.kind {
             ItemKind::Instructions {
