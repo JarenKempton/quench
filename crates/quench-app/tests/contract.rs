@@ -79,3 +79,53 @@ fn fnv(bytes: &[u8]) -> u64 {
         (h ^ u64::from(*b)).wrapping_mul(0x100000001b3)
     })
 }
+
+#[test]
+fn a_corrupt_machine_id_is_never_replaced() {
+    let root = std::env::temp_dir().join(format!("quench-machine-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let quench = QuenchHome::at(root.join("quench"));
+    let home = root.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let first = App::new(&home, quench.clone()).unwrap().machine();
+    let file = root.join("quench/local/machine.json");
+    let text = fs::read_to_string(&file).unwrap();
+    fs::write(&file, &text[..text.len() - 3]).unwrap();
+    assert!(App::new(&home, quench.clone()).is_err());
+    assert_eq!(fs::read_to_string(&file).unwrap(), text[..text.len() - 3]);
+    fs::write(&file, &text).unwrap();
+    assert_eq!(App::new(&home, quench).unwrap().machine(), first);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn opening_home_lists_each_skill_once() {
+    let root = std::env::temp_dir().join(format!("quench-homeproj-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let home = root.join("home");
+    fs::create_dir_all(home.join(".claude/skills/one")).unwrap();
+    fs::write(
+        home.join(".claude/skills/one/SKILL.md"),
+        "---\nname: one\ndescription: d\n---\n",
+    )
+    .unwrap();
+    let app = App::new(&home, QuenchHome::at(root.join("quench"))).unwrap();
+    let view = app.open_project(&home).unwrap();
+    let ids: Vec<&String> = view
+        .sections
+        .iter()
+        .flat_map(|s| &s.rows)
+        .map(|r| &r.id)
+        .collect();
+    let unique: std::collections::HashSet<_> = ids.iter().collect();
+    assert_eq!(ids.len(), unique.len());
+    assert_eq!(
+        view.sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .filter(|r| r.title == "one")
+            .count(),
+        1
+    );
+    let _ = fs::remove_dir_all(&root);
+}

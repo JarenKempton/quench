@@ -485,7 +485,7 @@ fn dir_name_opt(path: &Path) -> Option<&str> {
 
 /// Home dir from the environment. macOS/Linux use `HOME`; Windows `USERPROFILE`.
 /// Kept dependency-free (quench-core stays serde-only).
-pub(crate) fn home_dir() -> Option<PathBuf> {
+pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)

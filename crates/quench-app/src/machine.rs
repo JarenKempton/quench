@@ -1,6 +1,6 @@
-use crate::home::{read_json, write_json, QuenchHome};
+use crate::home::QuenchHome;
 use serde::{Deserialize, Serialize};
-use std::io::Read;
+use std::io::Write;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Machine {
@@ -12,22 +12,50 @@ pub struct Machine {
 impl Machine {
     pub fn load_or_create(home: &QuenchHome) -> std::io::Result<Machine> {
         let path = home.local().join("machine.json");
-        if let Some(machine) = read_json::<Machine>(&path) {
-            return Ok(machine);
+        match std::fs::read_to_string(&path) {
+            Ok(text) => return parse(&path, &text),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            Err(_) => {}
         }
+        std::fs::create_dir_all(home.local())?;
         let machine = Machine {
             v: 1,
             id: uuid_v4()?,
             label: hostname(),
         };
-        write_json(&path, &machine)?;
-        Ok(machine)
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                file.write_all(&serde_json::to_vec_pretty(&machine)?)?;
+                file.sync_all()?;
+                Ok(machine)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                parse(&path, &std::fs::read_to_string(&path)?)
+            }
+            Err(e) => Err(e),
+        }
     }
+}
+
+fn parse(path: &std::path::Path, text: &str) -> std::io::Result<Machine> {
+    serde_json::from_str(text).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} is unreadable ({e}); Quench won't replace this machine's id. Fix or delete the file.",
+                path.display()
+            ),
+        )
+    })
 }
 
 fn uuid_v4() -> std::io::Result<String> {
     let mut b = [0u8; 16];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+    getrandom::fill(&mut b).map_err(|e| std::io::Error::other(e.to_string()))?;
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     let hex: String = b.iter().map(|x| format!("{x:02x}")).collect();

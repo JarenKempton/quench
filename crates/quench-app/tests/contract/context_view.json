@@ -5,7 +5,7 @@
     "path": "<root>/proj",
     "identity": "this folder's path (not a git repo)"
   },
-  "always_tokens": 27,
+  "always_tokens": 28,
   "token_method": "estimated, bytes/3",
   "sections": [
     {
@@ -94,9 +94,9 @@
       "title": "MCP servers",
       "rows": [
         {
-          "id": "mcp:<root>/home/.claude.json#docs",
+          "id": "mcp:user:<root>/home/.claude.json#docs",
           "title": "docs",
-          "detail": "http · https://mcp.example.com/v1",
+          "detail": "http · https://mcp.example.com",
           "location": "~/.claude.json",
           "scope": "This machine",
           "cost": {
@@ -107,7 +107,7 @@
           ]
         },
         {
-          "id": "mcp:<root>/proj/.mcp.json#db",
+          "id": "mcp:project:<root>/proj/.mcp.json#db",
           "title": "db",
           "detail": "stdio · db-mcp",
           "location": "./.mcp.json",

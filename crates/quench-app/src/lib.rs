@@ -29,9 +29,12 @@ impl App {
     }
 
     pub fn for_this_user() -> std::io::Result<App> {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/"));
+        let home = quench_core::home_dir().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no home directory (HOME is unset)",
+            )
+        })?;
         let quench = QuenchHome::for_user(&home);
         App::new(&home, quench)
     }
@@ -56,7 +59,7 @@ impl App {
 
     pub fn open_project(&self, path: &Path) -> std::io::Result<ContextView> {
         let load = quench_core::claude_code_context(&self.home, path);
-        Recent::touch(&self.quench, &load.project_root, &load.project)?;
+        let _ = Recent::touch(&self.quench, &load.project_root, &load.project);
         Ok(context_view(&load, &self.home))
     }
 }

@@ -34,7 +34,9 @@ pub(crate) fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> std::io
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
+    let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    let mut file = std::fs::File::create(&tmp)?;
+    std::io::Write::write_all(&mut file, &serde_json::to_vec_pretty(value)?)?;
+    file.sync_all()?;
     std::fs::rename(tmp, path)
 }

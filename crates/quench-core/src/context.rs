@@ -143,6 +143,9 @@ pub fn claude_code_context(home: &Path, project_root: &Path) -> ContextLoad {
                 0
             };
             let duplicate_of = seen.claim_path(&skill.manifest);
+            if duplicate_of.as_deref() == Some(skill.manifest.as_path()) {
+                continue;
+            }
             items.push(ContextItem {
                 scope,
                 path: skill.manifest.clone(),

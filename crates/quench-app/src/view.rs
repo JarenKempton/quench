@@ -99,14 +99,34 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
         };
         let mut notes = Vec::new();
         if let Some(first) = &item.duplicate_of {
-            notes.push(format!("same content as {}", tilde(first, home)));
+            notes.push(format!("same file as {}", tilde(first, home)));
+        }
+        if let Some(first) = &item.same_content_as {
+            notes.push(format!("identical to {}, loaded twice", tilde(first, home)));
         }
         let path_id = item.path.display().to_string();
         match &item.kind {
-            ItemKind::Instructions { imported_by } => {
+            ItemKind::Instructions {
+                imported_by,
+                external,
+                path_scoped,
+                truncated,
+            } => {
                 let id = format!("file:{path_id}");
                 if let Some(by) = imported_by {
                     notes.push(format!("imported by {}", tilde(by, home)));
+                }
+                if *external {
+                    notes.push(
+                        "outside the project: loads only after you approve external imports"
+                            .to_string(),
+                    );
+                }
+                if *path_scoped {
+                    notes.push("loads when Claude touches matching files".to_string());
+                }
+                if *truncated {
+                    notes.push("only the first 200 lines or 25 KB load".to_string());
                 }
                 always.push(Row {
                     id,
@@ -142,7 +162,25 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                 });
             }
             ItemKind::McpServer(server) => {
-                let id = format!("mcp:{path_id}#{}", server.name);
+                let id = format!(
+                    "mcp:{}:{path_id}#{}",
+                    match server.config_scope {
+                        McpScope::User => "user",
+                        McpScope::Local => "local",
+                        McpScope::Project => "project",
+                    },
+                    server.name
+                );
+                if let Some(winner) = server.overridden_by {
+                    notes.push(format!(
+                        "not used: the {} server with this name wins",
+                        match winner {
+                            McpScope::User => "user",
+                            McpScope::Local => "local",
+                            McpScope::Project => "project",
+                        }
+                    ));
+                }
                 let transport = match server.transport {
                     Transport::Stdio => "stdio",
                     Transport::Http => "http",
@@ -196,7 +234,7 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
         }
     }
 
-    let sections = [
+    let sections: Vec<Section> = [
         ("instructions", "Always loaded", always),
         ("skills", "Skills", skills),
         ("mcp", "MCP servers", mcp),
@@ -222,7 +260,14 @@ pub fn context_view(load: &ContextLoad, home: &Path) -> ContextView {
                 IdentityMethod::Path => "this folder's path (not a git repo)".to_string(),
             },
         },
-        always_tokens: load.always_tokens.tokens,
+        always_tokens: sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .map(|r| match r.cost {
+                Cost::Estimated { always_tokens, .. } => always_tokens,
+                _ => 0,
+            })
+            .sum(),
         token_method: format!("estimated, {}", load.always_tokens.method),
         sections,
     }

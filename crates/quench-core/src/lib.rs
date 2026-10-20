@@ -23,7 +23,8 @@ pub use context::{
 };
 
 pub use scan::{
-    scan, scan_this_machine, ContextFile, Harness, Origin, Probe, ProjectScan, Scan, Skill,
+    home_dir, scan, scan_this_machine, ContextFile, Harness, Origin, Probe, ProjectScan, Scan,
+    Skill,
 };
 
 use serde::Serialize;

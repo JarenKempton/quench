@@ -2270,6 +2270,7 @@ dependencies = [
 name = "quench-app"
 version = "0.0.0"
 dependencies = [
+ "getrandom 0.3.4",
  "quench-core",
  "serde",
  "serde_json",
