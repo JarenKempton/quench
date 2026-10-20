@@ -1,6 +1,6 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::{prelude::FluentBuilder, *};
-use quench_app::{App as Quench, ContextView, Cost, MachineView, RecentView, Row};
+use quench_app::{App as Quench, ChangesView, ContextView, Cost, MachineView, RecentView, Row};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -14,7 +14,7 @@ const ACCENT: u32 = 0x6ea8fe;
 
 enum Line {
     Heading(String, usize),
-    Item(Row),
+    Item(Box<Row>),
 }
 
 pub struct Shell {
@@ -25,12 +25,23 @@ pub struct Shell {
     lines: Rc<Vec<Line>>,
     list: ListState,
     error: Option<String>,
+    open_path: Option<PathBuf>,
+    changes: ChangesView,
 }
+
+const VALUES: [(&str, &str); 5] = [
+    ("inherit", "Inherit"),
+    ("on", "On"),
+    ("name-only", "Name"),
+    ("user-invocable-only", "Slash"),
+    ("off", "Off"),
+];
 
 impl Shell {
     pub fn new(quench: Quench, launch: Option<PathBuf>, cx: &mut Context<Self>) -> Self {
         let machine = quench.machine();
         let recent = quench.recent();
+        let changes = quench.changes();
         let mut shell = Shell {
             quench,
             machine,
@@ -39,6 +50,8 @@ impl Shell {
             lines: Rc::new(Vec::new()),
             list: ListState::new(0, ListAlignment::Top, px(600.)),
             error: None,
+            open_path: None,
+            changes,
         };
         if let Some(path) = launch.or_else(|| shell.recent.first().map(|r| PathBuf::from(&r.path)))
         {
@@ -60,18 +73,117 @@ impl Shell {
                     .iter()
                     .flat_map(|s| {
                         std::iter::once(Line::Heading(s.title.clone(), s.rows.len()))
-                            .chain(s.rows.iter().cloned().map(Line::Item))
+                            .chain(s.rows.iter().cloned().map(Box::new).map(Line::Item))
                     })
                     .collect();
                 self.list.reset(lines.len());
                 self.lines = Rc::new(lines);
                 self.view = Some(view);
+                self.open_path = Some(path.to_path_buf());
                 self.recent = self.quench.recent();
                 self.error = None;
             }
             Err(e) => self.error = Some(format!("{}: {e}", path.display())),
         }
         cx.notify();
+    }
+
+    fn stage_skill(&mut self, skill: &str, value: &str, cx: &mut Context<Self>) {
+        let Some(path) = self.open_path.clone() else {
+            return;
+        };
+        match self
+            .quench
+            .stage_skill(&path, skill, (value != "inherit").then_some(value))
+        {
+            Ok(changes) => self.changes = changes,
+            Err(e) => self.error = Some(e.to_string()),
+        }
+        self.open(&path, cx);
+    }
+
+    fn run(&mut self, command: &str, cx: &mut Context<Self>) {
+        let result = match command {
+            "apply" => self.quench.apply(),
+            "undo" => self.quench.undo_last(),
+            _ => Ok(self.quench.discard()),
+        };
+        match result {
+            Ok(changes) => self.changes = changes,
+            Err(e) => self.error = Some(e.to_string()),
+        }
+        if let Some(path) = self.open_path.clone() {
+            self.open(&path, cx);
+        }
+    }
+
+    fn changes_bar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let changes = &self.changes;
+        if changes.items.is_empty() && !changes.can_undo {
+            return None;
+        }
+        let title = match changes.items.len() {
+            0 => "No pending changes".to_string(),
+            1 => "1 pending change".to_string(),
+            n => format!("{n} pending changes"),
+        };
+        Some(
+            div()
+                .mt_3()
+                .p_3()
+                .rounded_lg()
+                .border_1()
+                .border_color(rgb(ACCENT))
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(title),
+                        )
+                        .when(changes.can_undo, |d| {
+                            d.child(
+                                Button::new("undo")
+                                    .label("Undo last apply")
+                                    .on_click(cx.listener(|this, _, _, cx| this.run("undo", cx))),
+                            )
+                        })
+                        .when(!changes.items.is_empty(), |d| {
+                            d.child(
+                                Button::new("discard").label("Discard").on_click(
+                                    cx.listener(|this, _, _, cx| this.run("discard", cx)),
+                                ),
+                            )
+                            .child(
+                                Button::new("apply")
+                                    .primary()
+                                    .label("Apply")
+                                    .on_click(cx.listener(|this, _, _, cx| this.run("apply", cx))),
+                            )
+                        }),
+                )
+                .children(changes.items.iter().map(|c| {
+                    div()
+                        .text_xs()
+                        .text_color(rgb(MUTED))
+                        .child(format!("{} · {} {} → {}", c.project, c.skill, c.from, c.to))
+                }))
+                .children(changes.files.iter().map(|f| {
+                    div()
+                        .text_xs()
+                        .text_color(rgb(FAINT))
+                        .child(format!("writes {}", f.file))
+                }))
+                .into_any_element(),
+        )
     }
 
     fn pick(&mut self, cx: &mut Context<Self>) {
@@ -187,6 +299,8 @@ impl Shell {
                 .into_any_element();
         };
         let lines = self.lines.clone();
+        let entity = cx.entity();
+        let bar = self.changes_bar(cx);
         div()
             .flex_1()
             .h_full()
@@ -234,6 +348,7 @@ impl Shell {
             .when_some(self.error.clone(), |d, e| {
                 d.child(div().text_color(rgb(0xf38ba8)).child(e))
             })
+            .children(bar)
             .child(
                 list(self.list.clone(), move |ix, _, _| match &lines[ix] {
                     Line::Heading(title, count) => div()
@@ -243,7 +358,7 @@ impl Shell {
                         .font_weight(FontWeight::SEMIBOLD)
                         .child(format!("{} {count}", title.to_uppercase()))
                         .into_any_element(),
-                    Line::Item(row) => row_element(row).into_any_element(),
+                    Line::Item(row) => row_element(row, &entity).into_any_element(),
                 })
                 .flex_1(),
             )
@@ -263,7 +378,44 @@ impl Render for Shell {
     }
 }
 
-fn row_element(row: &Row) -> impl IntoElement {
+fn toggle_buttons(row: &Row, entity: &Entity<Shell>) -> Option<AnyElement> {
+    let toggle = row.toggle.as_ref()?;
+    let current = toggle
+        .pending
+        .clone()
+        .or_else(|| toggle.local.clone())
+        .unwrap_or_else(|| "inherit".to_string());
+    Some(
+        div()
+            .flex()
+            .gap_1()
+            .ml_2()
+            .children(VALUES.iter().map(|(value, label)| {
+                let entity = entity.clone();
+                let skill = toggle.skill.clone();
+                let active = current == *value;
+                let pending = active && toggle.pending.is_some();
+                div()
+                    .id(SharedString::from(format!("{}:{value}", toggle.skill)))
+                    .px_1()
+                    .text_xs()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(rgb(if pending { ACCENT } else { BORDER }))
+                    .text_color(rgb(if active { TEXT } else { FAINT }))
+                    .when(active, |d| d.bg(rgba(0xffffff14)))
+                    .when(!toggle.locked, |d| {
+                        d.cursor_pointer().on_click(move |_, _, cx| {
+                            entity.update(cx, |shell, cx| shell.stage_skill(&skill, value, cx));
+                        })
+                    })
+                    .child(*label)
+            }))
+            .into_any_element(),
+    )
+}
+
+fn row_element(row: &Row, entity: &Entity<Shell>) -> impl IntoElement {
     let location = std::iter::once(row.location.clone())
         .chain(row.notes.iter().cloned())
         .collect::<Vec<_>>()
@@ -299,7 +451,8 @@ fn row_element(row: &Row) -> impl IntoElement {
                         .text_xs()
                         .text_color(rgb(MUTED))
                         .child(cost_label(&row.cost)),
-                ),
+                )
+                .children(toggle_buttons(row, entity)),
         )
         .when_some(row.detail.clone(), |d, detail| {
             d.child(div().text_sm().text_color(rgb(MUTED)).child(detail))

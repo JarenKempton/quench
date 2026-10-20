@@ -1,6 +1,8 @@
 import { useShellStore } from "../store";
 import type { Cost } from "../generated/Cost";
 import type { Row } from "../generated/Row";
+import type { Toggle } from "../generated/Toggle";
+import { ChangesBar } from "./ChangesBar";
 
 export function ContextPanel() {
   const view = useShellStore((s) => s.view);
@@ -42,6 +44,7 @@ export function ContextPanel() {
         </div>
       </header>
       {status === "error" && <Notice text={error} />}
+      <ChangesBar />
       <div className="panel-body">
         {view.sections.map((section) => (
           <section key={section.id} className="ctx-section">
@@ -67,6 +70,7 @@ function ContextRow({ row }: { row: Row }) {
         <span className="skill-name">{row.title}</span>
         <span className="tag">{row.scope}</span>
         <span className="cost">{costLabel(row.cost)}</span>
+        {row.toggle && <ToggleSelect toggle={row.toggle} />}
       </div>
       {row.detail && <p className="skill-desc">{row.detail}</p>}
       <p className="skill-origin" title={row.location}>
@@ -74,6 +78,37 @@ function ContextRow({ row }: { row: Row }) {
         {row.notes.map((n) => ` · ${n}`).join("")}
       </p>
     </li>
+  );
+}
+
+const VALUES = [
+  ["inherit", "Inherit"],
+  ["on", "On"],
+  ["name-only", "Name only"],
+  ["user-invocable-only", "Slash only"],
+  ["off", "Off"],
+] as const;
+
+function ToggleSelect({ toggle }: { toggle: Toggle }) {
+  const stage = useShellStore((s) => s.stage);
+  const current = toggle.pending ?? toggle.local ?? "inherit";
+  return (
+    <select
+      className={`toggle ${toggle.pending ? "toggle--pending" : ""}`}
+      aria-label={`${toggle.skill} in this project`}
+      title={`Effective: ${toggle.value} (from ${toggle.source}). Changes write this project's .claude/settings.local.json.`}
+      disabled={toggle.locked}
+      value={current}
+      onChange={(e) =>
+        void stage(toggle.skill, e.target.value === "inherit" ? null : e.target.value)
+      }
+    >
+      {VALUES.map(([value, label]) => (
+        <option key={value} value={value}>
+          {value === "inherit" ? `${label} (${toggle.local ? "default" : toggle.value})` : label}
+        </option>
+      ))}
+    </select>
   );
 }
 

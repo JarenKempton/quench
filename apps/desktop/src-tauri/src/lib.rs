@@ -1,4 +1,4 @@
-use quench_app::{App, ContextView, MachineView, RecentView};
+use quench_app::{App, ChangesView, ContextView, MachineView, RecentView};
 use std::path::PathBuf;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -34,6 +34,37 @@ async fn open_project(app: State<'_, App>, path: String) -> Result<ContextView, 
 }
 
 #[tauri::command]
+fn stage_skill(
+    app: State<App>,
+    path: String,
+    skill: String,
+    value: Option<String>,
+) -> Result<ChangesView, String> {
+    app.stage_skill(&PathBuf::from(path), &skill, value.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn changes(app: State<App>) -> ChangesView {
+    app.changes()
+}
+
+#[tauri::command]
+fn discard(app: State<App>) -> ChangesView {
+    app.discard()
+}
+
+#[tauri::command]
+fn apply(app: State<App>) -> Result<ChangesView, String> {
+    app.apply().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn undo(app: State<App>) -> Result<ChangesView, String> {
+    app.undo_last().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn pick_project(handle: tauri::AppHandle) -> Option<String> {
     handle
         .dialog()
@@ -59,7 +90,12 @@ pub fn run() {
             recent,
             launch_project,
             open_project,
-            pick_project
+            pick_project,
+            stage_skill,
+            changes,
+            discard,
+            apply,
+            undo
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Quench application");
