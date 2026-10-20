@@ -38,6 +38,7 @@ pub struct McpServer {
     pub env_keys: Vec<String>,
     pub header_keys: Vec<String>,
     pub approval: Option<Approval>,
+    pub overridden_by: Option<McpScope>,
 }
 
 pub fn claude_code_mcp_servers(
@@ -47,16 +48,6 @@ pub fn claude_code_mcp_servers(
 ) -> Vec<McpServer> {
     let user_file = home.join(".claude.json");
     let user = read_json(&user_file);
-    let mut out = Vec::new();
-
-    if let Some(servers) = user.get("mcpServers").and_then(Value::as_object) {
-        out.extend(
-            servers
-                .iter()
-                .map(|(n, v)| server(n, v, McpScope::User, &user_file, None)),
-        );
-    }
-
     let project_entry = project_keys
         .iter()
         .find_map(|k| {
@@ -65,34 +56,62 @@ pub fn claude_code_mcp_servers(
         })
         .cloned()
         .unwrap_or(Value::Null);
-    if let Some(servers) = project_entry.get("mcpServers").and_then(Value::as_object) {
-        out.extend(
-            servers
-                .iter()
-                .map(|(n, v)| server(n, v, McpScope::Local, &user_file, None)),
-        );
-    }
-
     let project_file = project_root.join(".mcp.json");
     let project = read_json(&project_file);
-    if let Some(servers) = project.get("mcpServers").and_then(Value::as_object) {
-        let settings = [
-            project_entry.clone(),
-            read_json(&project_root.join(".claude/settings.local.json")),
-            read_json(&project_root.join(".claude/settings.json")),
-            read_json(&home.join(".claude/settings.json")),
-        ];
-        out.extend(servers.iter().map(|(n, v)| {
-            server(
-                n,
-                v,
-                McpScope::Project,
-                &project_file,
-                Some(approval(n, &settings)),
-            )
-        }));
+
+    let mut layers = vec![project_entry.clone()];
+    layers.extend(
+        settings_files(home, project_root, project_keys)
+            .iter()
+            .map(|f| read_json(f)),
+    );
+
+    let mut out = Vec::new();
+    for (scope, source, servers) in [
+        (McpScope::Local, &user_file, project_entry.get("mcpServers")),
+        (McpScope::Project, &project_file, project.get("mcpServers")),
+        (McpScope::User, &user_file, user.get("mcpServers")),
+    ] {
+        let Some(servers) = servers.and_then(Value::as_object) else {
+            continue;
+        };
+        let mut named: Vec<(&String, &Value)> = servers.iter().collect();
+        named.sort_by(|a, b| a.0.cmp(b.0));
+        for (name, v) in named {
+            let approval = (scope == McpScope::Project).then(|| approval(name, &layers));
+            let overridden_by = out
+                .iter()
+                .find(|s: &&McpServer| &s.name == name && s.overridden_by.is_none())
+                .map(|s| s.config_scope);
+            let mut server = server(name, v, scope, source, approval);
+            server.overridden_by = overridden_by;
+            out.push(server);
+        }
     }
+    out.sort_by_key(|s| match s.config_scope {
+        McpScope::User => 0,
+        McpScope::Local => 1,
+        McpScope::Project => 2,
+    });
     out
+}
+
+fn settings_files(home: &Path, project_root: &Path, project_keys: &[PathBuf]) -> Vec<PathBuf> {
+    let managed = if cfg!(target_os = "macos") {
+        PathBuf::from("/Library/Application Support/ClaudeCode")
+    } else {
+        PathBuf::from("/etc/claude-code")
+    };
+    let mut files = vec![managed.join("managed-settings.json")];
+    if let Ok(entries) = std::fs::read_dir(managed.join("managed-settings.d")) {
+        files.extend(entries.flatten().map(|e| e.path()));
+    }
+    for key in project_keys {
+        files.push(key.join(".claude/settings.local.json"));
+    }
+    files.push(project_root.join(".claude/settings.json"));
+    files.push(home.join(".claude/settings.json"));
+    files
 }
 
 fn read_json(path: &Path) -> Value {
@@ -108,15 +127,14 @@ fn approval(name: &str, layers: &[Value]) -> Approval {
             .and_then(Value::as_array)
             .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(name)))
     };
-    for layer in layers {
-        if listed(layer, "disabledMcpjsonServers") {
-            return Approval::Denied;
-        }
-        if listed(layer, "enabledMcpjsonServers")
-            || layer.get("enableAllProjectMcpServers") == Some(&Value::Bool(true))
-        {
-            return Approval::Approved;
-        }
+    if layers.iter().any(|l| listed(l, "disabledMcpjsonServers")) {
+        return Approval::Denied;
+    }
+    if layers.iter().any(|l| {
+        listed(l, "enabledMcpjsonServers")
+            || l.get("enableAllProjectMcpServers") == Some(&Value::Bool(true))
+    }) {
+        return Approval::Approved;
     }
     Approval::Pending
 }
@@ -134,7 +152,7 @@ fn server(
     let command = obj.get("command").and_then(Value::as_str);
     let transport = match obj.get("type").and_then(Value::as_str) {
         Some("stdio") => Transport::Stdio,
-        Some("http") => Transport::Http,
+        Some("http" | "streamable-http") => Transport::Http,
         Some("sse") => Transport::Sse,
         None if command.is_some() => Transport::Stdio,
         _ => Transport::Unknown,
@@ -144,7 +162,7 @@ fn server(
         config_scope,
         source: source.to_path_buf(),
         transport,
-        endpoint: url.map(redact_url).or_else(|| command.map(program)),
+        endpoint: url.map(redact_url).or_else(|| command.and_then(program)),
         arg_count: obj
             .get("args")
             .and_then(Value::as_array)
@@ -152,6 +170,7 @@ fn server(
         env_keys: keys(obj.get("env")),
         header_keys: keys(obj.get("headers")),
         approval,
+        overridden_by: None,
     }
 }
 
@@ -161,22 +180,22 @@ fn keys(v: Option<&Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn program(command: &str) -> String {
-    let first = command.split_whitespace().next().unwrap_or(command);
-    Path::new(first)
-        .file_name()
-        .map_or(first.to_string(), |n| n.to_string_lossy().into_owned())
+fn program(command: &str) -> Option<String> {
+    let first = command.split_whitespace().find(|t| !t.contains('='))?;
+    first
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|n| !n.is_empty())
+        .map(str::to_string)
 }
 
 fn redact_url(url: &str) -> String {
-    let url = url.split(['?', '#']).next().unwrap_or(url);
-    match url.split_once("://") {
-        Some((scheme, rest)) => {
-            let rest = rest.rsplit_once('@').map_or(rest, |(_, host)| host);
-            format!("{scheme}://{rest}")
-        }
-        None => url.to_string(),
-    }
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return "(url hidden)".to_string();
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    format!("{scheme}://{host}")
 }
 
 #[cfg(test)]
@@ -238,7 +257,7 @@ mod tests {
         );
         assert_eq!(
             servers[0].endpoint.as_deref(),
-            Some("https://mcp.example.com/v1")
+            Some("https://mcp.example.com")
         );
         assert_eq!(servers[0].header_keys, vec!["Authorization"]);
         assert_eq!(servers[2].endpoint.as_deref(), Some("pg-mcp"));
@@ -280,6 +299,74 @@ mod tests {
         let servers = claude_code_mcp_servers(&home, &proj, std::slice::from_ref(&proj));
         assert_eq!(servers[0].approval, Some(Approval::Denied));
         assert_eq!(servers[1].approval, Some(Approval::Approved));
+        let _ = fs::remove_dir_all(&r);
+    }
+
+    #[test]
+    fn secrets_in_url_paths_and_commands_never_surface() {
+        assert_eq!(
+            redact_url("https://mcp.zapier.com/api/mcp/s/SECRETPATH/mcp"),
+            "https://mcp.zapier.com"
+        );
+        assert_eq!(
+            redact_url("https://host.example/users/@me/mcp"),
+            "https://host.example"
+        );
+        assert_eq!(redact_url("user:SECRETPW@host.example/mcp"), "(url hidden)");
+        assert_eq!(
+            program("API_KEY=SECRETENV node server.js").as_deref(),
+            Some("node")
+        );
+        assert_eq!(
+            program(r"C:\tools\mcp.exe --token X").as_deref(),
+            Some("mcp.exe")
+        );
+        assert_eq!(program("TOKEN=abc"), None);
+    }
+
+    #[test]
+    fn a_denial_anywhere_wins_and_same_names_resolve_local_project_user() {
+        let r = root("merge");
+        let home = r.join("home");
+        let proj = r.join("proj");
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::create_dir_all(proj.join(".claude")).unwrap();
+        fs::write(
+            home.join(".claude/settings.json"),
+            r#"{"disabledMcpjsonServers": ["x"]}"#,
+        )
+        .unwrap();
+        fs::write(
+            proj.join(".claude/settings.local.json"),
+            r#"{"enableAllProjectMcpServers": true}"#,
+        )
+        .unwrap();
+        fs::write(
+            proj.join(".mcp.json"),
+            r#"{"mcpServers": {"x": {"command": "x"}, "gh": {"command": "gh-project"}}}"#,
+        )
+        .unwrap();
+        let claude_json = serde_json::json!({
+            "mcpServers": {"gh": {"command": "gh-user"}},
+            "projects": {proj.to_string_lossy(): {"mcpServers": {"gh": {"command": "gh-local"}}}}
+        });
+        fs::write(home.join(".claude.json"), claude_json.to_string()).unwrap();
+        let servers = claude_code_mcp_servers(&home, &proj, std::slice::from_ref(&proj));
+        let x = servers.iter().find(|s| s.name == "x").unwrap();
+        assert_eq!(x.approval, Some(Approval::Denied));
+        let gh: Vec<(McpScope, Option<McpScope>)> = servers
+            .iter()
+            .filter(|s| s.name == "gh")
+            .map(|s| (s.config_scope, s.overridden_by))
+            .collect();
+        assert_eq!(
+            gh,
+            vec![
+                (McpScope::User, Some(McpScope::Local)),
+                (McpScope::Local, None),
+                (McpScope::Project, Some(McpScope::Local)),
+            ]
+        );
         let _ = fs::remove_dir_all(&r);
     }
 }
