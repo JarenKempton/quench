@@ -89,9 +89,16 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
     const next = segments[i + 1];
     segment.reply = next?.prompt ?? null;
     segment.replyOrigin = next?.promptOrigin ?? null;
-    segment.subagents = children.filter((c) => within(startedAt(c), segment)).length;
   });
-  return segments.filter((s) => s.inferences > 0);
+  return linkSubagents(
+    segments.filter((s) => s.inferences > 0),
+    children.map(startedAt),
+  );
+}
+
+export function linkSubagents(list: Run[], childStarts: readonly (Date | null)[]): Run[] {
+  for (const run of list) run.subagents = childStarts.filter((at) => within(at, run)).length;
+  return list;
 }
 
 function within(at: Date | null, run: Run): boolean {
