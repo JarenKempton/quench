@@ -2,12 +2,20 @@ use quench_judge::{Cached, Exchange, Judge, JudgeError, ReplyKind, Sender, Verdi
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct Counting {
+    version: &'static str,
     calls: AtomicUsize,
+}
+
+fn counting(version: &'static str) -> Counting {
+    Counting {
+        version,
+        calls: AtomicUsize::new(0),
+    }
 }
 
 impl Judge for Counting {
     fn id(&self) -> String {
-        "counting".into()
+        format!("counting/{}", self.version)
     }
 
     fn classify(&self, exchanges: &[Exchange]) -> Vec<Result<Verdict, JudgeError>> {
@@ -45,12 +53,7 @@ fn each_exchange_is_judged_once_even_across_runs() {
     let path = dir.path().join("judgments.jsonl");
     let batch = [ex("no, wrong file"), ex("great"), ex("fail")];
 
-    let first = Cached::open(
-        Counting {
-            calls: AtomicUsize::new(0),
-        },
-        &path,
-    );
+    let first = Cached::open(counting("v1"), &path);
     let kinds: Vec<_> = first
         .classify(&batch)
         .into_iter()
@@ -61,13 +64,21 @@ fn each_exchange_is_judged_once_even_across_runs() {
         vec![Some(ReplyKind::Correction), Some(ReplyKind::Approval), None]
     );
 
-    let reopened = Cached::open(
-        Counting {
-            calls: AtomicUsize::new(0),
-        },
-        &path,
-    );
+    let reopened = Cached::open(counting("v1"), &path);
     assert_eq!(reopened.known(), 2);
     reopened.classify(&batch);
     assert_eq!(reopened.inner().calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_new_question_re_asks_and_drops_stale_answers() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("judgments.jsonl");
+    Cached::open(counting("v1"), &path).classify(&[ex("no"), ex("ok")]);
+
+    let changed = Cached::open(counting("v2"), &path);
+    assert_eq!(changed.known(), 0);
+    changed.classify(&[ex("no")]);
+    assert_eq!(changed.inner().calls.load(Ordering::SeqCst), 1);
+    assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 1);
 }

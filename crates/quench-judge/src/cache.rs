@@ -8,12 +8,14 @@ use std::sync::Mutex;
 
 pub struct Cached<J> {
     inner: J,
+    judge: String,
     path: PathBuf,
     known: Mutex<HashMap<String, Verdict>>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Line {
+    judge: String,
     key: String,
     verdict: Verdict,
 }
@@ -21,17 +23,25 @@ struct Line {
 impl<J: Judge> Cached<J> {
     pub fn open(inner: J, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let known = std::fs::read_to_string(&path)
-            .unwrap_or_default()
+        let judge = inner.id();
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let lines = text.lines().filter(|l| !l.trim().is_empty()).count();
+        let known: HashMap<String, Verdict> = text
             .lines()
             .filter_map(|l| serde_json::from_str::<Line>(l).ok())
+            .filter(|l| l.judge == judge)
             .map(|l| (l.key, l.verdict))
             .collect();
-        Cached {
+        let cached = Cached {
             inner,
+            judge,
             path,
             known: Mutex::new(known),
+        };
+        if cached.known() < lines {
+            let _ = cached.rewrite();
         }
+        cached
     }
 
     pub fn inner(&self) -> &J {
@@ -44,15 +54,32 @@ impl<J: Judge> Cached<J> {
 
     fn key(&self, exchange: &Exchange) -> String {
         let mut hash = Sha256::new();
-        for part in [
-            self.inner.id().as_str(),
-            &exchange.assistant_said,
-            &exchange.reply,
-        ] {
+        for part in [&self.judge, &exchange.assistant_said, &exchange.reply] {
             hash.update((part.len() as u64).to_le_bytes());
             hash.update(part.as_bytes());
         }
         format!("{:x}", hash.finalize())
+    }
+
+    fn line(&self, key: &str, verdict: Verdict) -> serde_json::Result<String> {
+        serde_json::to_string(&Line {
+            judge: self.judge.clone(),
+            key: key.into(),
+            verdict,
+        })
+    }
+
+    fn rewrite(&self) -> std::io::Result<()> {
+        let mut body = String::new();
+        for (key, verdict) in self.known.lock().expect("cache lock").iter() {
+            body.push_str(&self.line(key, *verdict)?);
+            body.push('\n');
+        }
+        let tmp = self
+            .path
+            .with_extension(format!("jsonl.{}.tmp", std::process::id()));
+        std::fs::write(&tmp, body)?;
+        std::fs::rename(&tmp, &self.path)
     }
 
     fn remember(&self, fresh: &[(String, Verdict)]) -> std::io::Result<()> {
@@ -67,11 +94,7 @@ impl<J: Judge> Cached<J> {
             .append(true)
             .open(&self.path)?;
         for (key, verdict) in fresh {
-            let line = serde_json::to_string(&Line {
-                key: key.clone(),
-                verdict: *verdict,
-            })?;
-            writeln!(file, "{line}")?;
+            writeln!(file, "{}", self.line(key, *verdict)?)?;
         }
         file.sync_all()
     }
@@ -79,7 +102,7 @@ impl<J: Judge> Cached<J> {
 
 impl<J: Judge> Judge for Cached<J> {
     fn id(&self) -> String {
-        self.inner.id()
+        self.judge.clone()
     }
 
     fn classify(&self, exchanges: &[Exchange]) -> Vec<Result<Verdict, JudgeError>> {
