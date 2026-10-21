@@ -35,11 +35,11 @@ Needs [Bun](https://bun.sh) 1.3 or later.
 
 ```sh
 bun install
-bun quench report
-bun build --compile packages/cli/src/main.ts --outfile quench   # a single binary
+bunx vp run quench report
+bunx vp run compile   # a single binary at dist/quench
 ```
 
-Checks: `bun test` and `bun run check`.
+Checks: `bunx vp check` and `bunx vp run test`. Tasks live in `vite.config.ts`; `vp test` (Vitest on Node) does not apply here because the readers use Bun APIs.
 
 ## Supported harnesses
 

@@ -7,14 +7,10 @@
     "packages/*"
   ],
   "type": "module",
-  "scripts": {
-    "quench": "bun packages/cli/src/main.ts",
-    "check": "vp check",
-    "test": "bun test"
-  },
   "devDependencies": {
     "@types/bun": "^1.3.0",
     "typescript": "^5.9.0",
     "vite-plus": "0.2.5"
-  }
+  },
+  "packageManager": "bun@1.4.2"
 }

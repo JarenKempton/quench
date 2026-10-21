@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { discoverAll, harnessLabel, readSessions, type Home, type Session } from "@quench/history";
+import { discoverAll, harnessById, readSessions, type Home, type Session } from "@quench/history";
 import { runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
 
@@ -35,7 +35,7 @@ export async function runs(
     process.stdout.write(json(list));
     return 0;
   }
-  const header = `${harnessLabel[session.harness]} session ${session.id} in ${session.cwd ?? "unknown folder"}\n\n`;
+  const header = `${harnessById[session.harness].label} session ${session.id} in ${session.cwd ?? "unknown folder"}\n\n`;
   const body = list
     .map(
       (run, i) =>

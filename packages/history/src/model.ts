@@ -1,11 +1,5 @@
 export type HarnessId = "claude-code" | "codex" | "pi";
 
-export const harnessLabel: Record<HarnessId, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  pi: "Pi",
-};
-
 export type Author = "user" | "assistant" | "injected";
 
 export type Origin = "typed" | "scheduled" | "host" | "unknown";
@@ -29,6 +23,10 @@ export type EventKind =
   | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null };
 
 export type Event = EventKind & { at: Date | null };
+
+export function unhandled(event: never): never {
+  throw new Error(`unhandled event ${JSON.stringify(event)}`);
+}
 
 export type Inference = Extract<Event, { type: "inference" }>;
 

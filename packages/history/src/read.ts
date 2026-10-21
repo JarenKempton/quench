@@ -1,5 +1,5 @@
-import type { Harness, SessionRef } from "./harness.ts";
-import { harnesses } from "./harnesses/index.ts";
+import type { SessionRef } from "./harness.ts";
+import { harnessById, harnesses } from "./harnesses/index.ts";
 import type { Home } from "./home.ts";
 import type { Session } from "./model.ts";
 
@@ -16,16 +16,11 @@ export async function* readSessions(
   refs: readonly SessionRef[],
   concurrency = 4,
 ): AsyncGenerator<ReadOutcome> {
-  const byId = new Map<string, Harness>(harnesses.map((h) => [h.id, h]));
-  const read = (ref: SessionRef): Promise<ReadOutcome> => {
-    const harness = byId.get(ref.harness);
-    if (!harness)
-      return Promise.resolve({ ok: false, ref, error: new Error(`no harness ${ref.harness}`) });
-    return harness.read(ref).then(
+  const read = (ref: SessionRef): Promise<ReadOutcome> =>
+    harnessById[ref.harness].read(ref).then(
       (session) => ({ ok: true, session }),
       (error: unknown) => ({ ok: false, ref, error }),
     );
-  };
   const pending = refs.slice(0, concurrency).map(read);
   let next = pending.length;
   while (pending.length > 0) {

@@ -12,9 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: bun run check
-      - run: bun test
-      - run: bun build --compile packages/cli/src/main.ts --outfile quench
-      - run: ./quench --help
+      - run: bunx vp check
+      - run: bunx vp run test
+      - run: bunx vp run compile
+      - run: ./dist/quench --help

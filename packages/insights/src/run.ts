@@ -1,4 +1,4 @@
-import { contextOf, startedAt, type Origin, type Session } from "@quench/history";
+import { contextOf, startedAt, unhandled, type Origin, type Session } from "@quench/history";
 
 export type Run = {
   prompt: string | null;
@@ -47,24 +47,40 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
   const segments: Run[] = [emptyRun()];
   let run = segments[0] as Run;
   for (const event of session.events) {
-    if (event.type === "message" && event.author === "user") {
-      run = { ...emptyRun(), prompt: event.text, promptOrigin: event.origin, startedAt: event.at };
-      segments.push(run);
-    } else if (event.type === "message" && event.author === "assistant") {
-      run.assistantSaid = event.text;
-    } else if (event.type === "inference") {
-      const context = contextOf(event.usage);
-      run.inferences += 1;
-      run.contextStart ??= context;
-      run.contextPeak = Math.max(run.contextPeak, context);
-      run.model = event.model ?? run.model;
-      run.effort = event.effort ?? run.effort;
-    } else if (event.type === "tool_call") {
-      run.toolCalls += 1;
-    } else if (event.type === "tool_result") {
-      run.toolErrors += event.isError === true ? 1 : 0;
-    } else if (event.type === "compaction") {
-      run.compactions += 1;
+    switch (event.type) {
+      case "message":
+        if (event.author === "user") {
+          run = {
+            ...emptyRun(),
+            prompt: event.text,
+            promptOrigin: event.origin,
+            startedAt: event.at,
+          };
+          segments.push(run);
+        } else if (event.author === "assistant") {
+          run.assistantSaid = event.text;
+        }
+        break;
+      case "inference": {
+        const context = contextOf(event.usage);
+        run.inferences += 1;
+        run.contextStart ??= context;
+        run.contextPeak = Math.max(run.contextPeak, context);
+        run.model = event.model ?? run.model;
+        run.effort = event.effort ?? run.effort;
+        break;
+      }
+      case "tool_call":
+        run.toolCalls += 1;
+        break;
+      case "tool_result":
+        run.toolErrors += event.isError === true ? 1 : 0;
+        break;
+      case "compaction":
+        run.compactions += 1;
+        break;
+      default:
+        unhandled(event);
     }
     run.startedAt ??= event.at;
     run.endedAt = event.at ?? run.endedAt;

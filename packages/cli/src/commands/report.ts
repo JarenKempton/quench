@@ -1,4 +1,4 @@
-import { discoverAll, harnessLabel, readSessions, type Home } from "@quench/history";
+import { discoverAll, harnessById, readSessions, type Home } from "@quench/history";
 import {
   ReportBuilder,
   startingShare,
@@ -48,7 +48,7 @@ function render(harnesses: HarnessReport[], days: number, unreadable: number): s
     ];
     if (h.unparsedLines) rows.push(["Unparsed lines", String(h.unparsedLines)]);
     return [
-      harnessLabel[h.harness],
+      harnessById[h.harness].label,
       ...rows.map(([label, value]) => `  ${label.padEnd(18)}${value}`),
     ].join("\n");
   });

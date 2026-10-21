@@ -1,3 +1,4 @@
+import { modified } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, Session } from "./model.ts";
 
@@ -8,10 +9,19 @@ export type SessionRef = {
   parent: string | null;
 };
 
-export interface Harness {
-  readonly id: HarnessId;
+export interface Harness<Id extends HarnessId = HarnessId> {
+  readonly id: Id;
+  readonly label: string;
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
+}
+
+export async function sessionRef(
+  harness: HarnessId,
+  path: string,
+  parent: string | null = null,
+): Promise<SessionRef> {
+  return { harness, path, modified: await modified(path), parent };
 }
 
 export class NotASession extends Error {

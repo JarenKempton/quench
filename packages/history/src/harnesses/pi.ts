@@ -1,14 +1,14 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { filesWithExt, modified } from "../files.ts";
-import { NotASession, type Harness, type SessionRef } from "../harness.ts";
+import { filesWithExt } from "../files.ts";
+import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { date, jsonlLines, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
 
 const count = z.number().nullish();
 
-const Message = z.looseObject({
+export const Message = z.looseObject({
   /** `user`, `assistant`, `system` or `toolResult`. */
   role: z.string().nullish(),
   /** Model id that produced an assistant message. */
@@ -37,7 +37,7 @@ const Message = z.looseObject({
 });
 type Message = z.infer<typeof Message>;
 
-const Line = z.looseObject({
+export const Line = z.looseObject({
   /** `session` (the header), `message`, `compaction`, `model_change`, `thinking_level_change` or `session_info`. */
   type: z.string(),
   /** Session id on the `session` header; entry id otherwise. */
@@ -52,7 +52,7 @@ const Line = z.looseObject({
   message: Message.optional(),
 });
 
-const Item = z.looseObject({
+export const Item = z.looseObject({
   /** `text`, `thinking`, `toolCall` or `image`. */
   type: z.string(),
   /** Tool call id on `toolCall` items. */
@@ -63,20 +63,14 @@ const Item = z.looseObject({
   text: z.unknown().optional(),
 });
 
-export const pi: Harness = {
+export const pi: Harness<"pi"> = {
   id: "pi",
+  label: "Pi",
 
   async discover(home: Home): Promise<SessionRef[]> {
     const sessions = join(home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent"), "sessions");
     const paths = await filesWithExt(sessions, ".jsonl", 1);
-    return Promise.all(
-      paths.map(async (path) => ({
-        harness: "pi" as const,
-        path,
-        modified: await modified(path),
-        parent: null,
-      })),
-    );
+    return Promise.all(paths.map((path) => sessionRef("pi", path)));
   },
 
   async read(r: SessionRef) {
@@ -97,7 +91,7 @@ export const pi: Harness = {
     if (!header) throw new NotASession(r.path, "Pi");
     return {
       id: header.id ?? "",
-      harness: "pi" as const,
+      harness: "pi",
       path: r.path,
       cwd: header.cwd ?? null,
       parent: null,

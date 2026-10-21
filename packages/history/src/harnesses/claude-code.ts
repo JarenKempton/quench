@@ -1,7 +1,7 @@
 import { join, basename } from "node:path";
 import { z } from "zod";
-import { filesWithExt, modified, subdirs } from "../files.ts";
-import type { Harness, SessionRef } from "../harness.ts";
+import { filesWithExt, subdirs } from "../files.ts";
+import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
 import type {
@@ -15,6 +15,28 @@ import type {
 } from "../model.ts";
 
 const count = z.number().nullish();
+
+export const ApiUsage = z.looseObject({
+  /** Uncached input tokens. */
+  input_tokens: count,
+  /** Input tokens served from the prompt cache. */
+  cache_read_input_tokens: count,
+  /** Input tokens written to the prompt cache. */
+  cache_creation_input_tokens: count,
+  /** Generated tokens, including thinking. */
+  output_tokens: count,
+});
+
+export const ApiMessage = z.looseObject({
+  /** API message id; one response is split across several lines that share it. */
+  id: z.string().nullish(),
+  /** Model id that produced an assistant message. */
+  model: z.string().nullish(),
+  /** A string, or an array of content blocks (see `Block`). */
+  content: z.unknown().optional(),
+  /** Token counts for one API call; repeated on every line of the same message. */
+  usage: ApiUsage.optional(),
+});
 
 const Line = z.looseObject({
   /** Line kind: `user`, `assistant` and `system` carry the conversation; others (`attachment`, `ai-title`, `queue-operation`…) are host bookkeeping. */
@@ -49,33 +71,11 @@ const Line = z.looseObject({
     })
     .optional(),
   /** The Anthropic Messages API message, as sent or received. */
-  message: z
-    .looseObject({
-      /** API message id; one response is split across several lines that share it. */
-      id: z.string().nullish(),
-      /** Model id that produced an assistant message. */
-      model: z.string().nullish(),
-      /** A string, or an array of content blocks (see `Block`). */
-      content: z.unknown().optional(),
-      /** Token counts for one API call; repeated on every line of the same message. */
-      usage: z
-        .looseObject({
-          /** Uncached input tokens. */
-          input_tokens: count,
-          /** Input tokens served from the prompt cache. */
-          cache_read_input_tokens: count,
-          /** Input tokens written to the prompt cache. */
-          cache_creation_input_tokens: count,
-          /** Generated tokens, including thinking. */
-          output_tokens: count,
-        })
-        .optional(),
-    })
-    .optional(),
+  message: ApiMessage.optional(),
 });
 type Line = z.infer<typeof Line>;
 
-const Block = z.looseObject({
+export const Block = z.looseObject({
   /** `text`, `thinking`, `tool_use`, `tool_result` or `image`. */
   type: z.string(),
   /** Tool call id on `tool_use` blocks. */
@@ -95,18 +95,19 @@ type Block = z.infer<typeof Block>;
 
 const HARNESS_NOTES = ["Caveat:", "[Request interrupted by user"];
 
-export const claudeCode: Harness = {
+export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
+  label: "Claude Code",
 
   async discover(home: Home): Promise<SessionRef[]> {
     const projects = join(home.pathFrom("CLAUDE_CONFIG_DIR", ".claude"), "projects");
     const refs: SessionRef[] = [];
     for (const dir of await subdirs(projects)) {
       for (const path of await filesWithExt(dir, ".jsonl", 0)) {
-        refs.push(await ref(path, null));
+        refs.push(await sessionRef("claude-code", path));
         const id = stem(path);
         for (const child of await filesWithExt(join(dir, id, "subagents"), ".jsonl", 0)) {
-          refs.push(await ref(child, id));
+          refs.push(await sessionRef("claude-code", child, id));
         }
       }
     }
@@ -143,10 +144,6 @@ export const claudeCode: Harness = {
     };
   },
 };
-
-async function ref(path: string, parent: string | null): Promise<SessionRef> {
-  return { harness: "claude-code", path, modified: await modified(path), parent };
-}
 
 const stem = (path: string) => basename(path, ".jsonl");
 
