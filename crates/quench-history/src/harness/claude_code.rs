@@ -3,13 +3,15 @@ use crate::jsonl::{self, str, text_of, timestamp, u64};
 use crate::source::{files_with_ext, modified};
 use crate::{
     Author, Compaction, CompactionTrigger, Event, EventKind, Harness, HarnessId, Home, Inference,
-    Message, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
+    Message, Origin, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
 pub struct ClaudeCode;
+
+const HARNESS_NOTES: [&str; 2] = ["Caveat:", "[Request interrupted by user"];
 
 impl Harness for ClaudeCode {
     fn id(&self) -> HarnessId {
@@ -79,6 +81,7 @@ impl Harness for ClaudeCode {
                                 at,
                                 kind: EventKind::Message(Message {
                                     author: Author::Assistant,
+                                    origin: Origin::Unknown,
                                     text: text_of(&item["text"]),
                                 }),
                             }),
@@ -182,12 +185,19 @@ fn user_events(line: &Value) -> Vec<EventKind> {
         || line.get("isCompactSummary").and_then(Value::as_bool) == Some(true);
     let (author, text) = match command(&text) {
         Some(command) if !flagged => (Author::User, command),
-        _ if flagged || injected_tag(&text) || text.starts_with("Caveat:") => {
+        _ if flagged
+            || injected_tag(&text)
+            || HARNESS_NOTES.iter().any(|n| text.starts_with(n)) =>
+        {
             (Author::Injected, text)
         }
         _ => (Author::User, text),
     };
-    vec![EventKind::Message(Message { author, text })]
+    vec![EventKind::Message(Message {
+        author,
+        origin: origin(line),
+        text,
+    })]
 }
 
 fn command(text: &str) -> Option<String> {
@@ -200,4 +210,15 @@ fn between<'a>(text: &'a str, open: &str, close: &str) -> Option<&'a str> {
     let start = text.find(open)? + open.len();
     let end = text[start..].find(close)? + start;
     Some(text[start..end].trim())
+}
+
+fn origin(line: &Value) -> Origin {
+    let typed =
+        str(&line["origin"], "kind") == Some("human") || str(line, "promptSource") == Some("typed");
+    match (typed, str(line, "promptSource"), str(line, "turnOrigin")) {
+        (true, _, _) => Origin::Typed,
+        (_, Some("system"), _) | (_, _, Some("scheduled")) => Origin::Scheduled,
+        (_, Some("sdk"), _) => Origin::Host,
+        _ => Origin::Unknown,
+    }
 }

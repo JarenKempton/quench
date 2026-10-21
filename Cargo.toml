@@ -5,6 +5,7 @@ members = [
   "crates/quench-app",
   "crates/quench-history",
   "crates/quench-insights",
+  "crates/quench-judge",
   "apps/cli",
   "apps/desktop/src-tauri",
   "apps/gpui",

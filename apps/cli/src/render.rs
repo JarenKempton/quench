@@ -120,7 +120,7 @@ pub fn runs(session: &Session, runs: &[Run]) -> String {
     out
 }
 
-fn facts(run: &Run) -> String {
+pub(crate) fn facts(run: &Run) -> String {
     let mut parts = vec![
         run.model.clone().unwrap_or_else(|| "unknown model".into()),
         run.effort
@@ -149,7 +149,7 @@ fn facts(run: &Run) -> String {
     parts.join(" · ")
 }
 
-fn quote(text: Option<&str>) -> String {
+pub(crate) fn quote(text: Option<&str>) -> String {
     let Some(text) = text else {
         return "(session ended)".into();
     };

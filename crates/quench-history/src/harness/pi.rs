@@ -2,7 +2,7 @@ use crate::jsonl::{self, str, text_of, timestamp, u64};
 use crate::source::{files_with_ext, modified};
 use crate::{
     Author, Compaction, CompactionTrigger, Event, EventKind, Harness, HarnessId, Home, Inference,
-    Message, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
+    Message, Origin, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
 };
 use serde_json::Value;
 
@@ -83,7 +83,11 @@ fn text_message(author: Author, content: &Value) -> Vec<EventKind> {
     if text.trim().is_empty() {
         return Vec::new();
     }
-    vec![EventKind::Message(Message { author, text })]
+    vec![EventKind::Message(Message {
+        author,
+        origin: Origin::Unknown,
+        text,
+    })]
 }
 
 fn assistant(m: &Value) -> Vec<EventKind> {

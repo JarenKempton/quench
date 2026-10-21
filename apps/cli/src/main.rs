@@ -1,3 +1,4 @@
+mod corrections;
 mod render;
 
 use clap::{Parser, Subcommand};
@@ -29,6 +30,14 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    Corrections {
+        #[arg(long, default_value_t = 30)]
+        days: i64,
+        #[arg(long, default_value_t = 10)]
+        examples: usize,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -39,12 +48,19 @@ fn main() -> ExitCode {
     match Cli::parse().command {
         Command::Report { days, json } => report(&home, days, json),
         Command::Runs { session, json } => runs(&home, &session, json),
+        Command::Corrections {
+            days,
+            examples,
+            json,
+        } => {
+            let (sessions, _) = load(&home, since(days), |_| true);
+            corrections::run(&home, &sessions, days, examples, json)
+        }
     }
 }
 
 fn report(home: &Home, days: i64, json: bool) -> ExitCode {
-    let since = Timestamp::now().checked_sub((days * 24).hours()).ok();
-    let (sessions, unreadable) = load(home, since, |_| true);
+    let (sessions, unreadable) = load(home, since(days), |_| true);
     let report = quench_insights::report(&sessions);
     if json {
         print_json(&report);
@@ -83,6 +99,10 @@ fn runs(home: &Home, path: &Path, json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+fn since(days: i64) -> Option<Timestamp> {
+    Timestamp::now().checked_sub((days * 24).hours()).ok()
+}
+
 fn load(
     home: &Home,
     since: Option<Timestamp>,
@@ -96,7 +116,7 @@ fn load(
     (ok.into_iter().flatten().collect(), failed.len())
 }
 
-fn print_json(value: &impl serde::Serialize) {
+pub(crate) fn print_json(value: &impl serde::Serialize) {
     println!(
         "{}",
         serde_json::to_string_pretty(value).expect("output serializes")

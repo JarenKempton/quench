@@ -1,5 +1,6 @@
 use quench_history::{
-    discover_all, read_all, Author, CompactionTrigger, EventKind, HarnessId, Home, Session, Usage,
+    discover_all, read_all, Author, CompactionTrigger, EventKind, HarnessId, Home, Origin, Session,
+    Usage,
 };
 use std::path::{Path, PathBuf};
 
@@ -66,8 +67,30 @@ fn claude_code_separates_people_from_harness_text() {
             "no, use the existing router"
         ]
     );
-    assert_eq!(messages(&s, Author::Injected).len(), 2);
+    assert_eq!(messages(&s, Author::Injected).len(), 3);
     assert_eq!(s.cwd.as_deref(), Some(Path::new("/work/demo")));
+}
+
+#[test]
+fn claude_code_records_where_a_message_came_from_when_it_can() {
+    let s = one(HarnessId::ClaudeCode, "s1");
+    let origins: Vec<Origin> = s
+        .events
+        .iter()
+        .filter_map(|e| match &e.kind {
+            EventKind::Message(m) if m.author == Author::User => Some(m.origin),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        origins,
+        vec![
+            Origin::Typed,
+            Origin::Unknown,
+            Origin::Unknown,
+            Origin::Host
+        ]
+    );
 }
 
 #[test]

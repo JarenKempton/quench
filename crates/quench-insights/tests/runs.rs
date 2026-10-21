@@ -1,7 +1,7 @@
 use jiff::Timestamp;
 use quench_history::{
-    Author, Diagnostics, Event, EventKind, HarnessId, Inference, Message, Session, ToolCall,
-    ToolResult, Usage,
+    Author, Diagnostics, Event, EventKind, HarnessId, Inference, Message, Origin, Session,
+    ToolCall, ToolResult, Usage,
 };
 use quench_insights::{report, runs};
 
@@ -14,6 +14,7 @@ fn say(secs: i64, author: Author, text: &str) -> Event {
         at: at(secs),
         kind: EventKind::Message(Message {
             author,
+            origin: Origin::Unknown,
             text: text.into(),
         }),
     }
@@ -154,4 +155,40 @@ fn the_report_counts_starting_load_against_everything_processed() {
 #[test]
 fn an_empty_history_reports_nothing() {
     assert!(report(&[]).harnesses.is_empty());
+}
+
+#[test]
+fn signals_bucket_replies_and_count_the_corrected_ones() {
+    use quench_insights::{signals, Sample};
+    let (parent, child) = demo();
+    let found = runs(&parent, &[&child]);
+    let samples: Vec<Sample> = found
+        .iter()
+        .enumerate()
+        .map(|(i, run)| Sample {
+            harness: HarnessId::ClaudeCode,
+            position: i + 1,
+            run,
+            corrected: run.reply.as_deref() == Some("no, the other file"),
+        })
+        .collect();
+    let by_name = |name: &str| {
+        signals(&samples)
+            .into_iter()
+            .find(|s| s.name == name)
+            .unwrap()
+            .buckets
+            .into_iter()
+            .map(|b| (b.label, b.replies, b.corrections))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        by_name("Effort"),
+        vec![("medium".into(), 1, 0), ("high".into(), 1, 1)]
+    );
+    assert_eq!(
+        by_name("Context when the reply came"),
+        vec![("under 50k".into(), 2, 1)]
+    );
+    assert_eq!(found[0].assistant_said.as_deref(), Some("done"));
 }

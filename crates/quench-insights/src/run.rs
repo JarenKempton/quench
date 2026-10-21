@@ -1,11 +1,14 @@
 use jiff::Timestamp;
-use quench_history::{Author, EventKind, Session};
+use quench_history::{Author, EventKind, Origin, Session};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Run {
     pub prompt: Option<String>,
+    pub prompt_origin: Option<Origin>,
     pub reply: Option<String>,
+    pub reply_origin: Option<Origin>,
+    pub assistant_said: Option<String>,
     pub started_at: Option<Timestamp>,
     pub ended_at: Option<Timestamp>,
     pub model: Option<String>,
@@ -32,10 +35,14 @@ pub fn runs(session: &Session, children: &[&Session]) -> Vec<Run> {
         match &event.kind {
             EventKind::Message(m) if m.author == Author::User => segments.push(Run {
                 prompt: Some(m.text.clone()),
+                prompt_origin: Some(m.origin),
                 started_at: event.at,
                 ended_at: event.at,
                 ..Run::default()
             }),
+            EventKind::Message(m) if m.author == Author::Assistant => {
+                run.assistant_said = Some(m.text.clone());
+            }
             EventKind::Inference(i) => {
                 let context = i.usage.context();
                 run.inferences += 1;
@@ -55,6 +62,7 @@ pub fn runs(session: &Session, children: &[&Session]) -> Vec<Run> {
     }
     for i in 1..segments.len() {
         segments[i - 1].reply = segments[i].prompt.clone();
+        segments[i - 1].reply_origin = segments[i].prompt_origin;
     }
     for run in &mut segments {
         run.subagents = children

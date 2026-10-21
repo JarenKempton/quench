@@ -74,9 +74,19 @@ pub enum Author {
     Injected,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Origin {
+    Typed,
+    Scheduled,
+    Host,
+    Unknown,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Message {
     pub author: Author,
+    pub origin: Origin,
     pub text: String,
 }
 

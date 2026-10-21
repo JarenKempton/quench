@@ -3,7 +3,7 @@ use crate::jsonl::{self, str, text_of, timestamp, u64};
 use crate::source::{files_with_ext, modified};
 use crate::{
     Author, Compaction, CompactionTrigger, Event, EventKind, Harness, HarnessId, Home, Inference,
-    Message, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
+    Message, Origin, ReadError, Session, SessionRef, ToolCall, ToolResult, Usage,
 };
 use serde_json::Value;
 
@@ -120,7 +120,11 @@ fn message(payload: &Value) -> Option<EventKind> {
         Some("user") if !injected(&text) => Author::User,
         _ => Author::Injected,
     };
-    Some(EventKind::Message(Message { author, text }))
+    Some(EventKind::Message(Message {
+        author,
+        origin: Origin::Unknown,
+        text,
+    }))
 }
 
 fn injected(text: &str) -> bool {

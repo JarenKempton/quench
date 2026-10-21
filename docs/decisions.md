@@ -163,6 +163,16 @@
 - **History and insights stay offline** ([#45]) — neither crate makes a network call.
   Model-backed judgment (classifying replies, attributing corrections) arrives behind a
   trait in its own crate, opt-in, with the user's own key.
+- **Model judgments go through one `Judge` trait** ([#45]) — `quench-judge` returns typed
+  verdicts, never prose. `Jev` is the first judge: opt-in via `TYPESAFE_API_KEY`, the
+  user's own key. `Cached` wraps any judge and appends each verdict to
+  `~/.quench/local/judgments.jsonl`, keyed by judge id plus input, so a reply is paid
+  for once and changing the question re-asks cleanly.
+- **Who sent a message: structure first, judge second** ([#45]) — Claude Code records
+  typed (`origin: human`), scheduled and SDK-delivered prompts. Typed and scheduled are
+  trusted; SDK hosts deliver people and orchestrator agents identically, so the judge
+  decides "person or automation" from the message alone, never from setup-specific
+  prefixes.
 - **Token counts are estimates** — bytes are measured; tokens are `ceil(bytes / 3)` and
   always labeled estimated. Calibrated 2026-10-20 against `claude -p "/context"`: skill index
   entries ran 2.93 B/token (26 skills), CLAUDE.md files 2.4–2.7 B/token; `bytes / 4`

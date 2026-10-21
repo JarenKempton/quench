@@ -6,7 +6,9 @@
 mod distribution;
 mod report;
 mod run;
+mod signals;
 
 pub use distribution::Distribution;
 pub use report::{report, Count, HarnessReport, Report};
 pub use run::{runs, Run};
+pub use signals::{signals, Bucket, Sample, Signal};

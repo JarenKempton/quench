@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 quench-history = { path = "../../crates/quench-history" }
 quench-insights = { path = "../../crates/quench-insights" }
+quench-judge = { path = "../../crates/quench-judge" }
+quench-app = { path = "../../crates/quench-app" }
 clap = { version = "4", features = ["derive"] }
 jiff = "0.2"
 serde = "1"
