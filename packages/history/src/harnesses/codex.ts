@@ -9,30 +9,54 @@ import type { Diagnostics, Event, EventKind } from "../model.ts";
 const count = z.number().nullish();
 
 const TokenUsage = z.looseObject({
+  /** All input tokens, including the cached ones counted below. */
   input_tokens: count,
+  /** Input tokens served from the prompt cache. */
   cached_input_tokens: count,
+  /** Input tokens written to the prompt cache. */
   cache_write_input_tokens: count,
+  /** Generated tokens, including reasoning. */
   output_tokens: count,
 });
 type TokenUsage = z.infer<typeof TokenUsage>;
 
 const Line = z.looseObject({
+  /** `session_meta`, `turn_context`, `response_item`, `event_msg`, `token_usage_record` or `compacted`. */
   type: z.string(),
+  /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
+  /** Fields depend on `type`; only the ones Quench reads are listed. */
   payload: z
     .looseObject({
+      /** Item kind on `response_item` (`message`, `function_call`, `reasoning`…) and `event_msg` (`token_count`, `task_started`…). */
       type: z.string().nullish(),
+      /** Session id, on `session_meta`. */
       id: z.string().nullish(),
+      /** Working directory, on `session_meta` and `turn_context`. */
       cwd: z.string().nullish(),
+      /** Model for the turns that follow, on `turn_context`. */
       model: z.string().nullish(),
+      /** Reasoning effort for the turns that follow, on `turn_context`. */
       effort: z.string().nullish(),
+      /** Message author: `user`, `assistant` or `developer`. AGENTS.md and environment context arrive as `user` too. */
       role: z.string().nullish(),
+      /** Tool name on tool calls. */
       name: z.string().nullish(),
+      /** Links a tool call to its output. */
       call_id: z.string().nullish(),
+      /** Message content: an array of `input_text` / `output_text` parts. */
       content: z.unknown().optional(),
+      /** Tool output on `function_call_output` and `custom_tool_call_output`. */
       output: z.unknown().optional(),
+      /** One API call's tokens, on `token_usage_record`. */
       usage: TokenUsage.optional(),
-      info: z.looseObject({ last_token_usage: TokenUsage.optional() }).nullish(),
+      /** On `token_count` events; older sessions only have this, not `token_usage_record`. */
+      info: z
+        .looseObject({
+          /** Tokens of the latest API call. */
+          last_token_usage: TokenUsage.optional(),
+        })
+        .nullish(),
     })
     .optional(),
 });

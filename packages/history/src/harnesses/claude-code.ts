@@ -17,28 +17,56 @@ import type {
 const count = z.number().nullish();
 
 const Line = z.looseObject({
+  /** Line kind: `user`, `assistant` and `system` carry the conversation; others (`attachment`, `ai-title`, `queue-operation`…) are host bookkeeping. */
   type: z.string(),
+  /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
+  /** Working directory the session ran in. */
   cwd: z.string().nullish(),
+  /** True when Claude Code injected the user line itself (reminders, command output), not the person. */
   isMeta: z.boolean().nullish(),
+  /** True on the user line that carries the summary written after a compaction. */
   isCompactSummary: z.boolean().nullish(),
+  /** Session-wide reasoning effort: `low`, `medium`, `high`, `xhigh`. */
   effort: z.string().nullish(),
+  /** Effort in force for this turn; wins over `effort` when present. */
   perTurnEffort: z.string().nullish(),
+  /** Who sent the prompt: `typed` by a person, `sdk` from a host app, `system` from Claude Code itself. */
   promptSource: z.string().nullish(),
+  /** Why the turn started, e.g. `scheduled`, `sdk`, `task_notification`. */
   turnOrigin: z.string().nullish(),
+  /** Sender of the prompt; `kind` is `human`, `peer` or `task-notification`. */
   origin: z.looseObject({ kind: z.string().nullish() }).optional(),
+  /** Kind of `system` line, e.g. `compact_boundary`, `api_error`, `local_command`. */
   subtype: z.string().nullish(),
-  compactMetadata: z.looseObject({ trigger: z.string().nullish(), preTokens: count }).optional(),
+  /** Present on `compact_boundary` lines. */
+  compactMetadata: z
+    .looseObject({
+      /** `auto` when the context filled up, `manual` for `/compact`. */
+      trigger: z.string().nullish(),
+      /** Context size in tokens just before compacting. */
+      preTokens: count,
+    })
+    .optional(),
+  /** The Anthropic Messages API message, as sent or received. */
   message: z
     .looseObject({
+      /** API message id; one response is split across several lines that share it. */
       id: z.string().nullish(),
+      /** Model id that produced an assistant message. */
       model: z.string().nullish(),
+      /** A string, or an array of content blocks (see `Block`). */
       content: z.unknown().optional(),
+      /** Token counts for one API call; repeated on every line of the same message. */
       usage: z
         .looseObject({
+          /** Uncached input tokens. */
           input_tokens: count,
+          /** Input tokens served from the prompt cache. */
           cache_read_input_tokens: count,
+          /** Input tokens written to the prompt cache. */
           cache_creation_input_tokens: count,
+          /** Generated tokens, including thinking. */
           output_tokens: count,
         })
         .optional(),
@@ -48,12 +76,19 @@ const Line = z.looseObject({
 type Line = z.infer<typeof Line>;
 
 const Block = z.looseObject({
+  /** `text`, `thinking`, `tool_use`, `tool_result` or `image`. */
   type: z.string(),
+  /** Tool call id on `tool_use` blocks. */
   id: z.string().nullish(),
+  /** Tool name on `tool_use` blocks, as the host named it. */
   name: z.string().nullish(),
+  /** Text of a `text` block. */
   text: z.unknown().optional(),
+  /** On `tool_result` blocks, the `id` of the `tool_use` it answers. */
   tool_use_id: z.string().nullish(),
+  /** True when the tool failed. */
   is_error: z.boolean().nullish(),
+  /** Output of a `tool_result` block: a string or an array of blocks. */
   content: z.unknown().optional(),
 });
 type Block = z.infer<typeof Block>;

@@ -9,31 +9,57 @@ import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
 const count = z.number().nullish();
 
 const Message = z.looseObject({
+  /** `user`, `assistant`, `system` or `toolResult`. */
   role: z.string().nullish(),
+  /** Model id that produced an assistant message. */
   model: z.string().nullish(),
+  /** Reasoning effort for an assistant message, e.g. `off`, `medium`, `high`. */
   thinkingLevel: z.string().nullish(),
+  /** On `toolResult` messages, the id of the tool call it answers. */
   toolCallId: z.string().nullish(),
+  /** True when the tool failed. */
   isError: z.boolean().nullish(),
+  /** A string, or an array of items (see `Item`). */
   content: z.unknown().optional(),
+  /** One API call's tokens, on assistant messages. */
   usage: z
-    .looseObject({ input: count, output: count, cacheRead: count, cacheWrite: count })
+    .looseObject({
+      /** Uncached input tokens. */
+      input: count,
+      /** Generated tokens. */
+      output: count,
+      /** Input tokens served from the prompt cache. */
+      cacheRead: count,
+      /** Input tokens written to the prompt cache. */
+      cacheWrite: count,
+    })
     .optional(),
 });
 type Message = z.infer<typeof Message>;
 
 const Line = z.looseObject({
+  /** `session` (the header), `message`, `compaction`, `model_change`, `thinking_level_change` or `session_info`. */
   type: z.string(),
+  /** Session id on the `session` header; entry id otherwise. */
   id: z.string().nullish(),
+  /** Working directory, on the `session` header. */
   cwd: z.string().nullish(),
+  /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
+  /** Context size in tokens just before a `compaction`. */
   tokensBefore: count,
+  /** Present on `message` lines. */
   message: Message.optional(),
 });
 
 const Item = z.looseObject({
+  /** `text`, `thinking`, `toolCall` or `image`. */
   type: z.string(),
+  /** Tool call id on `toolCall` items. */
   id: z.string().nullish(),
+  /** Tool name on `toolCall` items, as the host named it. */
   name: z.string().nullish(),
+  /** Text of a `text` item. */
   text: z.unknown().optional(),
 });
 
