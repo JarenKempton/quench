@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-10-20T10:00:06Z","isSidechain":true,"message":{"role":"user","content":"Find the router"}}
+{"type":"assistant","timestamp":"2026-10-20T10:00:07Z","message":{"id":"x1","model":"claude-haiku-5-5","content":[{"type":"text","text":"Found."}],"usage":{"input_tokens":5,"cache_read_input_tokens":8000,"output_tokens":3}}}

@@ -2,21 +2,19 @@
   "name": "quench",
   "version": "0.0.0",
   "private": true,
-  "description": "Quench — cross-harness visibility and control over AI coding agent context",
+  "description": "See what your coding agents load, what it costs, and where they go wrong.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @quench/desktop run tauri dev",
-    "build": "pnpm --filter @quench/desktop run tauri build",
-    "web": "pnpm --filter @quench/desktop run dev"
+    "quench": "bun packages/cli/src/main.ts",
+    "check": "vp check",
+    "test": "bun test"
   },
   "devDependencies": {
-    "vite": "catalog:",
-    "vite-plus": "catalog:"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "11.14.0",
-      "onFail": "download"
-    }
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.0",
+    "vite-plus": "0.2.5"
   }
 }
