@@ -8,5 +8,9 @@
   },
   "dependencies": {
     "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^1.0.0",
+    "@earendil-works/pi-coding-agent": "^1.3.0"
   }
 }

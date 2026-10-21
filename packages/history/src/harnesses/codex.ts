@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { filesWithExt, modified } from "../files.ts";
-import { NotASession, type Harness, type SessionRef } from "../harness.ts";
+import { filesWithExt } from "../files.ts";
+import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
@@ -64,20 +64,14 @@ type Line = z.infer<typeof Line>;
 
 const INJECTED_HEADINGS = ["# AGENTS.md instructions"];
 
-export const codex: Harness = {
+export const codex: Harness<"codex"> = {
   id: "codex",
+  label: "Codex",
 
   async discover(home: Home): Promise<SessionRef[]> {
     const sessions = join(home.pathFrom("CODEX_HOME", ".codex"), "sessions");
     const paths = await filesWithExt(sessions, ".jsonl", 3);
-    return Promise.all(
-      paths.map(async (path) => ({
-        harness: "codex" as const,
-        path,
-        modified: await modified(path),
-        parent: null,
-      })),
-    );
+    return Promise.all(paths.map((path) => sessionRef("codex", path)));
   },
 
   async read(r: SessionRef) {
@@ -99,7 +93,7 @@ export const codex: Harness = {
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
       id: meta.id ?? "",
-      harness: "codex" as const,
+      harness: "codex",
       path: r.path,
       cwd: meta.cwd ?? null,
       parent: null,

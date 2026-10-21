@@ -1,4 +1,4 @@
-import { contextOf, type HarnessId, type Session } from "@quench/history";
+import { contextOf, unhandled, type HarnessId, type Session } from "@quench/history";
 import { distribution, type Distribution } from "./distribution.ts";
 import { runs } from "./run.ts";
 
@@ -77,23 +77,33 @@ class Tally {
     let peak = 0;
     let compacted = false;
     for (const e of s.events) {
-      if (e.type === "inference") {
-        const context = contextOf(e.usage);
-        first ??= context;
-        this.inferences += 1;
-        this.tokensProcessed += context;
-        this.startingLoadTokens += Math.min(first, context);
-        peak = Math.max(peak, context);
-        bump(this.models, e.model);
-        bump(this.efforts, e.effort);
-      } else if (e.type === "compaction") {
-        this.compactions += 1;
-        compacted = true;
-      } else if (e.type === "tool_call") {
-        this.toolCalls += 1;
-      } else if (e.type === "tool_result") {
-        this.toolResultsWithStatus += e.isError === null ? 0 : 1;
-        this.toolErrors += e.isError === true ? 1 : 0;
+      switch (e.type) {
+        case "inference": {
+          const context = contextOf(e.usage);
+          first ??= context;
+          this.inferences += 1;
+          this.tokensProcessed += context;
+          this.startingLoadTokens += Math.min(first, context);
+          peak = Math.max(peak, context);
+          bump(this.models, e.model);
+          bump(this.efforts, e.effort);
+          break;
+        }
+        case "compaction":
+          this.compactions += 1;
+          compacted = true;
+          break;
+        case "tool_call":
+          this.toolCalls += 1;
+          break;
+        case "tool_result":
+          this.toolResultsWithStatus += e.isError === null ? 0 : 1;
+          this.toolErrors += e.isError === true ? 1 : 0;
+          break;
+        case "message":
+          break;
+        default:
+          unhandled(e);
       }
     }
     this.compactedSessions += compacted ? 1 : 0;

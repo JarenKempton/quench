@@ -37,9 +37,18 @@ format. Rules every adapter follows:
   It never becomes zero.
 - **Honor the harness's own override variable** for its data directory.
 
-Adding a harness: one file in `packages/history/src/harnesses/`, one line in
-`harnesses/index.ts`, one entry in `HarnessId`, and fixtures under
-`packages/history/test/fixtures/home`.
+Adding a harness starts with one entry in `HarnessId`. The type checker then fails until
+`harnessById` has an adapter for it, and that adapter must declare its id and label. Add
+fixtures under `packages/history/test/fixtures/home`.
+
+Adapters keep zod schemas because files on disk come from older harness versions and only a
+runtime check catches format drift. Where a harness publishes types for its files, they are
+dev dependencies and `test/vendor-types.test.ts` fails the type check if a schema reads a
+field the vendor doesn't publish or with a different type: Pi (`@earendil-works/pi-coding-agent`)
+fully, Claude Code's API message and content blocks (`@anthropic-ai/sdk`). The rest of the
+Claude Code line and all of Codex are unpublished, so those fields are documented on the schema.
+
+A new event kind breaks every `switch` that ends in `unhandled(event)` until it is handled.
 
 ## Insights
 
