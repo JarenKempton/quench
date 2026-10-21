@@ -2,7 +2,8 @@ mod render;
 
 use clap::{Parser, Subcommand};
 use jiff::{Timestamp, ToSpan};
-use quench_history::{discover_all, read_all, Home};
+use quench_history::{discover_all, read_all, Home, Session};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -23,27 +24,81 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    Runs {
+        session: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
-    let Command::Report { days, json } = Cli::parse().command;
     let Some(home) = Home::from_env() else {
         eprintln!("HOME is not set");
         return ExitCode::FAILURE;
     };
+    match Cli::parse().command {
+        Command::Report { days, json } => report(&home, days, json),
+        Command::Runs { session, json } => runs(&home, &session, json),
+    }
+}
+
+fn report(home: &Home, days: i64, json: bool) -> ExitCode {
     let since = Timestamp::now().checked_sub((days * 24).hours()).ok();
-    let refs = discover_all(&home, since);
-    let (sessions, failures): (Vec<_>, Vec<_>) =
-        read_all(&refs).into_iter().partition(Result::is_ok);
-    let sessions: Vec<_> = sessions.into_iter().flatten().collect();
+    let (sessions, unreadable) = load(home, since, |_| true);
     let report = quench_insights::report(&sessions);
     if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&report).expect("report serializes")
-        );
+        print_json(&report);
     } else {
-        print!("{}", render::report(&report, days, failures.len()));
+        print!("{}", render::report(&report, days, unreadable));
     }
     ExitCode::SUCCESS
+}
+
+fn runs(home: &Home, path: &Path, json: bool) -> ExitCode {
+    let Ok(path) = path.canonicalize() else {
+        eprintln!("{} does not exist", path.display());
+        return ExitCode::FAILURE;
+    };
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned());
+    let (sessions, _) = load(home, None, |r| {
+        r.path == path
+            || (r.parent.is_some()
+                && r.parent == stem
+                && r.path.starts_with(path.with_extension("")))
+    });
+    let Some(session) = sessions.iter().find(|s| s.path == path) else {
+        eprintln!(
+            "{} is not a session any known harness wrote",
+            path.display()
+        );
+        return ExitCode::FAILURE;
+    };
+    let children: Vec<&Session> = sessions.iter().filter(|s| s.parent.is_some()).collect();
+    let runs = quench_insights::runs(session, &children);
+    if json {
+        print_json(&runs);
+    } else {
+        print!("{}", render::runs(session, &runs));
+    }
+    ExitCode::SUCCESS
+}
+
+fn load(
+    home: &Home,
+    since: Option<Timestamp>,
+    keep: impl Fn(&quench_history::SessionRef) -> bool,
+) -> (Vec<Session>, usize) {
+    let refs: Vec<_> = discover_all(home, since)
+        .into_iter()
+        .filter(|r| keep(r))
+        .collect();
+    let (ok, failed): (Vec<_>, Vec<_>) = read_all(&refs).into_iter().partition(Result::is_ok);
+    (ok.into_iter().flatten().collect(), failed.len())
+}
+
+fn print_json(value: &impl serde::Serialize) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("output serializes")
+    );
 }

@@ -14,4 +14,5 @@ quench-history = { path = "../../crates/quench-history" }
 quench-insights = { path = "../../crates/quench-insights" }
 clap = { version = "4", features = ["derive"] }
 jiff = "0.2"
+serde = "1"
 serde_json = "1"

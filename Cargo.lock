@@ -6024,6 +6024,7 @@ dependencies = [
  "jiff",
  "quench-history",
  "quench-insights",
+ "serde",
  "serde_json",
 ]
 
