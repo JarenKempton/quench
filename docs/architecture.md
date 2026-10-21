@@ -36,8 +36,9 @@ Provenance ledger records where everything came from, who added it, when it chan
 
 ## Usage tracking
 
-- Session-log scanning: Claude Code exact (Skill tool_use events with ts/cwd), Pi/Codex
-  best-effort. Proven in agentkit.
+- Session history: `quench-history` reads Claude Code, Codex and Pi sessions into one
+  event model; `quench-insights` turns them into runs (everything between two user
+  messages) and per-harness reports. `quench-cli report` prints it.
 - Harness hooks where supported (Claude Code hooks) for real-time events.
 - NOT filesystem read-listening — reads aren't observable without kernel-level
   instrumentation (eBPF/Endpoint Security). Don't pretend otherwise.

@@ -79,6 +79,13 @@ cargo run -p quench-gpui      # the same app as a native GPUI window
 
 Pass a project path to open it directly, e.g. `cargo run -p quench-gpui -- ~/code/my-app`.
 
+Profile your agent sessions (Claude Code, Codex and Pi; needs only Rust):
+
+```sh
+cargo run --release -p quench-cli -- report            # last 30 days, every harness found
+cargo run --release -p quench-cli -- report --days 7 --json
+```
+
 Headless, for scripts or bug reports:
 
 ```sh
@@ -106,6 +113,9 @@ Set `QUENCH_HOME` to use a different directory than `~/.quench`.
   servers, project identity, settings layers. No UI.
 - `crates/quench-app` — app state, commands and the view models every UI renders.
   TypeScript types are generated into `apps/desktop/src/generated` by `cargo test`.
+- `crates/quench-history` — session history from every harness, in one event model.
+- `crates/quench-insights` — runs, context load and per-harness reports over that model.
+- `apps/cli` — `quench-cli report`: the profile in your terminal (`--json` for scripts).
 - `apps/desktop` — Tauri v2 + React frontend.
 - `apps/gpui` — GPUI frontend. Both frontends ship until one is retired.
 - `docs/` — architecture, scope and the decision log (`docs/decisions.md`).

@@ -1,0 +1,17 @@
+[package]
+name = "quench-cli"
+version = "0.0.0"
+edition = "2021"
+description = "Command-line Quench: profile what your coding agents load and how sessions go."
+publish = false
+
+[[bin]]
+name = "quench-cli"
+path = "src/main.rs"
+
+[dependencies]
+quench-history = { path = "../../crates/quench-history" }
+quench-insights = { path = "../../crates/quench-insights" }
+clap = { version = "4", features = ["derive"] }
+jiff = "0.2"
+serde_json = "1"

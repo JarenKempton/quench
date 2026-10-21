@@ -143,6 +143,26 @@
   `.claude/rules/` (rules with `paths:` load on demand) and the first 200 lines / 25 KB of
   auto memory. `@imports` go four hops deep and skip code spans, fences and HTML comments,
   which are also not counted. Only the same file is deduplicated; identical copies both load.
+- **Session history is read through one adapter per harness** ([#45]) — `quench-history`
+  maps each harness's on-disk sessions into one `Session` of typed events (`Message`,
+  `Inference`, `ToolCall`, `ToolResult`, `Compaction`). An adapter only knows paths and
+  formats, and honors the harness's own override variable (`CLAUDE_CONFIG_DIR`,
+  `CODEX_HOME`, `PI_CODING_AGENT_DIR`). Everything above it, starting with
+  `quench-insights`, never branches on harness. Adding a harness is one module plus one
+  registry line.
+- **Analysis uses structure, never names** ([#45]) — hosts rename tools (an MCP proxy can
+  wrap every built-in), so signals come from event types, ids, timestamps and subagent
+  files, never tool or server names. Messages are `User`, `Assistant` or `Injected`
+  (harness-added text such as instruction files, environment blocks, command output);
+  only the adapter decides which is which.
+- **Usage is normalized at the adapter** ([#45]) — every `Usage` has `input`,
+  `cache_read`, `cache_write` and `output`, with `input` excluding cache, so `context()`
+  means the same thing everywhere. OpenAI-style counts, where cached tokens are inside
+  `input_tokens`, are split on read. Unrecorded facts stay unknown (`is_error: None`),
+  never zero.
+- **History and insights stay offline** ([#45]) — neither crate makes a network call.
+  Model-backed judgment (classifying replies, attributing corrections) arrives behind a
+  trait in its own crate, opt-in, with the user's own key.
 - **Token counts are estimates** — bytes are measured; tokens are `ceil(bytes / 3)` and
   always labeled estimated. Calibrated 2026-10-20 against `claude -p "/context"`: skill index
   entries ran 2.93 B/token (26 skills), CLAUDE.md files 2.4–2.7 B/token; `bytes / 4`
@@ -182,6 +202,7 @@ private`). `generate_context!` must stay in `src-tauri` — it resolves `tauri.c
 [#17]: https://github.com/JarenKempton/quench/issues/17
 [#23]: https://github.com/JarenKempton/quench/issues/23
 [#34]: https://github.com/JarenKempton/quench/issues/34
+[#45]: https://github.com/JarenKempton/quench/issues/45
 [cargo ref]: https://doc.rust-lang.org/cargo/reference/profiles.html
 [size guide]: https://v2.tauri.app/concept/size/
 [project structure]: https://v2.tauri.app/start/project-structure/

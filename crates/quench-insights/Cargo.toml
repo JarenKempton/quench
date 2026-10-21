@@ -1,0 +1,11 @@
+[package]
+name = "quench-insights"
+version = "0.0.0"
+edition = "2021"
+description = "Harness-agnostic analysis over normalized session history: runs, context load, signals."
+publish = false
+
+[dependencies]
+quench-history = { path = "../quench-history" }
+jiff = { version = "0.2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }

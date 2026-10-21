@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/quench-core", "crates/quench-app", "apps/desktop/src-tauri", "apps/gpui"]
+members = [
+  "crates/quench-core",
+  "crates/quench-app",
+  "crates/quench-history",
+  "crates/quench-insights",
+  "apps/cli",
+  "apps/desktop/src-tauri",
+  "apps/gpui",
+]
 
 # quench#8: Cargo honors [profile.*] ONLY at the workspace root. Tauri's size guide
 # tells you to put this in src-tauri/Cargo.toml, where in a workspace it silently
