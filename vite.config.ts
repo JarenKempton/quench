@@ -1,10 +1,11 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
-  fmt: {},
+  fmt: {
+    ignorePatterns: ["packages/*/test/fixtures/**"],
+  },
   lint: {
-    jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
-    rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    ignorePatterns: ["packages/*/test/fixtures/**"],
     options: { typeAware: true, typeCheck: true },
   },
 });

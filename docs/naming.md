@@ -68,7 +68,7 @@ Pica, Galley, Legend, Gnomon, Datum, Grove, Arbor, Bower, Comb, Strata, Bedrock,
 Cove, Eddy, Ratchet, Detent, Pawl, Crystal, Ward, Hasp, Tumbler, Jess, Mews, Clef,
 Dial, Squelch, Focal, Larder, Sieve, Fettle, Kiln†, Hone†, Anneal†, Lathe†, Gimbal‡
 
-\* meaning OK, sound rejected  † user liked it, killed by collision  ‡ sound liked,
+\* meaning OK, sound rejected † user liked it, killed by collision ‡ sound liked,
 context rejected — this phonetic shape (GIM-bal: 2 syllables, g/b, -al/-el) is a live
 target.
 

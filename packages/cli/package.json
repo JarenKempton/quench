@@ -1,0 +1,13 @@
+{
+  "name": "@quench/cli",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "quench": "./src/main.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "@quench/history": "workspace:*",
+    "@quench/insights": "workspace:*"
+  }
+}

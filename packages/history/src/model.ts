@@ -1,0 +1,53 @@
+export type HarnessId = "claude-code" | "codex" | "pi";
+
+export const harnessLabel: Record<HarnessId, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+};
+
+export type Author = "user" | "assistant" | "injected";
+
+export type Origin = "typed" | "scheduled" | "host" | "unknown";
+
+export type Usage = {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+};
+
+export const contextOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
+
+export type CompactionTrigger = "auto" | "manual" | "unknown";
+
+export type EventKind =
+  | { type: "message"; author: Author; origin: Origin; text: string }
+  | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
+  | { type: "tool_call"; id: string | null; name: string }
+  | { type: "tool_result"; callId: string | null; isError: boolean | null; chars: number }
+  | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null };
+
+export type Event = EventKind & { at: Date | null };
+
+export type Inference = Extract<Event, { type: "inference" }>;
+
+export type Diagnostics = {
+  lines: number;
+  unparsed: number;
+};
+
+export type Session = {
+  id: string;
+  harness: HarnessId;
+  path: string;
+  cwd: string | null;
+  parent: string | null;
+  events: Event[];
+  diagnostics: Diagnostics;
+};
+
+export const inferences = (s: Session): Inference[] =>
+  s.events.filter((e): e is Inference => e.type === "inference");
+
+export const startedAt = (s: Session): Date | null => s.events.find((e) => e.at)?.at ?? null;
