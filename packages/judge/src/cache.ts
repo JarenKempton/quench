@@ -5,7 +5,15 @@ import { jsonlLines } from "@quench/history";
 import { z } from "zod";
 import { Verdict, type Exchange } from "./verdict.ts";
 
-const Line = z.object({ judge: z.string(), key: z.string(), verdict: Verdict });
+/** One persisted reply classification in judgments.jsonl, separate from theme-grouping decisions. */
+const Line = z.object({
+  /** Judge identity, including its model and reply-question version. */
+  judge: z.string(),
+  /** SHA-256 of length-prefixed judge identity, full assistant text and full reply text. */
+  key: z.string(),
+  /** The original model answer, not the effective sender after harness/host evidence is applied. */
+  verdict: Verdict,
+});
 
 export class VerdictCache {
   private constructor(

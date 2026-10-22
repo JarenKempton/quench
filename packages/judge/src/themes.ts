@@ -18,27 +18,49 @@ export interface ThemeJudge {
 }
 
 type Group = { id: string; exchange: Exchange; members: Reply[]; classifiers: Set<string> };
+/** Evidence summary for one corrective-intent group, including groups seen in only one session. */
 export type Theme = {
+  /** One original correction quotation, not a generated theme title or a draft rule. */
   representative: string;
+  /** Original correction occurrences assigned here; exact duplicate exchanges still count separately. */
   corrections: number;
+  /** Distinct (harness, native session ID) pairs, not proof of independent occurrences across forks. */
   sessions: number;
+  /** True when the group appears in at least two native sessions. */
   recurring: boolean;
+  /** Distinct last-recorded coding-agent models in the preceding runs, not the grouping models. */
   models: string[];
+  /** Correction occurrences whose preceding run has no recorded model. */
   unknownModels: number;
+  /** Occurrences per source of person attribution: harness metadata, host evidence or model inference. */
   senderSources: Record<Reply["senderSource"], number>;
+  /** Actual service model labels returned by the decisions that formed this group. */
   classifierModels: string[];
+  /** Source occurrences limited by --examples; counts above still cover every assigned occurrence. */
   examples: {
     harness: Reply["harness"];
+    /** Harness-native session ID, not a host conversation ID. */
     sessionId: string;
+    /** Local history file containing the source exchange. */
     path: string;
+    /** One-based position among the session's agent runs. */
     position: number;
+    /** The correction message's own timestamp, not the preceding run's end time. */
     at: Date | null;
+    /** Last recorded coding-agent model in the preceding run. */
     model: string | null;
+    /** How this occurrence was attributed to a person; it does not describe how its theme was chosen. */
     senderSource: Reply["senderSource"];
+    /** Full original correction text, not the clipped excerpt sent for grouping. */
     reply: string;
   }[];
 };
 
+/**
+ * Group person-attributed corrections with cached reply verdicts by specific corrective intent.
+ * Returns a report containing Theme[] plus coverage and processing statistics, not just an array.
+ * A null judge replays cached decisions until the first gap, then blocks dependent inputs.
+ */
 export async function groupCorrections(
   replies: readonly Reply[],
   cache: ThemeCache,
@@ -126,10 +148,15 @@ export async function groupCorrections(
   return {
     judge: cache.judge,
     limit: options.limit,
+    /** Person-attributed correction occurrences with known timestamps inside the window, before limiting. */
     eligibleCorrections: eligible.length,
+    /** Distinct full assistant/reply text pairs among eligible occurrences, before limiting. */
     uniqueInputs: unique.size,
+    /** Unique exchanges admitted by the analysis limit, including any not yet processed. */
     selectedInputs: selected.length,
+    /** Original occurrences represented by selected inputs, not just successfully grouped corrections. */
     selectedCorrections,
+    /** Eligible occurrences left out solely by the unique-input limit, not the exclusions below. */
     omittedCorrections: eligible.length - selectedCorrections,
     excluded: {
       outsideWindowCorrections: knownTime.length - eligible.length,
@@ -141,11 +168,17 @@ export async function groupCorrections(
         .length,
       unclassifiedReplies: replies.filter((r) => r.kind === null).length,
     },
+    /** Unique-input decisions reused from cache, including cached unclear answers. */
     cacheHits,
+    /** Fresh decisions persisted this run, including new/unclear answers; not the number of new themes. */
     newlyGrouped,
+    /** First missing decision when no judge is available; dependent inputs are counted as blocked. */
     pending,
+    /** Later unique inputs whose exemplar choices depend on an earlier missing or failed decision. */
     blocked,
+    /** Original correction occurrences assigned unclear, not unique inputs or an unclear theme. */
     unclear,
+    /** Failed fresh-decision operations; failures stop dependent work and are not cached. */
     failed: failures.length,
     failures,
     warnings: cache.warnings,
@@ -163,6 +196,7 @@ export async function groupCorrections(
   };
 }
 
+/** The whole resolved grouping report, including coverage and processing statistics; not Theme[]. */
 export type Themes = Awaited<ReturnType<typeof groupCorrections>>;
 
 function themeInput(exchange: Exchange, groups: readonly Group[]): ThemeInput {

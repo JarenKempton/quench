@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+/** The main purpose of the user's reply to the preceding agent run. */
 export const ReplyKind = z.enum(["correction", "new_request", "approval", "question", "info"]);
 export type ReplyKind = z.infer<typeof ReplyKind>;
 
+/** Person or automation attribution; a cached model guess may be overridden by structural evidence. */
 export const Sender = z.enum(["person", "automation"]);
 export type Sender = z.infer<typeof Sender>;
 
@@ -20,7 +22,15 @@ export const senderMeaning: Record<Sender, string> = {
     "Another AI agent, bot or tool wrote it: it refers to the owner in third person, coordinates other agents' tasks, or reports status",
 };
 
-export const Verdict = z.object({ kind: ReplyKind, sender: Sender, confidence: z.number() });
+/** Cached reply-classifier output, independent of theme membership and later sender enrichment. */
+export const Verdict = z.object({
+  /** What the reply mainly does: correct, request work, approve, question or provide information. */
+  kind: ReplyKind,
+  /** The classifier's authorship guess, not necessarily the final evidence-resolved sender. */
+  sender: Sender,
+  /** Confidence reported for the reply-kind answer, not confidence in the sender attribution. */
+  confidence: z.number(),
+});
 export type Verdict = z.infer<typeof Verdict>;
 
 export type Exchange = { assistantSaid: string; reply: string };

@@ -5,9 +5,24 @@ import { jsonlLines } from "@quench/history";
 import { z } from "zod";
 import type { ThemeInput } from "./themes.ts";
 
-export const ThemeDecision = z.object({ choice: z.string(), model: z.string().min(1) });
+/** One semantic grouping decision, not a theme summary or a reply-kind verdict. */
+export const ThemeDecision = z.object({
+  /** `new`, `unclear`, or an exemplar ID such as `t0`; checked against the current question's choices. */
+  choice: z.string(),
+  /** Actual model returned by the grouping service, not the coding-agent model being corrected. */
+  model: z.string().min(1),
+});
 export type ThemeDecision = z.infer<typeof ThemeDecision>;
-const Line = z.object({ judge: z.string(), key: z.string(), decision: ThemeDecision });
+
+/** One JSONL record in the separate theme-decision cache; aggregate counts are rebuilt, not stored. */
+const Line = z.object({
+  /** Grouping judge identity, including requested model and question version. */
+  judge: z.string(),
+  /** SHA-256 of judge identity and the exact question, choices, current excerpt and ordered exemplars. */
+  key: z.string(),
+  /** Validated choice and the model that made it; failures are never cached. */
+  decision: ThemeDecision,
+});
 
 export class ThemeCache {
   readonly warnings: string[] = [];
