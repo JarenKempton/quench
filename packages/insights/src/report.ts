@@ -101,6 +101,7 @@ class Tally {
           this.toolErrors += e.isError === true ? 1 : 0;
           break;
         case "message":
+        case "instructions":
           break;
         default:
           unhandled(e);

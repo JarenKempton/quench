@@ -94,6 +94,8 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
       case "compaction":
         run.compactions += 1;
         break;
+      case "instructions":
+        break;
       default:
         unhandled(event);
     }

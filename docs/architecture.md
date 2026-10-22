@@ -19,6 +19,7 @@ A `Session` is an ordered list of typed events:
 | `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
 | `tool_call` / `tool_result` | ids, name, `isError`, size of the result                                                                             |
 | `compaction`                | trigger, tokens before                                                                                               |
+| `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count   |
 
 Subagent sessions point at their parent with `parent`.
 
@@ -81,8 +82,14 @@ explicitly reports unsupported coverage.
 `sourceTrace` joins these normalized events by unique call IDs and transcript order, without
 branching on tool names or harness names. Failed, missing, ambiguous and unsupported results
 remain distinguishable. Returned metadata retains the path and reported range, not a claim of
-full delivery, continued context retention or rule compliance. Shell/MCP/injected sources are
-outside this first slice; current source files are never opened to fill historical gaps.
+full delivery, continued context retention or rule compliance. Shell/MCP sources are outside
+this slice; current source files are never opened to fill historical gaps.
+
+Adapters also declare how they record injected instructions: `per-file` (Claude Code
+`instructions` and `nested_memory` attachments), `combined` (Codex `AGENTS.md instructions`
+blocks, parsed per message part, with the directory but no file boundaries) or `unrecorded`
+(Pi). The `instructions` event keeps only fingerprints and lengths, so it is observed historical
+evidence that can later be compared with current steering inventory hashes. Insights ignore it.
 
 ## Optional host evidence
 

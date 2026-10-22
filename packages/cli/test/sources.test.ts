@@ -249,6 +249,8 @@ test("sources traces Pi read output without inventing result paths or line range
     otherToolCalls: 2,
     unmatchedFileResults: 0,
     unparsedRecords: 0,
+    injectedInstructions: "unrecorded",
+    unreadableInstructions: 0,
   });
   expect(report.reads[0]).toMatchObject({
     callId: "docs",
@@ -282,5 +284,159 @@ test("sources traces Pi read output without inventing result paths or line range
   expect(text.stdout).toContain("result path unknown · line range unknown");
   expect(text.stdout).not.toContain("0 reported lines");
   expect(await Bun.file(path).text()).toBe(before);
+  expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+});
+
+test("sources reports instructions each harness recorded as injected, without reading today's files", async () => {
+  const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  const global = "# Personal\n\n- Ask before publishing.";
+  const nested = "- Keep admin changes small.";
+  const { home, path } = await fixture([
+    {
+      type: "attachment",
+      timestamp: stamp,
+      attachment: {
+        type: "instructions",
+        files: [
+          { path: "/historical/home/.claude/CLAUDE.md", type: "User", content: global },
+          { path: "/historical/project/CLAUDE.md", type: "Project", content: "" },
+          { path: 42, type: "Project", content: "malformed" },
+        ],
+      },
+    },
+    {
+      type: "attachment",
+      timestamp: "2026-10-22T10:05:00Z",
+      attachment: {
+        type: "nested_memory",
+        path: "/historical/project/admin/CLAUDE.md",
+        content: {
+          path: "/historical/project/admin/CLAUDE.md",
+          type: "Project",
+          content: nested,
+          contentDiffersFromDisk: true,
+        },
+      },
+    },
+    { type: "attachment", timestamp: stamp, attachment: { type: "skill_listing", content: "x" } },
+  ]);
+  const out = await run(home, path, "--json");
+  expect(out.code).toBe(0);
+  const report = JSON.parse(out.stdout);
+  expect(report.coverage.injectedInstructions).toBe("per-file");
+  expect(report.coverage.unparsedRecords).toBe(0);
+  expect(report.instructions).toEqual([
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: "/historical/home/.claude/CLAUDE.md",
+      directory: null,
+      label: "User",
+      textSha256: sha(global),
+      textChars: global.length,
+      differsFromDisk: null,
+    },
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: "/historical/project/CLAUDE.md",
+      directory: null,
+      label: "Project",
+      textSha256: sha(""),
+      textChars: 0,
+      differsFromDisk: null,
+    },
+    {
+      at: "2026-10-22T10:05:00.000Z",
+      path: "/historical/project/admin/CLAUDE.md",
+      directory: null,
+      label: "Project",
+      textSha256: sha(nested),
+      textChars: nested.length,
+      differsFromDisk: true,
+    },
+  ]);
+  expect(report.warnings.join(" ")).toContain("1 recorded instruction entry");
+  const text = await run(home, path);
+  expect(text.stdout).toContain("Injected instructions: per-file · 3 recorded");
+  expect(text.stdout).toContain(
+    "/historical/project/admin/CLAUDE.md · Project · differs from disk at the time",
+  );
+
+  const codex = join(home, ".codex/sessions/2026/10/22/rollout.jsonl");
+  const block = "# Personal\n\n- Ask before publishing.\n\n--- project-doc ---\n\n- Run checks.";
+  const message = (text: string) => ({
+    type: "response_item",
+    timestamp: stamp,
+    payload: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+  });
+  await Bun.write(
+    codex,
+    [
+      {
+        type: "session_meta",
+        timestamp: stamp,
+        payload: { id: "codex", cwd: "/historical/project" },
+      },
+      message(
+        `# AGENTS.md instructions for /historical/project\n\n<INSTRUCTIONS>\n${block}\n</INSTRUCTIONS>`,
+      ),
+      {
+        type: "response_item",
+        timestamp: stamp,
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_text", text: "<recommended_plugins>\nnone\n</recommended_plugins>" },
+            {
+              type: "input_text",
+              text: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nOlder header.\n</INSTRUCTIONS>",
+            },
+            {
+              type: "input_text",
+              text: "<environment_context>\n  <cwd>/historical/project</cwd>\n</environment_context>",
+            },
+          ],
+        },
+      },
+      message("# AGENTS.md instructions for /historical/project\n\nno closing tag"),
+      message("Please mention # AGENTS.md instructions for /x <INSTRUCTIONS>a</INSTRUCTIONS>"),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const combined = JSON.parse((await run(home, codex, "--json")).stdout);
+  expect(combined.coverage.injectedInstructions).toBe("combined");
+  expect(combined.instructions).toEqual([
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: null,
+      directory: "/historical/project",
+      label: "AGENTS.md instructions",
+      textSha256: sha(block),
+      textChars: block.length,
+      differsFromDisk: null,
+    },
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: null,
+      directory: null,
+      label: "AGENTS.md instructions",
+      textSha256: sha("Older header."),
+      textChars: "Older header.".length,
+      differsFromDisk: null,
+    },
+  ]);
+  expect(combined.warnings.join(" ")).toContain("1 recorded instruction entry");
+  expect(combined.limitations.join(" ")).toContain("combined");
+
+  const pi = join(home, ".pi/agent/sessions/demo/session.jsonl");
+  await Bun.write(
+    pi,
+    JSON.stringify({ type: "session", id: "pi", cwd: "/historical/project" }) + "\n",
+  );
+  const none = JSON.parse((await run(home, pi, "--json")).stdout);
+  expect(none.coverage.injectedInstructions).toBe("unrecorded");
+  expect(none.instructions).toEqual([]);
+  expect(none.warnings.join(" ")).toContain("does not record injected instructions");
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
 });

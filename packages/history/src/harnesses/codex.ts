@@ -4,7 +4,7 @@ import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
+import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
 
 const count = z.number().nullish();
@@ -69,6 +69,7 @@ export const codex: Harness<"codex"> = {
   id: "codex",
   label: "Codex",
   sourceReads: false,
+  injectedInstructions: "combined",
 
   async steering(home, project) {
     const user = home.pathFrom("CODEX_HOME", ".codex");
@@ -103,6 +104,11 @@ export const codex: Harness<"codex"> = {
       const event = { ...kind, at: date(line.timestamp) };
       if (line.type === "event_msg") fallbackUsage.add(event);
       events.push(event);
+      const loaded =
+        line.type === "response_item" && line.payload?.role === "user"
+          ? instructions(line.payload.content)
+          : null;
+      if (loaded) events.push({ ...loaded, at: event.at });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
@@ -187,6 +193,32 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
     default:
       return null;
   }
+}
+
+const INSTRUCTIONS =
+  /^# AGENTS\.md instructions(?: for (.+))?\n\n<INSTRUCTIONS>\n([\s\S]*)\n<\/INSTRUCTIONS>\s*$/;
+
+function instructions(content: unknown): EventKind | null {
+  const parts = (Array.isArray(content) ? content : [content])
+    .map((part) => textOf([part]))
+    .filter((text) => text.startsWith(INJECTED_HEADINGS[0]!));
+  if (!parts.length) return null;
+  const files = parts.flatMap((text) => {
+    const match = INSTRUCTIONS.exec(text);
+    return match
+      ? [
+          {
+            path: null,
+            directory: match[1] ?? null,
+            label: "AGENTS.md instructions",
+            textSha256: sha256(match[2]!),
+            textChars: match[2]!.length,
+            differsFromDisk: null,
+          },
+        ]
+      : [];
+  });
+  return { type: "instructions", files, unreadable: parts.length - files.length };
 }
 
 const injected = (text: string) =>

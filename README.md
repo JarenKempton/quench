@@ -165,8 +165,17 @@ instead of file content. Normalized events retain the fingerprint instead of the
 Duplicate or out-of-order call/result IDs and malformed metadata remain uncertain. Parse gaps
 and unmatched file results warn; other tool calls remain visible as an unattributed count.
 
-This is partial session evidence. Shell/MCP reads, injected instructions, automatic imports,
-skill loading, images and unchanged-file references are not reconstructed. A recorded text
+The same report lists **instructions the harness recorded injecting** into context, with their
+timestamp, path, native label (for example Claude Code's `User`, `Project`, `Local`, `AutoMem`)
+and a SHA-256 of the recorded text. Claude Code records each file at session start and each
+subdirectory file loaded on demand, and flags text that differed from disk at the time. Codex
+records one combined `AGENTS.md instructions` block per directory, without file boundaries, so
+its path stays unknown. Pi does not persist injected context; its report says so instead of
+showing an empty list as evidence. Malformed instruction entries are counted and warned.
+Recorded instructions show what was in context, not that a rule was followed or survived
+compaction.
+
+This is partial session evidence. Shell/MCP reads, automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
 result does not prove the model used or obeyed it, retained it after compaction, or received
 the complete file. Reported ranges are metadata, not a completeness guarantee. The command
 makes no model calls, reads no host database and writes no files or caches.

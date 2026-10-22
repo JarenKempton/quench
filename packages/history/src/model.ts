@@ -34,6 +34,15 @@ export type FileReadResult = {
   returnedTextChars: number;
 };
 
+export type InjectedInstruction = {
+  path: string | null;
+  directory: string | null;
+  label: string | null;
+  textSha256: string;
+  textChars: number;
+  differsFromDisk: boolean | null;
+};
+
 export type EventKind =
   | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
@@ -45,7 +54,8 @@ export type EventKind =
       chars: number;
       fileRead?: FileReadResult;
     }
-  | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null };
+  | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null }
+  | { type: "instructions"; files: InjectedInstruction[]; unreadable: number };
 
 export type Event = EventKind & { at: Date | null };
 
