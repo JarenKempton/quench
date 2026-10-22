@@ -10,6 +10,7 @@ import type {
   Diagnostics,
   Event,
   EventKind,
+  FileReadResult,
   Origin,
   Session,
   Usage,
@@ -73,6 +74,7 @@ const Line = z.looseObject({
     .optional(),
   /** The Anthropic Messages API message, as sent or received. */
   message: ApiMessage.optional(),
+  toolUseResult: z.unknown().optional(),
 });
 type Line = z.infer<typeof Line>;
 
@@ -83,6 +85,7 @@ export const Block = z.looseObject({
   id: z.string().nullish(),
   /** Tool name on `tool_use` blocks, as the host named it. */
   name: z.string().nullish(),
+  input: z.unknown().optional(),
   /** Text of a `text` block. */
   text: z.unknown().optional(),
   /** On `tool_result` blocks, the `id` of the `tool_use` it answers. */
@@ -96,9 +99,26 @@ type Block = z.infer<typeof Block>;
 
 const HARNESS_NOTES = ["Caveat:", "[Request interrupted by user"];
 
+const ReadInput = z.object({
+  file_path: z.string().min(1),
+  offset: z.number().int().positive().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+const ReadResult = z.object({
+  type: z.literal("text"),
+  file: z.object({
+    filePath: z.string().min(1),
+    startLine: z.number().int().positive(),
+    numLines: z.number().int().nonnegative(),
+    totalLines: z.number().int().nonnegative(),
+  }),
+});
+
 export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
   label: "Claude Code",
+  sourceReads: true,
 
   async steering(home, project) {
     const user = home.pathFrom("CLAUDE_CONFIG_DIR", ".claude");
@@ -220,7 +240,21 @@ function assistant(line: Line): EventKind[] {
         text: textOf(block.text),
       });
     } else if (block.type === "tool_use") {
-      out.push({ type: "tool_call", id: block.id ?? null, name: block.name ?? "" });
+      const input = block.name === "Read" ? ReadInput.safeParse(block.input) : null;
+      out.push({
+        type: "tool_call",
+        id: block.id ?? null,
+        name: block.name ?? "",
+        ...(input?.success
+          ? {
+              fileRead: {
+                path: input.data.file_path,
+                offset: input.data.offset ?? null,
+                limit: input.data.limit ?? null,
+              },
+            }
+          : {}),
+      });
     }
   }
   return out;
@@ -230,12 +264,22 @@ function user(line: Line): EventKind[] {
   const content = line.message?.content;
   const results = blocks(content).filter((b) => b.type === "tool_result");
   if (results.length > 0) {
-    return results.map((b) => ({
-      type: "tool_result",
-      callId: b.tool_use_id ?? null,
-      isError: b.is_error ?? null,
-      chars: textOf(b.content).length,
-    }));
+    return results.map((b) => {
+      const text = textOf(b.content);
+      const fileRead =
+        results.length === 1 &&
+        b.is_error !== true &&
+        (typeof b.content === "string" || text.length > 0)
+          ? readResult(line.toolUseResult, text)
+          : null;
+      return {
+        type: "tool_result",
+        callId: b.tool_use_id ?? null,
+        isError: b.is_error ?? null,
+        chars: text.length,
+        ...(fileRead ? { fileRead } : {}),
+      };
+    });
   }
   const text = textOf(content);
   if (!text.trim()) return [];
@@ -252,6 +296,21 @@ function user(line: Line): EventKind[] {
       text,
     },
   ];
+}
+
+function readResult(raw: unknown, text: string): FileReadResult | null {
+  const parsed = ReadResult.safeParse(raw);
+  if (!parsed.success) return null;
+  const file = parsed.data.file;
+  if (file.numLines > 0 && file.startLine + file.numLines - 1 > file.totalLines) return null;
+  return {
+    path: file.filePath,
+    startLine: file.startLine,
+    lineCount: file.numLines,
+    totalLines: file.totalLines,
+    returnedTextSha256: new Bun.CryptoHasher("sha256").update(text).digest("hex"),
+    returnedTextChars: text.length,
+  };
 }
 
 function blocks(content: unknown): Block[] {

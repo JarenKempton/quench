@@ -68,6 +68,19 @@ for conditions. Missing files are normal, unreadable sources and coverage limits
 There are no model calls, host/session reads or writes. Historical attribution remains a
 separate future step; unmatched themes cannot be called unwritten preferences.
 
+## Recorded source evidence
+
+Each adapter declares whether it supports native file-read tracing. Claude Code normalizes
+validated `Read` requests and structured text-file results into optional `fileRead` fields on
+tool events. The recorded tool text is hashed and counted without retaining another content
+copy. Other adapters explicitly report unsupported coverage.
+
+`sourceTrace` joins these normalized events by unique call IDs and transcript order, without
+branching on tool names or harness names. Failed, missing, ambiguous and unsupported results
+remain distinguishable. Returned metadata retains the path and reported range, not a claim of
+full delivery, continued context retention or rule compliance. Shell/MCP/injected sources are
+outside this first slice; current source files are never opened to fill historical gaps.
+
 ## Optional host evidence
 
 A host delivers messages to a harness; it is not another harness. The CLI may supply a

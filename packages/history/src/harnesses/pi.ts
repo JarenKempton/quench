@@ -67,6 +67,7 @@ export const Item = z.looseObject({
 export const pi: Harness<"pi"> = {
   id: "pi",
   label: "Pi",
+  sourceReads: false,
 
   async steering(home, project) {
     const user = home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent");

@@ -23,11 +23,28 @@ export const contextOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
 
 export type CompactionTrigger = "auto" | "manual" | "unknown";
 
+export type FileReadRequest = { path: string; offset: number | null; limit: number | null };
+
+export type FileReadResult = {
+  path: string;
+  startLine: number;
+  lineCount: number;
+  totalLines: number;
+  returnedTextSha256: string;
+  returnedTextChars: number;
+};
+
 export type EventKind =
   | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
-  | { type: "tool_call"; id: string | null; name: string }
-  | { type: "tool_result"; callId: string | null; isError: boolean | null; chars: number }
+  | { type: "tool_call"; id: string | null; name: string; fileRead?: FileReadRequest }
+  | {
+      type: "tool_result";
+      callId: string | null;
+      isError: boolean | null;
+      chars: number;
+      fileRead?: FileReadResult;
+    }
   | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null };
 
 export type Event = EventKind & { at: Date | null };

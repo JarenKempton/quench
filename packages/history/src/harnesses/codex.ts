@@ -68,6 +68,7 @@ const INJECTED_HEADINGS = ["# AGENTS.md instructions"];
 export const codex: Harness<"codex"> = {
   id: "codex",
   label: "Codex",
+  sourceReads: false,
 
   async steering(home, project) {
     const user = home.pathFrom("CODEX_HOME", ".codex");

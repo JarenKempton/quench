@@ -6,3 +6,4 @@ export * from "./model.ts";
 export { discoverAll, readSessions, type ReadOutcome } from "./read.ts";
 export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
+export { sourceTrace } from "./sources.ts";

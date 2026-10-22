@@ -51,6 +51,11 @@ retired with it and live in git history.
   paths, scopes and bullet/paragraph locations. Candidate presence does not prove effective
   loading. Precedence, conditions, imports and historical snapshots are not resolved, so no
   ignored-rule or never-written claim follows. Inventory never writes or calls a model.
+- **Source tracing starts from recorded evidence.** Native read requests and results are
+  normalized at the harness edge, then linked by unique call IDs and transcript order.
+  Unsupported adapters and missing/ambiguous results remain explicit. Source filenames do not
+  determine relevance, and current files never fill historical gaps. Returned tool text is
+  fingerprinted without claiming complete delivery, continued retention or causal influence.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,
