@@ -40,7 +40,13 @@ export class ThemeCache {
     if (!Object.hasOwn(input.choices, decision.choice)) throw new Error("Unknown theme choice");
     const key = this.key(input);
     await mkdir(dirname(this.path), { recursive: true });
-    await appendFile(this.path, `${JSON.stringify({ judge: this.judge, key, decision })}\n`);
+    const file = Bun.file(this.path);
+    const separator =
+      (await file.exists()) && file.size > 0 && (await file.slice(-1).text()) !== "\n" ? "\n" : "";
+    await appendFile(
+      this.path,
+      `${separator}${JSON.stringify({ judge: this.judge, key, decision })}\n`,
+    );
     this.known.set(key, decision);
   }
 

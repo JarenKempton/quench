@@ -66,7 +66,9 @@ necessarily every model used in that run.
 
 The default is the oldest **20 unique exchanges** in the selected period; `--theme-limit` accepts
 1–50. Exact duplicate exchanges share a decision but retain their separate evidence occurrences.
-Coverage and omitted counts are always shown. Each model-visible exchange is clipped to the
+The window uses the correction message's own timestamp, not file modification or preceding-run
+end time; corrections with unknown timestamps are excluded and counted separately. Coverage and
+omitted counts are always shown. Each model-visible exchange is clipped to the
 last 500 assistant characters and first 1,000 correction characters (Unicode code points),
 including exemplars. Session paths, IDs, model labels and host records are not sent. At most one
 request is made per selected unique exchange, with no retries, a 10-second per-request timeout
@@ -82,6 +84,9 @@ assignments remain ungrouped.
 
 These are exploratory, order-dependent representative matches—not proof that all group members
 are equivalent, that a rule was ignored, or that the selected window covers every recurring issue.
+Session counts are distinct native IDs, **not independent occurrences**: copied history in forks
+can inflate both correction and session evidence. Inherited fork messages are not identified yet;
+this limitation is also shown in terminal and JSON output.
 Changing the window or earlier representatives can require new grouping decisions. Cached model
 outputs are reproducible; the moving `jev-latest` alias is not an accuracy guarantee. No steering
 files or histories are edited, no prose drafts are generated, and no live semantic-accuracy claim

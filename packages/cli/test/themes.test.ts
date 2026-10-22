@@ -83,6 +83,38 @@ async function fixture() {
   return { home, cacheFile, themeFile: join(home, ".quench/local/themes.jsonl"), sessions };
 }
 
+test("theme limits select correction dates, not recently modified files containing old history", async () => {
+  const { home, sessions } = await fixture();
+  for (const id of ["a", "b"]) {
+    const file = join(sessions, `${id}.jsonl`);
+    const lines = (await Bun.file(file).text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { timestamp: string });
+    for (const line of lines) line.timestamp = "2020-01-01T10:00:00Z";
+    if (id === "b") lines[2]!.timestamp = new Date().toISOString();
+    await Bun.write(file, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+  }
+  const result = await run(home, [
+    "corrections",
+    "--themes",
+    "--days",
+    "1",
+    "--theme-limit",
+    "1",
+    "--dry-run",
+    "--json",
+  ]);
+  expect(result.code).toBe(0);
+  const out = JSON.parse(result.stdout);
+  expect([
+    out.themes.eligibleCorrections,
+    out.themes.selectedInputs,
+    out.themes.omittedCorrections,
+  ]).toEqual([1, 1, 0]);
+  expect(out.themes.excluded.outsideWindowCorrections).toBe(1);
+});
+
 test("themes runs through the actual SDK path independently, then replays with no key or requests", async () => {
   const { home, cacheFile, themeFile, sessions } = await fixture();
   const before = await Bun.file(cacheFile).text();
@@ -97,6 +129,8 @@ test("themes runs through the actual SDK path independently, then replays with n
     planned.themes.blocked,
   ]).toEqual([1, 0, 1, 1]);
   expect(planned.themes.excluded).toEqual({
+    outsideWindowCorrections: 0,
+    unknownTimeCorrections: 0,
     automationCorrections: 1,
     unknownSenderCorrections: 0,
     unclassifiedReplies: 1,

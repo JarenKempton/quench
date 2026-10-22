@@ -43,15 +43,19 @@ export async function groupCorrections(
   replies: readonly Reply[],
   cache: ThemeCache,
   judge: ThemeJudge | null,
-  options: { limit: number; examples: number },
+  options: { limit: number; examples: number; since: Date },
 ) {
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > MAX_THEME_LIMIT)
     throw new Error(`Theme limit must be between 1 and ${MAX_THEME_LIMIT}`);
   if (judge && judge.id !== cache.judge) throw new Error("Theme judge/cache mismatch");
-  const eligible = replies.filter((r) => r.kind === "correction" && r.sender === "person");
+  const people = replies.filter((r) => r.kind === "correction" && r.sender === "person");
+  const knownTime = people.filter(
+    (r) => r.run.replyAt !== null && Number.isFinite(r.run.replyAt.getTime()),
+  );
+  const eligible = knownTime.filter((r) => r.run.replyAt! >= options.since);
   eligible.sort(
     (a, b) =>
-      (a.run.endedAt?.getTime() ?? Infinity) - (b.run.endedAt?.getTime() ?? Infinity) ||
+      (a.run.replyAt?.getTime() ?? Infinity) - (b.run.replyAt?.getTime() ?? Infinity) ||
       compare(a.harness, b.harness) ||
       compare(a.sessionId, b.sessionId) ||
       a.position - b.position,
@@ -128,6 +132,8 @@ export async function groupCorrections(
     selectedCorrections,
     omittedCorrections: eligible.length - selectedCorrections,
     excluded: {
+      outsideWindowCorrections: knownTime.length - eligible.length,
+      unknownTimeCorrections: people.length - knownTime.length,
       automationCorrections: replies.filter(
         (r) => r.kind === "correction" && r.sender === "automation",
       ).length,
@@ -143,6 +149,9 @@ export async function groupCorrections(
     failed: failures.length,
     failures,
     warnings: cache.warnings,
+    limitations: [
+      "Native session IDs do not prove independent occurrences; copied fork history can inflate evidence.",
+    ],
     themes: groups
       .map((group) => evidence(group, options.examples))
       .sort(
@@ -194,7 +203,7 @@ function evidence(group: Group, examples: number): Theme {
       sessionId: r.sessionId,
       path: r.path,
       position: r.position,
-      at: r.run.endedAt,
+      at: r.run.replyAt,
       model: r.run.model,
       senderSource: r.senderSource,
       reply: r.run.reply!,

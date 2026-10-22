@@ -12,7 +12,7 @@ import {
   type ThemeInput,
 } from "../src/index.ts";
 
-const options = { limit: 20, examples: 10 };
+const options = { limit: 20, examples: 10, since: new Date("2026-10-01T00:00:00Z") };
 const path = async () => join(await mkdtemp(join(tmpdir(), "quench-themes-")), "themes.jsonl");
 const reply = (sessionId: string, text: string, extra: Partial<Reply> = {}): Reply => ({
   sessionId,
@@ -40,7 +40,13 @@ const reply = (sessionId: string, text: string, extra: Partial<Reply> = {}): Rep
         at: new Date("2026-10-20T10:00:00Z"),
       },
       { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
-      { type: "message", author: "user", origin: "host", text, at: null },
+      {
+        type: "message",
+        author: "user",
+        origin: "host",
+        text,
+        at: new Date("2026-10-20T10:00:02Z"),
+      },
     ],
   })[0]!,
   ...extra,
@@ -84,6 +90,8 @@ test("semantic assignments retain occurrences, distinct sessions, run models and
   const result = await groupCorrections(list, cache, judge, options);
   expect([result.eligibleCorrections, result.uniqueInputs, result.newlyGrouped]).toEqual([5, 4, 4]);
   expect(result.excluded).toEqual({
+    outsideWindowCorrections: 0,
+    unknownTimeCorrections: 0,
     automationCorrections: 1,
     unknownSenderCorrections: 1,
     unclassifiedReplies: 1,
@@ -138,6 +146,26 @@ test("dry-run stops at the first unknown decision, without inventing downstream 
   expect(await Bun.file(cacheFile).text()).toBe(before);
 });
 
+test("the theme window uses known correction timestamps and abstains when the reply time is missing", async () => {
+  const cache = await ThemeCache.open(await path(), JevThemes.id);
+  const old = reply("a", "Old correction");
+  old.run.replyAt = new Date("2020-01-01T00:00:00Z");
+  const unknown = reply("b", "Unknown date");
+  unknown.run.replyAt = null;
+  const judge = scripted(["new"]);
+  const result = await groupCorrections(
+    [old, unknown, reply("c", "Current correction")],
+    cache,
+    judge,
+    { ...options, limit: 1 },
+  );
+  expect([result.eligibleCorrections, result.omittedCorrections, judge.inputs.length]).toEqual([
+    1, 0, 1,
+  ]);
+  expect(result.excluded).toMatchObject({ outsideWindowCorrections: 1, unknownTimeCorrections: 1 });
+  expect(result.themes[0]!.representative).toBe("Current correction");
+});
+
 test("limits apply to unique exchanges without dropping their local occurrences, and recurrence needs multiple sessions", async () => {
   const cache = await ThemeCache.open(await path(), JevThemes.id);
   const a = reply("a", "Keep the scope small");
@@ -145,7 +173,7 @@ test("limits apply to unique exchanges without dropping their local occurrences,
     [a, { ...a, position: 2 }, reply("b", "Another correction")],
     cache,
     scripted(["new"]),
-    { limit: 1, examples: 0 },
+    { ...options, limit: 1, examples: 0 },
   );
   expect([result.selectedInputs, result.selectedCorrections, result.omittedCorrections]).toEqual([
     1, 2, 1,
@@ -211,6 +239,25 @@ test("invalid choices stop without poisoning the cache, and excerpts are Unicode
   expect(await Bun.file(cacheFile).exists()).toBe(false);
   expect(Array.from(judge.inputs[0]!.state.correction.reply)).toHaveLength(1000);
   expect(Array.from(judge.inputs[0]!.state.correction.assistantSaid)).toHaveLength(500);
+});
+
+test("unterminated theme cache tails cannot consume existing or newly appended decisions", async () => {
+  for (const tail of ["", '\n{"judge":']) {
+    const file = await path();
+    const original = await ThemeCache.open(file, JevThemes.id);
+    const judge = scripted(["new"]);
+    await groupCorrections([reply("a", "Verify first")], original, judge, options);
+    const input = judge.inputs[0]!;
+    const firstLine = (await Bun.file(file).text()).trimEnd();
+    await Bun.write(file, firstLine + tail);
+    const reopened = await ThemeCache.open(file, JevThemes.id);
+    expect(reopened.get(input)?.choice).toBe("new");
+    const next = { ...input, question: "Another specific question" };
+    await reopened.remember(next, { choice: "unclear", model: "jev-test" });
+    const again = await ThemeCache.open(file, JevThemes.id);
+    expect([again.get(input)?.choice, again.get(next)?.choice]).toEqual(["new", "unclear"]);
+    expect((await Bun.file(file).text()).startsWith(firstLine + tail)).toBe(true);
+  }
 });
 
 test("malformed caches and other namespaces remain byte-identical when opened read-only", async () => {

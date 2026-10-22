@@ -60,12 +60,9 @@ export async function corrections(home: Home, options: Options): Promise<number>
       ? null
       : openT3History(options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"));
   let sessions: SessionRuns[];
+  const since = new Date(Date.now() - options.days * 86_400_000);
   try {
-    sessions = await sessionRuns(
-      home,
-      new Date(Date.now() - options.days * 86_400_000),
-      host?.enrich,
-    );
+    sessions = await sessionRuns(home, since, host?.enrich);
   } finally {
     host?.close();
   }
@@ -86,7 +83,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
         judged.replies,
         await ThemeCache.open(join(home.dir, ".quench/local/themes.jsonl"), JevThemes.id),
         themeJudge,
-        { limit: options.themeLimit, examples: options.examples },
+        { limit: options.themeLimit, examples: options.examples, since },
       )
     : null;
   const tokens = jev?.tokens ?? null;
@@ -157,7 +154,7 @@ function renderThemes(themes: Themes, days: number): string {
     `Last ${days} days · correction themes · ${themes.judge}`,
     `${themes.selectedCorrections} of ${themes.eligibleCorrections} person corrections selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
-    `Excluded: ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not sent).`,
+    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not sent).`,
     "",
     "Recurring across sessions (representative quotations, not draft rules)",
   ];
@@ -176,6 +173,7 @@ function renderThemes(themes: Themes, days: number): string {
   lines.push(
     "",
     `${themes.themes.length - recurring.length} groups occur in only one session. Grouping is exploratory, not proof of a cause or an ignored rule.`,
+    "Session counts are native IDs, not independent occurrences: copied fork history can inflate evidence.",
   );
   if (themes.pending || themes.blocked)
     lines.push(

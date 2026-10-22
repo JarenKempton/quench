@@ -99,7 +99,10 @@ it, changes its key or re-asks it.
 `corrections --themes` loads reply verdicts without compacting or writing their cache, resolves
 senders normally, and selects only cached person corrections. Unclassified replies are not sent
 for classification. Session id, harness, source path and run position survive the reply boundary
-so evidence can count distinct native sessions rather than folders or model calls.
+so evidence can count distinct native sessions rather than folders or model calls. `Run.replyAt`
+preserves the following user message's own timestamp without changing run boundaries or inferring
+it from subsequent activity. Themes filters by this timestamp before limiting inputs; unknown
+reply timestamps are excluded and reported separately.
 
 `groupCorrections` in judge consumes generic replies and a separate typed `ThemeJudge`. It sorts
 oldest-first with harness/session/run tie-breakers, consolidates exact exchanges while retaining
@@ -119,7 +122,9 @@ Evidence is aggregated locally: occurrences, distinct `(harness, sessionId)` ses
 preceding-run models, missing-model counts, sender sources and source examples. Recurrence means
 at least two distinct sessions; single-session groups remain in JSON. Labels are representative
 quotations, not generated titles or rules. This is exploratory, order-dependent matching to one
-exemplar, not all-pairs equivalence or evidence of what steering instructions were loaded.
+exemplar, not all-pairs equivalence or evidence of what steering instructions were loaded. Native
+session IDs are not independent occurrences: inherited conversation prefixes in forks are not
+identified and may inflate evidence; both terminal and JSON expose this limitation.
 
 ## Reading at scale
 
