@@ -39,3 +39,27 @@ export const plural = (n: number, noun: string, nouns = `${noun}s`) =>
   `${n} ${n === 1 ? noun : nouns}`;
 
 export const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
+
+export function table(rows: string[][], right: number[] = [], indent = "  "): string[] {
+  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((row) => row[i]!.length)));
+  return rows.map((row) =>
+    (
+      indent +
+      row
+        .map((cell, i) => (right.includes(i) ? cell.padStart(widths[i]!) : cell.padEnd(widths[i]!)))
+        .join("  ")
+    ).trimEnd(),
+  );
+}
+
+export function size(bytes: number): string {
+  if (bytes < 1_000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${(bytes / 1e3).toFixed(1)} KB`;
+  return `${(bytes / 1e6).toFixed(1)} MB`;
+}
+
+export function ago(iso: string | null, now = new Date()): string {
+  if (!iso) return "unknown";
+  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+}

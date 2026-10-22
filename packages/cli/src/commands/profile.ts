@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { basename, relative } from "node:path";
 import {
   discoverAll,
   harnessById,
@@ -6,11 +7,13 @@ import {
   projects,
   readSessions,
   steeringInventory,
+  type HarnessId,
   type Home,
+  type Project,
   type SessionPlace,
   type SteeringFile,
 } from "@quench/history";
-import { json, plural } from "../format.ts";
+import { ago, json, plural, size, table } from "../format.ts";
 
 type InstructionFile = Omit<SteeringFile, "rules"> & { rules: number };
 
@@ -86,39 +89,137 @@ export async function profile(
     process.stdout.write(json(result));
     return 0;
   }
+  process.stdout.write(render(result, home.dir).join("\n") + "\n");
+  return 0;
+}
+
+type Profile = {
+  days: number;
+  homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
+  unreadable: number;
+  globalInstructions: InstructionFile[];
+  projects: (Project & {
+    instructions: { directory: string; files: InstructionFile[] };
+    warnings: string[];
+  })[];
+  missingDirectories: string[];
+};
+
+const OTHER_FOLDERS_SHOWN = 5;
+
+const count = (n: number) => n.toLocaleString("en-US");
+
+function render(result: Profile, homeDir: string): string[] {
+  const short = (path: string) =>
+    path === homeDir || path.startsWith(`${homeDir}/`) ? `~${path.slice(homeDir.length)}` : path;
+  const agents = result.homes.filter((h) => h.found);
+  const sessions = result.homes.reduce((n, h) => n + h.sessions, 0);
   const lines = [
-    `Quench profile · sessions from the last ${options.days} days · current disk`,
+    `Quench profile · last ${result.days} days · ${count(sessions)} sessions · instruction files as they are on disk now`,
     "",
-    "Harness homes",
+    ...table(
+      [
+        ["Agent", "Sessions", "Home"],
+        ...result.homes.map((h) => [
+          harnessById[h.harness].label,
+          h.found ? count(h.sessions) : "—",
+          h.found ? short(h.path) : `${short(h.path)} not found; set ${flagFor(h.harness)}`,
+        ]),
+      ],
+      [1],
+    ),
   ];
-  for (const h of result.homes)
-    lines.push(
-      `  ${harnessById[h.harness].label} · ${h.path} · ${h.found ? plural(h.sessions, "session") : `not found (set ${flagFor(h.harness)})`}`,
-    );
-  if (unreadable) lines.push(`  ${plural(unreadable, "session file")} could not be read`);
-  lines.push("", "Global instructions");
+  if (result.unreadable)
+    lines.push(`  ${plural(result.unreadable, "session file")} could not be read`);
+
+  lines.push("", "Global instructions · every project, before project files");
   if (!result.globalInstructions.length) lines.push("  none found");
-  for (const file of result.globalInstructions) lines.push(...fileLines(file));
-  const repositories = profiled.filter((p) => p.git).length;
+  else
+    lines.push(
+      ...table(
+        result.globalInstructions.flatMap((file) =>
+          file.sources.map((s) => [
+            short(s.path),
+            size(file.bytes),
+            harnessById[s.harness].label,
+            s.path === s.realPath ? "" : `→ ${short(s.realPath)}`,
+          ]),
+        ),
+        [1],
+      ),
+    );
+
+  const repos = result.projects.filter((p) => p.git);
+  const other = result.projects.filter((p) => !p.git);
+  const loaded = (p: Profile["projects"][number], harness: HarnessId) => {
+    const bytes = p.instructions.files
+      .filter((f) => f.sources.some((s) => s.harness === harness))
+      .reduce((n, f) => n + f.bytes, 0);
+    return bytes ? size(bytes) : "—";
+  };
+  const fileNames = (p: Profile["projects"][number]) =>
+    [
+      ...new Set(
+        p.instructions.files.flatMap((f) =>
+          f.sources.map((s) => relative(p.instructions.directory, s.path)),
+        ),
+      ),
+    ].join(", ") || "none";
+  const row = (p: Profile["projects"][number]) => [
+    p.root === homeDir ? "~" : basename(p.root),
+    p.sessions ? count(p.sessions) : "—",
+    p.sessions ? ago(p.lastActive) : "scanned",
+    ...agents.map((h) => loaded(p, h.harness)),
+    fileNames(p),
+    short(p.root),
+  ];
+  const header = [
+    "Project",
+    "Sessions",
+    "Last used",
+    ...agents.map((h) => harnessById[h.harness].label),
+    "Instruction files",
+    "Path",
+  ];
+  const numeric = [1, ...agents.map((_, i) => i + 3)];
+
   lines.push(
     "",
-    `Projects · ${plural(repositories, "git repository", "git repositories")} · ${plural(profiled.length - repositories, "other directory", "other directories")} · ${plural(found.missing.length, "session directory", "session directories")} no longer on disk`,
+    `Projects · ${plural(repos.length, "git repository", "git repositories")} · project instruction size per agent`,
   );
-  for (const p of profiled) {
-    const activity = p.sessions
-      ? `${plural(p.directories.length, "directory", "directories")} · ${plural(p.sessions, "session")} · last ${p.lastActive?.slice(0, 10) ?? "unknown"} · ${p.harnesses.map((h) => harnessById[h].label).join(", ")}`
-      : "from --scan · no recent sessions";
-    lines.push("", `${p.root} · ${p.git ? "git" : "not git"} · ${activity}`);
-    const files = p.instructions.files;
+  lines.push(...(repos.length ? table([header, ...repos.map(row)], numeric) : ["  none found"]));
+
+  if (other.length) {
+    const shown = [...other].sort((a, b) => b.sessions - a.sessions).slice(0, OTHER_FOLDERS_SHOWN);
     lines.push(
-      `  Instructions in ${p.instructions.directory}: ${plural(files.length, "file")} · ${files.reduce((n, f) => n + f.bytes, 0)} bytes`,
+      "",
+      `Other folders · ${plural(other.length, "folder")} outside git · ${plural(
+        other.reduce((n, p) => n + p.sessions, 0),
+        "session",
+      )}`,
+      ...table([header, ...shown.map(row)], numeric),
     );
-    for (const file of files) lines.push(...fileLines(file));
-    for (const warning of p.warnings) lines.push(`  Warning: ${warning}`);
+    if (other.length > shown.length)
+      lines.push(`  … ${other.length - shown.length} more in --json`);
   }
-  lines.push("", ...result.limitations);
-  process.stdout.write(lines.join("\n") + "\n");
-  return 0;
+
+  const warnings = result.projects.flatMap((p) =>
+    p.warnings.map((w) => `  ${basename(p.root)}: ${w}`),
+  );
+  if (warnings.length) lines.push("", "Warnings", ...warnings);
+  if (result.missingDirectories.length)
+    lines.push(
+      "",
+      result.missingDirectories.length === 1
+        ? "1 session folder no longer exists; its sessions are not listed."
+        : `${result.missingDirectories.length} session folders no longer exist; their sessions are not listed.`,
+    );
+  lines.push(
+    "",
+    "Sizes are the project's own instruction files each agent would find in its most recently used folder; global files come on top.",
+    "Files on disk now are not proof of what a past session loaded. Skills, MCP servers and plugins are not counted yet.",
+  );
+  return lines;
 }
 
 export const HOME_FLAGS = {
@@ -129,13 +230,3 @@ export const HOME_FLAGS = {
 
 const flagFor = (id: string) =>
   `--${Object.entries(HOME_FLAGS).find(([, harness]) => harness === id)![0]}`;
-
-function fileLines(file: InstructionFile): string[] {
-  return [
-    `  ${file.id.slice(0, 12)} · ${file.bytes} bytes · ${plural(file.rules, "rule candidate")}`,
-    ...file.sources.map(
-      (s) =>
-        `    ${harnessById[s.harness].label} · ${s.scope} · ${s.path}${s.path === s.realPath ? "" : ` → ${s.realPath}`}`,
-    ),
-  ];
-}

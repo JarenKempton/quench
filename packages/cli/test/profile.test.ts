@@ -78,9 +78,33 @@ test("profile with no arguments finds projects from session directories and grou
 
   const bare = await quench(home);
   expect(bare.code).toBe(0);
-  expect(bare.stdout).toContain(`Pi · ${join(home, ".pi/agent")} · not found (set --pi-home)`);
-  expect(bare.stdout).toContain(
-    "Projects · 1 git repository · 1 other directory · 1 session directory no longer on disk",
+  expect(bare.stdout).toBe(
+    [
+      "Quench profile · last 30 days · 5 sessions · instruction files as they are on disk now",
+      "",
+      "  Agent        Sessions  Home",
+      "  Claude Code         0  ~/.claude",
+      "  Codex               5  ~/.codex",
+      "  Pi                  —  ~/.pi/agent not found; set --pi-home",
+      "",
+      "Global instructions · every project, before project files",
+      "  ~/.claude/CLAUDE.md  25 B  Claude Code",
+      "  ~/.codex/AGENTS.md   21 B  Codex",
+      "",
+      "Projects · 1 git repository · project instruction size per agent",
+      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Path",
+      "  app             3  today             22 B   22 B  AGENTS.md          ~/code/app",
+      "",
+      "Other folders · 1 folder outside git · 1 session",
+      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Path",
+      "  scratch         1  today                —      —  none               ~/scratch",
+      "",
+      "1 session folder no longer exists; its sessions are not listed.",
+      "",
+      "Sizes are the project's own instruction files each agent would find in its most recently used folder; global files come on top.",
+      "Files on disk now are not proof of what a past session loaded. Skills, MCP servers and plugins are not counted yet.",
+      "",
+    ].join("\n"),
   );
 
   const { stdout, code } = await quench(
