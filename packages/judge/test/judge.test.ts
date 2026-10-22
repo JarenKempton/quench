@@ -67,6 +67,8 @@ test("generic sender evidence overrides cached guesses without changing verdicts
   const judged = await judgeReplies(
     [
       {
+        id: "s",
+        path: "/unused",
         harness: "codex",
         cwd: null,
         runs: [

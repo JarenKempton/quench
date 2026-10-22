@@ -11,6 +11,9 @@ import { openT3History } from "@quench/history/hosts/t3";
 import { linkSubagents, runs } from "@quench/insights";
 import {
   Jev,
+  JevThemes,
+  groupCorrections,
+  ThemeCache,
   judgeReplies,
   KeyRejected,
   summarize,
@@ -19,6 +22,7 @@ import {
   type SessionRuns,
   type Summary,
   type Tally,
+  type Themes,
 } from "@quench/judge";
 import { json, quote, runFacts } from "../format.ts";
 
@@ -36,15 +40,21 @@ type Options = {
   json: boolean;
   dryRun: boolean;
   hostHistory?: string | false;
+  themes: boolean;
+  themeLimit: number;
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const jev = options.dryRun ? null : Jev.fromEnv();
-  if (!options.dryRun && !jev) {
+  const jev = options.dryRun || options.themes ? null : Jev.fromEnv();
+  if (!options.dryRun && !options.themes && !jev) {
     process.stderr.write(NO_KEY);
     return 2;
   }
-  const cache = await VerdictCache.open(join(home.dir, ".quench/local/judgments.jsonl"), Jev.id);
+  const cache = await VerdictCache.open(
+    join(home.dir, ".quench/local/judgments.jsonl"),
+    Jev.id,
+    options.themes,
+  );
   const host =
     options.hostHistory === false
       ? null
@@ -70,6 +80,15 @@ export async function corrections(home: Home, options: Options): Promise<number>
     return 1;
   }
   const summary = summarize(judged.replies, options.examples);
+  const themeJudge = options.themes && !options.dryRun ? JevThemes.fromEnv() : null;
+  const themes = options.themes
+    ? await groupCorrections(
+        judged.replies,
+        await ThemeCache.open(join(home.dir, ".quench/local/themes.jsonl"), JevThemes.id),
+        themeJudge,
+        { limit: options.themeLimit, examples: options.examples },
+      )
+    : null;
   const tokens = jev?.tokens ?? null;
   process.stdout.write(
     options.json
@@ -82,6 +101,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
           tokens,
           warnings,
           ...summary,
+          ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
           latest: summary.latest.map((r) => ({
             harness: r.harness,
             folder: folder(r.cwd),
@@ -90,8 +110,17 @@ export async function corrections(home: Home, options: Options): Promise<number>
             run: r.run,
           })),
         })
-      : render(summary, judged, options.days, cache.judge, tokens),
+      : themes
+        ? renderThemes(themes, options.days)
+        : render(summary, judged, options.days, cache.judge, tokens),
   );
+  if (themes?.failed) return 1;
+  if (themes?.pending && !options.dryRun && !themeJudge) {
+    process.stderr.write(
+      "Grouping cached person corrections uses Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run. It sends up to 500 assistant characters and 1,000 correction characters per exchange, including earlier exemplars.\n",
+    );
+    return 2;
+  }
   return 0;
 }
 
@@ -110,6 +139,8 @@ async function sessionRuns(
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
       parents.set(`${s.harness}:${s.id}`, {
+        id: s.id,
+        path: s.path,
         harness: s.harness,
         cwd: s.cwd,
         runs: runs(enrich?.(s) ?? s),
@@ -118,6 +149,41 @@ async function sessionRuns(
   }
   for (const [key, session] of parents) linkSubagents(session.runs, childStarts.get(key) ?? []);
   return [...parents.values()];
+}
+
+function renderThemes(themes: Themes, days: number): string {
+  const recurring = themes.themes.filter((t) => t.recurring);
+  const lines = [
+    `Last ${days} days · correction themes · ${themes.judge}`,
+    `${themes.selectedCorrections} of ${themes.eligibleCorrections} person corrections selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
+    `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
+    `Excluded: ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not sent).`,
+    "",
+    "Recurring across sessions (representative quotations, not draft rules)",
+  ];
+  if (!recurring.length) lines.push("  None established in the processed evidence.");
+  for (const theme of recurring) {
+    lines.push(
+      `  ${theme.corrections} corrections · ${theme.sessions} sessions · preceding-run models: ${theme.models.join(", ") || "unknown"} (${theme.unknownModels} unknown)`,
+      `    ${quote(theme.representative)}`,
+      `    Senders: ${theme.senderSources.harness} harness · ${theme.senderSources.host} host · ${theme.senderSources.judge} model-inferred`,
+    );
+    for (const example of theme.examples)
+      lines.push(
+        `      ${example.harness}:${example.sessionId} run ${example.position} · ${example.path}  ${quote(example.reply)}`,
+      );
+  }
+  lines.push(
+    "",
+    `${themes.themes.length - recurring.length} groups occur in only one session. Grouping is exploratory, not proof of a cause or an ignored rule.`,
+  );
+  if (themes.pending || themes.blocked)
+    lines.push(
+      `Up to ${themes.pending + themes.blocked} grouping requests remain; no uncached reply classifications will be sent.`,
+    );
+  for (const warning of themes.warnings) lines.push(`Warning: ${warning}`);
+  for (const failure of themes.failures) lines.push(`Failure: ${failure}`);
+  return `${lines.join("\n")}\n`;
 }
 
 function render(

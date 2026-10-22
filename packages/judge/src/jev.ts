@@ -6,6 +6,7 @@ import {
   type Fetch,
   type Usage,
 } from "@typesafe-ai/sdk";
+import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
   ReplyKind,
   replyKindMeaning,
@@ -93,6 +94,43 @@ export const requests = (exchange: Exchange) => ({
     questions: { sender: choice("Who wrote this message?", senderMeaning) },
   },
 });
+
+export class JevThemes implements ThemeJudge {
+  static readonly id = `jev/${MODEL}/themes-v1`;
+  readonly id = JevThemes.id;
+  readonly tokens = { input: 0, output: 0 };
+  readonly #client: TypeSafeClient;
+  readonly #signal = AbortSignal.timeout(60_000);
+
+  constructor(apiKey: string, fetch: Fetch = globalThis.fetch) {
+    this.#client = new TypeSafeClient({
+      apiKey,
+      fetch: withStreamedBody(fetch),
+      defaultModel: MODEL,
+      logLevel: "off",
+      retry: { maxRetries: 0 },
+      timeout: 10_000,
+    });
+  }
+
+  static fromEnv(env: Record<string, string | undefined> = process.env): JevThemes | null {
+    const key = env.TYPESAFE_API_KEY?.trim();
+    return key ? new JevThemes(key) : null;
+  }
+
+  async assign(input: ThemeInput): Promise<ThemeDecision> {
+    const result = await this.#client.systemOne(
+      {
+        state: input.state,
+        questions: { theme: choice(input.question, input.choices) },
+      },
+      { signal: this.#signal },
+    );
+    this.tokens.input += result.usage.input_tokens ?? 0;
+    this.tokens.output += result.usage.output_tokens ?? 0;
+    return { choice: result.answers.theme.choice, model: result.model };
+  }
+}
 
 const withStreamedBody =
   (fetch: Fetch): Fetch =>

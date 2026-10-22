@@ -3,9 +3,17 @@ import { signals, type Run, type Signal } from "@quench/insights";
 import type { VerdictCache } from "./cache.ts";
 import { ReplyKind, type Exchange, type Judge, type Sender, type Verdict } from "./verdict.ts";
 
-export type SessionRuns = { harness: HarnessId; cwd: string | null; runs: Run[] };
+export type SessionRuns = {
+  id: string;
+  path: string;
+  harness: HarnessId;
+  cwd: string | null;
+  runs: Run[];
+};
 
 export type Reply = {
+  sessionId: string;
+  path: string;
   harness: HarnessId;
   cwd: string | null;
   position: number;
@@ -43,6 +51,8 @@ export async function judgeReplies(
     replies: asked.map(({ session, position, run, exchange }) => {
       const verdict = cache.get(exchange);
       return {
+        sessionId: session.id,
+        path: session.path,
         harness: session.harness,
         cwd: session.cwd,
         position,
