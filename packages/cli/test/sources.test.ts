@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -101,6 +101,13 @@ test("sources traces recorded document reads without consulting today's source f
   expect(text.stdout).toContain("Shell/MCP reads");
   expect(await Bun.file(path).text()).toBe(before);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+  await rename(join(home, ".claude"), join(home, "store"));
+  await symlink("store", join(home, ".claude"));
+  for (const alias of [path, join(home, "store/projects/demo/session.jsonl")]) {
+    const aliased = await run(home, alias, "--json");
+    expect(aliased.code).toBe(0);
+    expect(JSON.parse(aliased.stdout).reads).toEqual(out.reads);
+  }
 });
 
 test("sources distinguishes failed, missing, ambiguous and unverified reads", async () => {

@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 import { discoverAll, harnessById, sourceTrace, type Home } from "@quench/history";
 import { json } from "../format.ts";
 
@@ -13,7 +14,16 @@ export async function sources(
   }
   try {
     const path = await realpath(files[0]!);
-    const ref = (await discoverAll(home)).find((ref) => ref.path === path);
+    const refs = await discoverAll(home);
+    let ref = refs.find((ref) => ref.path === path || ref.path === resolve(files[0]!));
+    if (!ref) {
+      for (const candidate of refs) {
+        if ((await realpath(candidate.path).catch(() => null)) === path) {
+          ref = candidate;
+          break;
+        }
+      }
+    }
     if (!ref) throw new Error(`${path} is not a session any known harness discovered`);
     const report = sourceTrace(await harnessById[ref.harness].read(ref));
     if (options.json) process.stdout.write(json(report));
