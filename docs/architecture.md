@@ -4,7 +4,8 @@ Quench is a TypeScript monorepo on Bun. Each package depends only on the package
 
 ```
 packages/history    reads each harness's session files into one Session model
-packages/insights   pure functions over sessions: runs, reports
+packages/insights   pure functions over sessions: runs, reports, signals
+packages/judge      opt-in model judgments about runs, behind the Judge interface
 packages/cli        the `quench` command; formatting only
 ```
 
@@ -59,6 +60,17 @@ A new event kind breaks every `switch` that ends in `unhandled(event)` until it 
 
 Insights never branch on harness and never look at tool or server names, because hosts
 rename them.
+
+## Judgments
+
+`history` and `insights` never make a network call. Anything that needs a model goes through
+`Judge` in `packages/judge`, which returns typed verdicts, never prose. `Jev` is the only judge
+today; it uses `@typesafe-ai/sdk` with the user's key. `VerdictCache` stores each verdict keyed by
+judge id plus the exact input, so changing a question (and its id) re-asks cleanly.
+
+Who sent a reply comes from structure first: Claude Code marks typed and scheduled prompts.
+Everything else, including prompts an SDK host delivers for people and orchestrator agents
+alike, is decided by the judge from the message alone.
 
 ## Reading at scale
 

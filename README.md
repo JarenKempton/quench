@@ -23,6 +23,12 @@ Claude Code
 | ------------------------------------- | ------------------------------------------------------------------------------------- |
 | `quench report [--days 30] [--json]`  | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs <session-file> [--json]` | One session as prompt → what the agent did → your reply                               |
+| `quench corrections [--dry-run]`      | How often you corrected the agent, and what came before. Opt-in, see below            |
+
+`quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
+your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
+before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a reply is paid for once.
+`--dry-run` shows how many replies would be sent without sending anything.
 
 ## Status
 

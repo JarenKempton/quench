@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Author, Event, Session } from "@quench/history";
-import { ReportBuilder, durationSeconds, runs } from "../src/index.ts";
+import { ReportBuilder, durationSeconds, runs, signals } from "../src/index.ts";
 
 const at = (secs: number) => new Date(Date.UTC(2026, 9, 20, 10, 0, secs));
 
@@ -106,4 +106,23 @@ test("the report weighs the starting load against everything processed", () => {
 
 test("an empty history reports nothing", () => {
   expect(new ReportBuilder().finish()).toEqual([]);
+});
+
+test("signals bucket replies and count the corrected ones", () => {
+  const samples = runs(parent, [child]).map((run, i) => ({
+    harness: "claude-code" as const,
+    position: i + 1,
+    run,
+    corrected: run.reply === "no, the other file",
+  }));
+  const buckets = (name: string) =>
+    signals(samples)
+      .find((s) => s.name === name)
+      ?.buckets.map((b) => [b.label, b.replies, b.corrections]);
+  expect(buckets("Effort")).toEqual([
+    ["medium", 1, 0],
+    ["high", 1, 1],
+  ]);
+  expect(buckets("Context when the reply came")).toEqual([["under 50k", 2, 1]]);
+  expect(buckets("Harness")).toEqual([["Claude Code", 2, 1]]);
 });

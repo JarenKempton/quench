@@ -12,6 +12,7 @@ async function quench(...args: string[]) {
       CLAUDE_CONFIG_DIR: "",
       CODEX_HOME: "",
       PI_CODING_AGENT_DIR: "",
+      TYPESAFE_API_KEY: "",
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -44,6 +45,18 @@ test("runs shows each prompt, what the agent did, and the reply", async () => {
   expect(stdout).toContain('#1   "Add a health check endpoint"');
   expect(stdout).toContain("1 tool error · 1 subagent · 1 compaction");
   expect(stdout).toContain('→  "/review now"');
+});
+
+test("corrections asks for a key before sending anything, and a dry run counts what it would send", async () => {
+  const noKey = await quench("corrections");
+  expect(noKey.code).toBe(2);
+  expect(noKey.stderr).toContain("Set TYPESAFE_API_KEY to opt in");
+
+  const dry = await quench("corrections", "--days", "36500", "--dry-run", "--json");
+  expect(dry.code).toBe(0);
+  const out = JSON.parse(dry.stdout);
+  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([1, 0, null]);
+  expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
 });
 
 test("unknown commands and bad input fail with a message", async () => {

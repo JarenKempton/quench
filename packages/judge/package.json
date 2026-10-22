@@ -1,0 +1,15 @@
+{
+  "name": "@quench/judge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@quench/history": "workspace:*",
+    "@quench/insights": "workspace:*",
+    "@typesafe-ai/sdk": "^0.7.0",
+    "zod": "^4.1.0"
+  }
+}
