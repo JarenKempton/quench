@@ -76,6 +76,10 @@ test("profile with no arguments finds projects from session directories and grou
       "\n",
   );
 
+  const older = new Date(Date.now() - 2 * 86_400_000);
+  await utimes(join(sessions, "d.jsonl"), older, older);
+  await utimes(join(home, "pi-elsewhere/sessions/p.jsonl"), older, older);
+
   const bare = await quench(home);
   expect(bare.code).toBe(0);
   expect(bare.stdout).toBe(
@@ -96,8 +100,8 @@ test("profile with no arguments finds projects from session directories and grou
       "  app             3  today             22 B   22 B  AGENTS.md          ~/code/app",
       "",
       "Other folders · 1 folder outside git · 1 session",
-      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Path",
-      "  scratch         1  today                —      —  none               ~/scratch",
+      "  Project  Sessions  Last used   Claude Code  Codex  Instruction files  Path",
+      "  scratch         1  2 days ago            —      —  none               ~/scratch",
       "",
       "1 session folder no longer exists; its sessions are not listed.",
       "",
