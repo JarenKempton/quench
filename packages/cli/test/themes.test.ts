@@ -11,6 +11,7 @@ async function run(home: string, flags: string[], env: Record<string, string> = 
   const proc = Bun.spawn(["bun", join(root, "packages/cli/src/main.ts"), ...flags], {
     env: {
       ...process.env,
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
       HOME: home,
       CLAUDE_CONFIG_DIR: "",
       CODEX_HOME: "",
@@ -83,9 +84,64 @@ async function fixture() {
   return { home, cacheFile, themeFile: join(home, ".quench/local/themes.jsonl"), sessions };
 }
 
+test("corrections separate people, automation and unresolved senders without treating coordination as correction", async () => {
+  const { home, cacheFile, sessions } = await fixture();
+  const coordination = "Review the next task.";
+  const source = await Bun.file(join(sessions, "c.jsonl")).text();
+  await Bun.write(
+    join(sessions, "e.jsonl"),
+    source.replace("Relay: run the checks.", coordination),
+  );
+  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  await cache.remember([
+    [
+      { assistantSaid: "done", reply: coordination },
+      { kind: "new_request", sender: "automation", confidence: 1 },
+    ],
+  ]);
+  const before = await Bun.file(cacheFile).text();
+  const result = await run(home, ["corrections", "--days", "36500", "--dry-run", "--json"]);
+  expect(result.code).toBe(0);
+  const out = JSON.parse(result.stdout);
+  expect(out.fromPeople.replies).toBe(2);
+  expect(out.fromAutomation).toMatchObject({
+    replies: 2,
+    judged: 2,
+    kinds: { correction: 1, new_request: 1 },
+  });
+  expect(out.fromUnknown).toMatchObject({ replies: 1, judged: 0 });
+  const harnessBuckets = (signals: { name: string; buckets: unknown[] }[]) =>
+    signals.find((s) => s.name === "Harness")!.buckets;
+  expect(harnessBuckets(out.signals)).toEqual([
+    { label: "Claude Code", replies: 2, corrections: 2 },
+  ]);
+  expect(harnessBuckets(out.automationSignals)).toEqual([
+    { label: "Claude Code", replies: 2, corrections: 1 },
+  ]);
+  expect(out.latest).toHaveLength(2);
+  expect(out.latestAutomation).toHaveLength(1);
+  expect(out.latestAutomation[0]).toMatchObject({
+    sessionId: "c",
+    path: join(sessions, "c.jsonl"),
+    position: 1,
+    sender: "automation",
+    senderSource: "judge",
+    reply: "Relay: run the checks.",
+  });
+  const preview = await run(home, [...args, "--dry-run"]);
+  expect(JSON.parse(preview.stdout).themes.eligibleCorrections).toBe(3);
+  const text = await run(home, ["corrections", "--days", "36500", "--dry-run"]);
+  expect(text.stdout).toContain("5 replies to agent runs");
+  expect(text.stdout).toContain("Unresolved senders");
+  expect(text.stdout).toContain("Latest corrections from agents / automation");
+  expect(text.stdout).toContain("Relay: run the checks.");
+  expect(text.stdout).not.toContain("not counted below");
+  expect(await Bun.file(cacheFile).text()).toBe(before);
+});
+
 test("theme limits select correction dates, not recently modified files containing old history", async () => {
   const { home, sessions } = await fixture();
-  for (const id of ["a", "b"]) {
+  for (const id of ["a", "b", "c"]) {
     const file = join(sessions, `${id}.jsonl`);
     const lines = (await Bun.file(file).text())
       .trim()
@@ -112,7 +168,7 @@ test("theme limits select correction dates, not recently modified files containi
     out.themes.selectedInputs,
     out.themes.omittedCorrections,
   ]).toEqual([1, 1, 0]);
-  expect(out.themes.excluded.outsideWindowCorrections).toBe(1);
+  expect(out.themes.excluded.outsideWindowCorrections).toBe(2);
 });
 
 test("themes classifies missing replies before grouping, then replays both caches without requests", async () => {
@@ -127,11 +183,10 @@ test("themes classifies missing replies before grouping, then replays both cache
     planned.newlyJudged,
     planned.themes.pending,
     planned.themes.blocked,
-  ]).toEqual([1, 0, 1, 1]);
+  ]).toEqual([1, 0, 1, 2]);
   expect(planned.themes.excluded).toEqual({
     outsideWindowCorrections: 0,
     unknownTimeCorrections: 0,
-    automationCorrections: 1,
     unknownSenderCorrections: 0,
     unclassifiedReplies: 1,
   });
@@ -193,16 +248,18 @@ test("themes classifies missing replies before grouping, then replays both cache
     const fresh = await run(home, args, env);
     expect(fresh.code).toBe(0);
     const result = JSON.parse(fresh.stdout);
-    expect(calls).toEqual(["kind", "sender", "theme", "theme", "theme"]);
+    expect(calls).toEqual(["kind", "sender", "theme", "theme", "theme", "theme"]);
     expect(preview.stdout).toContain("Uncached replies: 1 (2 classification requests)");
-    expect([result.newlyJudged, result.pending, result.themes.newlyGrouped]).toEqual([1, 0, 3]);
+    expect([result.newlyJudged, result.pending, result.themes.newlyGrouped]).toEqual([1, 0, 4]);
     expect(result.tokens).toEqual({ input: 20, output: 4 });
-    expect(result.themes.tokens).toEqual({ input: 30, output: 6 });
+    expect(result.themes.tokens).toEqual({ input: 40, output: 8 });
     expect(result.themes.themes[0]).toMatchObject({
-      corrections: 3,
-      sessions: 3,
+      corrections: 4,
+      sessions: 4,
+      fromPeople: { corrections: 3, sessions: 3, recurring: true },
+      fromAutomation: { corrections: 1, sessions: 1, recurring: false },
       recurring: true,
-      models: ["model-a", "model-b", "model-d"],
+      models: ["model-a", "model-b", "model-c", "model-d"],
       classifierModels: ["local-test-model"],
     });
     expect(result.themes.excluded.unclassifiedReplies).toBe(0);
@@ -219,15 +276,15 @@ test("themes classifies missing replies before grouping, then replays both cache
         replayed.themes.cacheHits,
         replayed.themes.newlyGrouped,
         replayed.themes.pending,
-      ]).toEqual([3, 0, 0]);
+      ]).toEqual([4, 0, 0]);
       expect(replayed.themes.themes).toEqual(result.themes.themes);
     }
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(6);
     expect(await Bun.file(themeFile).text()).toBe(bytes);
     expect(await Bun.file(cacheFile).text()).toBe(verdicts);
     expect(await Bun.file(join(sessions, "a.jsonl")).text()).toBe(history);
     const text = await run(home, ["corrections", "--themes", "--days", "36500"]);
-    expect(text.stdout).toContain("3 corrections · 3 sessions");
+    expect(text.stdout).toContain("4 corrections · 4 sessions");
     expect(text.stdout).toContain("representative quotations, not draft rules");
     expect(text.stdout).toContain(`${join(sessions, "a.jsonl")}`);
     expect(text.stdout).not.toContain("Uncached replies:");
@@ -245,7 +302,7 @@ test("themes previews leave malformed reply/theme caches unchanged and validate 
   expect(preview.code).toBe(0);
   const out = JSON.parse(preview.stdout);
   expect([out.themes.selectedInputs, out.themes.omittedCorrections, out.themes.blocked]).toEqual([
-    1, 1, 0,
+    1, 2, 0,
   ]);
   expect(out.themes.warnings).toHaveLength(1);
   expect(await Bun.file(cacheFile).text()).toBe(before);
@@ -301,20 +358,20 @@ test("classification failures remain visible even when known themes group succes
     const result = JSON.parse(failed.stdout);
     expect([result.failed, result.newlyJudged, result.themes.failed]).toEqual([1, 0, 0]);
     expect(result.themes.excluded.unclassifiedReplies).toBe(1);
-    expect(result.themes.themes[0].corrections).toBe(2);
-    expect(calls).toEqual(["kind", "sender", "theme", "theme"]);
+    expect(result.themes.themes[0].corrections).toBe(3);
+    expect(calls).toEqual(["kind", "sender", "theme", "theme", "theme"]);
     expect(await Bun.file(cacheFile).text()).toBe(before);
     const themes = await Bun.file(themeFile).text();
     const noKey = await run(home, args);
     expect(noKey.code).toBe(2);
     const replayed = JSON.parse(noKey.stdout);
     expect([replayed.pending, replayed.themes.pending, replayed.themes.cacheHits]).toEqual([
-      1, 0, 2,
+      1, 0, 3,
     ]);
     expect(noKey.stderr).toContain("Classifying missing replies");
     expect(await Bun.file(cacheFile).text()).toBe(before);
     expect(await Bun.file(themeFile).text()).toBe(themes);
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(5);
     const text = await run(home, ["corrections", "--themes", "--days", "36500"], {
       TYPESAFE_API_KEY: "local-test-only",
       TYPESAFE_BASE_URL: server.url.toString(),
@@ -322,7 +379,7 @@ test("classification failures remain visible even when known themes group succes
     expect(text.code).toBe(1);
     expect(text.stdout).toContain("1 unclassified replies (not grouped)");
     expect(text.stdout).toContain("Classification failure:");
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(7);
   } finally {
     await server.stop(true);
   }
@@ -355,7 +412,7 @@ test("a grouping service failure is reported without reclassifying replies or as
     expect(failed.code).toBe(1);
     const result = JSON.parse(failed.stdout);
     expect([calls, result.newlyJudged, result.themes.failed, result.themes.blocked]).toEqual([
-      1, 0, 1, 1,
+      1, 0, 1, 2,
     ]);
     expect(await Bun.file(themeFile).exists()).toBe(false);
     expect(await Bun.file(cacheFile).text()).toBe(before);

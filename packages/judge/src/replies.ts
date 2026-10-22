@@ -83,17 +83,39 @@ export type Tally = { replies: number; judged: number; kinds: Record<ReplyKind, 
 export type Summary = {
   fromPeople: Tally;
   fromAutomation: Tally;
+  fromUnknown: Tally;
   signals: Signal[];
+  automationSignals: Signal[];
   latest: Reply[];
+  latestAutomation: Reply[];
   senderSources: Record<Reply["senderSource"], number>;
 };
 
 export function summarize(replies: readonly Reply[], examples: number): Summary {
   const senderSources = { harness: 0, host: 0, judge: 0, unknown: 0 };
   for (const reply of replies) senderSources[reply.senderSource] += 1;
-  const people = replies.filter((r) => r.sender !== "automation");
-  const automated = replies.filter((r) => r.sender === "automation");
-  const samples = people.flatMap((r) =>
+  const people = senderSummary(
+    replies.filter((r) => r.sender === "person"),
+    examples,
+  );
+  const automated = senderSummary(
+    replies.filter((r) => r.sender === "automation"),
+    examples,
+  );
+  return {
+    fromPeople: people.tally,
+    fromAutomation: automated.tally,
+    fromUnknown: tally(replies.filter((r) => r.sender === null)),
+    signals: people.signals,
+    automationSignals: automated.signals,
+    latest: people.latest,
+    latestAutomation: automated.latest,
+    senderSources,
+  };
+}
+
+function senderSummary(replies: readonly Reply[], examples: number) {
+  const samples = replies.flatMap((r) =>
     r.kind === null
       ? []
       : [
@@ -105,16 +127,14 @@ export function summarize(replies: readonly Reply[], examples: number): Summary 
           },
         ],
   );
-  const latest = people
+  const latest = replies
     .filter((r) => r.kind === "correction")
-    .sort((a, b) => (b.run.endedAt?.getTime() ?? 0) - (a.run.endedAt?.getTime() ?? 0))
+    .sort((a, b) => (b.run.replyAt?.getTime() ?? 0) - (a.run.replyAt?.getTime() ?? 0))
     .slice(0, examples);
   return {
-    fromPeople: tally(people),
-    fromAutomation: tally(automated),
+    tally: tally(replies),
     signals: signals(samples),
     latest,
-    senderSources,
   };
 }
 

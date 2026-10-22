@@ -111,11 +111,15 @@ output distinguishes harness evidence, host evidence, model inference and unreso
 The cached verdict remains the model's answer; resolving the effective sender never overwrites
 it, changes its key or re-asks it.
 
+The corrections summary keeps person, automation and unresolved senders separate. Only classified
+replies enter each attributed rate and signal set. Recent examples retain session/run locations
+and sender evidence. Routine coordination remains its classified reply kind, not a correction.
+
 ### Correction themes
 
 `corrections --themes` uses the normal reply pipeline: reuse cached verdicts, classify missing
-replies with Jev, resolve senders, then select person corrections for grouping. Host evidence
-establishes authorship, not reply kind; classification remains necessary. Dry runs and no-key
+replies with Jev, resolve senders, then select person and automation corrections for grouping.
+Host evidence establishes authorship, not reply kind; classification remains necessary. Dry runs and no-key
 replays open the verdict cache read-only, without compacting or writing it. Dry runs report
 classification requests separately from grouping requests for already-known corrections; the
 grouping limit does not bound classification. Failures in either stage produce a nonzero exit.
@@ -139,7 +143,10 @@ Failures are not cached; one failed or missing assignment stops dependent work. 
 only the known prefix and reports later decisions as blocked, never hypothetical cache hits. The
 Jev adapter disables retries and bounds requests to 10 seconds each and 60 seconds overall.
 
-Evidence is aggregated locally: occurrences, distinct `(harness, sessionId)` sessions, last known
+Evidence is aggregated locally, including separate person/automation counts and recurrence;
+representative and example senders remain explicit. Agent-only groups do not establish human
+preferences. Changing sender evidence recomputes counts without invalidating identical semantic
+inputs in the cache. Other evidence includes distinct `(harness, sessionId)` sessions, last known
 preceding-run models, missing-model counts, sender sources and source examples. Recurrence means
 at least two distinct sessions; single-session groups remain in JSON. Labels are representative
 quotations, not generated titles or rules. This is exploratory, order-dependent matching to one
