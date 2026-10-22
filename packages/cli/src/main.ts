@@ -14,8 +14,8 @@ Usage:
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
-                                       how often you corrected the agent, and what came before
-    --themes                          also group person corrections by corrective intent (opt-in Jev calls)
+                                       corrections from people and agents, counted separately
+    --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only

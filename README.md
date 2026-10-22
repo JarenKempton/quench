@@ -23,7 +23,7 @@ Claude Code
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
-| `quench corrections [--dry-run]`         | How often you corrected the agent, and what came before. Opt-in, see below            |
+| `quench corrections [--dry-run]`         | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]` | Current instruction-file inventory and source rule candidates; offline                |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
@@ -32,7 +32,13 @@ before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a repl
 `--dry-run` shows how many replies would be sent without sending anything.
 
 Sender attribution uses harness metadata first, optional host evidence second, and Jev's guess
-otherwise. The output counts each source separately. `corrections` can read T3 Code's local
+otherwise. The output counts each source separately. Human and automation replies have separate
+correction rates, outcome signals and recent examples; unresolved senders remain a separate
+bucket. Rates use classified replies only; only the correction verdict increases their numerator.
+JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAutomation` and
+`fromUnknown`. Examples include the history path, session, run and sender evidence.
+
+`corrections` can read T3 Code's local
 `~/.t3/userdata/statev2.sqlite` **read-only** when it exists; T3 is not another harness or a
 requirement. Use `--host-history <sqlite-file>` for another location, or `--no-host-history` to
 skip it. There is no recursive file search. Missing or incompatible host history leaves the
@@ -52,17 +58,21 @@ quench corrections --themes --theme-limit 20
 ```
 
 `--themes` adds grouping to the normal corrections pipeline: reuse cached verdicts, classify
-missing replies with Jev, resolve sender attribution, then group person-attributed corrections.
+missing replies with Jev, resolve sender attribution, then group corrections from both people
+and automation.
 T3 evidence can establish who sent a reply, not whether it is a correction; Jev still determines
-reply kind. Automation corrections, unresolved senders and failed or pending classifications
-are counted separately in the theme coverage.
+reply kind. Unresolved senders and failed or pending classifications remain excluded and visible
+in the theme coverage. Automation corrections participate in the same bounded grouping process.
 
 Grouping is a separate opt-in Jev choice question using `TYPESAFE_API_KEY`. Each exchange
 is compared with earlier representative exchanges for the **same specific corrective intent**,
 not just a shared topic. The output quotes a representative correction; it does not generate a
 rule or infer which instructions existed. Counts, distinct sessions, preceding-run model labels,
 sender-attribution sources and source examples are computed locally. Model-inferred people
-remain labeled as such. A group is labeled recurring only across at least two distinct sessions;
+remain labeled as such. Each theme separates `fromPeople` and `fromAutomation` correction counts,
+session counts and recurrence, and labels the representative and example senders. Agent-only
+themes are supervision evidence, not confirmed human preferences or proposed rules.
+A group is labeled recurring only across at least two distinct sessions;
 single-session groups remain available in JSON. A run's model is its last recorded model, not
 necessarily every model used in that run.
 
@@ -85,8 +95,8 @@ exact question, choices and ordered bounded exchanges. Counts are rebuilt from c
 reply classifications retain their existing cache and grouping has its own. Fully cached results
 need no key; without a key, missing work is reported with exit code 2. `--dry-run` makes no model
 calls and writes neither cache. It reports pending classification requests and groups only known
-person corrections, replaying the cached grouping prefix before marking the first missing decision
-pending and later inputs blocked. Their exemplar lists are not yet known. Failed assignments stop
+corrections with attributed senders, replaying the cached grouping prefix before marking the
+first missing decision pending and later inputs blocked. Their exemplar lists are not yet known. Failed assignments stop
 the sequence without guessing later memberships; unclear assignments remain ungrouped. A failure
 in either stage returns exit code 1, even if other known corrections can still be grouped.
 

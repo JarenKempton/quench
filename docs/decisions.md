@@ -39,13 +39,17 @@ retired with it and live in git history.
   fall back visibly. Harness evidence wins over host evidence, which wins over model inference.
   Cached model verdicts and their questions stay unchanged.
 - **Themes compare corrective intent; they do not draft rules.** The opt-in themes mode extends
-  normal reply classification, then groups person corrections with separate typed decisions and
-  a separate cache. Dry runs call neither judge and write neither cache; the grouping limit does
+  normal reply classification, then groups person and automation corrections with separate typed
+  decisions and a separate cache. Dry runs call neither judge and write neither cache; the grouping limit does
   not cap the preceding reply classification.
   It groups against bounded, deterministically ordered representative exchanges without a keyword
   taxonomy. Counts and source evidence are local; recurrence requires multiple native sessions.
   Quotations remain quotations, unclear stays ungrouped, and missing/failed sequential decisions
   block dependent work. No claim about ignored or unwritten rules is made without steering evidence.
+- **Human correction and agent supervision are separate outcome signals.** Both can contribute
+  to a corrective theme, with their own counts, sessions, recurrence and attributed examples.
+  Unknown senders remain separate. Coordination is not automatically correction; agent-only
+  evidence does not establish a human preference or justify a rule proposal by itself.
 - **Steering inventory is current evidence, not historical attribution.** Adapters own native
   candidate locations; the offline scanner deduplicates exact bytes and preserves source
   paths, scopes and bullet/paragraph locations. Candidate presence does not prove effective

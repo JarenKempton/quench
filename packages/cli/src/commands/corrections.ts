@@ -19,6 +19,7 @@ import {
   summarize,
   VerdictCache,
   type Judged,
+  type Reply,
   type SessionRuns,
   type Summary,
   type Tally,
@@ -99,13 +100,8 @@ export async function corrections(home: Home, options: Options): Promise<number>
           warnings,
           ...summary,
           ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
-          latest: summary.latest.map((r) => ({
-            harness: r.harness,
-            folder: folder(r.cwd),
-            reply: r.run.reply,
-            senderSource: r.senderSource,
-            run: r.run,
-          })),
+          latest: summary.latest.map(example),
+          latestAutomation: summary.latestAutomation.map(example),
         })
       : themes
         ? renderThemes(themes, judged, options.days)
@@ -114,7 +110,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   if (themes && (themes.failed || judged.failures.length)) return 1;
   if (themes && !options.dryRun && !replyJudge && (judged.pending || themes.pending)) {
     process.stderr.write(
-      "Classifying missing replies and grouping person corrections use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview both stages.\n",
+      "Classifying missing replies and grouping corrections use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview both stages.\n",
     );
     return 2;
   }
@@ -153,9 +149,9 @@ function renderThemes(themes: Themes, judged: Judged, days: number): string {
   const lines = [
     `Last ${days} days · correction themes · ${themes.judge}`,
     `Reply classification: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
-    `${themes.selectedCorrections} of ${themes.eligibleCorrections} person corrections selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
+    `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
-    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
+    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
     "",
     "Recurring across sessions (representative quotations, not draft rules)",
   ];
@@ -163,18 +159,20 @@ function renderThemes(themes: Themes, judged: Judged, days: number): string {
   for (const theme of recurring) {
     lines.push(
       `  ${theme.corrections} corrections · ${theme.sessions} sessions · preceding-run models: ${theme.models.join(", ") || "unknown"} (${theme.unknownModels} unknown)`,
-      `    ${quote(theme.representative)}`,
-      `    Senders: ${theme.senderSources.harness} harness · ${theme.senderSources.host} host · ${theme.senderSources.judge} model-inferred`,
+      `    People: ${theme.fromPeople.corrections} corrections across ${theme.fromPeople.sessions} sessions · agents / automation: ${theme.fromAutomation.corrections} across ${theme.fromAutomation.sessions} sessions`,
+      `    ${theme.representativeSender}: ${quote(theme.representative)}`,
+      `    Attribution: ${theme.senderSources.harness} harness · ${theme.senderSources.host} host · ${theme.senderSources.judge} model-inferred`,
     );
     for (const example of theme.examples)
       lines.push(
-        `      ${example.harness}:${example.sessionId} run ${example.position} · ${example.path}  ${quote(example.reply)}`,
+        `      ${example.sender} (${example.senderSource}) · ${example.harness}:${example.sessionId} run ${example.position} · ${example.path}  ${quote(example.reply)}`,
       );
   }
   lines.push(
     "",
     `${themes.themes.length - recurring.length} groups occur in only one session. Grouping is exploratory, not proof of a cause or an ignored rule.`,
     "Session counts are native IDs, not independent occurrences: copied fork history can inflate evidence.",
+    "Agent corrections are supervision evidence, not confirmed human preferences or rule proposals.",
   );
   if (judged.pending)
     lines.push(
@@ -199,38 +197,54 @@ function render(
 ): string {
   const people = summary.fromPeople;
   const bots = summary.fromAutomation;
+  const unknown = summary.fromUnknown;
   const status = [`${judged.newlyJudged} new`, `${judged.failures.length} failed`];
   if (judged.pending) status.push(`${judged.pending} not judged yet`);
   const lines = [
-    `Last ${days} days · ${people.replies + bots.replies} replies to agent runs · judged by ${judge} (${status.join(", ")})`,
+    `Last ${days} days · ${people.replies + bots.replies + unknown.replies} replies to agent runs · judged by ${judge} (${status.join(", ")})`,
     `Sender attribution: ${summary.senderSources.harness} harness · ${summary.senderSources.host} host · ${summary.senderSources.judge} model-inferred · ${summary.senderSources.unknown} unresolved`,
     "",
     `Corrections from people         ${share(people)}`,
-    `Corrections relayed by agents   ${share(bots)}  not counted below`,
-    "",
-    `${"What came before a person's reply".padEnd(36)}${"replies".padStart(9)}${"corrected".padStart(12)}`,
+    `Corrections from agents / automation ${share(bots)}`,
+    `Unresolved senders              ${unknown.replies} replies · ${unknown.judged} classified · ${unknown.kinds.correction} corrections; excluded from attributed rates and signals`,
   ];
-  for (const signal of summary.signals) {
-    const shown = signal.buckets.filter((b) => b.replies >= MIN_BUCKET);
-    if (shown.length < 2) continue;
-    lines.push(signal.name);
-    for (const b of shown) {
-      lines.push(
-        `  ${b.label.padEnd(34)}${String(b.replies).padStart(9)}${percent(b.corrections, b.replies).padStart(12)}`,
-      );
+  for (const [label, signals] of [
+    ["people", summary.signals],
+    ["agents / automation", summary.automationSignals],
+  ] as const) {
+    lines.push(
+      "",
+      `What came before replies from ${label}`,
+      `${"".padEnd(36)}${"replies".padStart(9)}${"corrected".padStart(12)}`,
+    );
+    for (const signal of signals) {
+      const shown = signal.buckets.filter((b) => b.replies >= MIN_BUCKET);
+      if (shown.length < 2) continue;
+      lines.push(signal.name);
+      for (const b of shown) {
+        lines.push(
+          `  ${b.label.padEnd(34)}${String(b.replies).padStart(9)}${percent(b.corrections, b.replies).padStart(12)}`,
+        );
+      }
     }
   }
   lines.push(
     "",
     `Buckets under ${MIN_BUCKET} replies are hidden. These are correlations, not causes.`,
   );
-  lines.push("", "Latest corrections from people");
-  for (const r of summary.latest) {
-    const when = r.run.endedAt?.toISOString().slice(0, 10) ?? "";
-    lines.push(
-      `  ${when}  ${harnessById[r.harness].label} · ${folder(r.cwd) ?? "?"}  ${quote(r.run.reply)}`,
-      `      after: ${runFacts(r.run)}`,
-    );
+  for (const [label, latest] of [
+    ["people", summary.latest],
+    ["agents / automation", summary.latestAutomation],
+  ] as const) {
+    lines.push("", `Latest corrections from ${label}`);
+    for (const r of latest) {
+      const when = r.run.replyAt?.toISOString().slice(0, 10) ?? "";
+      lines.push(
+        `  ${when}  ${harnessById[r.harness].label} · ${folder(r.cwd) ?? "?"}  ${quote(r.run.reply)}`,
+        `      ${r.senderSource} attribution · ${r.path} run ${r.position}`,
+        `      after: ${runFacts(r.run)}`,
+      );
+    }
   }
   if (judged.pending) {
     lines.push(
@@ -247,7 +261,19 @@ function render(
 }
 
 const share = (t: Tally) =>
-  `${String(t.kinds.correction).padStart(5)} of ${String(t.judged).padStart(5)} replies  (${percent(t.kinds.correction, t.judged)})`;
+  `${String(t.kinds.correction).padStart(5)} of ${String(t.judged).padStart(5)} classified replies  (${t.judged ? percent(t.kinds.correction, t.judged) : "unknown"})`;
+
+const example = (r: Reply) => ({
+  harness: r.harness,
+  sessionId: r.sessionId,
+  path: r.path,
+  position: r.position,
+  folder: folder(r.cwd),
+  reply: r.run.reply,
+  sender: r.sender,
+  senderSource: r.senderSource,
+  run: r.run,
+});
 
 const percent = (n: number, of: number) => `${((100 * n) / Math.max(of, 1)).toFixed(1)}%`;
 

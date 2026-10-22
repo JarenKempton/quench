@@ -22,6 +22,9 @@ type Group = { id: string; exchange: Exchange; members: Reply[]; classifiers: Se
 export type Theme = {
   /** One original correction quotation, not a generated theme title or a draft rule. */
   representative: string;
+  representativeSender: Reply["sender"];
+  fromPeople: { corrections: number; sessions: number; recurring: boolean };
+  fromAutomation: { corrections: number; sessions: number; recurring: boolean };
   /** Original correction occurrences assigned here; exact duplicate exchanges still count separately. */
   corrections: number;
   /** Distinct (harness, native session ID) pairs, not proof of independent occurrences across forks. */
@@ -32,7 +35,6 @@ export type Theme = {
   models: string[];
   /** Correction occurrences whose preceding run has no recorded model. */
   unknownModels: number;
-  /** Occurrences per source of person attribution: harness metadata, host evidence or model inference. */
   senderSources: Record<Reply["senderSource"], number>;
   /** Actual service model labels returned by the decisions that formed this group. */
   classifierModels: string[];
@@ -49,18 +51,13 @@ export type Theme = {
     at: Date | null;
     /** Last recorded coding-agent model in the preceding run. */
     model: string | null;
-    /** How this occurrence was attributed to a person; it does not describe how its theme was chosen. */
+    sender: Reply["sender"];
     senderSource: Reply["senderSource"];
     /** Full original correction text, not the clipped excerpt sent for grouping. */
     reply: string;
   }[];
 };
 
-/**
- * Group person-attributed corrections with cached reply verdicts by specific corrective intent.
- * Returns a report containing Theme[] plus coverage and processing statistics, not just an array.
- * A null judge replays cached decisions until the first gap, then blocks dependent inputs.
- */
 export async function groupCorrections(
   replies: readonly Reply[],
   cache: ThemeCache,
@@ -70,8 +67,8 @@ export async function groupCorrections(
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > MAX_THEME_LIMIT)
     throw new Error(`Theme limit must be between 1 and ${MAX_THEME_LIMIT}`);
   if (judge && judge.id !== cache.judge) throw new Error("Theme judge/cache mismatch");
-  const people = replies.filter((r) => r.kind === "correction" && r.sender === "person");
-  const knownTime = people.filter(
+  const corrections = replies.filter((r) => r.kind === "correction" && r.sender !== null);
+  const knownTime = corrections.filter(
     (r) => r.run.replyAt !== null && Number.isFinite(r.run.replyAt.getTime()),
   );
   const eligible = knownTime.filter((r) => r.run.replyAt! >= options.since);
@@ -148,7 +145,6 @@ export async function groupCorrections(
   return {
     judge: cache.judge,
     limit: options.limit,
-    /** Person-attributed correction occurrences with known timestamps inside the window, before limiting. */
     eligibleCorrections: eligible.length,
     /** Distinct full assistant/reply text pairs among eligible occurrences, before limiting. */
     uniqueInputs: unique.size,
@@ -160,10 +156,7 @@ export async function groupCorrections(
     omittedCorrections: eligible.length - selectedCorrections,
     excluded: {
       outsideWindowCorrections: knownTime.length - eligible.length,
-      unknownTimeCorrections: people.length - knownTime.length,
-      automationCorrections: replies.filter(
-        (r) => r.kind === "correction" && r.sender === "automation",
-      ).length,
+      unknownTimeCorrections: corrections.length - knownTime.length,
       unknownSenderCorrections: replies.filter((r) => r.kind === "correction" && r.sender === null)
         .length,
       unclassifiedReplies: replies.filter((r) => r.kind === null).length,
@@ -184,6 +177,7 @@ export async function groupCorrections(
     warnings: cache.warnings,
     limitations: [
       "Native session IDs do not prove independent occurrences; copied fork history can inflate evidence.",
+      "Agent corrections are supervision evidence, not confirmed human preferences or rule proposals.",
     ],
     themes: groups
       .map((group) => evidence(group, options.examples))
@@ -217,15 +211,20 @@ function themeInput(exchange: Exchange, groups: readonly Group[]): ThemeInput {
   };
 }
 
+function occurrences(replies: readonly Reply[]) {
+  const sessions = new Set(replies.map((r) => JSON.stringify([r.harness, r.sessionId]))).size;
+  return { corrections: replies.length, sessions, recurring: sessions >= 2 };
+}
+
 function evidence(group: Group, examples: number): Theme {
-  const sessions = new Set(group.members.map((r) => JSON.stringify([r.harness, r.sessionId]))).size;
   const senderSources = { harness: 0, host: 0, judge: 0, unknown: 0 };
   for (const r of group.members) senderSources[r.senderSource] += 1;
   return {
     representative: group.members[0]!.run.reply!,
-    corrections: group.members.length,
-    sessions,
-    recurring: sessions >= 2,
+    representativeSender: group.members[0]!.sender,
+    ...occurrences(group.members),
+    fromPeople: occurrences(group.members.filter((r) => r.sender === "person")),
+    fromAutomation: occurrences(group.members.filter((r) => r.sender === "automation")),
     models: [
       ...new Set(group.members.flatMap((r) => (r.run.model === null ? [] : [r.run.model]))),
     ].sort(),
@@ -239,6 +238,7 @@ function evidence(group: Group, examples: number): Theme {
       position: r.position,
       at: r.run.replyAt,
       model: r.run.model,
+      sender: r.sender,
       senderSource: r.senderSource,
       reply: r.run.reply!,
     })),

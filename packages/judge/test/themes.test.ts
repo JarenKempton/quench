@@ -82,34 +82,36 @@ test("semantic assignments retain occurrences, distinct sessions, run models and
     a,
     reply("d", "Use the other endpoint."),
     reply("e", "That is unclear."),
-    reply("f", "Agent relay", { sender: "automation" }),
+    reply("f", a.run.reply!, { sender: "automation" }),
     reply("g", "Unresolved sender", { sender: null, senderSource: "unknown" }),
     reply("h", "Not classified", { kind: null }),
   ];
   const judge = scripted(["new", "t0", "new", "unclear"]);
   const result = await groupCorrections(list, cache, judge, options);
-  expect([result.eligibleCorrections, result.uniqueInputs, result.newlyGrouped]).toEqual([5, 4, 4]);
+  expect([result.eligibleCorrections, result.uniqueInputs, result.newlyGrouped]).toEqual([6, 4, 4]);
   expect(result.excluded).toEqual({
     outsideWindowCorrections: 0,
     unknownTimeCorrections: 0,
-    automationCorrections: 1,
     unknownSenderCorrections: 1,
     unclassifiedReplies: 1,
   });
   expect(result.unclear).toBe(1);
   expect(result.themes[0]).toMatchObject({
     representative: a.run.reply,
-    corrections: 3,
-    sessions: 3,
+    corrections: 4,
+    sessions: 4,
+    fromPeople: { corrections: 3, sessions: 3, recurring: true },
+    fromAutomation: { corrections: 1, sessions: 1, recurring: false },
     recurring: true,
     models: ["model-a", "model-b"],
     unknownModels: 1,
-    senderSources: { harness: 1, host: 1, judge: 1, unknown: 0 },
+    senderSources: { harness: 1, host: 1, judge: 2, unknown: 0 },
     classifierModels: ["jev-test"],
   });
   expect(result.themes[0]!.examples.map((e) => [e.sessionId, e.position, e.path])).toEqual([
     ["a", 1, "/history/a.jsonl"],
     ["c", 1, "/history/c.jsonl"],
+    ["f", 1, "/history/f.jsonl"],
     ["b", 1, "/history/b.jsonl"],
   ]);
   expect(Object.keys(judge.inputs[0]!.choices)).toEqual(["new", "unclear"]);
@@ -144,6 +146,40 @@ test("dry-run stops at the first unknown decision, without inventing downstream 
   const partial = await groupCorrections(list, cache, null, options);
   expect([partial.cacheHits, partial.pending, partial.blocked]).toEqual([1, 1, 1]);
   expect(await Bun.file(cacheFile).text()).toBe(before);
+});
+
+test("agent-only themes retain supervision evidence without claiming a recurring human preference", async () => {
+  const file = await path();
+  const cache = await ThemeCache.open(file, JevThemes.id);
+  const list = [
+    reply("a", "Verify the result", { sender: "automation", senderSource: "host" }),
+    reply("b", "Verify the result", { sender: "automation", senderSource: "harness" }),
+    reply("c", "Review the next task", { sender: "automation", kind: "new_request" }),
+    reply("d", "Unknown correction", { sender: null, senderSource: "unknown" }),
+  ];
+  const result = await groupCorrections(list, cache, scripted(["new"]), options);
+  expect([result.eligibleCorrections, result.uniqueInputs, result.newlyGrouped]).toEqual([2, 1, 1]);
+  expect(result.themes[0]).toMatchObject({
+    representativeSender: "automation",
+    recurring: true,
+    fromPeople: { corrections: 0, sessions: 0, recurring: false },
+    fromAutomation: { corrections: 2, sessions: 2, recurring: true },
+  });
+  expect(result.themes[0]!.examples.map((e) => e.sender)).toEqual(["automation", "automation"]);
+  expect(result.excluded.unknownSenderCorrections).toBe(1);
+  const before = await Bun.file(file).text();
+  const enriched = await groupCorrections(
+    list.map((r) => (r.sessionId === "a" ? { ...r, sender: "person" as const } : r)),
+    cache,
+    scripted([]),
+    options,
+  );
+  expect([enriched.cacheHits, enriched.newlyGrouped]).toEqual([1, 0]);
+  expect(enriched.themes[0]).toMatchObject({
+    fromPeople: { corrections: 1, sessions: 1, recurring: false },
+    fromAutomation: { corrections: 1, sessions: 1, recurring: false },
+  });
+  expect(await Bun.file(file).text()).toBe(before);
 });
 
 test("the theme window uses known correction timestamps and abstains when the reply time is missing", async () => {
