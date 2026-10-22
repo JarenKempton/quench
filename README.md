@@ -50,10 +50,11 @@ quench corrections --themes --dry-run --json
 quench corrections --themes --theme-limit 20
 ```
 
-`--themes` reuses **only cached person-attributed correction verdicts**. It never sends
-uncached replies for kind/sender classification, even when a key is present. Run ordinary
-`corrections` separately if you want to classify more history. Automation corrections,
-unresolved senders and unclassified replies are counted separately in the theme coverage.
+`--themes` adds grouping to the normal corrections pipeline: reuse cached verdicts, classify
+missing replies with Jev, resolve sender attribution, then group person-attributed corrections.
+T3 evidence can establish who sent a reply, not whether it is a correction; Jev still determines
+reply kind. Automation corrections, unresolved senders and failed or pending classifications
+are counted separately in the theme coverage.
 
 Grouping is a separate opt-in Jev choice question using `TYPESAFE_API_KEY`. Each exchange
 is compared with earlier representative exchanges for the **same specific corrective intent**,
@@ -64,8 +65,12 @@ remain labeled as such. A group is labeled recurring only across at least two di
 single-session groups remain available in JSON. A run's model is its last recorded model, not
 necessarily every model used in that run.
 
-The default is the oldest **20 unique exchanges** in the selected period; `--theme-limit` accepts
-1–50. Exact duplicate exchanges share a decision but retain their separate evidence occurrences.
+The grouping default is the oldest **20 unique exchanges** in the selected period; `--theme-limit`
+accepts 1–50. This limits grouping, not the preceding reply classification: each uncached reply
+uses two classification requests, just as ordinary `corrections` does. Preview that workload
+with `--dry-run` before a paid run; additional grouping work cannot be known until those replies
+are classified. Exact duplicate exchanges share a grouping decision but retain their separate
+evidence occurrences.
 The window uses the correction message's own timestamp, not file modification or preceding-run
 end time; corrections with unknown timestamps are excluded and counted separately. Coverage and
 omitted counts are always shown. Each model-visible exchange is clipped to the
@@ -76,11 +81,13 @@ and a 60-second total grouping budget. `--examples` limits source examples, not 
 
 Decisions have a separate cache at `~/.quench/local/themes.jsonl`, keyed by grouping version and
 exact question, choices and ordered bounded exchanges. Counts are rebuilt from current evidence;
-reply verdicts are never rewritten in themes mode. Cached results need no key. `--dry-run` makes
-no model calls and writes neither cache: it replays the cached prefix, then reports the first
-missing decision as pending and later inputs as blocked, because their exemplar lists are not
-yet known. Failed assignments stop the sequence without guessing later memberships; unclear
-assignments remain ungrouped.
+reply classifications retain their existing cache and grouping has its own. Fully cached results
+need no key; without a key, missing work is reported with exit code 2. `--dry-run` makes no model
+calls and writes neither cache. It reports pending classification requests and groups only known
+person corrections, replaying the cached grouping prefix before marking the first missing decision
+pending and later inputs blocked. Their exemplar lists are not yet known. Failed assignments stop
+the sequence without guessing later memberships; unclear assignments remain ungrouped. A failure
+in either stage returns exit code 1, even if other known corrections can still be grouped.
 
 These are exploratory, order-dependent representative matches—not proof that all group members
 are equivalent, that a rule was ignored, or that the selected window covers every recurring issue.

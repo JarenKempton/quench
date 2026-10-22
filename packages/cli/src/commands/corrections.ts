@@ -45,15 +45,15 @@ type Options = {
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const jev = options.dryRun || options.themes ? null : Jev.fromEnv();
-  if (!options.dryRun && !options.themes && !jev) {
+  const replyJudge = options.dryRun ? null : Jev.fromEnv();
+  if (!options.dryRun && !options.themes && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
   }
   const cache = await VerdictCache.open(
     join(home.dir, ".quench/local/judgments.jsonl"),
     Jev.id,
-    options.themes,
+    replyJudge === null,
   );
   const host =
     options.hostHistory === false
@@ -70,7 +70,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   for (const warning of warnings) process.stderr.write(`${warning}\n`);
   let judged: Judged;
   try {
-    judged = await judgeReplies(sessions, cache, jev);
+    judged = await judgeReplies(sessions, cache, replyJudge);
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
     process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
@@ -86,7 +86,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
         { limit: options.themeLimit, examples: options.examples, since },
       )
     : null;
-  const tokens = jev?.tokens ?? null;
+  const tokens = replyJudge?.tokens ?? null;
   process.stdout.write(
     options.json
       ? json({
@@ -108,13 +108,13 @@ export async function corrections(home: Home, options: Options): Promise<number>
           })),
         })
       : themes
-        ? renderThemes(themes, options.days)
+        ? renderThemes(themes, judged, options.days)
         : render(summary, judged, options.days, cache.judge, tokens),
   );
-  if (themes?.failed) return 1;
-  if (themes?.pending && !options.dryRun && !themeJudge) {
+  if (themes && (themes.failed || judged.failures.length)) return 1;
+  if (themes && !options.dryRun && !replyJudge && (judged.pending || themes.pending)) {
     process.stderr.write(
-      "Grouping cached person corrections uses Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run. It sends up to 500 assistant characters and 1,000 correction characters per exchange, including earlier exemplars.\n",
+      "Classifying missing replies and grouping person corrections use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview both stages.\n",
     );
     return 2;
   }
@@ -148,13 +148,14 @@ async function sessionRuns(
   return [...parents.values()];
 }
 
-function renderThemes(themes: Themes, days: number): string {
+function renderThemes(themes: Themes, judged: Judged, days: number): string {
   const recurring = themes.themes.filter((t) => t.recurring);
   const lines = [
     `Last ${days} days · correction themes · ${themes.judge}`,
+    `Reply classification: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
     `${themes.selectedCorrections} of ${themes.eligibleCorrections} person corrections selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
-    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not sent).`,
+    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
     "",
     "Recurring across sessions (representative quotations, not draft rules)",
   ];
@@ -175,12 +176,17 @@ function renderThemes(themes: Themes, days: number): string {
     `${themes.themes.length - recurring.length} groups occur in only one session. Grouping is exploratory, not proof of a cause or an ignored rule.`,
     "Session counts are native IDs, not independent occurrences: copied fork history can inflate evidence.",
   );
+  if (judged.pending)
+    lines.push(
+      `Uncached replies: ${judged.pending} (${judged.pending * 2} classification requests); additional corrections may become eligible for grouping.`,
+    );
   if (themes.pending || themes.blocked)
     lines.push(
-      `Up to ${themes.pending + themes.blocked} grouping requests remain; no uncached reply classifications will be sent.`,
+      `Up to ${themes.pending + themes.blocked} grouping requests remain for currently classified corrections.`,
     );
   for (const warning of themes.warnings) lines.push(`Warning: ${warning}`);
-  for (const failure of themes.failures) lines.push(`Failure: ${failure}`);
+  for (const failure of judged.failures) lines.push(`Classification failure: ${failure.message}`);
+  for (const failure of themes.failures) lines.push(`Grouping failure: ${failure}`);
   return `${lines.join("\n")}\n`;
 }
 

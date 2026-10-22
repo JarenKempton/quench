@@ -115,7 +115,7 @@ test("theme limits select correction dates, not recently modified files containi
   expect(out.themes.excluded.outsideWindowCorrections).toBe(1);
 });
 
-test("themes runs through the actual SDK path independently, then replays with no key or requests", async () => {
+test("themes classifies missing replies before grouping, then replays both caches without requests", async () => {
   const { home, cacheFile, themeFile, sessions } = await fixture();
   const before = await Bun.file(cacheFile).text();
   const history = await Bun.file(join(sessions, "a.jsonl")).text();
@@ -138,8 +138,9 @@ test("themes runs through the actual SDK path independently, then replays with n
   expect(await Bun.file(themeFile).exists()).toBe(false);
   const noKey = await run(home, args);
   expect(noKey.code).toBe(2);
-  expect(noKey.stderr).toContain("Grouping cached person corrections uses Jev");
-  let calls = 0;
+  expect(noKey.stderr).toContain("TYPESAFE_API_KEY");
+  const calls: string[] = [];
+  let grouping = 0;
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
@@ -148,15 +149,28 @@ test("themes runs through the actual SDK path independently, then replays with n
         questions: Record<string, unknown>;
         state: Record<string, unknown>;
       };
-      expect(Object.keys(body.questions)).toEqual(["theme"]);
-      expect(Object.keys(body.state)).toEqual(["correction", "exemplars"]);
-      calls += 1;
+      const question = Object.keys(body.questions)[0]!;
+      expect(Object.keys(body.questions)).toEqual([question]);
+      expect(["kind", "sender", "theme"]).toContain(question);
+      if (question === "kind")
+        expect(body.state).toEqual({ assistant_said: "done", user_reply: "Have you tested it?" });
+      else if (question === "sender")
+        expect(body.state).toEqual({ message: "Have you tested it?" });
+      else expect(Object.keys(body.state)).toEqual(["correction", "exemplars"]);
+      calls.push(question);
       return Response.json({
         model: "local-test-model",
         answers: {
-          theme: {
+          [question]: {
             type: "choice",
-            choice: calls === 1 ? "new" : "t0",
+            choice:
+              question === "kind"
+                ? "correction"
+                : question === "sender"
+                  ? "person"
+                  : grouping++ === 0
+                    ? "new"
+                    : "t0",
             confidence: 1,
             probabilities: {},
           },
@@ -167,41 +181,56 @@ test("themes runs through the actual SDK path independently, then replays with n
   });
   try {
     const env = { TYPESAFE_API_KEY: "local-test-only", TYPESAFE_BASE_URL: server.url.toString() };
+    const preview = await run(
+      home,
+      ["corrections", "--themes", "--days", "36500", "--dry-run"],
+      env,
+    );
+    expect(preview.code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(await Bun.file(cacheFile).text()).toBe(before);
+    expect(await Bun.file(themeFile).exists()).toBe(false);
     const fresh = await run(home, args, env);
     expect(fresh.code).toBe(0);
     const result = JSON.parse(fresh.stdout);
-    expect([calls, result.newlyJudged, result.pending, result.themes.newlyGrouped]).toEqual([
-      2, 0, 1, 2,
-    ]);
-    expect(result.themes.tokens).toEqual({ input: 20, output: 4 });
+    expect(calls).toEqual(["kind", "sender", "theme", "theme", "theme"]);
+    expect(preview.stdout).toContain("Uncached replies: 1 (2 classification requests)");
+    expect([result.newlyJudged, result.pending, result.themes.newlyGrouped]).toEqual([1, 0, 3]);
+    expect(result.tokens).toEqual({ input: 20, output: 4 });
+    expect(result.themes.tokens).toEqual({ input: 30, output: 6 });
     expect(result.themes.themes[0]).toMatchObject({
-      corrections: 2,
-      sessions: 2,
+      corrections: 3,
+      sessions: 3,
       recurring: true,
-      models: ["model-a", "model-b"],
+      models: ["model-a", "model-b", "model-d"],
       classifierModels: ["local-test-model"],
     });
+    expect(result.themes.excluded.unclassifiedReplies).toBe(0);
     const bytes = await Bun.file(themeFile).text();
+    const verdicts = await Bun.file(cacheFile).text();
+    expect(verdicts.startsWith(before)).toBe(true);
+    expect(verdicts.trim().split("\n")).toHaveLength(4);
     for (const environment of [{}, env]) {
       const replay = await run(home, args, environment);
       expect(replay.code).toBe(0);
       const replayed = JSON.parse(replay.stdout);
+      expect([replayed.newlyJudged, replayed.pending]).toEqual([0, 0]);
       expect([
         replayed.themes.cacheHits,
         replayed.themes.newlyGrouped,
         replayed.themes.pending,
-      ]).toEqual([2, 0, 0]);
+      ]).toEqual([3, 0, 0]);
       expect(replayed.themes.themes).toEqual(result.themes.themes);
     }
-    expect(calls).toBe(2);
+    expect(calls).toHaveLength(5);
     expect(await Bun.file(themeFile).text()).toBe(bytes);
-    expect(await Bun.file(cacheFile).text()).toBe(before);
+    expect(await Bun.file(cacheFile).text()).toBe(verdicts);
     expect(await Bun.file(join(sessions, "a.jsonl")).text()).toBe(history);
     const text = await run(home, ["corrections", "--themes", "--days", "36500"]);
-    expect(text.stdout).toContain("2 corrections · 2 sessions");
+    expect(text.stdout).toContain("3 corrections · 3 sessions");
     expect(text.stdout).toContain("representative quotations, not draft rules");
     expect(text.stdout).toContain(`${join(sessions, "a.jsonl")}`);
-    expect(text.stdout).not.toContain("would be sent to Jev in 2 requests");
+    expect(text.stdout).not.toContain("Uncached replies:");
   } finally {
     await server.stop(true);
   }
@@ -230,8 +259,84 @@ test("themes previews leave malformed reply/theme caches unchanged and validate 
   expect((await run(home, ["corrections", "--theme-limit", "2"])).code).toBe(1);
 });
 
+test("classification failures remain visible even when known themes group successfully", async () => {
+  const { home, cacheFile, themeFile } = await fixture();
+  const before = await Bun.file(cacheFile).text();
+  const calls: string[] = [];
+  let grouping = 0;
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: async (request) => {
+      const body = (await request.json()) as { questions: Record<string, unknown> };
+      const question = Object.keys(body.questions)[0]!;
+      calls.push(question);
+      return Response.json({
+        model: "local-test-model",
+        answers: {
+          [question]: {
+            type: "choice",
+            choice:
+              question === "kind"
+                ? "praise"
+                : question === "sender"
+                  ? "person"
+                  : grouping++ === 0
+                    ? "new"
+                    : "t0",
+            confidence: 1,
+            probabilities: {},
+          },
+        },
+        usage: { input_tokens: 10, output_tokens: 2 },
+      });
+    },
+  });
+  try {
+    const failed = await run(home, args, {
+      TYPESAFE_API_KEY: "local-test-only",
+      TYPESAFE_BASE_URL: server.url.toString(),
+    });
+    expect(failed.code).toBe(1);
+    const result = JSON.parse(failed.stdout);
+    expect([result.failed, result.newlyJudged, result.themes.failed]).toEqual([1, 0, 0]);
+    expect(result.themes.excluded.unclassifiedReplies).toBe(1);
+    expect(result.themes.themes[0].corrections).toBe(2);
+    expect(calls).toEqual(["kind", "sender", "theme", "theme"]);
+    expect(await Bun.file(cacheFile).text()).toBe(before);
+    const themes = await Bun.file(themeFile).text();
+    const noKey = await run(home, args);
+    expect(noKey.code).toBe(2);
+    const replayed = JSON.parse(noKey.stdout);
+    expect([replayed.pending, replayed.themes.pending, replayed.themes.cacheHits]).toEqual([
+      1, 0, 2,
+    ]);
+    expect(noKey.stderr).toContain("Classifying missing replies");
+    expect(await Bun.file(cacheFile).text()).toBe(before);
+    expect(await Bun.file(themeFile).text()).toBe(themes);
+    expect(calls).toHaveLength(4);
+    const text = await run(home, ["corrections", "--themes", "--days", "36500"], {
+      TYPESAFE_API_KEY: "local-test-only",
+      TYPESAFE_BASE_URL: server.url.toString(),
+    });
+    expect(text.code).toBe(1);
+    expect(text.stdout).toContain("1 unclassified replies (not grouped)");
+    expect(text.stdout).toContain("Classification failure:");
+    expect(calls).toHaveLength(6);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 test("a grouping service failure is reported without reclassifying replies or assuming later memberships", async () => {
   const { home, cacheFile, themeFile } = await fixture();
+  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  await cache.remember([
+    [
+      { assistantSaid: "done", reply: "Have you tested it?" },
+      { kind: "question", sender: "person", confidence: 1 },
+    ],
+  ]);
   const before = await Bun.file(cacheFile).text();
   let calls = 0;
   const server = Bun.serve({

@@ -38,8 +38,10 @@ retired with it and live in git history.
   outside harness readers, insights and judge. Uncertain matches abstain; unavailable sources
   fall back visibly. Harness evidence wins over host evidence, which wins over model inference.
   Cached model verdicts and their questions stay unchanged.
-- **Themes compare corrective intent; they do not draft rules.** The opt-in themes mode consumes
-  only cached person corrections and uses separate typed model decisions and a separate cache.
+- **Themes compare corrective intent; they do not draft rules.** The opt-in themes mode extends
+  normal reply classification, then groups person corrections with separate typed decisions and
+  a separate cache. Dry runs call neither judge and write neither cache; the grouping limit does
+  not cap the preceding reply classification.
   It groups against bounded, deterministically ordered representative exchanges without a keyword
   taxonomy. Counts and source evidence are local; recurrence requires multiple native sessions.
   Quotations remain quotations, unclear stays ungrouped, and missing/failed sequential decisions

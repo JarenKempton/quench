@@ -96,10 +96,14 @@ it, changes its key or re-asks it.
 
 ### Correction themes
 
-`corrections --themes` loads reply verdicts without compacting or writing their cache, resolves
-senders normally, and selects only cached person corrections. Unclassified replies are not sent
-for classification. Session id, harness, source path and run position survive the reply boundary
-so evidence can count distinct native sessions rather than folders or model calls. `Run.replyAt`
+`corrections --themes` uses the normal reply pipeline: reuse cached verdicts, classify missing
+replies with Jev, resolve senders, then select person corrections for grouping. Host evidence
+establishes authorship, not reply kind; classification remains necessary. Dry runs and no-key
+replays open the verdict cache read-only, without compacting or writing it. Dry runs report
+classification requests separately from grouping requests for already-known corrections; the
+grouping limit does not bound classification. Failures in either stage produce a nonzero exit.
+Session id, harness, source path and run position survive the reply boundary so evidence can count
+distinct native sessions rather than folders or model calls. `Run.replyAt`
 preserves the following user message's own timestamp without changing run boundaries or inferring
 it from subsequent activity. Themes filters by this timestamp before limiting inputs; unknown
 reply timestamps are excluded and reported separately.
