@@ -5,12 +5,14 @@ import { THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
 import { report } from "./commands/report.ts";
 import { runs } from "./commands/runs.ts";
+import { steering } from "./commands/steering.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
 
 Usage:
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
+  quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        how often you corrected the agent, and what came before
     --themes                          also group person corrections by corrective intent (opt-in Jev calls)
@@ -71,6 +73,9 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
 }
 
 switch (command) {
+  case "steering":
+    process.exitCode = await steering(home, rest, { json: values.json });
+    break;
   case "report":
     process.exitCode = await report(home, { days, json: values.json });
     break;

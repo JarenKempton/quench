@@ -19,11 +19,12 @@ Claude Code
 
 ## Commands
 
-| Command                               | What it shows                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------- |
-| `quench report [--days 30] [--json]`  | Per harness: starting load, peak context, compactions, tool errors, models and effort |
-| `quench runs <session-file> [--json]` | One session as prompt → what the agent did → your reply                               |
-| `quench corrections [--dry-run]`      | How often you corrected the agent, and what came before. Opt-in, see below            |
+| Command                                  | What it shows                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
+| `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
+| `quench corrections [--dry-run]`         | How often you corrected the agent, and what came before. Opt-in, see below            |
+| `quench steering <project-dir> [--json]` | Current instruction-file inventory and source rule candidates; offline                |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
@@ -98,6 +99,37 @@ Changing the window or earlier representatives can require new grouping decision
 outputs are reproducible; the moving `jev-latest` alias is not an accuracy guarantee. No steering
 files or histories are edited, no prose drafts are generated, and no live semantic-accuracy claim
 is implied by local replay tests.
+
+## Current steering inventory
+
+```sh
+quench steering /path/to/project --json
+```
+
+Requires an explicit existing directory. The Claude Code, Codex and Pi adapters enumerate
+built-in instruction filenames in their user locations and the directory's ancestor chain;
+Codex stops at the nearest `.git` directory or worktree marker, or checks only the selected
+directory outside a repository. Claude Code also scans ancestor/user `.claude/rules` trees.
+Harness directory environment overrides work just as they do for session discovery.
+Candidate names follow [Claude Code's memory docs](https://code.claude.com/docs/en/memory),
+[Codex's AGENTS.md docs](https://learn.chatgpt.com/docs/agent-configuration/agents-md), and
+Pi's installed `loadProjectContextFiles` implementation. Their effective-loading behavior
+is deliberately not reproduced by this inventory.
+
+The report merges byte-identical files by SHA-256 while retaining each harness, encountered
+path, canonical path and user/ancestor/project scope. The same bytes have the same identity
+across worktree paths; other worktrees are not searched. Rule candidates are original bullets
+or paragraphs with line ranges, not semantic judgments. Headings, frontmatter and fenced code
+are omitted; scope conditions remain in the source file and are not interpreted.
+
+**This is current-disk evidence, not an effective or historical load report.** Both ordinary
+and override candidates remain visible: precedence, settings, imports, custom fallback names,
+managed policy, auto memory and runtime overrides are not resolved. Descendant instruction
+files are not searched. No result establishes an ignored rule or a preference never written.
+Unreadable/oversized sources, cycles and exhausted limits produce warnings. Reads are bounded
+to 256 KiB per file, 256 files, 256 physical rule directories and 1,024 directory paths
+(including symlink aliases). The command makes no model calls,
+reads no session/host history, and writes no files or caches, even when a key is configured.
 
 ## Status
 

@@ -46,6 +46,11 @@ retired with it and live in git history.
   taxonomy. Counts and source evidence are local; recurrence requires multiple native sessions.
   Quotations remain quotations, unclear stays ungrouped, and missing/failed sequential decisions
   block dependent work. No claim about ignored or unwritten rules is made without steering evidence.
+- **Steering inventory is current evidence, not historical attribution.** Adapters own native
+  candidate locations; the offline scanner deduplicates exact bytes and preserves source
+  paths, scopes and bullet/paragraph locations. Candidate presence does not prove effective
+  loading. Precedence, conditions, imports and historical snapshots are not resolved, so no
+  ignored-rule or never-written claim follows. Inventory never writes or calls a model.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

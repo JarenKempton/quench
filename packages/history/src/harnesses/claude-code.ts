@@ -3,6 +3,7 @@ import { z } from "zod";
 import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
@@ -98,6 +99,27 @@ const HARNESS_NOTES = ["Caveat:", "[Request interrupted by user"];
 export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
   label: "Claude Code",
+
+  async steering(home, project) {
+    const user = home.pathFrom("CLAUDE_CONFIG_DIR", ".claude");
+    const roots: SteeringRoot[] = [
+      { path: join(user, "CLAUDE.md"), scope: "user" },
+      { path: join(user, "rules"), scope: "user", directory: true },
+    ];
+    for (const dir of await ancestorDirs(project)) {
+      const scope = dir === project ? "project" : "ancestor";
+      for (const name of [
+        "CLAUDE.md",
+        ".claude/CLAUDE.md",
+        "CLAUDE.local.md",
+        "AGENTS.md",
+        ".claude/AGENTS.md",
+      ])
+        roots.push({ path: join(dir, name), scope });
+      roots.push({ path: join(dir, ".claude/rules"), scope, directory: true });
+    }
+    return roots;
+  },
 
   async discover(home: Home): Promise<SessionRef[]> {
     const projects = join(home.pathFrom("CLAUDE_CONFIG_DIR", ".claude"), "projects");

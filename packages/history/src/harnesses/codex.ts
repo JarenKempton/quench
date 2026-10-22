@@ -3,6 +3,7 @@ import { z } from "zod";
 import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
 
@@ -67,6 +68,18 @@ const INJECTED_HEADINGS = ["# AGENTS.md instructions"];
 export const codex: Harness<"codex"> = {
   id: "codex",
   label: "Codex",
+
+  async steering(home, project) {
+    const user = home.pathFrom("CODEX_HOME", ".codex");
+    const roots: SteeringRoot[] = [
+      { path: join(user, "AGENTS.override.md"), scope: "user" },
+      { path: join(user, "AGENTS.md"), scope: "user" },
+    ];
+    for (const dir of await ancestorDirs(project, true))
+      for (const name of ["AGENTS.override.md", "AGENTS.md"])
+        roots.push({ path: join(dir, name), scope: dir === project ? "project" : "ancestor" });
+    return roots;
+  },
 
   async discover(home: Home): Promise<SessionRef[]> {
     const sessions = join(home.pathFrom("CODEX_HOME", ".codex"), "sessions");

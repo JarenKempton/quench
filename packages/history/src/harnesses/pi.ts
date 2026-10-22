@@ -3,6 +3,7 @@ import { z } from "zod";
 import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, jsonlLines, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
 
@@ -66,6 +67,17 @@ export const Item = z.looseObject({
 export const pi: Harness<"pi"> = {
   id: "pi",
   label: "Pi",
+
+  async steering(home, project) {
+    const user = home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent");
+    const roots: SteeringRoot[] = [];
+    const names = ["AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"];
+    for (const name of names) roots.push({ path: join(user, name), scope: "user" });
+    for (const dir of await ancestorDirs(project))
+      for (const name of names)
+        roots.push({ path: join(dir, name), scope: dir === project ? "project" : "ancestor" });
+    return roots;
+  },
 
   async discover(home: Home): Promise<SessionRef[]> {
     const sessions = join(home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent"), "sessions");
