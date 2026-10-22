@@ -118,7 +118,10 @@ function baseRef(root: string): string | null {
 }
 
 function git(cwd: string, ...args: string[]): string | null {
-  const result = Bun.spawnSync(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "ignore" });
+  const result = Bun.spawnSync(["git", "--no-optional-locks", "-C", cwd, ...args], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   return result.success ? result.stdout.toString() : null;
 }
 
