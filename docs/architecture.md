@@ -94,6 +94,42 @@ output distinguishes harness evidence, host evidence, model inference and unreso
 The cached verdict remains the model's answer; resolving the effective sender never overwrites
 it, changes its key or re-asks it.
 
+### Correction themes
+
+`corrections --themes` uses the normal reply pipeline: reuse cached verdicts, classify missing
+replies with Jev, resolve senders, then select person corrections for grouping. Host evidence
+establishes authorship, not reply kind; classification remains necessary. Dry runs and no-key
+replays open the verdict cache read-only, without compacting or writing it. Dry runs report
+classification requests separately from grouping requests for already-known corrections; the
+grouping limit does not bound classification. Failures in either stage produce a nonzero exit.
+Session id, harness, source path and run position survive the reply boundary so evidence can count
+distinct native sessions rather than folders or model calls. `Run.replyAt`
+preserves the following user message's own timestamp without changing run boundaries or inferring
+it from subsequent activity. Themes filters by this timestamp before limiting inputs; unknown
+reply timestamps are excluded and reported separately.
+
+`groupCorrections` in judge consumes generic replies and a separate typed `ThemeJudge`. It sorts
+oldest-first with harness/session/run tie-breakers, consolidates exact exchanges while retaining
+occurrences, and caps unique inputs at 20 by default (configurable up to 50). Each decision chooses
+an existing exemplar, a new clear intent, or unclear. The same specific corrective intent is
+required; vocabulary and setup names are not an algorithmic grouping signal. Only clipped exchange
+text reaches Jev (assistant tail 500, correction head 1,000 Unicode code points), not source metadata.
+
+`ThemeCache` is separate from reply verdicts, append-only for new validated decisions and read-only
+on open. Its hash includes judge version and the exact question, choices, current excerpt and
+ordered exemplars. Cache values include the returned classifier model, not derived aggregates.
+Failures are not cached; one failed or missing assignment stops dependent work. A dry run replays
+only the known prefix and reports later decisions as blocked, never hypothetical cache hits. The
+Jev adapter disables retries and bounds requests to 10 seconds each and 60 seconds overall.
+
+Evidence is aggregated locally: occurrences, distinct `(harness, sessionId)` sessions, last known
+preceding-run models, missing-model counts, sender sources and source examples. Recurrence means
+at least two distinct sessions; single-session groups remain in JSON. Labels are representative
+quotations, not generated titles or rules. This is exploratory, order-dependent matching to one
+exemplar, not all-pairs equivalence or evidence of what steering instructions were loaded. Native
+session IDs are not independent occurrences: inherited conversation prefixes in forks are not
+identified and may inflate evidence; both terminal and JSON expose this limitation.
+
 ## Reading at scale
 
 `readSessions` streams one session at a time with a small concurrency limit, and each

@@ -11,6 +11,9 @@ import { openT3History } from "@quench/history/hosts/t3";
 import { linkSubagents, runs } from "@quench/insights";
 import {
   Jev,
+  JevThemes,
+  groupCorrections,
+  ThemeCache,
   judgeReplies,
   KeyRejected,
   summarize,
@@ -19,6 +22,7 @@ import {
   type SessionRuns,
   type Summary,
   type Tally,
+  type Themes,
 } from "@quench/judge";
 import { json, quote, runFacts } from "../format.ts";
 
@@ -36,26 +40,29 @@ type Options = {
   json: boolean;
   dryRun: boolean;
   hostHistory?: string | false;
+  themes: boolean;
+  themeLimit: number;
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const jev = options.dryRun ? null : Jev.fromEnv();
-  if (!options.dryRun && !jev) {
+  const replyJudge = options.dryRun ? null : Jev.fromEnv();
+  if (!options.dryRun && !options.themes && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
   }
-  const cache = await VerdictCache.open(join(home.dir, ".quench/local/judgments.jsonl"), Jev.id);
+  const cache = await VerdictCache.open(
+    join(home.dir, ".quench/local/judgments.jsonl"),
+    Jev.id,
+    replyJudge === null,
+  );
   const host =
     options.hostHistory === false
       ? null
       : openT3History(options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"));
   let sessions: SessionRuns[];
+  const since = new Date(Date.now() - options.days * 86_400_000);
   try {
-    sessions = await sessionRuns(
-      home,
-      new Date(Date.now() - options.days * 86_400_000),
-      host?.enrich,
-    );
+    sessions = await sessionRuns(home, since, host?.enrich);
   } finally {
     host?.close();
   }
@@ -63,14 +70,23 @@ export async function corrections(home: Home, options: Options): Promise<number>
   for (const warning of warnings) process.stderr.write(`${warning}\n`);
   let judged: Judged;
   try {
-    judged = await judgeReplies(sessions, cache, jev);
+    judged = await judgeReplies(sessions, cache, replyJudge);
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
     process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
   const summary = summarize(judged.replies, options.examples);
-  const tokens = jev?.tokens ?? null;
+  const themeJudge = options.themes && !options.dryRun ? JevThemes.fromEnv() : null;
+  const themes = options.themes
+    ? await groupCorrections(
+        judged.replies,
+        await ThemeCache.open(join(home.dir, ".quench/local/themes.jsonl"), JevThemes.id),
+        themeJudge,
+        { limit: options.themeLimit, examples: options.examples, since },
+      )
+    : null;
+  const tokens = replyJudge?.tokens ?? null;
   process.stdout.write(
     options.json
       ? json({
@@ -82,6 +98,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
           tokens,
           warnings,
           ...summary,
+          ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
           latest: summary.latest.map((r) => ({
             harness: r.harness,
             folder: folder(r.cwd),
@@ -90,8 +107,17 @@ export async function corrections(home: Home, options: Options): Promise<number>
             run: r.run,
           })),
         })
-      : render(summary, judged, options.days, cache.judge, tokens),
+      : themes
+        ? renderThemes(themes, judged, options.days)
+        : render(summary, judged, options.days, cache.judge, tokens),
   );
+  if (themes && (themes.failed || judged.failures.length)) return 1;
+  if (themes && !options.dryRun && !replyJudge && (judged.pending || themes.pending)) {
+    process.stderr.write(
+      "Classifying missing replies and grouping person corrections use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview both stages.\n",
+    );
+    return 2;
+  }
   return 0;
 }
 
@@ -110,6 +136,8 @@ async function sessionRuns(
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
       parents.set(`${s.harness}:${s.id}`, {
+        id: s.id,
+        path: s.path,
         harness: s.harness,
         cwd: s.cwd,
         runs: runs(enrich?.(s) ?? s),
@@ -118,6 +146,48 @@ async function sessionRuns(
   }
   for (const [key, session] of parents) linkSubagents(session.runs, childStarts.get(key) ?? []);
   return [...parents.values()];
+}
+
+function renderThemes(themes: Themes, judged: Judged, days: number): string {
+  const recurring = themes.themes.filter((t) => t.recurring);
+  const lines = [
+    `Last ${days} days · correction themes · ${themes.judge}`,
+    `Reply classification: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
+    `${themes.selectedCorrections} of ${themes.eligibleCorrections} person corrections selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
+    `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
+    `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.automationCorrections} automation corrections · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
+    "",
+    "Recurring across sessions (representative quotations, not draft rules)",
+  ];
+  if (!recurring.length) lines.push("  None established in the processed evidence.");
+  for (const theme of recurring) {
+    lines.push(
+      `  ${theme.corrections} corrections · ${theme.sessions} sessions · preceding-run models: ${theme.models.join(", ") || "unknown"} (${theme.unknownModels} unknown)`,
+      `    ${quote(theme.representative)}`,
+      `    Senders: ${theme.senderSources.harness} harness · ${theme.senderSources.host} host · ${theme.senderSources.judge} model-inferred`,
+    );
+    for (const example of theme.examples)
+      lines.push(
+        `      ${example.harness}:${example.sessionId} run ${example.position} · ${example.path}  ${quote(example.reply)}`,
+      );
+  }
+  lines.push(
+    "",
+    `${themes.themes.length - recurring.length} groups occur in only one session. Grouping is exploratory, not proof of a cause or an ignored rule.`,
+    "Session counts are native IDs, not independent occurrences: copied fork history can inflate evidence.",
+  );
+  if (judged.pending)
+    lines.push(
+      `Uncached replies: ${judged.pending} (${judged.pending * 2} classification requests); additional corrections may become eligible for grouping.`,
+    );
+  if (themes.pending || themes.blocked)
+    lines.push(
+      `Up to ${themes.pending + themes.blocked} grouping requests remain for currently classified corrections.`,
+    );
+  for (const warning of themes.warnings) lines.push(`Warning: ${warning}`);
+  for (const failure of judged.failures) lines.push(`Classification failure: ${failure.message}`);
+  for (const failure of themes.failures) lines.push(`Grouping failure: ${failure}`);
+  return `${lines.join("\n")}\n`;
 }
 
 function render(

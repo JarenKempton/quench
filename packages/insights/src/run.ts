@@ -12,6 +12,7 @@ export type Run = {
   promptOrigin: Origin | null;
   promptSender: SenderEvidence | null;
   reply: string | null;
+  replyAt: Date | null;
   replyOrigin: Origin | null;
   replySender: SenderEvidence | null;
   assistantSaid: string | null;
@@ -33,6 +34,7 @@ const emptyRun = (): Run => ({
   promptOrigin: null,
   promptSender: null,
   reply: null,
+  replyAt: null,
   replyOrigin: null,
   replySender: null,
   assistantSaid: null,
@@ -61,6 +63,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
     switch (event.type) {
       case "message":
         if (event.author === "user") {
+          run.replyAt = event.at;
           run = {
             ...emptyRun(),
             prompt: event.text,

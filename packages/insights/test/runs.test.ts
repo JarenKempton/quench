@@ -52,6 +52,7 @@ test("a run spans one prompt and links the reply that followed", () => {
   const summary = runs(parent, [child]).map((r) => ({
     prompt: r.prompt,
     reply: r.reply,
+    replyAt: r.replyAt,
     assistantSaid: r.assistantSaid,
     inferences: r.inferences,
     context: [r.contextStart, r.contextPeak],
@@ -64,6 +65,7 @@ test("a run spans one prompt and links the reply that followed", () => {
     {
       prompt: "build it",
       reply: "no, the other file",
+      replyAt: at(60),
       assistantSaid: "done",
       inferences: 2,
       context: [20_000, 26_000],
@@ -75,6 +77,7 @@ test("a run spans one prompt and links the reply that followed", () => {
     {
       prompt: "no, the other file",
       reply: "thanks",
+      replyAt: at(120),
       assistantSaid: null,
       inferences: 1,
       context: [30_000, 30_000],
@@ -84,6 +87,19 @@ test("a run spans one prompt and links the reply that followed", () => {
       seconds: 1,
     },
   ]);
+});
+
+test("a missing reply timestamp is not inferred from the next run's activity", () => {
+  const list = runs(
+    session("unknown", null, [
+      say(0, "user", "work"),
+      call(1, 100, "model", "high"),
+      { ...say(2, "user", "correction"), at: null },
+      call(3, 100, "model", "high"),
+    ]),
+  );
+  expect(list[0]!.replyAt).toBeNull();
+  expect(list[1]!.startedAt).toEqual(at(3));
 });
 
 test("the report weighs the starting load against everything processed", () => {

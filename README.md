@@ -43,6 +43,62 @@ unmatched messages fall back to the judge. Imported `user/server` records are no
 authorship. This uses T3's current internal format, not a stable public API. It does not change
 cached judgments or send host records to Jev. `report` and `runs` do not read host history.
 
+## Recurring correction themes
+
+```sh
+quench corrections --themes --dry-run --json
+quench corrections --themes --theme-limit 20
+```
+
+`--themes` adds grouping to the normal corrections pipeline: reuse cached verdicts, classify
+missing replies with Jev, resolve sender attribution, then group person-attributed corrections.
+T3 evidence can establish who sent a reply, not whether it is a correction; Jev still determines
+reply kind. Automation corrections, unresolved senders and failed or pending classifications
+are counted separately in the theme coverage.
+
+Grouping is a separate opt-in Jev choice question using `TYPESAFE_API_KEY`. Each exchange
+is compared with earlier representative exchanges for the **same specific corrective intent**,
+not just a shared topic. The output quotes a representative correction; it does not generate a
+rule or infer which instructions existed. Counts, distinct sessions, preceding-run model labels,
+sender-attribution sources and source examples are computed locally. Model-inferred people
+remain labeled as such. A group is labeled recurring only across at least two distinct sessions;
+single-session groups remain available in JSON. A run's model is its last recorded model, not
+necessarily every model used in that run.
+
+The grouping default is the oldest **20 unique exchanges** in the selected period; `--theme-limit`
+accepts 1–50. This limits grouping, not the preceding reply classification: each uncached reply
+uses two classification requests, just as ordinary `corrections` does. Preview that workload
+with `--dry-run` before a paid run; additional grouping work cannot be known until those replies
+are classified. Exact duplicate exchanges share a grouping decision but retain their separate
+evidence occurrences.
+The window uses the correction message's own timestamp, not file modification or preceding-run
+end time; corrections with unknown timestamps are excluded and counted separately. Coverage and
+omitted counts are always shown. Each model-visible exchange is clipped to the
+last 500 assistant characters and first 1,000 correction characters (Unicode code points),
+including exemplars. Session paths, IDs, model labels and host records are not sent. At most one
+request is made per selected unique exchange, with no retries, a 10-second per-request timeout
+and a 60-second total grouping budget. `--examples` limits source examples, not analysis inputs.
+
+Decisions have a separate cache at `~/.quench/local/themes.jsonl`, keyed by grouping version and
+exact question, choices and ordered bounded exchanges. Counts are rebuilt from current evidence;
+reply classifications retain their existing cache and grouping has its own. Fully cached results
+need no key; without a key, missing work is reported with exit code 2. `--dry-run` makes no model
+calls and writes neither cache. It reports pending classification requests and groups only known
+person corrections, replaying the cached grouping prefix before marking the first missing decision
+pending and later inputs blocked. Their exemplar lists are not yet known. Failed assignments stop
+the sequence without guessing later memberships; unclear assignments remain ungrouped. A failure
+in either stage returns exit code 1, even if other known corrections can still be grouped.
+
+These are exploratory, order-dependent representative matches—not proof that all group members
+are equivalent, that a rule was ignored, or that the selected window covers every recurring issue.
+Session counts are distinct native IDs, **not independent occurrences**: copied history in forks
+can inflate both correction and session evidence. Inherited fork messages are not identified yet;
+this limitation is also shown in terminal and JSON output.
+Changing the window or earlier representatives can require new grouping decisions. Cached model
+outputs are reproducible; the moving `jev-latest` alias is not an accuracy guarantee. No steering
+files or histories are edited, no prose drafts are generated, and no live semantic-accuracy claim
+is implied by local replay tests.
+
 ## Status
 
 Early and changing. Direction and scope: [#45](https://github.com/JarenKempton/quench/issues/45).

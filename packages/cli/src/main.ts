@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { Home } from "@quench/history";
+import { THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
 import { report } from "./commands/report.ts";
 import { runs } from "./commands/runs.ts";
@@ -12,6 +13,8 @@ Usage:
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        how often you corrected the agent, and what came before
+    --themes                          also group person corrections by corrective intent (opt-in Jev calls)
+    --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 `;
@@ -22,6 +25,8 @@ const { positionals, values } = parseArgs({
     days: { type: "string", default: "30" },
     examples: { type: "string", default: "10" },
     "dry-run": { type: "boolean", default: false },
+    themes: { type: "boolean", default: false },
+    "theme-limit": { type: "string" },
     "host-history": { type: "string" },
     "no-host-history": { type: "boolean", default: false },
     json: { type: "boolean", default: false },
@@ -33,6 +38,7 @@ const home = Home.fromEnv();
 const [command, ...rest] = positionals;
 const days = Number(values.days);
 const examples = Number(values.examples);
+const themeLimit = Number(values["theme-limit"] ?? THEME_LIMIT);
 
 if (values.help || !command) {
   process.stdout.write(USAGE);
@@ -51,6 +57,19 @@ if (!Number.isInteger(examples) || examples < 0) {
   process.exit(1);
 }
 
+if (values.themes && command !== "corrections") {
+  process.stderr.write("--themes is only available for corrections\n");
+  process.exit(1);
+}
+if (values["theme-limit"] !== undefined && !values.themes) {
+  process.stderr.write("--theme-limit requires --themes\n");
+  process.exit(1);
+}
+if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LIMIT) {
+  process.stderr.write(`--theme-limit must be a whole number between 1 and ${MAX_THEME_LIMIT}\n`);
+  process.exit(1);
+}
+
 switch (command) {
   case "report":
     process.exitCode = await report(home, { days, json: values.json });
@@ -61,6 +80,8 @@ switch (command) {
       examples,
       json: values.json,
       dryRun: values["dry-run"],
+      themes: values.themes,
+      themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
         : values["host-history"]

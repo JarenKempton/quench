@@ -3,24 +3,38 @@ import { statSync } from "node:fs";
 import { z } from "zod";
 import type { HarnessId, SenderEvidence, Session, SessionEnricher } from "../model.ts";
 
+/** T3's projected link between a host conversation and a harness-native session. */
 const ProviderThread = z.object({
+  /** T3 conversation ID; used to find messages belonging to this host thread. */
   appThreadId: z.string(),
+  /** Native session reference, when T3 recorded one; absent references cannot establish a match. */
   nativeThreadRef: z
     .object({
+      /** T3's provider driver name, mapped here to a harness ID rather than exposed to analysis. */
       driver: z.string(),
+      /** Session ID from the harness's own history, not the T3 conversation ID. */
       nativeId: z.string(),
+      /** Only `strong` links are eligible; other values do not establish session ownership. */
       strength: z.string(),
     })
     .nullish(),
 });
 
+/** T3 message provenance; a `user` transport role alone does not establish human authorship. */
 const Message = z.object({
+  /** T3's message ID, retained as evidence; it is not a shared native-harness message ID. */
   id: z.string(),
+  /** Owning T3 conversation; must agree with the linked provider thread. */
   threadId: z.string(),
+  /** Transport role; only `user` messages are candidates for sender enrichment. */
   role: z.string(),
+  /** Exact message text; repeated or nonidentical text is not matched heuristically. */
   text: z.string(),
+  /** Host creation time, parsed and compared with the harness timestamp during matching. */
   createdAt: z.string(),
+  /** Explicit `agent` means automation; `user` requires a trusted interactive creation source. */
   createdBy: z.string().optional(),
+  /** `web` or `mobile` corroborates `user`; imported `server` records do not prove a person typed them. */
   creationSource: z.string().optional(),
 });
 

@@ -5,16 +5,25 @@ import { jsonlLines } from "@quench/history";
 import { z } from "zod";
 import { Verdict, type Exchange } from "./verdict.ts";
 
-const Line = z.object({ judge: z.string(), key: z.string(), verdict: Verdict });
+/** One persisted reply classification in judgments.jsonl, separate from theme-grouping decisions. */
+const Line = z.object({
+  /** Judge identity, including its model and reply-question version. */
+  judge: z.string(),
+  /** SHA-256 of length-prefixed judge identity, full assistant text and full reply text. */
+  key: z.string(),
+  /** The original model answer, not the effective sender after harness/host evidence is applied. */
+  verdict: Verdict,
+});
 
 export class VerdictCache {
   private constructor(
     readonly path: string,
     readonly judge: string,
     private readonly known: Map<string, Verdict>,
+    private readonly readOnly: boolean,
   ) {}
 
-  static async open(path: string, judge: string): Promise<VerdictCache> {
+  static async open(path: string, judge: string, readOnly = false): Promise<VerdictCache> {
     const known = new Map<string, Verdict>();
     const diagnostics = { lines: 0, unparsed: 0 };
     if (await Bun.file(path).exists()) {
@@ -22,8 +31,8 @@ export class VerdictCache {
         if (line.judge === judge) known.set(line.key, line.verdict);
       }
     }
-    const cache = new VerdictCache(path, judge, known);
-    if (known.size < diagnostics.lines) await cache.rewrite();
+    const cache = new VerdictCache(path, judge, known, readOnly);
+    if (!readOnly && known.size < diagnostics.lines) await cache.rewrite();
     return cache;
   }
 
@@ -37,6 +46,7 @@ export class VerdictCache {
 
   async remember(fresh: readonly (readonly [Exchange, Verdict])[]): Promise<void> {
     if (fresh.length === 0) return;
+    if (this.readOnly) throw new Error("Cannot write to a read-only verdict cache");
     const lines = fresh.map(([exchange, verdict]) => {
       const key = this.key(exchange);
       this.known.set(key, verdict);
