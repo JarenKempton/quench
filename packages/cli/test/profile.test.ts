@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -96,8 +96,8 @@ test("profile with no arguments finds projects from session directories and grou
       "  ~/.codex/AGENTS.md   21 B  Codex",
       "",
       "Projects · 1 git repository · project instruction size per agent",
-      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Path",
-      "  app             3  today             22 B   22 B  AGENTS.md          ~/code/app",
+      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Worktrees   Path",
+      "  app             3  today             22 B   22 B  AGENTS.md          1 · 0 idle  ~/code/app",
       "",
       "Other folders · 1 folder outside git · 1 session",
       "  Project  Sessions  Last used   Claude Code  Codex  Instruction files  Path",
@@ -189,4 +189,60 @@ test("profile rejects a scan directory that does not exist", async () => {
   const { code, stderr } = await quench(home, "--scan", join(home, "nope"));
   expect(code).toBe(1);
   expect(stderr).toContain("nope");
+});
+
+test("worktrees lists idle worktrees safe to remove and why others are kept, without removing any", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-worktrees-")));
+  const repo = join(home, "code/app");
+  const wt = (name: string) => join(home, "wt", name);
+  await mkdir(repo, { recursive: true });
+  git(repo, "init");
+  git(repo, "commit", "--allow-empty", "-m", "init");
+  for (const name of ["active", "merged", "dirty", "unmerged", "locked", "gone"])
+    git(repo, "worktree", "add", "-b", name, wt(name));
+  git(wt("unmerged"), "commit", "--allow-empty", "-m", "work");
+  await Bun.write(join(wt("dirty"), "notes.txt"), "draft\n");
+  git(repo, "worktree", "lock", wt("locked"));
+  await rm(wt("gone"), { recursive: true });
+  const sessions = join(home, ".codex/sessions/2026/10/20");
+  await codexSession(sessions, "a", wt("active"));
+  await codexSession(sessions, "b", repo);
+
+  const profile = await quench(home);
+  expect(profile.stdout).toContain("6 · 4 idle");
+  expect(profile.stdout).toContain("`quench worktrees` shows which are safe to remove.");
+
+  const text = await quench(home, "worktrees");
+  expect(text.code).toBe(0);
+  expect(text.stdout).toContain(
+    [
+      "~/code/app · 6 linked worktrees · 1 active · 4 idle · base main",
+      "  Safe to remove (1):",
+      "    git -C ~/code/app worktree remove ~/wt/merged   # merged",
+      "  Idle but kept (3):",
+      "    ~/wt/dirty   # dirty · uncommitted or untracked changes",
+      "    ~/wt/locked   # locked · locked",
+      "    ~/wt/unmerged   # unmerged · branch not merged into main",
+      "  Folders already gone (1): git -C ~/code/app worktree prune",
+    ].join("\n"),
+  );
+
+  const { stdout } = await quench(home, "worktrees", "--json");
+  const [checked] = JSON.parse(stdout).repositories;
+  expect(
+    checked.worktrees.map((w: { branch: string; active: boolean; removable: boolean }) => [
+      w.branch,
+      w.active,
+      w.removable,
+    ]),
+  ).toEqual([
+    ["active", true, false],
+    ["dirty", false, false],
+    ["gone", false, false],
+    ["locked", false, false],
+    ["merged", false, true],
+    ["unmerged", false, false],
+  ]);
+  for (const name of ["active", "merged", "dirty", "unmerged", "locked"])
+    expect(await Bun.file(join(wt(name), ".git")).exists()).toBe(true);
 });
