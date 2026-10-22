@@ -11,6 +11,7 @@ async function runWithEnv(home: string, args: string[], env: Record<string, stri
   const proc = Bun.spawn(["bun", main, "steering", ...args], {
     env: {
       ...process.env,
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
       HOME: home,
       CLAUDE_CONFIG_DIR: join(home, "claude-config"),
       CODEX_HOME: join(home, "codex-config"),
