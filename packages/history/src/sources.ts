@@ -82,9 +82,9 @@ export function sourceTrace(session: Session) {
     warnings.push(
       "This adapter does not yet trace native file reads; an empty report does not mean no sources were read.",
     );
-  if (injected === "unrecorded")
+  if (!instructions.length && !unreadableInstructions)
     warnings.push(
-      "This harness does not record injected instructions in session history; an empty list does not mean none were loaded.",
+      "No injected instructions are recorded in this session. Older harness versions did not record them, so this does not mean none were loaded.",
     );
   if (unreadableInstructions)
     warnings.push(
@@ -118,7 +118,7 @@ export function sourceTrace(session: Session) {
     warnings,
     limitations: [
       "Only recorded native text-file reads are traced. Shell/MCP reads, imports and skill loading are not reconstructed.",
-      "Injected instructions are the text the harness recorded adding to context, hashed as recorded. Claude Code records each file; Codex records one combined block per directory without file boundaries; Pi records none. Recorded text is not proof a rule was followed or survived compaction.",
+      "Injected instructions are the text the harness recorded adding to context, hashed as recorded, including entries re-injected after compaction or inherited by a fork. Claude Code and Pi record each file; Codex records one combined block per directory without file boundaries. Harnesses may process text before injecting it (Claude Code strips HTML comments), so hashes need not match the file's bytes. Recorded text is not proof a rule was followed.",
       "Returned output is transcript evidence, not proof it was used, obeyed or retained after compaction. Reported line ranges do not guarantee complete file delivery.",
       "No current source files are opened. Hashes identify recorded tool text, including wrappers, not source-file bytes.",
     ],

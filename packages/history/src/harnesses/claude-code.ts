@@ -43,6 +43,8 @@ export const ApiMessage = z.looseObject({
 const Line = z.looseObject({
   /** Line kind: `user`, `assistant` and `system` carry the conversation; others (`attachment`, `ai-title`, `queue-operation`…) are host bookkeeping. */
   type: z.string(),
+  /** Line id; Claude Code occasionally writes the same line twice. */
+  uuid: z.string().nullish(),
   /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
   /** Working directory the session ran in. */
@@ -96,7 +98,7 @@ const InstructionFile = z.looseObject({
   type: z.string().nullish(),
   /** Text as injected, after Claude Code's own processing; may differ from the file's bytes. */
   content: z.string(),
-  /** On nested files: true when the injected text differed from the file on disk at the time. */
+  /** True when the injected text differs from the file's raw bytes, e.g. after Claude Code strips HTML comments. */
   contentDiffersFromDisk: z.boolean().nullish(),
 });
 
@@ -183,9 +185,14 @@ export const claudeCode: Harness<"claude-code"> = {
     const diagnostics: Diagnostics = { lines: 0, unparsed: 0 };
     const events: Event[] = [];
     const inferenceAt = new Map<string, number>();
+    const attachments = new Set<string>();
     let cwd: string | null = null;
     for await (const line of jsonlLines(r.path, Line, diagnostics)) {
       cwd ??= line.cwd ?? null;
+      if (line.type === "attachment" && line.uuid) {
+        if (attachments.has(line.uuid)) continue;
+        attachments.add(line.uuid);
+      }
       const at = date(line.timestamp);
       for (const kind of eventsOf(line)) {
         const id = line.message?.id;
@@ -247,7 +254,7 @@ function instructions(raw: unknown): EventKind[] {
             label: file.data.type ?? null,
             textSha256: sha256(file.data.content),
             textChars: file.data.content.length,
-            differsFromDisk: file.data.contentDiffersFromDisk ?? null,
+            textDiffersFromFile: file.data.contentDiffersFromDisk ?? null,
           },
         ]
       : [];

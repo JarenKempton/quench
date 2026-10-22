@@ -40,7 +40,7 @@ export type InjectedInstruction = {
   label: string | null;
   textSha256: string;
   textChars: number;
-  differsFromDisk: boolean | null;
+  textDiffersFromFile: boolean | null;
 };
 
 export type EventKind =

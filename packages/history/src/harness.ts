@@ -14,7 +14,7 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   readonly id: Id;
   readonly label: string;
   readonly sourceReads: boolean;
-  readonly injectedInstructions: "per-file" | "combined" | "unrecorded";
+  readonly injectedInstructions: "per-file" | "combined";
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
   steering(home: Home, project: string): Promise<SteeringRoot[]>;

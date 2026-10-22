@@ -168,12 +168,14 @@ and unmatched file results warn; other tool calls remain visible as an unattribu
 The same report lists **instructions the harness recorded injecting** into context, with their
 timestamp, path, native label (for example Claude Code's `User`, `Project`, `Local`, `AutoMem`)
 and a SHA-256 of the recorded text. Claude Code records each file at session start and each
-subdirectory file loaded on demand, and flags text that differed from disk at the time. Codex
-records one combined `AGENTS.md instructions` block per directory, without file boundaries, so
-its path stays unknown. Pi does not persist injected context; its report says so instead of
-showing an empty list as evidence. Malformed instruction entries are counted and warned.
-Recorded instructions show what was in context, not that a rule was followed or survived
-compaction.
+subdirectory file loaded on demand; it flags text it processed before injecting (for example
+stripped HTML comments), so those hashes won't match the file's bytes. Pi records each context
+file in its system-prompt `project_context` section. Codex records one combined
+`AGENTS.md instructions` block per directory, without file boundaries, so its path stays
+unknown. Instructions re-injected after a compaction, or inherited by a forked session, are
+listed at that point. A session with none gets a warning, since older harness versions didn't
+record them. Malformed entries are counted and warned. Recorded instructions show what was in
+context, not that a rule was followed.
 
 This is partial session evidence. Shell/MCP reads, automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
 result does not prove the model used or obeyed it, retained it after compaction, or received

@@ -4,7 +4,7 @@ import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, jsonlLines, textOf } from "../jsonl.ts";
+import { date, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
 
 const count = z.number().nullish();
@@ -23,6 +23,8 @@ export const Message = z.looseObject({
   isError: z.boolean().nullish(),
   /** A string, or an array of items (see `Item`). */
   content: z.unknown().optional(),
+  /** On `system` messages: prompt sections by name, replacing earlier ones; `null` removes one. `project_context` lists loaded context files. */
+  sections: z.record(z.string(), z.string().nullable()).nullish(),
   /** One API call's tokens, on assistant messages. */
   usage: z
     .looseObject({
@@ -52,6 +54,8 @@ export const Line = z.looseObject({
   tokensBefore: count,
   /** Present on `message` lines. */
   message: Message.optional(),
+  /** On `compaction`: the replayed system message that leads the compacted context. */
+  systemMessage: Message.nullish(),
 });
 
 export const Item = z.looseObject({
@@ -78,7 +82,7 @@ export const pi: Harness<"pi"> = {
   id: "pi",
   label: "Pi",
   sourceReads: true,
-  injectedInstructions: "unrecorded",
+  injectedInstructions: "per-file",
 
   async steering(home, project) {
     const user = home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent");
@@ -108,7 +112,10 @@ export const pi: Harness<"pi"> = {
         line.type === "message" && line.message
           ? message(line.message)
           : line.type === "compaction"
-            ? [{ type: "compaction", trigger: "unknown", tokensBefore: line.tokensBefore ?? null }]
+            ? [
+                { type: "compaction", trigger: "unknown", tokensBefore: line.tokensBefore ?? null },
+                ...instructions(line.systemMessage?.sections),
+              ]
             : [];
       for (const kind of kinds) events.push({ ...kind, at });
     }
@@ -130,7 +137,7 @@ function message(m: Message): EventKind[] {
     case "user":
       return text("user", m.content);
     case "system":
-      return text("injected", m.content);
+      return [...text("injected", m.content), ...instructions(m.sections)];
     case "toolResult": {
       const value = textOf(m.content);
       return [
@@ -202,4 +209,21 @@ function assistant(m: Message): EventKind[] {
     }
   }
   return out;
+}
+
+const CONTEXT_FILE = /<project_instructions path="([^"]*)">\n([\s\S]*?)\n<\/project_instructions>/g;
+
+function instructions(sections: Message["sections"]): EventKind[] {
+  const context = sections?.project_context;
+  if (!context) return [];
+  const files = [...context.matchAll(CONTEXT_FILE)].map(([, path, content]) => ({
+    path: path!,
+    directory: null,
+    label: "project_context",
+    textSha256: sha256(content!),
+    textChars: content!.length,
+    textDiffersFromFile: null,
+  }));
+  const declared = context.split("<project_instructions path=").length - 1;
+  return [{ type: "instructions", files, unreadable: Math.max(0, declared - files.length) }];
 }

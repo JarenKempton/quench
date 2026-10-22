@@ -86,10 +86,13 @@ full delivery, continued context retention or rule compliance. Shell/MCP sources
 this slice; current source files are never opened to fill historical gaps.
 
 Adapters also declare how they record injected instructions: `per-file` (Claude Code
-`instructions` and `nested_memory` attachments), `combined` (Codex `AGENTS.md instructions`
-blocks, parsed per message part, with the directory but no file boundaries) or `unrecorded`
-(Pi). The `instructions` event keeps only fingerprints and lengths, so it is observed historical
-evidence that can later be compared with current steering inventory hashes. Insights ignore it.
+`instructions`/`nested_memory` attachments, deduplicated by line id; Pi `project_context`
+system sections, including the replayed system message on compactions) or `combined` (Codex
+`AGENTS.md instructions` message parts, including compaction `replacement_history`, with the
+directory but no file boundaries). The `instructions` event keeps only fingerprints and lengths.
+It is ignored by insights and does not move run timing. Hashes describe the injected text: an
+exact match with current inventory bytes is possible only for unprocessed per-file entries, not
+for processed Claude Code text or combined Codex blocks.
 
 ## Optional host evidence
 

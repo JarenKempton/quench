@@ -56,8 +56,8 @@ retired with it and live in git history.
   loading. Precedence, conditions, imports and historical snapshots are not resolved, so no
   ignored-rule or never-written claim follows. Inventory never writes or calls a model.
 - **Observed instructions come from what the harness recorded, not from today's files.**
-  Per-file, combined and unrecorded coverage stay distinct; missing evidence is never filled in
-  from the current inventory.
+  Per-file and combined coverage stay distinct, sessions without records are flagged rather than
+  read as "none loaded", and missing evidence is never filled in from the current inventory.
 - **Source tracing starts from recorded evidence.** Native read requests and results are
   normalized at the harness edge, then linked by unique call IDs and transcript order.
   Unsupported adapters and missing/ambiguous results remain explicit. Source filenames do not
