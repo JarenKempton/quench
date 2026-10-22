@@ -18,6 +18,7 @@ export const Message = z.looseObject({
   thinkingLevel: z.string().nullish(),
   /** On `toolResult` messages, the id of the tool call it answers. */
   toolCallId: z.string().nullish(),
+  toolName: z.string().nullish(),
   /** True when the tool failed. */
   isError: z.boolean().nullish(),
   /** A string, or an array of items (see `Item`). */
@@ -60,14 +61,23 @@ export const Item = z.looseObject({
   id: z.string().nullish(),
   /** Tool name on `toolCall` items, as the host named it. */
   name: z.string().nullish(),
+  arguments: z.unknown().optional(),
   /** Text of a `text` item. */
   text: z.unknown().optional(),
 });
 
+const ReadInput = z.object({
+  path: z.string().min(1),
+  offset: z.number().int().positive().nullish(),
+  limit: z.number().int().positive().nullish(),
+});
+
+const ReadContent = z.array(z.object({ type: z.literal("text"), text: z.string() })).min(1);
+
 export const pi: Harness<"pi"> = {
   id: "pi",
   label: "Pi",
-  sourceReads: false,
+  sourceReads: true,
 
   async steering(home, project) {
     const user = home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent");
@@ -120,15 +130,31 @@ function message(m: Message): EventKind[] {
       return text("user", m.content);
     case "system":
       return text("injected", m.content);
-    case "toolResult":
+    case "toolResult": {
+      const value = textOf(m.content);
       return [
         {
           type: "tool_result",
           callId: m.toolCallId ?? null,
           isError: m.isError ?? null,
-          chars: textOf(m.content).length,
+          chars: value.length,
+          ...(m.toolName === "read" &&
+          m.isError === false &&
+          ReadContent.safeParse(m.content).success
+            ? {
+                fileRead: {
+                  path: null,
+                  startLine: null,
+                  lineCount: null,
+                  totalLines: null,
+                  returnedTextSha256: new Bun.CryptoHasher("sha256").update(value).digest("hex"),
+                  returnedTextChars: value.length,
+                },
+              }
+            : {}),
         },
       ];
+    }
     case "assistant":
       return assistant(m);
     default:
@@ -156,8 +182,23 @@ function assistant(m: Message): EventKind[] {
     const item = Item.safeParse(raw);
     if (!item.success) continue;
     if (item.data.type === "text") out.push(...text("assistant", item.data.text));
-    if (item.data.type === "toolCall")
-      out.push({ type: "tool_call", id: item.data.id ?? null, name: item.data.name ?? "" });
+    if (item.data.type === "toolCall") {
+      const input = item.data.name === "read" ? ReadInput.safeParse(item.data.arguments) : null;
+      out.push({
+        type: "tool_call",
+        id: item.data.id ?? null,
+        name: item.data.name ?? "",
+        ...(input?.success
+          ? {
+              fileRead: {
+                path: input.data.path,
+                offset: input.data.offset ?? null,
+                limit: input.data.limit ?? null,
+              },
+            }
+          : {}),
+      });
+    }
   }
   return out;
 }

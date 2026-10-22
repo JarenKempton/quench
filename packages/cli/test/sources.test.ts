@@ -189,3 +189,98 @@ test("sources reports unsupported adapters and invalid input explicitly", async 
   await Bun.write(unknown, "{}\n");
   expect((await run(home, unknown)).code).toBe(1);
 });
+
+test("sources traces Pi read output without inventing result paths or line ranges", async () => {
+  const { home } = await fixture([]);
+  const path = join(home, ".pi/agent/sessions/demo/session.jsonl");
+  const requested = { path: "docs/guide.md", offset: 4, limit: 1 };
+  const output = "Historical rule 🧭\n\n[10 more lines in file. Use offset=5 to continue.]";
+  const piCall = (id: string, name = "read", args: unknown = requested) => ({
+    type: "message",
+    timestamp: stamp,
+    message: { role: "assistant", content: [{ type: "toolCall", id, name, arguments: args }] },
+  });
+  const piResult = (id: string, extra: Record<string, unknown> = {}) => ({
+    type: "message",
+    timestamp: stamp,
+    message: {
+      role: "toolResult",
+      toolCallId: id,
+      toolName: "read",
+      isError: false,
+      content: [{ type: "text", text: output }],
+      ...extra,
+    },
+  });
+  await Bun.write(
+    path,
+    [
+      { type: "session", id: "pi-source", cwd: "/historical/project" },
+      piCall("docs"),
+      piResult("docs"),
+      piCall("empty", "read", { path: "empty.md", offset: null, limit: null }),
+      piResult("empty", { content: [{ type: "text", text: "" }] }),
+      piCall("failed"),
+      piResult("failed", { isError: true }),
+      piCall("missing"),
+      piCall("image"),
+      piResult("image", { content: [{ type: "image", data: "unused" }] }),
+      piCall("mixed"),
+      piResult("mixed", { content: [{ type: "text", text: output }, { type: "image" }] }),
+      piCall("malformed"),
+      piResult("malformed", { content: [{ type: "text", text: 42 }] }),
+      piCall("wrong-tool"),
+      piResult("wrong-tool", { toolName: "bash" }),
+      piCall("uncertain"),
+      piResult("uncertain", { isError: null }),
+      piCall("mcp", "mcp__read"),
+      piResult("mcp", { toolName: "mcp__read" }),
+      piCall("invalid", "read", { ...requested, offset: -1 }),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const before = await Bun.file(path).text();
+  const result = await run(home, path, "--json");
+  expect(result.code).toBe(0);
+  const report = JSON.parse(result.stdout);
+  expect(report.coverage).toEqual({
+    nativeFileReads: "supported",
+    otherToolCalls: 2,
+    unmatchedFileResults: 0,
+    unparsedRecords: 0,
+  });
+  expect(report.reads[0]).toMatchObject({
+    callId: "docs",
+    requested,
+    status: "returned",
+    returned: {
+      path: null,
+      startLine: null,
+      lineCount: null,
+      totalLines: null,
+      returnedTextChars: output.length,
+      returnedTextSha256: new Bun.CryptoHasher("sha256").update(output).digest("hex"),
+    },
+  });
+  expect(report.reads[1].returned.returnedTextChars).toBe(0);
+  expect(report.reads[1].requested).toEqual({ path: "empty.md", offset: null, limit: null });
+  expect(report.reads.map((read: { status: string }) => read.status)).toEqual([
+    "returned",
+    "returned",
+    "failed",
+    "missing-result",
+    "unknown",
+    "unknown",
+    "unknown",
+    "unknown",
+    "unknown",
+  ]);
+  const text = await run(home, path);
+  expect(text.code).toBe(0);
+  expect(text.stdout).toContain("returned · docs/guide.md");
+  expect(text.stdout).toContain("result path unknown · line range unknown");
+  expect(text.stdout).not.toContain("0 reported lines");
+  expect(await Bun.file(path).text()).toBe(before);
+  expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+});

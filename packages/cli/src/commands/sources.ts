@@ -40,9 +40,13 @@ export async function sources(
         );
         if (read.returned) {
           const r = read.returned;
-          lines.push(
-            `  ${r.path} · ${r.lineCount ? `reported lines ${r.startLine}–${r.startLine + r.lineCount - 1} of ${r.totalLines}` : "0 reported lines"}`,
-          );
+          const range =
+            r.lineCount === null || r.startLine === null
+              ? "line range unknown"
+              : r.lineCount === 0
+                ? "0 reported lines"
+                : `reported lines ${r.startLine}–${r.startLine + r.lineCount - 1} of ${r.totalLines ?? "unknown"}`;
+          lines.push(`  ${r.path ?? "result path unknown"} · ${range}`);
           lines.push(
             `  recorded tool text: ${r.returnedTextChars} characters · sha256 ${r.returnedTextSha256}`,
           );

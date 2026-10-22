@@ -26,10 +26,10 @@ export type CompactionTrigger = "auto" | "manual" | "unknown";
 export type FileReadRequest = { path: string; offset: number | null; limit: number | null };
 
 export type FileReadResult = {
-  path: string;
-  startLine: number;
-  lineCount: number;
-  totalLines: number;
+  path: string | null;
+  startLine: number | null;
+  lineCount: number | null;
+  totalLines: number | null;
   returnedTextSha256: string;
   returnedTextChars: number;
 };

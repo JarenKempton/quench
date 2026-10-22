@@ -73,7 +73,10 @@ separate future step; unmatched themes cannot be called unwritten preferences.
 Each adapter declares whether it supports native file-read tracing. Claude Code normalizes
 validated `Read` requests and structured text-file results into optional `fileRead` fields on
 tool events. The recorded tool text is hashed and counted without retaining another content
-copy. Other adapters explicitly report unsupported coverage.
+copy. Pi normalizes native `read` requests and successful text-only outputs, leaving the result
+path and line metadata null because its transcript does not supply them. Requested paths remain
+verbatim; adapters do not reconstruct paths or line ranges from textual tool notices. Codex
+explicitly reports unsupported coverage.
 
 `sourceTrace` joins these normalized events by unique call IDs and transcript order, without
 branching on tool names or harness names. Failed, missing, ambiguous and unsupported results

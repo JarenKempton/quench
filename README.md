@@ -138,16 +138,20 @@ reads no session/host history, and writes no files or caches, even when a key is
 quench sources /path/to/discovered/session.jsonl --json
 ```
 
-Reads one session found in the configured harness history directories. The first adapter traces
-Claude Code's native `Read` calls when the transcript retains structured text-file results.
+Reads one session found in the configured harness history directories. Claude Code's adapter
+traces native `Read` calls when the transcript retains structured text-file results. Pi's adapter
+traces native `read` requests and successful text-only results.
 Any filename can appear, including README files, arbitrary documentation and skill references;
-current copies of those source files are never opened. Codex and Pi explicitly report that
+current copies of those source files are never opened. Codex explicitly reports that
 source tracing is not yet supported, rather than treating empty output as no loaded sources.
 
 Each attempt retains its call ID, request timestamp/path/offset/limit, result timestamp and
 status: returned, failed, missing result or unknown. Returned evidence includes the recorded
-path, reported line range and total lines, plus a SHA-256 of returned tool text (including
-wrappers, not source-file bytes). Normalized events retain the fingerprint instead of the text.
+path, reported line range and total lines when available, plus a SHA-256 of returned tool text
+(including wrappers, not source-file bytes). Pi does not record result paths or reliable line
+ranges; those fields stay unknown. Requested paths remain verbatim, without resolving them
+against today's filesystem or assuming they identify local files. Text can include tool notices
+instead of file content. Normalized events retain the fingerprint instead of the text.
 Duplicate or out-of-order call/result IDs and malformed metadata remain uncertain. Parse gaps
 and unmatched file results warn; other tool calls remain visible as an unattributed count.
 
