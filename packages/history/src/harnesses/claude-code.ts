@@ -115,13 +115,16 @@ const ReadResult = z.object({
   }),
 });
 
+const HOME = { variable: "CLAUDE_CONFIG_DIR", fallback: ".claude" };
+
 export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
   label: "Claude Code",
+  home: HOME,
   sourceReads: true,
 
   async steering(home, project) {
-    const user = home.pathFrom("CLAUDE_CONFIG_DIR", ".claude");
+    const user = home.of(HOME);
     const roots: SteeringRoot[] = [
       { path: join(user, "CLAUDE.md"), scope: "user" },
       { path: join(user, "rules"), scope: "user", directory: true },
@@ -142,7 +145,7 @@ export const claudeCode: Harness<"claude-code"> = {
   },
 
   async discover(home: Home): Promise<SessionRef[]> {
-    const projects = join(home.pathFrom("CLAUDE_CONFIG_DIR", ".claude"), "projects");
+    const projects = join(home.of(HOME), "projects");
     const refs: SessionRef[] = [];
     for (const dir of await subdirs(projects)) {
       for (const path of await filesWithExt(dir, ".jsonl", 0)) {

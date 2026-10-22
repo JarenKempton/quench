@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { HarnessHome } from "./harness.ts";
 
 export class Home {
   constructor(
@@ -15,7 +16,7 @@ export class Home {
     return new Home(this.dir, { ...this.env, [key]: value });
   }
 
-  pathFrom(variable: string, fallback: string): string {
+  of({ variable, fallback }: HarnessHome): string {
     const value = this.env[variable];
     return value ? value : join(this.dir, fallback);
   }

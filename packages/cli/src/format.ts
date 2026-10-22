@@ -35,6 +35,7 @@ export function runFacts(run: Run): string {
   return parts.join(" · ");
 }
 
-export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+export const plural = (n: number, noun: string, nouns = `${noun}s`) =>
+  `${n} ${n === 1 ? noun : nouns}`;
 
 export const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;

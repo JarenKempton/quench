@@ -65,13 +65,16 @@ type Line = z.infer<typeof Line>;
 
 const INJECTED_HEADINGS = ["# AGENTS.md instructions"];
 
+const HOME = { variable: "CODEX_HOME", fallback: ".codex" };
+
 export const codex: Harness<"codex"> = {
   id: "codex",
   label: "Codex",
+  home: HOME,
   sourceReads: false,
 
   async steering(home, project) {
-    const user = home.pathFrom("CODEX_HOME", ".codex");
+    const user = home.of(HOME);
     const roots: SteeringRoot[] = [
       { path: join(user, "AGENTS.override.md"), scope: "user" },
       { path: join(user, "AGENTS.md"), scope: "user" },
@@ -83,7 +86,7 @@ export const codex: Harness<"codex"> = {
   },
 
   async discover(home: Home): Promise<SessionRef[]> {
-    const sessions = join(home.pathFrom("CODEX_HOME", ".codex"), "sessions");
+    const sessions = join(home.of(HOME), "sessions");
     const paths = await filesWithExt(sessions, ".jsonl", 3);
     return Promise.all(paths.map((path) => sessionRef("codex", path)));
   },

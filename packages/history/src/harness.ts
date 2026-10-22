@@ -10,9 +10,12 @@ export type SessionRef = {
   parent: string | null;
 };
 
+export type HarnessHome = { variable: string; fallback: string };
+
 export interface Harness<Id extends HarnessId = HarnessId> {
   readonly id: Id;
   readonly label: string;
+  readonly home: HarnessHome;
   readonly sourceReads: boolean;
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;

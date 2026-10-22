@@ -24,7 +24,7 @@ Subagent sessions point at their parent with `parent`.
 
 ## Harness adapters
 
-An adapter implements `Harness`: `discover(home)` lists session files, `read(ref)`
+An adapter implements `Harness`: `home` names its data directory and override variable, `discover(home)` lists session files, `read(ref)`
 turns one into a `Session`, and `steering(home, project)` lists candidate instruction
 locations. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
 

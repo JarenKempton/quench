@@ -14,6 +14,9 @@ retired with it and live in git history.
   that sends data anywhere is opt-in and says what it sends.
 - **No fake numbers.** Every number traces to a file on disk, and estimates are labeled.
 - **Align, don't fork.** Quench writes harness-native settings and never invents a format.
+- **Zero-setup discovery.** Projects come from the working directories sessions recorded,
+  grouped by git repository, not from crawling the disk. Harness homes use their defaults
+  and override variables, with a flag per harness when those fail.
 - **Users bring their own compute.** Model-backed analysis uses the user's own key, so
   running Quench costs its maintainers nothing per user.
 
