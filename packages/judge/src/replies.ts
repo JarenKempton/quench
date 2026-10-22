@@ -1,4 +1,4 @@
-import type { HarnessId, Origin } from "@quench/history";
+import type { HarnessId } from "@quench/history";
 import { signals, type Run, type Signal } from "@quench/insights";
 import type { VerdictCache } from "./cache.ts";
 import { ReplyKind, type Exchange, type Judge, type Sender, type Verdict } from "./verdict.ts";
@@ -12,6 +12,7 @@ export type Reply = {
   run: Run;
   kind: ReplyKind | null;
   sender: Sender | null;
+  senderSource: "harness" | "host" | "judge" | "unknown";
 };
 
 export type Judged = { replies: Reply[]; newlyJudged: number; pending: number; failures: Error[] };
@@ -47,7 +48,7 @@ export async function judgeReplies(
         position,
         run,
         kind: verdict?.kind ?? null,
-        sender: senderOf(run.replyOrigin, verdict),
+        ...senderOf(run, verdict),
       };
     }),
   };
@@ -58,10 +59,13 @@ const exchangeOf = (run: Run, reply: string): Exchange => ({
   reply,
 });
 
-function senderOf(origin: Origin | null, verdict: Verdict | undefined): Sender | null {
-  if (origin === "typed") return "person";
-  if (origin === "scheduled") return "automation";
-  return verdict?.sender ?? null;
+function senderOf(run: Run, verdict: Verdict | undefined): Pick<Reply, "sender" | "senderSource"> {
+  if (run.replyOrigin === "typed") return { sender: "person", senderSource: "harness" };
+  if (run.replyOrigin === "scheduled") return { sender: "automation", senderSource: "harness" };
+  if (run.replySender) return { sender: run.replySender.sender, senderSource: "host" };
+  return verdict
+    ? { sender: verdict.sender, senderSource: "judge" }
+    : { sender: null, senderSource: "unknown" };
 }
 
 export type Tally = { replies: number; judged: number; kinds: Record<ReplyKind, number> };
@@ -71,9 +75,12 @@ export type Summary = {
   fromAutomation: Tally;
   signals: Signal[];
   latest: Reply[];
+  senderSources: Record<Reply["senderSource"], number>;
 };
 
 export function summarize(replies: readonly Reply[], examples: number): Summary {
+  const senderSources = { harness: 0, host: 0, judge: 0, unknown: 0 };
+  for (const reply of replies) senderSources[reply.senderSource] += 1;
   const people = replies.filter((r) => r.sender !== "automation");
   const automated = replies.filter((r) => r.sender === "automation");
   const samples = people.flatMap((r) =>
@@ -97,6 +104,7 @@ export function summarize(replies: readonly Reply[], examples: number): Summary 
     fromAutomation: tally(automated),
     signals: signals(samples),
     latest,
+    senderSources,
   };
 }
 

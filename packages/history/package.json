@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./hosts/t3": "./src/hosts/t3.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"

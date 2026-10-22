@@ -1,10 +1,16 @@
+import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { mkdtemp, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Jev, VerdictCache } from "@quench/judge";
 
 const root = join(import.meta.dir, "../../..");
 const home = join(root, "packages/history/test/fixtures/home");
 
-async function quench(...args: string[]) {
+const quench = (...args: string[]) => quenchAt(home, ...args);
+
+async function quenchAt(home: string, ...args: string[]) {
   const proc = Bun.spawn(["bun", join(root, "packages/cli/src/main.ts"), ...args], {
     env: {
       ...process.env,
@@ -57,6 +63,94 @@ test("corrections asks for a key before sending anything, and a dry run counts w
   const out = JSON.parse(dry.stdout);
   expect([out.pending, out.newlyJudged, out.tokens]).toEqual([1, 0, null]);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+});
+
+test("corrections uses optional host evidence over a cached sender, and degrades visibly", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "quench-cli-host-"));
+  const sessions = join(dir, ".claude/projects/demo");
+  const hostDir = join(dir, ".t3/userdata");
+  await mkdir(sessions, { recursive: true });
+  await mkdir(hostDir, { recursive: true });
+  await Bun.write(
+    join(sessions, "native.jsonl"),
+    [
+      {
+        type: "user",
+        sessionId: "native",
+        timestamp: "2026-10-20T10:00:00Z",
+        promptSource: "sdk",
+        message: { role: "user", content: "build" },
+      },
+      {
+        type: "assistant",
+        timestamp: "2026-10-20T10:00:01Z",
+        message: {
+          id: "a",
+          model: "model",
+          content: [{ type: "text", text: "done" }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      {
+        type: "user",
+        timestamp: "2026-10-20T10:00:03Z",
+        promptSource: "sdk",
+        message: { role: "user", content: "no, the other file" },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n") + "\n",
+  );
+  const cacheFile = join(dir, ".quench/local/judgments.jsonl");
+  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  await cache.remember([
+    [
+      { assistantSaid: "done", reply: "no, the other file" },
+      { kind: "correction", sender: "person", confidence: 1 },
+    ],
+  ]);
+  const cacheBefore = await Bun.file(cacheFile).text();
+  const path = join(hostDir, "statev2.sqlite");
+  const db = new Database(path);
+  db.exec(`CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
+    CREATE TABLE orchestration_v2_projection_messages (thread_id TEXT, role TEXT, payload_json TEXT);`);
+  db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
+    JSON.stringify({
+      appThreadId: "thread",
+      nativeThreadRef: { driver: "claudeAgent", nativeId: "native", strength: "strong" },
+    }),
+  );
+  db.query("INSERT INTO orchestration_v2_projection_messages VALUES ('thread', 'user', ?)").run(
+    JSON.stringify({
+      id: "message",
+      threadId: "thread",
+      role: "user",
+      text: "no, the other file",
+      createdAt: "2026-10-20T10:00:02Z",
+      createdBy: "agent",
+      creationSource: "mcp",
+    }),
+  );
+  db.close();
+  const hostBefore = await Bun.file(path).bytes();
+  const args = ["corrections", "--days", "36500", "--dry-run", "--json"];
+  const disabled = await quenchAt(dir, ...args, "--no-host-history");
+  expect(JSON.parse(disabled.stdout).fromPeople.kinds.correction).toBe(1);
+  const enriched = await quenchAt(dir, ...args);
+  const out = JSON.parse(enriched.stdout);
+  expect(enriched.code).toBe(0);
+  expect(out.fromPeople.kinds.correction).toBe(0);
+  expect(out.fromAutomation.kinds.correction).toBe(1);
+  expect(out.senderSources).toEqual({ harness: 0, host: 1, judge: 0, unknown: 0 });
+  expect([out.pending, out.newlyJudged, out.failed, out.tokens]).toEqual([0, 0, 0, null]);
+  expect(await Bun.file(path).bytes()).toEqual(hostBefore);
+  expect(await Bun.file(cacheFile).text()).toBe(cacheBefore);
+  const broken = join(dir, "broken.sqlite");
+  await Bun.write(broken, "not sqlite");
+  const fallback = await quenchAt(dir, ...args, "--host-history", broken);
+  expect(fallback.code).toBe(0);
+  expect(JSON.parse(fallback.stdout).senderSources.judge).toBe(1);
+  expect(fallback.stderr).toContain("incompatible");
 });
 
 test("unknown commands and bad input fail with a message", async () => {

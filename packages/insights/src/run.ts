@@ -1,10 +1,19 @@
-import { contextOf, startedAt, unhandled, type Origin, type Session } from "@quench/history";
+import {
+  contextOf,
+  startedAt,
+  unhandled,
+  type Origin,
+  type SenderEvidence,
+  type Session,
+} from "@quench/history";
 
 export type Run = {
   prompt: string | null;
   promptOrigin: Origin | null;
+  promptSender: SenderEvidence | null;
   reply: string | null;
   replyOrigin: Origin | null;
+  replySender: SenderEvidence | null;
   assistantSaid: string | null;
   startedAt: Date | null;
   endedAt: Date | null;
@@ -22,8 +31,10 @@ export type Run = {
 const emptyRun = (): Run => ({
   prompt: null,
   promptOrigin: null,
+  promptSender: null,
   reply: null,
   replyOrigin: null,
+  replySender: null,
   assistantSaid: null,
   startedAt: null,
   endedAt: null,
@@ -54,6 +65,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
             ...emptyRun(),
             prompt: event.text,
             promptOrigin: event.origin,
+            promptSender: event.sender ?? null,
             startedAt: event.at,
           };
           segments.push(run);
@@ -89,6 +101,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
     const next = segments[i + 1];
     segment.reply = next?.prompt ?? null;
     segment.replyOrigin = next?.promptOrigin ?? null;
+    segment.replySender = next?.promptSender ?? null;
   });
   return linkSubagents(
     segments.filter((s) => s.inferences > 0),

@@ -2,7 +2,16 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Jev, KeyRejected, VerdictCache, type Exchange, type Verdict } from "../src/index.ts";
+import { runs } from "@quench/insights";
+import {
+  Jev,
+  KeyRejected,
+  VerdictCache,
+  judgeReplies,
+  summarize,
+  type Exchange,
+  type Verdict,
+} from "../src/index.ts";
 import { requests } from "../src/jev.ts";
 
 const exchange = (reply: string): Exchange => ({ assistantSaid: "done", reply });
@@ -22,6 +31,70 @@ test("each exchange is remembered across opens, and a new judge id starts clean"
   const changed = await VerdictCache.open(path, "judge/v2");
   expect(changed.size).toBe(0);
   expect(await Bun.file(path).text()).toBe("");
+});
+
+test("generic sender evidence overrides cached guesses without changing verdicts or run boundaries", async () => {
+  const cache = await VerdictCache.open(await cachePath(), "judge/v1");
+  await cache.remember([[exchange("no"), verdict]]);
+  const list = runs({
+    id: "s",
+    harness: "codex",
+    path: "/unused",
+    cwd: null,
+    parent: null,
+    diagnostics: { lines: 4, unparsed: 0 },
+    events: [
+      { type: "message", author: "user", origin: "host", text: "build", at: null },
+      {
+        type: "inference",
+        model: null,
+        effort: null,
+        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        at: null,
+      },
+      { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
+      {
+        type: "message",
+        author: "user",
+        origin: "host",
+        text: "no",
+        at: null,
+        sender: { sender: "automation", source: "another-host", messageId: "m" },
+      },
+    ],
+  });
+  const run = list[0]!;
+  const judged = await judgeReplies(
+    [
+      {
+        harness: "codex",
+        cwd: null,
+        runs: [
+          run,
+          { ...run, replyOrigin: "typed" },
+          { ...run, replyOrigin: "scheduled" },
+          { ...run, replySender: null },
+        ],
+      },
+    ],
+    cache,
+    null,
+  );
+  expect(list).toHaveLength(1);
+  expect(judged.replies.map((r) => [r.sender, r.senderSource])).toEqual([
+    ["automation", "host"],
+    ["person", "harness"],
+    ["automation", "harness"],
+    ["person", "judge"],
+  ]);
+  expect([judged.newlyJudged, judged.pending, cache.size]).toEqual([0, 0, 1]);
+  expect(cache.get(exchange("no"))).toEqual(verdict);
+  expect(summarize(judged.replies, 10).senderSources).toEqual({
+    harness: 2,
+    host: 1,
+    judge: 1,
+    unknown: 0,
+  });
 });
 
 test("the sender question never sees the agent message", () => {

@@ -12,6 +12,8 @@ Usage:
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        how often you corrected the agent, and what came before
+    --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
+    --no-host-history                  use harness metadata and model judgments only
 `;
 
 const { positionals, values } = parseArgs({
@@ -20,6 +22,8 @@ const { positionals, values } = parseArgs({
     days: { type: "string", default: "30" },
     examples: { type: "string", default: "10" },
     "dry-run": { type: "boolean", default: false },
+    "host-history": { type: "string" },
+    "no-host-history": { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -57,6 +61,11 @@ switch (command) {
       examples,
       json: values.json,
       dryRun: values["dry-run"],
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
     });
     break;
   case "runs":

@@ -30,6 +30,19 @@ your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of
 before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a reply is paid for once.
 `--dry-run` shows how many replies would be sent without sending anything.
 
+Sender attribution uses harness metadata first, optional host evidence second, and Jev's guess
+otherwise. The output counts each source separately. `corrections` can read T3 Code's local
+`~/.t3/userdata/statev2.sqlite` **read-only** when it exists; T3 is not another harness or a
+requirement. Use `--host-history <sqlite-file>` for another location, or `--no-host-history` to
+skip it. There is no recursive file search. Missing or incompatible host history leaves the
+harness/model fallback intact; incompatible formats produce a warning.
+
+T3 matching requires a strong native session link, unique exact message text in both histories,
+and delivery within 60 seconds of host creation. Repeated, edited, delayed or otherwise
+unmatched messages fall back to the judge. Imported `user/server` records are not proof of human
+authorship. This uses T3's current internal format, not a stable public API. It does not change
+cached judgments or send host records to Jev. `report` and `runs` do not read host history.
+
 ## Status
 
 Early and changing. Direction and scope: [#45](https://github.com/JarenKempton/quench/issues/45).

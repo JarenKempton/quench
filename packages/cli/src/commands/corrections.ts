@@ -1,5 +1,13 @@
 import { join } from "node:path";
-import { discoverAll, harnessById, readSessions, startedAt, type Home } from "@quench/history";
+import {
+  discoverAll,
+  harnessById,
+  readSessions,
+  startedAt,
+  type Home,
+  type SessionEnricher,
+} from "@quench/history";
+import { openT3History } from "@quench/history/hosts/t3";
 import { linkSubagents, runs } from "@quench/insights";
 import {
   Jev,
@@ -22,7 +30,13 @@ Set TYPESAFE_API_KEY to opt in, or pass --dry-run to see what would be sent.
 Answers are cached in ~/.quench/local/judgments.jsonl, so each reply is paid for once.
 `;
 
-type Options = { days: number; examples: number; json: boolean; dryRun: boolean };
+type Options = {
+  days: number;
+  examples: number;
+  json: boolean;
+  dryRun: boolean;
+  hostHistory?: string | false;
+};
 
 export async function corrections(home: Home, options: Options): Promise<number> {
   const jev = options.dryRun ? null : Jev.fromEnv();
@@ -31,7 +45,22 @@ export async function corrections(home: Home, options: Options): Promise<number>
     return 2;
   }
   const cache = await VerdictCache.open(join(home.dir, ".quench/local/judgments.jsonl"), Jev.id);
-  const sessions = await sessionRuns(home, new Date(Date.now() - options.days * 86_400_000));
+  const host =
+    options.hostHistory === false
+      ? null
+      : openT3History(options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"));
+  let sessions: SessionRuns[];
+  try {
+    sessions = await sessionRuns(
+      home,
+      new Date(Date.now() - options.days * 86_400_000),
+      host?.enrich,
+    );
+  } finally {
+    host?.close();
+  }
+  const warnings = host?.warnings ?? [];
+  for (const warning of warnings) process.stderr.write(`${warning}\n`);
   let judged: Judged;
   try {
     judged = await judgeReplies(sessions, cache, jev);
@@ -51,11 +80,13 @@ export async function corrections(home: Home, options: Options): Promise<number>
           pending: judged.pending,
           failed: judged.failures.length,
           tokens,
+          warnings,
           ...summary,
           latest: summary.latest.map((r) => ({
             harness: r.harness,
             folder: folder(r.cwd),
             reply: r.run.reply,
+            senderSource: r.senderSource,
             run: r.run,
           })),
         })
@@ -64,7 +95,11 @@ export async function corrections(home: Home, options: Options): Promise<number>
   return 0;
 }
 
-async function sessionRuns(home: Home, since: Date): Promise<SessionRuns[]> {
+async function sessionRuns(
+  home: Home,
+  since: Date,
+  enrich?: SessionEnricher,
+): Promise<SessionRuns[]> {
   const parents = new Map<string, SessionRuns>();
   const childStarts = new Map<string, (Date | null)[]>();
   for await (const outcome of readSessions(await discoverAll(home, since))) {
@@ -74,7 +109,11 @@ async function sessionRuns(home: Home, since: Date): Promise<SessionRuns[]> {
       const key = `${s.harness}:${s.parent}`;
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
-      parents.set(`${s.harness}:${s.id}`, { harness: s.harness, cwd: s.cwd, runs: runs(s) });
+      parents.set(`${s.harness}:${s.id}`, {
+        harness: s.harness,
+        cwd: s.cwd,
+        runs: runs(enrich?.(s) ?? s),
+      });
     }
   }
   for (const [key, session] of parents) linkSubagents(session.runs, childStarts.get(key) ?? []);
@@ -94,6 +133,7 @@ function render(
   if (judged.pending) status.push(`${judged.pending} not judged yet`);
   const lines = [
     `Last ${days} days · ${people.replies + bots.replies} replies to agent runs · judged by ${judge} (${status.join(", ")})`,
+    `Sender attribution: ${summary.senderSources.harness} harness · ${summary.senderSources.host} host · ${summary.senderSources.judge} model-inferred · ${summary.senderSources.unknown} unresolved`,
     "",
     `Corrections from people         ${share(people)}`,
     `Corrections relayed by agents   ${share(bots)}  not counted below`,
