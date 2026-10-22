@@ -4,6 +4,14 @@ export type Author = "user" | "assistant" | "injected";
 
 export type Origin = "typed" | "scheduled" | "host" | "unknown";
 
+export type SenderEvidence = {
+  sender: "person" | "automation";
+  source: string;
+  messageId: string;
+};
+
+export type SessionEnricher = (session: Session) => Session;
+
 export type Usage = {
   input: number;
   cacheRead: number;
@@ -16,7 +24,7 @@ export const contextOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
 export type CompactionTrigger = "auto" | "manual" | "unknown";
 
 export type EventKind =
-  | { type: "message"; author: Author; origin: Origin; text: string }
+  | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
   | { type: "tool_call"; id: string | null; name: string }
   | { type: "tool_result"; callId: string | null; isError: boolean | null; chars: number }

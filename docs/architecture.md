@@ -6,19 +6,19 @@ Quench is a TypeScript monorepo on Bun. Each package depends only on the package
 packages/history    reads each harness's session files into one Session model
 packages/insights   pure functions over sessions: runs, reports, signals
 packages/judge      opt-in model judgments about runs, behind the Judge interface
-packages/cli        the `quench` command; formatting only
+packages/cli        the `quench` command; composition and formatting
 ```
 
 ## The Session model
 
 A `Session` is an ordered list of typed events:
 
-| Event                       | Fields                                                                                   |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text` |
-| `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                        |
-| `tool_call` / `tool_result` | ids, name, `isError`, size of the result                                                 |
-| `compaction`                | trigger, tokens before                                                                   |
+| Event                       | Fields                                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text`, optional `sender` evidence |
+| `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
+| `tool_call` / `tool_result` | ids, name, `isError`, size of the result                                                                             |
+| `compaction`                | trigger, tokens before                                                                                               |
 
 Subagent sessions point at their parent with `parent`.
 
@@ -51,6 +51,26 @@ Claude Code line and all of Codex are unpublished, so those fields are documente
 
 A new event kind breaks every `switch` that ends in `unhandled(event)` until it is handled.
 
+## Optional host evidence
+
+A host delivers messages to a harness; it is not another harness. The CLI may supply a
+`SessionEnricher` between reading a session and deriving its runs. It adds generic
+`SenderEvidence` (person/automation, source, message id), without rewriting transport origin,
+message text, authors or run boundaries. Insights and judge never import host adapters.
+
+`history/src/hosts/t3.ts` alone knows T3's SQLite projection format and native driver names.
+The corrections command checks one known path or an explicit `--host-history` path, opens it
+read-only in a consistent read transaction, and closes it after loading. It does not crawl the
+filesystem or read the event log. Missing storage is a no-op; unreadable or incompatible storage
+warns and falls back rather than discarding valid harness history.
+
+T3 does not share a user-message id with the normalized transcript. Enrichment therefore
+requires a strong native session link, unique exact text on both sides, and a harness timestamp
+between host creation and 60 seconds later. Ambiguous links, repeated text, longer delivery
+delays and unknown timestamps are left alone. Explicit agent authorship maps to automation;
+only user/web or user/mobile records establish human authorship. Imported user/server records
+remain unverified. This is deliberately incomplete, not a claim of universal sender identity.
+
 ## Insights
 
 - A **run** is everything the agent did between two user messages: model, effort,
@@ -68,9 +88,11 @@ rename them.
 today; it uses `@typesafe-ai/sdk` with the user's key. `VerdictCache` stores each verdict keyed by
 judge id plus the exact input, so changing a question (and its id) re-asks cleanly.
 
-Who sent a reply comes from structure first: Claude Code marks typed and scheduled prompts.
-Everything else, including prompts an SDK host delivers for people and orchestrator agents
-alike, is decided by the judge from the message alone.
+Who sent a reply comes from structure first: typed/scheduled harness origins, then optional
+host sender evidence. Everything else is inferred by the judge from the message alone. The
+output distinguishes harness evidence, host evidence, model inference and unresolved senders.
+The cached verdict remains the model's answer; resolving the effective sender never overwrites
+it, changes its key or re-asks it.
 
 ## Reading at scale
 

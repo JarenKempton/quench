@@ -33,6 +33,11 @@ retired with it and live in git history.
   for once. The cache format is the Rust prototype's, so its verdicts carry over.
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
+- **Hosts enrich history; they do not redefine harnesses.** Optional local host adapters add
+  generic sender evidence before run derivation. Host SQL, paths and native driver names stay
+  outside harness readers, insights and judge. Uncertain matches abstain; unavailable sources
+  fall back visibly. Harness evidence wins over host evidence, which wins over model inference.
+  Cached model verdicts and their questions stay unchanged.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,
