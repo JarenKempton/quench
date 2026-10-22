@@ -25,6 +25,7 @@ Claude Code
 | `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
 | `quench corrections [--dry-run]`         | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]` | Current instruction-file inventory and source rule candidates; offline                |
+| `quench sources <session-file> [--json]` | Recorded file reads, returned ranges and explicit source-coverage gaps; offline       |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
@@ -140,6 +141,35 @@ Unreadable/oversized sources, cycles and exhausted limits produce warnings. Read
 to 256 KiB per file, 256 files, 256 physical rule directories and 1,024 directory paths
 (including symlink aliases). The command makes no model calls,
 reads no session/host history, and writes no files or caches, even when a key is configured.
+
+## Recorded session sources
+
+```sh
+quench sources /path/to/discovered/session.jsonl --json
+```
+
+Reads one session found in the configured harness history directories. Claude Code's adapter
+traces native `Read` calls when the transcript retains structured text-file results. Pi's adapter
+traces native `read` requests and successful text-only results.
+Any filename can appear, including README files, arbitrary documentation and skill references;
+current copies of those source files are never opened. Codex explicitly reports that
+source tracing is not yet supported, rather than treating empty output as no loaded sources.
+
+Each attempt retains its call ID, request timestamp/path/offset/limit, result timestamp and
+status: returned, failed, missing result or unknown. Returned evidence includes the recorded
+path, reported line range and total lines when available, plus a SHA-256 of returned tool text
+(including wrappers, not source-file bytes). Pi does not record result paths or reliable line
+ranges; those fields stay unknown. Requested paths remain verbatim, without resolving them
+against today's filesystem or assuming they identify local files. Text can include tool notices
+instead of file content. Normalized events retain the fingerprint instead of the text.
+Duplicate or out-of-order call/result IDs and malformed metadata remain uncertain. Parse gaps
+and unmatched file results warn; other tool calls remain visible as an unattributed count.
+
+This is partial session evidence. Shell/MCP reads, injected instructions, automatic imports,
+skill loading, images and unchanged-file references are not reconstructed. A recorded text
+result does not prove the model used or obeyed it, retained it after compaction, or received
+the complete file. Reported ranges are metadata, not a completeness guarantee. The command
+makes no model calls, reads no host database and writes no files or caches.
 
 ## Status
 

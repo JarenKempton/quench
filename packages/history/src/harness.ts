@@ -13,6 +13,7 @@ export type SessionRef = {
 export interface Harness<Id extends HarnessId = HarnessId> {
   readonly id: Id;
   readonly label: string;
+  readonly sourceReads: boolean;
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
   steering(home: Home, project: string): Promise<SteeringRoot[]>;

@@ -6,6 +6,7 @@ import { corrections } from "./commands/corrections.ts";
 import { report } from "./commands/report.ts";
 import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
+import { sources } from "./commands/sources.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
 
@@ -13,6 +14,7 @@ Usage:
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
+  quench sources <session-file> [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
@@ -73,6 +75,9 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
 }
 
 switch (command) {
+  case "sources":
+    process.exitCode = await sources(home, rest, { json: values.json });
+    break;
   case "steering":
     process.exitCode = await steering(home, rest, { json: values.json });
     break;
