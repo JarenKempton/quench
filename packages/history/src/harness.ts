@@ -1,6 +1,7 @@
 import { modified } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, Session } from "./model.ts";
+import type { SteeringRoot } from "./steering.ts";
 
 export type SessionRef = {
   harness: HarnessId;
@@ -14,6 +15,7 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   readonly label: string;
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
+  steering(home: Home, project: string): Promise<SteeringRoot[]>;
 }
 
 export async function sessionRef(

@@ -24,9 +24,9 @@ Subagent sessions point at their parent with `parent`.
 
 ## Harness adapters
 
-An adapter implements `Harness`: `discover(home)` lists session files and `read(ref)`
-turns one into a `Session`. It is the only code that knows a harness's paths and file
-format. Rules every adapter follows:
+An adapter implements `Harness`: `discover(home)` lists session files, `read(ref)`
+turns one into a `Session`, and `steering(home, project)` lists candidate instruction
+locations. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
 
 - **Validate each line with zod.** Lines that don't fit are counted in
   `diagnostics.unparsed` and shown in the report, so a format change is visible instead
@@ -50,6 +50,23 @@ fully, Claude Code's API message and content blocks (`@anthropic-ai/sdk`). The r
 Claude Code line and all of Codex are unpublished, so those fields are documented on the schema.
 
 A new event kind breaks every `switch` that ends in `unhandled(event)` until it is handled.
+
+## Current steering evidence
+
+`steeringInventory` in history consumes adapter-supplied paths without branching on harness
+names. It validates an explicit project directory, follows file/rule-directory symlinks with
+cycle detection, bounds reads, and groups identical bytes by SHA-256. Every encountered source
+retains its harness, path, canonical path and scope; content identity does not imply equal
+scope or that a harness itself deduplicates the text. Stable IDs also match copied files in
+separate worktrees without scanning those worktrees or persisting an index.
+
+The report states `evidence: current-disk` and `historicalLoad: unknown`. It is an inventory
+of candidates, not a resolution of native precedence, settings, imports or load conditions.
+Rule candidates retain source line ranges for bullets/paragraphs, skipping headings,
+frontmatter and fenced code. They are not semantic rules; source files remain authoritative
+for conditions. Missing files are normal, unreadable sources and coverage limits warn.
+There are no model calls, host/session reads or writes. Historical attribution remains a
+separate future step; unmatched themes cannot be called unwritten preferences.
 
 ## Optional host evidence
 
