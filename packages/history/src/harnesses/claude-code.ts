@@ -86,6 +86,11 @@ const Line = z.looseObject({
 });
 type Line = z.infer<typeof Line>;
 
+const BashInput = z.looseObject({
+  /** Shell command the model ran. */
+  command: z.string(),
+});
+
 const SkillInput = z.looseObject({
   /** Name of the skill the model invoked. */
   skill: z.string(),
@@ -405,11 +410,13 @@ function assistant(line: Line): EventKind[] {
     } else if (block.type === "tool_use") {
       const input = block.name === "Read" ? ReadInput.safeParse(block.input) : null;
       const skill = block.name === "Skill" ? SkillInput.safeParse(block.input) : null;
+      const shell = block.name === "Bash" ? BashInput.safeParse(block.input) : null;
       if (skill?.success) out.push({ type: "invocation", name: skill.data.skill, by: "model" });
       out.push({
         type: "tool_call",
         id: block.id ?? null,
         name: block.name ?? "",
+        ...(shell?.success ? { command: shell.data.command } : {}),
         ...(input?.success
           ? {
               fileRead: {

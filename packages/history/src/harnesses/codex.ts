@@ -46,6 +46,10 @@ const Line = z.looseObject({
       role: z.string().nullish(),
       /** Tool name on tool calls. */
       name: z.string().nullish(),
+      /** Tool input on `custom_tool_call`: code or a command, as text. */
+      input: z.unknown().optional(),
+      /** Tool arguments on `function_call`, as JSON text. */
+      arguments: z.unknown().optional(),
       /** Links a tool call to its output. */
       call_id: z.string().nullish(),
       /** Message content: an array of `input_text` / `output_text` parts. */
@@ -78,7 +82,7 @@ export const codex: Harness<"codex"> = {
   home: HOME,
   sourceReads: false,
   injectedInstructions: "combined",
-  skillUse: false,
+  skillUse: true,
 
   async skills(home, project) {
     const codex = home.of(HOME);
@@ -241,7 +245,12 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
     }
     case "function_call":
     case "custom_tool_call":
-      return { type: "tool_call", id: p.call_id ?? null, name: p.name ?? "" };
+      return {
+        type: "tool_call",
+        id: p.call_id ?? null,
+        name: p.name ?? "",
+        ...commandOf(p.input ?? p.arguments),
+      };
     case "function_call_output":
     case "custom_tool_call_output":
       return {
@@ -254,6 +263,8 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
       return null;
   }
 }
+
+const commandOf = (input: unknown) => (typeof input === "string" ? { command: input } : {});
 
 const INSTRUCTIONS =
   /^# AGENTS\.md instructions(?: for (.+))?\n\n<INSTRUCTIONS>\n([\s\S]*)\n<\/INSTRUCTIONS>\s*$/;

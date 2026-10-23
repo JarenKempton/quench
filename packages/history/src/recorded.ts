@@ -14,13 +14,14 @@ export function recordedSkills(session: Session): SessionSkills | null {
   const byPath = new Map([...listed.values()].flatMap((s) => (s.path ? [[s.path, s.name]] : [])));
   const used = new Map<string, "model" | "user">();
   for (const event of session.events) {
-    const use =
+    const uses =
       event.type === "invocation"
-        ? { name: event.name, by: event.by }
-        : event.type === "tool_call" && event.fileRead && byPath.has(event.fileRead.path)
-          ? { name: byPath.get(event.fileRead.path)!, by: "model" as const }
-          : null;
-    if (use && listed.has(use.name) && !used.has(use.name)) used.set(use.name, use.by);
+        ? [{ name: event.name, by: event.by }]
+        : event.type === "tool_call"
+          ? namedSkills(event, byPath)
+          : [];
+    for (const use of uses)
+      if (listed.has(use.name) && !used.has(use.name)) used.set(use.name, use.by);
   }
   return {
     listed: [...listed.values()].map((skill) => ({
@@ -55,6 +56,15 @@ export async function compareWithDisk(record: InjectedInstruction): Promise<Disk
   return [text, text.replace(/\n$/, "")].some((t) => sha256(t) === record.textSha256)
     ? "same"
     : "differs";
+}
+
+function namedSkills(
+  call: Extract<Session["events"][number], { type: "tool_call" }>,
+  byPath: Map<string, string>,
+): { name: string; by: "model" }[] {
+  return [...byPath]
+    .filter(([path]) => call.fileRead?.path === path || call.command?.includes(path))
+    .map(([, name]) => ({ name, by: "model" }));
 }
 
 const interned = new Map<string, string>();
