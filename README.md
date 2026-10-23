@@ -21,6 +21,7 @@ Claude Code
 
 | Command                                  | What it shows                                                                         |
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| `quench [profile] [--scan <dir>]`        | Every harness home, global instructions and each project your sessions ran in         |
 | `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
 | `quench corrections [--dry-run]`         | Human correction and agent supervision rates, counted separately. Opt-in              |
@@ -110,6 +111,25 @@ Changing the window or earlier representatives can require new grouping decision
 outputs are reproducible; the moving `jev-latest` alias is not an accuracy guarantee. No steering
 files or histories are edited, no prose drafts are generated, and no live semantic-accuracy claim
 is implied by local replay tests.
+
+## Profile
+
+```sh
+quench
+quench profile --days 90 --scan ~/code --json
+```
+
+Needs no arguments. It finds each harness home at its default location or override, reads
+the sessions modified in the last `--days` (default 30) and takes each session's recorded
+working directory as a project. Directories in one git repository, including linked
+worktrees and subdirectories, group under its main checkout; others stand alone. Directories
+no longer on disk are counted. Nothing else on the disk is searched: `--scan <dir>` adds that
+repository, or the git repositories directly inside it, for projects with no sessions yet.
+
+Each project shows the current steering inventory of its most recently used directory, with
+user-level files listed once as global instructions. That is current-disk evidence, with the
+same limits as `quench steering`; other worktrees may differ. Skills, MCP servers and plugins
+are not profiled yet. The command makes no model calls and writes no files or caches.
 
 ## Current steering inventory
 
@@ -201,11 +221,11 @@ Checks: `bunx vp check` and `bunx vp run test`. Tasks live in `vite.config.ts`; 
 
 ## Supported harnesses
 
-| Harness                               | Reads from             | Override              |
-| ------------------------------------- | ---------------------- | --------------------- |
-| Claude Code (CLI, desktop, Agent SDK) | `~/.claude/projects`   | `CLAUDE_CONFIG_DIR`   |
-| Codex (CLI, app)                      | `~/.codex/sessions`    | `CODEX_HOME`          |
-| Pi                                    | `~/.pi/agent/sessions` | `PI_CODING_AGENT_DIR` |
+| Harness                               | Reads from             | Override                               |
+| ------------------------------------- | ---------------------- | -------------------------------------- |
+| Claude Code (CLI, desktop, Agent SDK) | `~/.claude/projects`   | `CLAUDE_CONFIG_DIR` or `--claude-home` |
+| Codex (CLI, app)                      | `~/.codex/sessions`    | `CODEX_HOME` or `--codex-home`         |
+| Pi                                    | `~/.pi/agent/sessions` | `PI_CODING_AGENT_DIR` or `--pi-home`   |
 
 Adding one is a single file in `packages/history/src/harnesses/`. See
 [docs/architecture.md](docs/architecture.md).

@@ -78,14 +78,17 @@ const ReadInput = z.object({
 
 const ReadContent = z.array(z.object({ type: z.literal("text"), text: z.string() })).min(1);
 
+const HOME = { variable: "PI_CODING_AGENT_DIR", fallback: ".pi/agent" };
+
 export const pi: Harness<"pi"> = {
   id: "pi",
   label: "Pi",
+  home: HOME,
   sourceReads: true,
   injectedInstructions: "per-file",
 
   async steering(home, project) {
-    const user = home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent");
+    const user = home.of(HOME);
     const roots: SteeringRoot[] = [];
     const names = ["AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"];
     for (const name of names) roots.push({ path: join(user, name), scope: "user" });
@@ -96,7 +99,7 @@ export const pi: Harness<"pi"> = {
   },
 
   async discover(home: Home): Promise<SessionRef[]> {
-    const sessions = join(home.pathFrom("PI_CODING_AGENT_DIR", ".pi/agent"), "sessions");
+    const sessions = join(home.of(HOME), "sessions");
     const paths = await filesWithExt(sessions, ".jsonl", 1);
     return Promise.all(paths.map((path) => sessionRef("pi", path)));
   },
