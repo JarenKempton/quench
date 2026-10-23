@@ -7,7 +7,9 @@ export { discoverAll, readSessions, type ReadOutcome } from "./read.ts";
 export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
+export { compareWithDisk, recordedInstructions, type DiskComparison } from "./recorded.ts";
 export {
+  checkout,
   projects,
   sessionPlaces,
   type Project,
