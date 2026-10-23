@@ -63,13 +63,13 @@ full bodies.
 
 ## Evidence trail
 
-- `~/.pi/agent/settings.json` — `packages: [git:…/pi-config, git:…/agent-skills]`.
+- `~/.pi/agent/settings.json` — `packages: [git:…]`, skill packages installed from git.
 - `pi --help` — `--skill`, `--no-skills` ("Disable skills discovery and loading").
 - `dist/core/skills.js` — `formatSkillsForPrompt()` (index) + `loadSkillFromFile()`
   (frontmatter only).
 - `dist/core/system-prompt.js:29-30,103-104` — injects the index, read-tool-gated.
-- `~/Documents/programming/agent-skills/README.md` — canonical SKILL.md catalog,
-  standard Agent Skills format, consumed by Pi as a package.
+- A skills package's `README.md` — canonical SKILL.md catalog, standard Agent Skills
+  format, consumed by Pi as a package.
 
 ## Not verified
 

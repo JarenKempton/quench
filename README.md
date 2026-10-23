@@ -8,13 +8,13 @@ and effort levels you use, and how each agent run went. Nothing leaves your mach
 unless you opt in.
 
 ```
-$ quench report
+$ quench report        # on the test fixture home
 Claude Code
-  Sessions          522 (+173 subagent)
-  Tokens processed  30.5B
-  Starting load     median 193.8k  (p10 63.1k, p90 214.9k)  (49% of tokens processed)
-  Compactions       378 in 100 sessions
-  Effort            medium 65%, high 33%, xhigh 1%
+  Sessions          1 (+1 subagent)
+  Tokens processed  59.0k
+  Starting load     median 21.0k  (p10 21.0k, p90 21.0k)  (85% of tokens processed)
+  Compactions       1 in 1 sessions
+  Effort            high 33%, medium 33%, unknown 33%
 ```
 
 ## Commands
