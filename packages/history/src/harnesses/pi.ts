@@ -71,6 +71,11 @@ export const Item = z.looseObject({
   text: z.unknown().optional(),
 });
 
+const BashInput = z.looseObject({
+  /** Shell command the model ran. */
+  command: z.string(),
+});
+
 const ReadInput = z.object({
   path: z.string().min(1),
   offset: z.number().int().positive().nullish(),
@@ -224,10 +229,12 @@ function assistant(m: Message): EventKind[] {
     if (item.data.type === "text") out.push(...text("assistant", item.data.text));
     if (item.data.type === "toolCall") {
       const input = item.data.name === "read" ? ReadInput.safeParse(item.data.arguments) : null;
+      const shell = item.data.name === "bash" ? BashInput.safeParse(item.data.arguments) : null;
       out.push({
         type: "tool_call",
         id: item.data.id ?? null,
         name: item.data.name ?? "",
+        ...(shell?.success ? { command: shell.data.command } : {}),
         ...(input?.success
           ? {
               fileRead: {
