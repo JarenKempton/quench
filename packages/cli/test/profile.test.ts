@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Home, skillInventory } from "@quench/history";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -86,28 +87,28 @@ test("profile with no arguments finds projects from session directories and grou
     [
       "Quench profile · last 30 days · 5 sessions · instruction files as they are on disk now",
       "",
-      "  Agent        Sessions  Home",
-      "  Claude Code         0  ~/.claude",
-      "  Codex               5  ~/.codex",
-      "  Pi                  —  ~/.pi/agent not found; set --pi-home",
+      "  Agent        Sessions  Skills  MCP  Home",
+      "  Claude Code         0  0         0  ~/.claude",
+      "  Codex               5  0         0  ~/.codex",
+      "  Pi                  —  —         —  ~/.pi/agent not found; set --pi-home",
       "",
       "Global instructions · every project, before project files",
       "  ~/.claude/CLAUDE.md  25 B  Claude Code",
       "  ~/.codex/AGENTS.md   21 B  Codex",
       "",
       "Projects · 1 git repository · project instruction size per agent",
-      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Instruction files  Worktrees   Path",
-      "  app             3  today             22 B   22 B                 —  AGENTS.md          1 · 0 idle  ~/code/app",
+      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
+      "  app             3  today             22 B   22 B                 —       —    —  AGENTS.md          1 · 0 idle  ~/code/app",
       "",
       "Other folders · 1 folder outside git · 1 session",
-      "  Project  Sessions  Last used   Claude Code  Codex  Recorded/session  Instruction files  Path",
-      "  scratch         1  2 days ago            —      —                 —  none               ~/scratch",
+      "  Project  Sessions  Last used   Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Path",
+      "  scratch         1  2 days ago            —      —                 —       —    —  none               ~/scratch",
       "",
       "1 session folder no longer exists; its sessions are not listed.",
       "",
       "Agent columns: the project's own instruction files on disk now in its most recently used folder; global files come on top.",
       "Recorded/session: median instruction text sessions logged loading, global files included. Older harness versions logged none.",
-      "Skills, MCP servers and plugins are not counted yet.",
+      "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in and plugin skills are not counted yet.",
       "",
     ].join("\n"),
   );
@@ -344,8 +345,8 @@ test("profile shows the instructions sessions recorded loading and whether disk 
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
-      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Instruction files  Worktrees   Path",
-      "  app             4  today             22 B      —          35 chars  CLAUDE.md          1 · 0 idle  ~/code/app",
+      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
+      "  app             4  today             22 B      —          35 chars       —    —  CLAUDE.md          1 · 0 idle  ~/code/app",
     ].join("\n"),
   );
   expect(stdout).toContain(
@@ -369,4 +370,132 @@ test("profile shows the instructions sessions recorded loading and whether disk 
     [join(worktree, "CLAUDE.md"), "differs"],
   ]);
   expect(out.projects[0].recordedLoad).toEqual({ sessions: 3, medianChars: 35 });
+});
+
+test("profile lists skills and MCP servers each agent finds, without reading out secrets", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-setup-")));
+  const repo = join(home, "code/app");
+  const worktree = join(home, "wt/app-x");
+  await mkdir(repo, { recursive: true });
+  git(repo, "init");
+  git(repo, "commit", "--allow-empty", "-m", "init");
+  git(repo, "worktree", "add", worktree);
+  const skill = (dir: string, front: string, body = "Steps.\n") =>
+    Bun.write(join(dir, "SKILL.md"), `---\n${front}\n---\n\n${body}`);
+  await skill(join(home, ".claude/skills/review"), "name: review\ndescription: Review: find bugs");
+  await skill(
+    join(home, ".claude/skills/release"),
+    "name: release\ndescription: Ship it\ndisable-model-invocation: true",
+  );
+  await Bun.write(join(home, ".claude/commands/deploy.md"), "Deploy the app.\n\nMore.\n");
+  await skill(join(home, "shared/notes"), "name: notes\ndescription: Take notes");
+  await mkdir(join(home, ".agents/skills"), { recursive: true });
+  await symlink(join(home, "shared/notes"), join(home, ".agents/skills/notes"));
+  await skill(join(home, ".codex/skills/.system/plan"), "name: plan\ndescription: Plan work");
+  await skill(join(repo, ".claude/skills/app-only"), "name: app-only\ndescription: App task");
+  await skill(join(repo, ".agents/skills/repo-skill"), "name: repo-skill\ndescription: Repo task");
+  await Bun.write(
+    join(home, ".claude.json"),
+    JSON.stringify({
+      mcpServers: { figma: { type: "http", url: "https://mcp.example.com/mcp?token=SECRET" } },
+      projects: {
+        [repo]: {
+          mcpServers: {
+            db: {
+              command: "/usr/bin/db-mcp",
+              args: ["--password", "SECRET"],
+              env: { PW: "SECRET" },
+            },
+          },
+        },
+      },
+    }),
+  );
+  await Bun.write(
+    join(repo, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        linear: { type: "http", url: "https://mcp.linear.app/mcp" },
+        tickets: { command: "npx", args: ["tickets", "SECRET"] },
+      },
+    }),
+  );
+  await Bun.write(
+    join(home, ".claude/settings.json"),
+    JSON.stringify({ enabledMcpjsonServers: ["linear"] }),
+  );
+  await Bun.write(
+    join(home, ".codex/config.toml"),
+    [
+      "[mcp_servers.docs]",
+      'url = "https://docs.example.com/mcp"',
+      'bearer_token_env_var = "SECRET"',
+      "[mcp_servers.old]",
+      'command = "old-mcp"',
+      "enabled = false",
+      `[projects."${repo}"]`,
+      'trust_level = "trusted"',
+    ].join("\n"),
+  );
+  await Bun.write(
+    join(repo, ".codex/config.toml"),
+    '[mcp_servers.local]\ncommand = "node"\nargs = ["SECRET"]\n',
+  );
+  await Bun.write(
+    join(home, ".claude/projects/s/one.jsonl"),
+    JSON.stringify({ type: "user", cwd: worktree, message: { content: "hi" } }) + "\n",
+  );
+  await codexSession(join(home, ".codex/sessions/2026/10/20"), "c", repo);
+
+  const earlier = new Date(Date.now() - 86_400_000);
+  await utimes(join(home, ".claude/projects/s/one.jsonl"), earlier, earlier);
+
+  const { stdout, code } = await quench(home);
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    [
+      "  Agent        Sessions  Skills        MCP  Home",
+      "  Claude Code         1  2 · 44 chars    1  ~/.claude",
+      "  Codex               1  2 · 28 chars    2  ~/.codex",
+      "  Pi                  —  —               —  ~/.pi/agent not found; set --pi-home",
+    ].join("\n"),
+  );
+  expect(stdout).toContain(
+    [
+      "MCP servers · configured on disk now · tool definitions not counted",
+      "  Server   Agent        Scope    Transport  Target            State           Where",
+      "  figma    Claude Code  user     http       mcp.example.com   on              all projects",
+      "  docs     Codex        user     http       docs.example.com  on              all projects",
+      "  old      Codex        user     stdio      old-mcp           off             all projects",
+      "  linear   Claude Code  project  http       mcp.linear.app    on              app",
+      "  tickets  Claude Code  project  stdio      npx               needs approval  app",
+      "  db       Claude Code  local    stdio      db-mcp            on              app",
+      "  local    Codex        project  stdio      node              on              app",
+    ].join("\n"),
+  );
+  const raw = (await quench(home, "--json")).stdout;
+  expect(raw).not.toContain("SECRET");
+  const out = JSON.parse(raw);
+  const where = (skills: { name: string; sources: { harness: string; scope: string }[] }[]) =>
+    skills.map((s) => [s.name, s.sources.map((x) => `${x.harness}:${x.scope}`)]);
+  expect(where(out.globalSkills)).toEqual([
+    ["release", ["claude-code:user"]],
+    ["review", ["claude-code:user"]],
+    ["deploy", ["claude-code:user"]],
+    ["notes", ["codex:user", "pi:user"]],
+    ["plan", ["codex:system"]],
+  ]);
+  expect(out.globalSkills.find((s: { name: string }) => s.name === "release").modelInvocable).toBe(
+    false,
+  );
+  expect(where(out.projects[0].skills)).toEqual([
+    ["app-only", ["claude-code:project"]],
+    ["repo-skill", ["codex:project", "pi:project"]],
+  ]);
+  const inWorktree = await skillInventory(new Home(home), worktree);
+  expect(
+    inWorktree.skills
+      .filter((s) => s.sources.some((x) => x.scope === "project"))
+      .map((s) => [s.name, s.sources.map((x) => `${x.harness}:${x.scope}`)]),
+  ).toEqual([["app-only", ["claude-code:project"]]]);
 });

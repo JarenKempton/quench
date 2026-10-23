@@ -1,6 +1,8 @@
 import { modified } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, Session } from "./model.ts";
+import type { McpEntry } from "./mcp.ts";
+import type { SkillRoot } from "./skills.ts";
 import type { SteeringRoot } from "./steering.ts";
 
 export type SessionRef = {
@@ -21,6 +23,8 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
   steering(home: Home, project: string): Promise<SteeringRoot[]>;
+  skills(home: Home, project: string): Promise<SkillRoot[]>;
+  mcp(home: Home, project: string): Promise<McpEntry[]>;
 }
 
 export async function sessionRef(

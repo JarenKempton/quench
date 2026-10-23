@@ -1,6 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
-import { subdirs } from "./files.ts";
+import { join, resolve } from "node:path";
+import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction } from "./model.ts";
 import { discoverAll, readSessions } from "./read.ts";
@@ -119,32 +119,6 @@ export async function projects(places: readonly SessionPlace[], scan: readonly s
 async function existingDirectory(path: string): Promise<string | null> {
   const real = await realpath(path).catch(() => null);
   return real && (await stat(real)).isDirectory() ? real : null;
-}
-
-export async function repositoryRoot(directory: string): Promise<string | null> {
-  return (await checkout(directory))?.root ?? null;
-}
-
-export async function checkout(directory: string): Promise<{ top: string; root: string } | null> {
-  for (let dir = directory; ; dir = dirname(dir)) {
-    const dotGit = join(dir, ".git");
-    const info = await stat(dotGit).catch(() => null);
-    if (info?.isDirectory()) return { top: dir, root: dir };
-    if (info?.isFile()) return { top: dir, root: (await commonRoot(dotGit)) ?? dir };
-    if (dir === dirname(dir)) return null;
-  }
-}
-
-async function commonRoot(dotGit: string): Promise<string | null> {
-  const gitDir = /^gitdir: (.+)$/m.exec(await Bun.file(dotGit).text())?.[1]?.trim();
-  if (!gitDir) return null;
-  const linked = resolve(dirname(dotGit), gitDir);
-  const common = await Bun.file(join(linked, "commondir"))
-    .text()
-    .then((text) => resolve(linked, text.trim()))
-    .catch(() => null);
-  if (!common) return null;
-  return basename(common) === ".git" ? dirname(common) : common;
 }
 
 const unique = <T>(values: T[]) => [...new Set(values)];

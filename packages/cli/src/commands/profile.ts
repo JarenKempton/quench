@@ -6,16 +6,20 @@ import {
   harnessById,
   harnesses,
   linkedWorktrees,
+  mcpInventory,
   projects,
   sessionPlaces,
+  skillInventory,
   steeringInventory,
   usedIn,
   type DiskComparison,
   type HarnessId,
   type Home,
   type InjectedInstruction,
+  type McpServer,
   type Project,
   type SessionPlace,
+  type Skill,
   type SteeringFile,
 } from "@quench/history";
 import { ago, json, plural, size, table, tokens } from "../format.ts";
@@ -36,6 +40,8 @@ export async function profile(
     return 1;
   }
   const global = new Map<string, InstructionFile>();
+  const globalSkills = new Map<string, Skill>();
+  const globalMcp = new Map<string, McpServer>();
   const profiled = [];
   for (const project of found.projects) {
     const directory = project.directories[0]?.path ?? project.root;
@@ -50,6 +56,17 @@ export async function profile(
       if (user.length) global.set(file.id, { ...summary, sources: user });
       if (other.length) local.push({ ...summary, sources: other });
     }
+    const skills = await skillInventory(home, directory);
+    const projectSkills: Skill[] = [];
+    for (const skill of skills.skills) {
+      const shared = skill.sources.filter((s) => s.scope === "user" || s.scope === "system");
+      const own = skill.sources.filter((s) => !shared.includes(s));
+      if (shared.length) globalSkills.set(skill.realPath, { ...skill, sources: shared });
+      if (own.length) projectSkills.push({ ...skill, sources: own });
+    }
+    const mcp = await mcpInventory(home, directory);
+    for (const server of mcp.servers.filter((s) => s.scope === "user"))
+      globalMcp.set(`${server.harness}\0${server.name}`, server);
     const loads = (found.placesByRoot.get(project.root) ?? []).flatMap((p) =>
       p.instructions ? [p.instructions.reduce((n, f) => n + f.textChars, 0)] : [],
     );
@@ -64,7 +81,9 @@ export async function profile(
         idle: linked.filter((w) => !w.missing && !usedIn(w.path, directories)).length,
         missing: linked.filter((w) => w.missing).length,
       },
-      warnings: inventory.warnings,
+      skills: projectSkills,
+      mcpServers: mcp.servers.filter((s) => s.scope !== "user"),
+      warnings: [...inventory.warnings, ...skills.warnings, ...mcp.warnings],
     });
   }
   const result = {
@@ -80,6 +99,8 @@ export async function profile(
     ),
     unreadable,
     globalInstructions: [...global.values()],
+    globalSkills: [...globalSkills.values()],
+    globalMcpServers: [...globalMcp.values()],
     recordedInstructions: await recordedFiles(places),
     projects: profiled,
     missingDirectories: found.missing,
@@ -89,7 +110,8 @@ export async function profile(
       "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
       "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",
       "A recorded file is the same as disk now when its hash matches the file's text exactly, or with one final newline removed as Claude Code does. Anything else differs: usually the file changed since, possibly other processing by the harness.",
-      "Skills, MCP servers and plugins are not profiled yet.",
+      "Skills are SKILL.md folders in each agent's documented locations on disk now. Up-front size is name plus description before each agent's own caps and budgets; bodies load on demand. Built-in and plugin skills, managed and /etc locations, and Codex agents/openai.yaml policies are not read. Codex and Pi project trust is approximated from user config, or assumed for Pi.",
+      "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Tool definitions need a live connection and are not counted. Plugin and managed servers are not read.",
     ],
   };
   if (options.json) {
@@ -183,10 +205,14 @@ type Profile = {
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
   unreadable: number;
   globalInstructions: InstructionFile[];
+  globalSkills: Skill[];
+  globalMcpServers: McpServer[];
   recordedInstructions: RecordedFile[];
   projects: (Project & {
     instructions: { directory: string; files: InstructionFile[] };
     recordedLoad: { sessions: number; medianChars: number | null };
+    skills: Skill[];
+    mcpServers: McpServer[];
     worktrees: { linked: number; idle: number; missing: number } | null;
     warnings: string[];
   })[];
@@ -197,6 +223,14 @@ const OTHER_FOLDERS_SHOWN = 5;
 const RECORDED_SHOWN = 15;
 
 const chars = (n: number) => `${tokens(n)} chars`;
+
+function skillsCell(skills: Skill[], harness: HarnessId): string {
+  const visible = skills.filter(
+    (s) => s.modelInvocable && s.sources.some((source) => source.harness === harness),
+  );
+  if (!visible.length) return "0";
+  return `${count(visible.length)} · ${chars(visible.reduce((n, s) => n + s.indexChars, 0))}`;
+}
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -210,14 +244,18 @@ function render(result: Profile, homeDir: string): string[] {
     "",
     ...table(
       [
-        ["Agent", "Sessions", "Home"],
+        ["Agent", "Sessions", "Skills", "MCP", "Home"],
         ...result.homes.map((h) => [
           harnessById[h.harness].label,
           h.found ? count(h.sessions) : "—",
+          h.found ? skillsCell(result.globalSkills, h.harness) : "—",
+          h.found
+            ? count(result.globalMcpServers.filter((s) => s.harness === h.harness).length)
+            : "—",
           h.found ? short(h.path) : `${short(h.path)} not found; set ${flagFor(h.harness)}`,
         ]),
       ],
-      [1],
+      [1, 3],
     ),
   ];
   if (result.unreadable)
@@ -262,6 +300,8 @@ function render(result: Profile, homeDir: string): string[] {
     p.sessions ? ago(p.lastActive) : "scanned",
     ...agents.map((h) => loaded(p, h.harness)),
     p.recordedLoad.medianChars === null ? "—" : chars(p.recordedLoad.medianChars),
+    p.skills.length ? count(p.skills.length) : "—",
+    p.mcpServers.length ? count(p.mcpServers.length) : "—",
     fileNames(p),
     p.worktrees?.linked ? `${count(p.worktrees.linked)} · ${count(p.worktrees.idle)} idle` : "—",
     short(p.root),
@@ -272,11 +312,13 @@ function render(result: Profile, homeDir: string): string[] {
     "Last used",
     ...agents.map((h) => harnessById[h.harness].label),
     "Recorded/session",
+    "Skills",
+    "MCP",
     "Instruction files",
     "Worktrees",
     "Path",
   ];
-  const numeric = [1, ...agents.map((_, i) => i + 3), agents.length + 3];
+  const numeric = [1, ...agents.map((_, i) => i + 3), ...[3, 4, 5].map((i) => agents.length + i)];
 
   lines.push(
     "",
@@ -300,6 +342,30 @@ function render(result: Profile, homeDir: string): string[] {
     if (other.length > shown.length)
       lines.push(`  … ${other.length - shown.length} more in --json`);
   }
+
+  const servers = [
+    ...result.globalMcpServers.map((s) => ({ ...s, where: "all projects" })),
+    ...result.projects.flatMap((p) =>
+      p.mcpServers.map((s) => ({ ...s, where: p.root === homeDir ? "~" : basename(p.root) })),
+    ),
+  ];
+  if (servers.length)
+    lines.push(
+      "",
+      "MCP servers · configured on disk now · tool definitions not counted",
+      ...table([
+        ["Server", "Agent", "Scope", "Transport", "Target", "State", "Where"],
+        ...servers.map((s) => [
+          s.name,
+          harnessById[s.harness].label,
+          s.scope,
+          s.transport,
+          s.target ?? "—",
+          s.enabled === null ? "needs approval" : s.enabled ? "on" : "off",
+          s.where,
+        ]),
+      ]),
+    );
 
   if (result.recordedInstructions.length) {
     const shown = result.recordedInstructions.slice(0, RECORDED_SHOWN);
@@ -365,7 +431,9 @@ function render(result: Profile, homeDir: string): string[] {
   );
   if (result.recordedInstructions.length)
     lines.push("Disk now: whether the last recorded text still matches the file today.");
-  lines.push("Skills, MCP servers and plugins are not counted yet.");
+  lines.push(
+    "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in and plugin skills are not counted yet.",
+  );
   return lines;
 }
 
