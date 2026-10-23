@@ -20,6 +20,7 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   readonly home: HarnessHome;
   readonly sourceReads: boolean;
   readonly injectedInstructions: "per-file" | "combined";
+  readonly skillUse: boolean;
   discover(home: Home): Promise<SessionRef[]>;
   read(ref: SessionRef): Promise<Session>;
   steering(home: Home, project: string): Promise<SteeringRoot[]>;
