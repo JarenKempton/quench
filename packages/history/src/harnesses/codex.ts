@@ -78,6 +78,7 @@ export const codex: Harness<"codex"> = {
   home: HOME,
   sourceReads: false,
   injectedInstructions: "combined",
+  skillUse: false,
 
   async skills(home, project) {
     const codex = home.of(HOME);
@@ -166,6 +167,8 @@ export const codex: Harness<"codex"> = {
       }
       const loaded = instructions(line);
       if (loaded) events.push({ ...loaded, at });
+      const listing = skillListing(line);
+      if (listing) events.push({ ...listing, at });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
@@ -263,6 +266,24 @@ const HistoryItem = z.looseObject({
   /** Message content: an array of `input_text` / `output_text` parts. */
   content: z.unknown().optional(),
 });
+
+const SKILLS = /<skills_instructions>([\s\S]*?)<\/skills_instructions>/;
+
+function skillListing(line: Line): EventKind | null {
+  const p = line.payload;
+  if (line.type !== "response_item" || p?.type !== "message" || p.role !== "developer") return null;
+  const block = SKILLS.exec(textOf(p.content))?.[1];
+  if (!block) return null;
+  const roots = new Map(
+    [...block.matchAll(/^- `(r\d+)` = `([^`]+)`$/gm)].map(([, id, path]) => [id!, path!]),
+  );
+  const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(([, name, file]) => {
+    const [root, ...rest] = file!.split("/");
+    const base = roots.get(root!);
+    return { name: name!, path: base ? [base, ...rest].join("/") : file! };
+  });
+  return { type: "skills", listed, chars: block.length };
+}
 
 function instructions(line: Line): EventKind | null {
   const p = line.payload;
