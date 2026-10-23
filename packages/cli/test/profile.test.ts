@@ -96,17 +96,18 @@ test("profile with no arguments finds projects from session directories and grou
       "  ~/.codex/AGENTS.md   21 B  Codex",
       "",
       "Projects · 1 git repository · project instruction size per agent",
-      "  Project  Sessions  Last used  Claude Code  Codex  Instruction files  Worktrees   Path",
-      "  app             3  today             22 B   22 B  AGENTS.md          1 · 0 idle  ~/code/app",
+      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Instruction files  Worktrees   Path",
+      "  app             3  today             22 B   22 B                 —  AGENTS.md          1 · 0 idle  ~/code/app",
       "",
       "Other folders · 1 folder outside git · 1 session",
-      "  Project  Sessions  Last used   Claude Code  Codex  Instruction files  Path",
-      "  scratch         1  2 days ago            —      —  none               ~/scratch",
+      "  Project  Sessions  Last used   Claude Code  Codex  Recorded/session  Instruction files  Path",
+      "  scratch         1  2 days ago            —      —                 —  none               ~/scratch",
       "",
       "1 session folder no longer exists; its sessions are not listed.",
       "",
-      "Sizes are the project's own instruction files each agent would find in its most recently used folder; global files come on top.",
-      "Files on disk now are not proof of what a past session loaded. Skills, MCP servers and plugins are not counted yet.",
+      "Agent columns: the project's own instruction files on disk now in its most recently used folder; global files come on top.",
+      "Recorded/session: median instruction text sessions logged loading, global files included. Older harness versions logged none.",
+      "Skills, MCP servers and plugins are not counted yet.",
       "",
     ].join("\n"),
   );
@@ -245,4 +246,127 @@ test("worktrees lists idle worktrees safe to remove and why others are kept, wit
   ]);
   for (const name of ["active", "merged", "dirty", "unmerged", "locked"])
     expect(await Bun.file(join(wt(name), ".git")).exists()).toBe(true);
+});
+
+test("profile shows the instructions sessions recorded loading and whether disk still matches", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-recorded-")));
+  const repo = join(home, "code/app");
+  const worktree = join(home, "wt/app-x");
+  await mkdir(repo, { recursive: true });
+  git(repo, "init");
+  git(repo, "commit", "--allow-empty", "-m", "init");
+  git(repo, "worktree", "add", worktree);
+  const claudeHome = join(home, ".claude");
+  const memory = join(
+    claudeHome,
+    "projects",
+    repo.replace(/[^A-Za-z0-9]/g, "-"),
+    "memory/MEMORY.md",
+  );
+  await Bun.write(join(claudeHome, "CLAUDE.md"), "Prefer boring solutions.\n");
+  await Bun.write(join(repo, "CLAUDE.md"), "- Run the real check.\n");
+  await Bun.write(join(worktree, "CLAUDE.md"), "- New rule.\n");
+  await Bun.write(memory, "- Deploys need approval.\n");
+  const claudeSession = (id: string, cwd: string, files: object[]) =>
+    Bun.write(
+      join(claudeHome, "projects/sessions", `${id}.jsonl`),
+      [
+        { type: "user", timestamp: "2026-10-20T10:00:00Z", cwd, message: { content: "hi" } },
+        ...files.map((attachment) => ({
+          type: "attachment",
+          timestamp: "2026-10-20T10:00:00Z",
+          cwd,
+          attachment,
+        })),
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n") + "\n",
+    );
+  const file = (path: string, content: string, extra = {}) => ({
+    path,
+    type: "Project",
+    content,
+    ...extra,
+  });
+  await claudeSession("one", repo, [
+    {
+      type: "instructions",
+      files: [
+        file(join(claudeHome, "CLAUDE.md"), "Prefer boring solutions."),
+        file(join(repo, "CLAUDE.md"), "- Run the real check."),
+        file(memory, "- Deploys need approval."),
+      ],
+    },
+    {
+      type: "nested_memory",
+      content: file(join(repo, "admin/CLAUDE.md"), "- Small admin changes.", {
+        contentDiffersFromDisk: true,
+      }),
+    },
+  ]);
+  await claudeSession("two", worktree, [
+    {
+      type: "instructions",
+      files: [
+        file(join(claudeHome, "CLAUDE.md"), "Prefer boring solutions."),
+        file(join(worktree, "CLAUDE.md"), "- Old rule."),
+      ],
+    },
+  ]);
+  await claudeSession("three", repo, []);
+  await Bun.write(
+    join(home, ".codex/sessions/2026/10/20/c.jsonl"),
+    [
+      { type: "session_meta", timestamp: "2026-10-20T10:00:00Z", payload: { id: "c", cwd: repo } },
+      {
+        type: "response_item",
+        timestamp: "2026-10-20T10:00:00Z",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `# AGENTS.md instructions for ${repo}\n\n<INSTRUCTIONS>\nUse concise replies.\n</INSTRUCTIONS>`,
+            },
+          ],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n") + "\n",
+  );
+
+  const yesterday = new Date(Date.now() - 86_400_000);
+  await utimes(join(claudeHome, "projects/sessions/two.jsonl"), yesterday, yesterday);
+
+  const { stdout, code } = await quench(home);
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    [
+      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Instruction files  Worktrees   Path",
+      "  app             4  today             22 B      —          35 chars  CLAUDE.md          1 · 0 idle  ~/code/app",
+    ].join("\n"),
+  );
+  expect(stdout).toContain(
+    [
+      "Recorded instructions · what session histories logged loading · worktrees folded",
+      "  File                       Agents       Sessions  Last recorded      Size  Disk now",
+      "  ~/.claude/CLAUDE.md        Claude Code         2  today          24 chars  same",
+      "  app/CLAUDE.md              Claude Code         2  today          21 chars  1 same, 1 differs",
+      "  app (combined block)       Codex               1  today          20 chars  not comparable",
+      "  app auto memory/MEMORY.md  Claude Code         1  today          24 chars  same",
+      "  app/admin/CLAUDE.md        Claude Code         1  today          22 chars  not comparable",
+    ].join("\n"),
+  );
+  const out = JSON.parse((await quench(home, "--json")).stdout);
+  expect(
+    out.recordedInstructions
+      .find((r: { file: string; combined: boolean }) => r.file === "CLAUDE.md" && !r.combined)
+      .checkouts.map((c: { path: string; disk: string }) => [c.path, c.disk]),
+  ).toEqual([
+    [join(repo, "CLAUDE.md"), "same"],
+    [join(worktree, "CLAUDE.md"), "differs"],
+  ]);
+  expect(out.projects[0].recordedLoad).toEqual({ sessions: 3, medianChars: 35 });
 });

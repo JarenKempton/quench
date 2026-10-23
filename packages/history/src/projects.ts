@@ -2,10 +2,16 @@ import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
-import type { HarnessId } from "./model.ts";
+import type { HarnessId, InjectedInstruction } from "./model.ts";
 import { discoverAll, readSessions } from "./read.ts";
+import { recordedInstructions } from "./recorded.ts";
 
-export type SessionPlace = { cwd: string | null; harness: HarnessId; at: Date | null };
+export type SessionPlace = {
+  cwd: string | null;
+  harness: HarnessId;
+  at: Date | null;
+  instructions: InjectedInstruction[] | null;
+};
 
 export type ProjectDirectory = {
   path: string;
@@ -36,6 +42,7 @@ export async function sessionPlaces(home: Home, since: Date) {
         cwd: outcome.session.cwd,
         harness: outcome.session.harness,
         at: modified.get(outcome.session.path) ?? null,
+        instructions: recordedInstructions(outcome.session),
       });
   }
   return { places, unreadable };
@@ -46,6 +53,7 @@ export async function projects(places: readonly SessionPlace[], scan: readonly s
   for (const cwd of new Set(places.flatMap((p) => (p.cwd ? [p.cwd] : []))))
     resolved.set(cwd, await existingDirectory(cwd));
   const byDirectory = new Map<string, SessionPlace[]>();
+  const placesByRoot = new Map<string, SessionPlace[]>();
   for (const place of places) {
     const path = place.cwd ? resolved.get(place.cwd) : null;
     if (path) byDirectory.set(path, [...(byDirectory.get(path) ?? []), place]);
@@ -68,6 +76,7 @@ export async function projects(places: readonly SessionPlace[], scan: readonly s
   for (const [path, sessions] of byDirectory) {
     const root = await repositoryRoot(path);
     const entry = project(root ?? path, root !== null);
+    placesByRoot.set(entry.root, [...(placesByRoot.get(entry.root) ?? []), ...sessions]);
     const directory = {
       path,
       sessions: sessions.length,
@@ -103,6 +112,7 @@ export async function projects(places: readonly SessionPlace[], scan: readonly s
         (b.lastActive ?? "").localeCompare(a.lastActive ?? "") || a.root.localeCompare(b.root),
     ),
     missing: missing.sort(),
+    placesByRoot,
   };
 }
 
@@ -112,11 +122,15 @@ async function existingDirectory(path: string): Promise<string | null> {
 }
 
 export async function repositoryRoot(directory: string): Promise<string | null> {
+  return (await checkout(directory))?.root ?? null;
+}
+
+export async function checkout(directory: string): Promise<{ top: string; root: string } | null> {
   for (let dir = directory; ; dir = dirname(dir)) {
     const dotGit = join(dir, ".git");
     const info = await stat(dotGit).catch(() => null);
-    if (info?.isDirectory()) return dir;
-    if (info?.isFile()) return (await commonRoot(dotGit)) ?? dir;
+    if (info?.isDirectory()) return { top: dir, root: dir };
+    if (info?.isFile()) return { top: dir, root: (await commonRoot(dotGit)) ?? dir };
     if (dir === dirname(dir)) return null;
   }
 }

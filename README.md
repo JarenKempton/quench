@@ -129,8 +129,17 @@ repository, or the git repositories directly inside it, for projects with no ses
 
 Each project shows the current steering inventory of its most recently used directory, with
 user-level files listed once as global instructions. That is current-disk evidence, with the
-same limits as `quench steering`; other worktrees may differ. Skills, MCP servers and plugins
-are not profiled yet. The command makes no model calls and writes no files or caches.
+same limits as `quench steering`; other worktrees may differ.
+
+It also shows the instructions sessions recorded loading, as `quench sources` reads them:
+the median per session for each project, and each recorded file with the sessions that
+loaded it, its last recorded size and whether that text still matches the file on disk.
+Copies of one file across worktrees fold into one row with a state per checkout. A match
+is exact, allowing only the single final newline Claude Code drops. Text a harness
+transformed (Claude Code stripping HTML comments) and Codex's combined per-directory
+blocks are not comparable. Sessions from harness versions that recorded nothing count as
+unknown, not zero. Skills, MCP servers and plugins are not profiled yet. The command makes
+no model calls and writes no files or caches.
 
 ## Idle worktrees
 

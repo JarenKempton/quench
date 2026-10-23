@@ -1,6 +1,8 @@
 import { stat } from "node:fs/promises";
-import { basename, relative } from "node:path";
+import { basename, dirname, relative } from "node:path";
 import {
+  checkout,
+  compareWithDisk,
   harnessById,
   harnesses,
   linkedWorktrees,
@@ -8,12 +10,15 @@ import {
   sessionPlaces,
   steeringInventory,
   usedIn,
+  type DiskComparison,
   type HarnessId,
   type Home,
+  type InjectedInstruction,
   type Project,
+  type SessionPlace,
   type SteeringFile,
 } from "@quench/history";
-import { ago, json, plural, size, table } from "../format.ts";
+import { ago, json, plural, size, table, tokens } from "../format.ts";
 
 type InstructionFile = Omit<SteeringFile, "rules"> & { rules: number };
 
@@ -45,11 +50,15 @@ export async function profile(
       if (user.length) global.set(file.id, { ...summary, sources: user });
       if (other.length) local.push({ ...summary, sources: other });
     }
+    const loads = (found.placesByRoot.get(project.root) ?? []).flatMap((p) =>
+      p.instructions ? [p.instructions.reduce((n, f) => n + f.textChars, 0)] : [],
+    );
     const linked = project.git ? await linkedWorktrees(project.root) : null;
     const directories = project.directories.map((d) => d.path);
     profiled.push({
       ...project,
       instructions: { directory, files: local },
+      recordedLoad: { sessions: loads.length, medianChars: median(loads) },
       worktrees: linked && {
         linked: linked.length,
         idle: linked.filter((w) => !w.missing && !usedIn(w.path, directories)).length,
@@ -71,12 +80,15 @@ export async function profile(
     ),
     unreadable,
     globalInstructions: [...global.values()],
+    recordedInstructions: await recordedFiles(places),
     projects: profiled,
     missingDirectories: found.missing,
     limitations: [
       `Projects come from the working directories of sessions modified in the last ${options.days} days, plus --scan; projects with no recent sessions are not found.`,
       "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
       "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
+      "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",
+      "A recorded file is the same as disk now when its hash matches the file's text exactly, or with one final newline removed as Claude Code does. Anything else differs: usually the file changed since, possibly other processing by the harness.",
       "Skills, MCP servers and plugins are not profiled yet.",
     ],
   };
@@ -88,13 +100,93 @@ export async function profile(
   return 0;
 }
 
+type RecordedFile = {
+  root: string | null;
+  file: string;
+  combined: boolean;
+  harnesses: HarnessId[];
+  sessions: number;
+  lastRecorded: string | null;
+  textChars: number;
+  textSha256: string;
+  checkouts: { path: string; lastRecorded: string | null; disk: DiskComparison }[];
+};
+
+type Recorded = { at: string | null; record: InjectedInstruction };
+
+async function recordedFiles(places: readonly SessionPlace[]): Promise<RecordedFile[]> {
+  const checkouts = new Map<string, ReturnType<typeof checkout>>();
+  const checkoutOf = (dir: string) =>
+    checkouts.get(dir) ?? checkouts.set(dir, checkout(dir)).get(dir)!;
+  const rows = new Map<
+    string,
+    { root: string | null; file: string; places: SessionPlace[]; latest: Map<string, Recorded> }
+  >();
+  for (const place of places) {
+    const at = place.at?.toISOString() ?? null;
+    for (const record of place.instructions ?? []) {
+      const target = record.path ?? record.directory;
+      const repo = target ? await checkoutOf(record.path ? dirname(target) : target) : null;
+      const file = repo && target ? relative(repo.top, target) || "." : (target ?? "unknown");
+      const key = `${repo?.root ?? ""}\0${file}\0${record.path === null}`;
+      const row =
+        rows.get(key) ??
+        rows.set(key, { root: repo?.root ?? null, file, places: [], latest: new Map() }).get(key)!;
+      if (row.places.at(-1) !== place) row.places.push(place);
+      const copy = target ?? "unknown";
+      if ((at ?? "") >= (row.latest.get(copy)?.at ?? "")) row.latest.set(copy, { at, record });
+    }
+  }
+  return Promise.all(
+    [...rows.values()].map(async (row) => {
+      const copies = [...row.latest].sort(([, a], [, b]) => (b.at ?? "").localeCompare(a.at ?? ""));
+      const [, newest] = copies[0]!;
+      return {
+        root: row.root,
+        file: row.file,
+        combined: newest.record.path === null,
+        harnesses: unique(row.places.map((p) => p.harness)),
+        sessions: row.places.length,
+        lastRecorded: newest.at,
+        textChars: newest.record.textChars,
+        textSha256: newest.record.textSha256,
+        checkouts: await Promise.all(
+          copies.map(async ([path, { at, record }]) => ({
+            path,
+            lastRecorded: at,
+            disk: await compareWithDisk(record),
+          })),
+        ),
+      };
+    }),
+  ).then((files) => files.sort((a, b) => b.sessions - a.sessions || a.file.localeCompare(b.file)));
+}
+
+const unique = <T>(values: T[]) => [...new Set(values)];
+
+function diskNow(file: RecordedFile): string {
+  const states = unique(file.checkouts.map((c) => c.disk));
+  if (states.length === 1) return states[0]!;
+  return states
+    .map((state) => `${file.checkouts.filter((c) => c.disk === state).length} ${state}`)
+    .join(", ");
+}
+
+function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
+
 type Profile = {
   days: number;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
   unreadable: number;
   globalInstructions: InstructionFile[];
+  recordedInstructions: RecordedFile[];
   projects: (Project & {
     instructions: { directory: string; files: InstructionFile[] };
+    recordedLoad: { sessions: number; medianChars: number | null };
     worktrees: { linked: number; idle: number; missing: number } | null;
     warnings: string[];
   })[];
@@ -102,6 +194,9 @@ type Profile = {
 };
 
 const OTHER_FOLDERS_SHOWN = 5;
+const RECORDED_SHOWN = 15;
+
+const chars = (n: number) => `${tokens(n)} chars`;
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -166,6 +261,7 @@ function render(result: Profile, homeDir: string): string[] {
     p.sessions ? count(p.sessions) : "—",
     p.sessions ? ago(p.lastActive) : "scanned",
     ...agents.map((h) => loaded(p, h.harness)),
+    p.recordedLoad.medianChars === null ? "—" : chars(p.recordedLoad.medianChars),
     fileNames(p),
     p.worktrees?.linked ? `${count(p.worktrees.linked)} · ${count(p.worktrees.idle)} idle` : "—",
     short(p.root),
@@ -175,11 +271,12 @@ function render(result: Profile, homeDir: string): string[] {
     "Sessions",
     "Last used",
     ...agents.map((h) => harnessById[h.harness].label),
+    "Recorded/session",
     "Instruction files",
     "Worktrees",
     "Path",
   ];
-  const numeric = [1, ...agents.map((_, i) => i + 3)];
+  const numeric = [1, ...agents.map((_, i) => i + 3), agents.length + 3];
 
   lines.push(
     "",
@@ -204,6 +301,47 @@ function render(result: Profile, homeDir: string): string[] {
       lines.push(`  … ${other.length - shown.length} more in --json`);
   }
 
+  if (result.recordedInstructions.length) {
+    const shown = result.recordedInstructions.slice(0, RECORDED_SHOWN);
+    const projectName = (root: string) => (root === homeDir ? "~" : basename(root));
+    const claudeProjects = `${result.homes.find((h) => h.harness === "claude-code")!.path}/projects/`;
+    const memoryOwner = (path: string) => {
+      const [slug, ...rest] = path.slice(claudeProjects.length).split("/");
+      const root = result.projects.find((p) => p.root.replace(/[^A-Za-z0-9]/g, "-") === slug)?.root;
+      return root && rest[0] === "memory"
+        ? `${projectName(root)} auto memory/${rest.slice(1).join("/")}`
+        : null;
+    };
+    const name = (r: RecordedFile) =>
+      r.combined
+        ? r.root === null
+          ? "combined block, directory not recorded"
+          : `${projectName(r.root)}${r.file === "." ? "" : `/${r.file}`} (combined block)`
+        : r.root !== null
+          ? `${projectName(r.root)}/${r.file}`
+          : ((r.file.startsWith(claudeProjects) ? memoryOwner(r.file) : null) ?? short(r.file));
+    lines.push(
+      "",
+      "Recorded instructions · what session histories logged loading · worktrees folded",
+      ...table(
+        [
+          ["File", "Agents", "Sessions", "Last recorded", "Size", "Disk now"],
+          ...shown.map((r) => [
+            name(r),
+            r.harnesses.map((h) => harnessById[h].label).join(", "),
+            count(r.sessions),
+            ago(r.lastRecorded),
+            chars(r.textChars),
+            diskNow(r),
+          ]),
+        ],
+        [2, 4],
+      ),
+    );
+    if (result.recordedInstructions.length > shown.length)
+      lines.push(`  … ${result.recordedInstructions.length - shown.length} more in --json`);
+  }
+
   const warnings = result.projects.flatMap((p) =>
     p.warnings.map((w) => `  ${basename(p.root)}: ${w}`),
   );
@@ -222,9 +360,12 @@ function render(result: Profile, homeDir: string): string[] {
     );
   lines.push(
     "",
-    "Sizes are the project's own instruction files each agent would find in its most recently used folder; global files come on top.",
-    "Files on disk now are not proof of what a past session loaded. Skills, MCP servers and plugins are not counted yet.",
+    "Agent columns: the project's own instruction files on disk now in its most recently used folder; global files come on top.",
+    "Recorded/session: median instruction text sessions logged loading, global files included. Older harness versions logged none.",
   );
+  if (result.recordedInstructions.length)
+    lines.push("Disk now: whether the last recorded text still matches the file today.");
+  lines.push("Skills, MCP servers and plugins are not counted yet.");
   return lines;
 }
 
