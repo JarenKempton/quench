@@ -249,6 +249,8 @@ test("sources traces Pi read output without inventing result paths or line range
     otherToolCalls: 2,
     unmatchedFileResults: 0,
     unparsedRecords: 0,
+    injectedInstructions: "per-file",
+    unreadableInstructions: 0,
   });
   expect(report.reads[0]).toMatchObject({
     callId: "docs",
@@ -283,4 +285,307 @@ test("sources traces Pi read output without inventing result paths or line range
   expect(text.stdout).not.toContain("0 reported lines");
   expect(await Bun.file(path).text()).toBe(before);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+});
+
+test("sources reports instructions each harness recorded as injected, without reading today's files", async () => {
+  const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  const global = "# Personal\n\n- Ask before publishing.";
+  const nested = "- Keep admin changes small.";
+  const loaded = {
+    type: "attachment",
+    uuid: "replayed-line",
+    timestamp: stamp,
+    attachment: {
+      type: "instructions",
+      files: [
+        { path: "/historical/home/.claude/CLAUDE.md", type: "User", content: global },
+        { path: "/historical/project/CLAUDE.md", type: "Project", content: "" },
+        { path: 42, type: "Project", content: "malformed" },
+      ],
+    },
+  };
+  const { home, path } = await fixture([
+    loaded,
+    loaded,
+    {
+      type: "attachment",
+      timestamp: stamp,
+      attachment: {
+        type: "skill_listing_placeholder",
+        files: [
+          { path: "/historical/home/.claude/CLAUDE.md", type: "User", content: global },
+          { path: "/historical/project/CLAUDE.md", type: "Project", content: "" },
+          { path: 42, type: "Project", content: "malformed" },
+        ],
+      },
+    },
+    {
+      type: "attachment",
+      timestamp: "2026-10-22T10:05:00Z",
+      attachment: {
+        type: "nested_memory",
+        path: "/historical/project/admin/CLAUDE.md",
+        content: {
+          path: "/historical/project/admin/CLAUDE.md",
+          type: "Project",
+          content: nested,
+          contentDiffersFromDisk: true,
+        },
+      },
+    },
+    { type: "attachment", timestamp: stamp, attachment: { type: "skill_listing", content: "x" } },
+  ]);
+  const out = await run(home, path, "--json");
+  expect(out.code).toBe(0);
+  const report = JSON.parse(out.stdout);
+  expect(report.coverage.injectedInstructions).toBe("per-file");
+  expect(report.coverage.unparsedRecords).toBe(0);
+  expect(report.instructions).toEqual([
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: "/historical/home/.claude/CLAUDE.md",
+      directory: null,
+      label: "User",
+      textSha256: sha(global),
+      textChars: global.length,
+      textDiffersFromFile: null,
+    },
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: "/historical/project/CLAUDE.md",
+      directory: null,
+      label: "Project",
+      textSha256: sha(""),
+      textChars: 0,
+      textDiffersFromFile: null,
+    },
+    {
+      at: "2026-10-22T10:05:00.000Z",
+      path: "/historical/project/admin/CLAUDE.md",
+      directory: null,
+      label: "Project",
+      textSha256: sha(nested),
+      textChars: nested.length,
+      textDiffersFromFile: true,
+    },
+  ]);
+  expect(report.warnings.join(" ")).toContain("1 recorded instruction entry");
+  const text = await run(home, path);
+  expect(text.stdout).toContain("Injected instructions: per-file · 3 recorded");
+  expect(text.stdout).toContain(
+    "/historical/project/admin/CLAUDE.md · Project · injected text differs from the file (processed by the harness)",
+  );
+
+  const codex = join(home, ".codex/sessions/2026/10/22/rollout.jsonl");
+  const block = "# Personal\n\n- Ask before publishing.\n\n--- project-doc ---\n\n- Run checks.";
+  const message = (text: string) => ({
+    type: "response_item",
+    timestamp: stamp,
+    payload: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+  });
+  await Bun.write(
+    codex,
+    [
+      {
+        type: "session_meta",
+        timestamp: stamp,
+        payload: { id: "codex", cwd: "/historical/project" },
+      },
+      message(
+        `# AGENTS.md instructions for /historical/project\n\n<INSTRUCTIONS>\n${block}\n</INSTRUCTIONS>`,
+      ),
+      {
+        type: "response_item",
+        timestamp: stamp,
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_text", text: "<recommended_plugins>\nnone\n</recommended_plugins>" },
+            {
+              type: "input_text",
+              text: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nOlder header.\n</INSTRUCTIONS>",
+            },
+            {
+              type: "input_text",
+              text: "<environment_context>\n  <cwd>/historical/project</cwd>\n</environment_context>",
+            },
+          ],
+        },
+      },
+      message("# AGENTS.md instructions for /historical/project\n\nno closing tag"),
+      {
+        type: "compacted",
+        timestamp: "2026-10-22T11:00:00Z",
+        payload: {
+          message: "",
+          replacement_history: [
+            {
+              type: "message",
+              role: "developer",
+              content: [{ type: "input_text", text: "<permissions/>" }],
+            },
+            {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `# AGENTS.md instructions for /historical/project\n\n<INSTRUCTIONS>\n${block}\n</INSTRUCTIONS>`,
+                },
+              ],
+            },
+            { type: "compaction" },
+          ],
+        },
+      },
+      message("Please mention # AGENTS.md instructions for /x <INSTRUCTIONS>a</INSTRUCTIONS>"),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const combined = JSON.parse((await run(home, codex, "--json")).stdout);
+  expect(combined.coverage.injectedInstructions).toBe("combined");
+  expect(combined.instructions).toEqual([
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: null,
+      directory: "/historical/project",
+      label: "AGENTS.md instructions",
+      textSha256: sha(block),
+      textChars: block.length,
+      textDiffersFromFile: null,
+    },
+    {
+      at: "2026-10-22T10:00:00.000Z",
+      path: null,
+      directory: null,
+      label: "AGENTS.md instructions",
+      textSha256: sha("Older header."),
+      textChars: "Older header.".length,
+      textDiffersFromFile: null,
+    },
+    {
+      at: "2026-10-22T11:00:00.000Z",
+      path: null,
+      directory: "/historical/project",
+      label: "AGENTS.md instructions",
+      textSha256: sha(block),
+      textChars: block.length,
+      textDiffersFromFile: null,
+    },
+  ]);
+  expect(combined.warnings.join(" ")).toContain("1 recorded instruction entry");
+  expect(combined.limitations.join(" ")).toContain("combined");
+
+  const pi = join(home, ".pi/agent/sessions/demo/session.jsonl");
+  const piContext = (files: [string, string][]) =>
+    `<project_context>\nProject-specific instructions and guidelines:\n\n${files
+      .map(([p, c]) => `<project_instructions path="${p}">\n${c}\n</project_instructions>`)
+      .join("\n\n")}\n</project_context>`;
+  const system = (sections: Record<string, string | null>, at = stamp) => ({
+    type: "message",
+    timestamp: at,
+    message: { role: "system", content: "", sections },
+  });
+  await Bun.write(
+    pi,
+    [
+      { type: "session", id: "pi", cwd: "/historical/project" },
+      system({
+        preamble: "You are an expert coding assistant.",
+        project_context: piContext([
+          ["/historical/home/.pi/agent/AGENTS.md", global],
+          ["/historical/project/AGENTS.md", nested],
+        ]),
+        cwd: "<cwd>/historical/project</cwd>",
+      }),
+      system({ project_context: null }, "2026-10-22T10:10:00Z"),
+      system({ skills: "<skills></skills>" }, "2026-10-22T10:11:00Z"),
+      system(
+        { project_context: '<project_context>\n<project_instructions path="/x">\nunterminated' },
+        "2026-10-22T10:12:00Z",
+      ),
+      {
+        type: "compaction",
+        timestamp: "2026-10-22T10:20:00Z",
+        tokensBefore: 100,
+        systemMessage: {
+          role: "system",
+          content: "",
+          sections: { project_context: piContext([["/historical/project/AGENTS.md", nested]]) },
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const piReport = JSON.parse((await run(home, pi, "--json")).stdout);
+  expect(piReport.coverage.injectedInstructions).toBe("per-file");
+  expect(piReport.coverage.unreadableInstructions).toBe(1);
+  expect(
+    piReport.instructions.map((i: { at: string; path: string; textSha256: string }) => [
+      i.at,
+      i.path,
+      i.textSha256,
+    ]),
+  ).toEqual([
+    ["2026-10-22T10:00:00.000Z", "/historical/home/.pi/agent/AGENTS.md", sha(global)],
+    ["2026-10-22T10:00:00.000Z", "/historical/project/AGENTS.md", sha(nested)],
+    ["2026-10-22T10:20:00.000Z", "/historical/project/AGENTS.md", sha(nested)],
+  ]);
+  const bare = join(home, ".pi/agent/sessions/demo/bare.jsonl");
+  await Bun.write(
+    bare,
+    JSON.stringify({ type: "session", id: "bare", cwd: "/historical/project" }) + "\n",
+  );
+  const none = JSON.parse((await run(home, bare, "--json")).stdout);
+  expect(none.instructions).toEqual([]);
+  expect(none.warnings.join(" ")).toContain(
+    "No injected instructions are recorded in this session",
+  );
+  expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+});
+
+test("recorded instructions do not move run boundaries or timing", async () => {
+  const { home, path } = await fixture([
+    {
+      type: "user",
+      timestamp: stamp,
+      promptSource: "typed",
+      message: { role: "user", content: "work" },
+    },
+    {
+      type: "assistant",
+      timestamp: "2026-10-22T10:00:01Z",
+      message: {
+        id: "a",
+        model: "m",
+        content: [{ type: "text", text: "done" }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    },
+    {
+      type: "attachment",
+      timestamp: "2026-10-22T10:00:09Z",
+      attachment: {
+        type: "nested_memory",
+        content: { path: "/historical/project/sub/CLAUDE.md", type: "Project", content: "- Rule." },
+      },
+    },
+  ]);
+  const proc = Bun.spawn(["bun", main, "runs", path, "--json"], {
+    env: {
+      ...process.env,
+      HOME: home,
+      CLAUDE_CONFIG_DIR: "",
+      CODEX_HOME: "",
+      PI_CODING_AGENT_DIR: "",
+    },
+    stdout: "pipe",
+  });
+  const out = JSON.parse(await new Response(proc.stdout).text());
+  expect(await proc.exited).toBe(0);
+  const runs = out.runs ?? out;
+  expect(runs.at(-1).endedAt).toBe("2026-10-22T10:00:01.000Z");
 });

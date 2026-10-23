@@ -4,7 +4,7 @@ import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
+import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
   Diagnostics,
@@ -43,6 +43,8 @@ export const ApiMessage = z.looseObject({
 const Line = z.looseObject({
   /** Line kind: `user`, `assistant` and `system` carry the conversation; others (`attachment`, `ai-title`, `queue-operation`…) are host bookkeeping. */
   type: z.string(),
+  /** Line id; Claude Code occasionally writes the same line twice. */
+  uuid: z.string().nullish(),
   /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
   /** Working directory the session ran in. */
@@ -74,9 +76,31 @@ const Line = z.looseObject({
     .optional(),
   /** The Anthropic Messages API message, as sent or received. */
   message: ApiMessage.optional(),
+  /** On `attachment` lines: context Claude Code added for the model (see `Attachment`). */
+  attachment: z.unknown().optional(),
   toolUseResult: z.unknown().optional(),
 });
 type Line = z.infer<typeof Line>;
+
+const Attachment = z.looseObject({
+  /** `instructions` (memory files loaded at start), `nested_memory` (a subdirectory file loaded on demand); others such as `skill_listing` are not instructions. */
+  type: z.string(),
+  /** On `instructions`: one entry per loaded file (see `InstructionFile`). */
+  files: z.array(z.unknown()).nullish(),
+  /** On `nested_memory`: the loaded file (see `InstructionFile`). */
+  content: z.unknown().optional(),
+});
+
+const InstructionFile = z.looseObject({
+  /** Absolute path Claude Code loaded the text from. */
+  path: z.string(),
+  /** Memory type: `User`, `Project`, `Local`, `AutoMem`… */
+  type: z.string().nullish(),
+  /** Text as injected, after Claude Code's own processing; may differ from the file's bytes. */
+  content: z.string(),
+  /** True when the injected text differs from the file's raw bytes, e.g. after Claude Code strips HTML comments. */
+  contentDiffersFromDisk: z.boolean().nullish(),
+});
 
 export const Block = z.looseObject({
   /** `text`, `thinking`, `tool_use`, `tool_result` or `image`. */
@@ -119,6 +143,7 @@ export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
   label: "Claude Code",
   sourceReads: true,
+  injectedInstructions: "per-file",
 
   async steering(home, project) {
     const user = home.pathFrom("CLAUDE_CONFIG_DIR", ".claude");
@@ -160,9 +185,14 @@ export const claudeCode: Harness<"claude-code"> = {
     const diagnostics: Diagnostics = { lines: 0, unparsed: 0 };
     const events: Event[] = [];
     const inferenceAt = new Map<string, number>();
+    const attachments = new Set<string>();
     let cwd: string | null = null;
     for await (const line of jsonlLines(r.path, Line, diagnostics)) {
       cwd ??= line.cwd ?? null;
+      if (line.type === "attachment" && line.uuid) {
+        if (attachments.has(line.uuid)) continue;
+        attachments.add(line.uuid);
+      }
       const at = date(line.timestamp);
       for (const kind of eventsOf(line)) {
         const id = line.message?.id;
@@ -197,9 +227,39 @@ function eventsOf(line: Line): EventKind[] {
       return assistant(line);
     case "user":
       return user(line);
+    case "attachment":
+      return instructions(line.attachment);
     default:
       return [];
   }
+}
+
+function instructions(raw: unknown): EventKind[] {
+  const attachment = Attachment.safeParse(raw);
+  if (!attachment.success) return [];
+  const entries =
+    attachment.data.type === "instructions"
+      ? (attachment.data.files ?? [])
+      : attachment.data.type === "nested_memory"
+        ? [attachment.data.content]
+        : null;
+  if (!entries) return [];
+  const files = entries.flatMap((entry) => {
+    const file = InstructionFile.safeParse(entry);
+    return file.success
+      ? [
+          {
+            path: file.data.path,
+            directory: null,
+            label: file.data.type ?? null,
+            textSha256: sha256(file.data.content),
+            textChars: file.data.content.length,
+            textDiffersFromFile: file.data.contentDiffersFromDisk ?? null,
+          },
+        ]
+      : [];
+  });
+  return [{ type: "instructions", files, unreadable: entries.length - files.length }];
 }
 
 function compaction(line: Line): EventKind {

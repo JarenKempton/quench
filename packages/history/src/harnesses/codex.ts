@@ -4,7 +4,7 @@ import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, injectedTag, jsonlLines, textOf } from "../jsonl.ts";
+import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
 
 const count = z.number().nullish();
@@ -49,6 +49,8 @@ const Line = z.looseObject({
       content: z.unknown().optional(),
       /** Tool output on `function_call_output` and `custom_tool_call_output`. */
       output: z.unknown().optional(),
+      /** On `compacted`: the items that replace the history, including re-injected instructions; inherited from the parent in forked sessions. */
+      replacement_history: z.array(z.unknown()).nullish(),
       /** One API call's tokens, on `token_usage_record`. */
       usage: TokenUsage.optional(),
       /** On `token_count` events; older sessions only have this, not `token_usage_record`. */
@@ -69,6 +71,7 @@ export const codex: Harness<"codex"> = {
   id: "codex",
   label: "Codex",
   sourceReads: false,
+  injectedInstructions: "combined",
 
   async steering(home, project) {
     const user = home.pathFrom("CODEX_HOME", ".codex");
@@ -98,11 +101,15 @@ export const codex: Harness<"codex"> = {
     for await (const line of jsonlLines(r.path, Line, diagnostics)) {
       if (line.type === "session_meta") meta ??= line.payload ?? undefined;
       hasRecords ||= line.type === "token_usage_record";
+      const at = date(line.timestamp);
       const kind = eventOf(line, turn);
-      if (!kind) continue;
-      const event = { ...kind, at: date(line.timestamp) };
-      if (line.type === "event_msg") fallbackUsage.add(event);
-      events.push(event);
+      if (kind) {
+        const event = { ...kind, at };
+        if (line.type === "event_msg") fallbackUsage.add(event);
+        events.push(event);
+      }
+      const loaded = instructions(line);
+      if (loaded) events.push({ ...loaded, at });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
@@ -187,6 +194,54 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
     default:
       return null;
   }
+}
+
+const INSTRUCTIONS =
+  /^# AGENTS\.md instructions(?: for (.+))?\n\n<INSTRUCTIONS>\n([\s\S]*)\n<\/INSTRUCTIONS>\s*$/;
+
+const HistoryItem = z.looseObject({
+  /** `message`, `compaction`, `function_call`… */
+  type: z.string().nullish(),
+  /** `user`, `assistant` or `developer`. */
+  role: z.string().nullish(),
+  /** Message content: an array of `input_text` / `output_text` parts. */
+  content: z.unknown().optional(),
+});
+
+function instructions(line: Line): EventKind | null {
+  const p = line.payload;
+  const messages =
+    line.type === "response_item" && p?.role === "user"
+      ? [p.content]
+      : line.type === "compacted" && Array.isArray(p?.replacement_history)
+        ? p.replacement_history.flatMap((raw) => {
+            const item = HistoryItem.safeParse(raw);
+            return item.success && item.data.type === "message" && item.data.role === "user"
+              ? [item.data.content]
+              : [];
+          })
+        : [];
+  const parts = messages
+    .flatMap((content) => (Array.isArray(content) ? content : [content]))
+    .map((part) => textOf([part]))
+    .filter((text) => text.startsWith(INJECTED_HEADINGS[0]!));
+  if (!parts.length) return null;
+  const files = parts.flatMap((text) => {
+    const match = INSTRUCTIONS.exec(text);
+    return match
+      ? [
+          {
+            path: null,
+            directory: match[1] ?? null,
+            label: "AGENTS.md instructions",
+            textSha256: sha256(match[2]!),
+            textChars: match[2]!.length,
+            textDiffersFromFile: null,
+          },
+        ]
+      : [];
+  });
+  return { type: "instructions", files, unreadable: parts.length - files.length };
 }
 
 const injected = (text: string) =>

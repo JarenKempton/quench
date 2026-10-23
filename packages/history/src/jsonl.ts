@@ -58,6 +58,8 @@ export const date = (value: string | null | undefined): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+export const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+
 export function injectedTag(text: string): boolean {
   const match = /^\s*<([A-Za-z][\w-]*)>/.exec(text);
   return match !== null && text.includes(`</${match[1]}>`);

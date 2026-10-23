@@ -53,6 +53,15 @@ export async function sources(
         }
         if (read.reason) lines.push(`  ${read.reason}`);
       }
+      lines.push(
+        "",
+        `Injected instructions: ${report.coverage.injectedInstructions} · ${report.instructions.length} recorded`,
+      );
+      for (const file of report.instructions)
+        lines.push(
+          `  ${file.at?.toISOString() ?? "time unknown"} · ${file.path ?? (file.directory ? `combined block for ${file.directory}` : "combined block, directory unknown")} · ${file.label ?? "type unknown"}${file.textDiffersFromFile ? " · injected text differs from the file (processed by the harness)" : ""}`,
+          `    recorded text: ${file.textChars} characters · sha256 ${file.textSha256}`,
+        );
       lines.push("", ...report.limitations, ...report.warnings.map((w) => `Warning: ${w}`));
       process.stdout.write(lines.join("\n") + "\n");
     }

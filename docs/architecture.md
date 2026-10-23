@@ -19,6 +19,7 @@ A `Session` is an ordered list of typed events:
 | `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
 | `tool_call` / `tool_result` | ids, name, `isError`, size of the result                                                                             |
 | `compaction`                | trigger, tokens before                                                                                               |
+| `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count   |
 
 Subagent sessions point at their parent with `parent`.
 
@@ -81,8 +82,17 @@ explicitly reports unsupported coverage.
 `sourceTrace` joins these normalized events by unique call IDs and transcript order, without
 branching on tool names or harness names. Failed, missing, ambiguous and unsupported results
 remain distinguishable. Returned metadata retains the path and reported range, not a claim of
-full delivery, continued context retention or rule compliance. Shell/MCP/injected sources are
-outside this first slice; current source files are never opened to fill historical gaps.
+full delivery, continued context retention or rule compliance. Shell/MCP sources are outside
+this slice; current source files are never opened to fill historical gaps.
+
+Adapters also declare how they record injected instructions: `per-file` (Claude Code
+`instructions`/`nested_memory` attachments, deduplicated by line id; Pi `project_context`
+system sections, including the replayed system message on compactions) or `combined` (Codex
+`AGENTS.md instructions` message parts, including compaction `replacement_history`, with the
+directory but no file boundaries). The `instructions` event keeps only fingerprints and lengths.
+It is ignored by insights and does not move run timing. Hashes describe the injected text: an
+exact match with current inventory bytes is possible only for unprocessed per-file entries, not
+for processed Claude Code text or combined Codex blocks.
 
 ## Optional host evidence
 
