@@ -3,6 +3,7 @@ import { z } from "zod";
 import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
@@ -86,6 +87,28 @@ export const pi: Harness<"pi"> = {
   home: HOME,
   sourceReads: true,
   injectedInstructions: "per-file",
+
+  async skills(home, project) {
+    const userAgents = join(home.dir, ".agents/skills");
+    return [
+      { path: join(home.of(HOME), "skills"), scope: "user", layout: "nested" },
+      { path: userAgents, scope: "user", layout: "nested" },
+      { path: join(project, ".pi/skills"), scope: "project", layout: "nested" },
+      ...(await ancestorDirs(project, true))
+        .map(
+          (dir): SkillRoot => ({
+            path: join(dir, ".agents/skills"),
+            scope: dir === project ? "project" : "ancestor",
+            layout: "nested",
+          }),
+        )
+        .filter((root) => root.path !== userAgents),
+    ];
+  },
+
+  async mcp() {
+    return [];
+  },
 
   async steering(home, project) {
     const user = home.of(HOME);

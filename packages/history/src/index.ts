@@ -8,8 +8,10 @@ export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
 export { compareWithDisk, recordedInstructions, type DiskComparison } from "./recorded.ts";
+export { checkout, repositoryRoot } from "./files.ts";
+export { mcpInventory, type McpServer } from "./mcp.ts";
+export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export {
-  checkout,
   projects,
   sessionPlaces,
   type Project,
