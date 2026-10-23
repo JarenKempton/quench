@@ -7,4 +7,17 @@ export { discoverAll, readSessions, type ReadOutcome } from "./read.ts";
 export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
-export { projects, type Project, type ProjectDirectory, type SessionPlace } from "./projects.ts";
+export {
+  projects,
+  sessionPlaces,
+  type Project,
+  type ProjectDirectory,
+  type SessionPlace,
+} from "./projects.ts";
+export {
+  checkWorktrees,
+  linkedWorktrees,
+  usedIn,
+  type Worktree,
+  type WorktreeCheck,
+} from "./worktrees.ts";

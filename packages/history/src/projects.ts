@@ -1,7 +1,9 @@
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { subdirs } from "./files.ts";
+import type { Home } from "./home.ts";
 import type { HarnessId } from "./model.ts";
+import { discoverAll, readSessions } from "./read.ts";
 
 export type SessionPlace = { cwd: string | null; harness: HarnessId; at: Date | null };
 
@@ -21,6 +23,23 @@ export type Project = {
   lastActive: string | null;
   directories: ProjectDirectory[];
 };
+
+export async function sessionPlaces(home: Home, since: Date) {
+  const refs = await discoverAll(home, since);
+  const modified = new Map(refs.map((ref) => [ref.path, ref.modified]));
+  const places: SessionPlace[] = [];
+  let unreadable = 0;
+  for await (const outcome of readSessions(refs, 8)) {
+    if (!outcome.ok) unreadable++;
+    else
+      places.push({
+        cwd: outcome.session.cwd,
+        harness: outcome.session.harness,
+        at: modified.get(outcome.session.path) ?? null,
+      });
+  }
+  return { places, unreadable };
+}
 
 export async function projects(places: readonly SessionPlace[], scan: readonly string[] = []) {
   const resolved = new Map<string, string | null>();

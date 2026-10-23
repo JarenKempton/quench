@@ -7,6 +7,7 @@ import { HOME_FLAGS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
 import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
+import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
@@ -15,6 +16,7 @@ Usage:
   quench [profile] [--days 30] [--scan <dir>] [--json]
                                        every harness home, global instructions and project found in your sessions
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
+  quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
   quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
@@ -104,6 +106,9 @@ switch (command) {
     break;
   case "steering":
     process.exitCode = await steering(home, rest, { json: values.json });
+    break;
+  case "worktrees":
+    process.exitCode = await worktrees(home, { days, json: values.json });
     break;
   case "report":
     process.exitCode = await report(home, { days, json: values.json });

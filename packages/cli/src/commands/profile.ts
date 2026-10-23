@@ -1,16 +1,16 @@
 import { stat } from "node:fs/promises";
 import { basename, relative } from "node:path";
 import {
-  discoverAll,
   harnessById,
   harnesses,
+  linkedWorktrees,
   projects,
-  readSessions,
+  sessionPlaces,
   steeringInventory,
+  usedIn,
   type HarnessId,
   type Home,
   type Project,
-  type SessionPlace,
   type SteeringFile,
 } from "@quench/history";
 import { ago, json, plural, size, table } from "../format.ts";
@@ -22,19 +22,7 @@ export async function profile(
   options: { days: number; scan: string[]; json: boolean },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const refs = await discoverAll(home, since);
-  const modified = new Map(refs.map((ref) => [ref.path, ref.modified]));
-  const places: SessionPlace[] = [];
-  let unreadable = 0;
-  for await (const outcome of readSessions(refs, 8)) {
-    if (!outcome.ok) unreadable++;
-    else
-      places.push({
-        cwd: outcome.session.cwd,
-        harness: outcome.session.harness,
-        at: modified.get(outcome.session.path) ?? null,
-      });
-  }
+  const { places, unreadable } = await sessionPlaces(home, since);
   let found: Awaited<ReturnType<typeof projects>>;
   try {
     found = await projects(places, options.scan);
@@ -57,9 +45,16 @@ export async function profile(
       if (user.length) global.set(file.id, { ...summary, sources: user });
       if (other.length) local.push({ ...summary, sources: other });
     }
+    const linked = project.git ? await linkedWorktrees(project.root) : null;
+    const directories = project.directories.map((d) => d.path);
     profiled.push({
       ...project,
       instructions: { directory, files: local },
+      worktrees: linked && {
+        linked: linked.length,
+        idle: linked.filter((w) => !w.missing && !usedIn(w.path, directories)).length,
+        missing: linked.filter((w) => w.missing).length,
+      },
       warnings: inventory.warnings,
     });
   }
@@ -100,6 +95,7 @@ type Profile = {
   globalInstructions: InstructionFile[];
   projects: (Project & {
     instructions: { directory: string; files: InstructionFile[] };
+    worktrees: { linked: number; idle: number; missing: number } | null;
     warnings: string[];
   })[];
   missingDirectories: string[];
@@ -171,6 +167,7 @@ function render(result: Profile, homeDir: string): string[] {
     p.sessions ? ago(p.lastActive) : "scanned",
     ...agents.map((h) => loaded(p, h.harness)),
     fileNames(p),
+    p.worktrees?.linked ? `${count(p.worktrees.linked)} · ${count(p.worktrees.idle)} idle` : "—",
     short(p.root),
   ];
   const header = [
@@ -179,6 +176,7 @@ function render(result: Profile, homeDir: string): string[] {
     "Last used",
     ...agents.map((h) => harnessById[h.harness].label),
     "Instruction files",
+    "Worktrees",
     "Path",
   ];
   const numeric = [1, ...agents.map((_, i) => i + 3)];
@@ -197,7 +195,10 @@ function render(result: Profile, homeDir: string): string[] {
         other.reduce((n, p) => n + p.sessions, 0),
         "session",
       )}`,
-      ...table([header, ...shown.map(row)], numeric),
+      ...table(
+        [header, ...shown.map(row)].map((cells) => cells.filter((_, i) => i !== header.length - 2)),
+        numeric,
+      ),
     );
     if (other.length > shown.length)
       lines.push(`  … ${other.length - shown.length} more in --json`);
@@ -213,6 +214,11 @@ function render(result: Profile, homeDir: string): string[] {
       result.missingDirectories.length === 1
         ? "1 session folder no longer exists; its sessions are not listed."
         : `${result.missingDirectories.length} session folders no longer exist; their sessions are not listed.`,
+    );
+  if (result.projects.some((p) => p.worktrees?.idle))
+    lines.push(
+      "",
+      `Idle worktrees had no session in the last ${result.days} days. \`quench worktrees\` shows which are safe to remove.`,
     );
   lines.push(
     "",

@@ -22,6 +22,7 @@ Claude Code
 | Command                                  | What it shows                                                                         |
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | `quench [profile] [--scan <dir>]`        | Every harness home, global instructions and each project your sessions ran in         |
+| `quench worktrees [--days 30] [--json]`  | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
 | `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
 | `quench corrections [--dry-run]`         | Human correction and agent supervision rates, counted separately. Opt-in              |
@@ -130,6 +131,20 @@ Each project shows the current steering inventory of its most recently used dire
 user-level files listed once as global instructions. That is current-disk evidence, with the
 same limits as `quench steering`; other worktrees may differ. Skills, MCP servers and plugins
 are not profiled yet. The command makes no model calls and writes no files or caches.
+
+## Idle worktrees
+
+```sh
+quench worktrees
+```
+
+For each git repository your sessions used, lists linked worktrees with no session in the last
+`--days`. One is safe to remove when it is idle, not locked, has no uncommitted or untracked
+changes, and its branch or commit is merged into the base branch (`origin/HEAD`, else `main` or
+`master`) or its upstream branch was deleted. Each safe one comes with the exact
+`git worktree remove` command; the rest show why they are kept, and folders already gone get
+`git worktree prune`. `git worktree remove` keeps the branch but deletes ignored files such as
+`.env`. Quench runs only read-only git commands and removes nothing.
 
 ## Current steering inventory
 

@@ -17,6 +17,8 @@ retired with it and live in git history.
 - **Zero-setup discovery.** Projects come from the working directories sessions recorded,
   grouped by git repository, not from crawling the disk. Harness homes use their defaults
   and override variables, with a flag per harness when those fail.
+- **Worktree cleanup is report-only.** Quench lists idle worktrees and the command to remove
+  each safe one; an opt-in purge with confirmation may follow once the list is trusted.
 - **Users bring their own compute.** Model-backed analysis uses the user's own key, so
   running Quench costs its maintainers nothing per user.
 
