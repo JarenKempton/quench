@@ -102,6 +102,8 @@ class Tally {
           break;
         case "message":
         case "instructions":
+        case "skills":
+        case "invocation":
           break;
         default:
           unhandled(e);

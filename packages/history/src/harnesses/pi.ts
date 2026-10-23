@@ -87,6 +87,7 @@ export const pi: Harness<"pi"> = {
   home: HOME,
   sourceReads: true,
   injectedInstructions: "per-file",
+  skillUse: true,
 
   async skills(home, project) {
     const userAgents = join(home.dir, ".agents/skills");
@@ -141,6 +142,7 @@ export const pi: Harness<"pi"> = {
             ? [
                 { type: "compaction", trigger: "unknown", tokensBefore: line.tokensBefore ?? null },
                 ...instructions(line.systemMessage?.sections),
+                ...skillListing(line.systemMessage?.sections),
               ]
             : [];
       for (const kind of kinds) events.push({ ...kind, at });
@@ -163,7 +165,11 @@ function message(m: Message): EventKind[] {
     case "user":
       return text("user", m.content);
     case "system":
-      return [...text("injected", m.content), ...instructions(m.sections)];
+      return [
+        ...text("injected", m.content),
+        ...instructions(m.sections),
+        ...skillListing(m.sections),
+      ];
     case "toolResult": {
       const value = textOf(m.content);
       return [
@@ -238,6 +244,15 @@ function assistant(m: Message): EventKind[] {
 }
 
 const CONTEXT_FILE = /<project_instructions path="([^"]*)">\n([\s\S]*?)\n<\/project_instructions>/g;
+
+function skillListing(sections: Message["sections"]): EventKind[] {
+  const index = sections?.skills;
+  if (!index) return [];
+  const listed = [
+    ...index.matchAll(/<skill>[\s\S]*?<name>([^<]*)<\/name>[\s\S]*?<location>([^<]*)<\/location>/g),
+  ].map(([, name, path]) => ({ name: name!.trim(), path: path!.trim() }));
+  return [{ type: "skills", listed, chars: index.length }];
+}
 
 function instructions(sections: Message["sections"]): EventKind[] {
   const context = sections?.project_context;
