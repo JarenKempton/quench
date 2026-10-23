@@ -8,6 +8,7 @@ import {
 import { count, plural, projectName, shortPath, size, table } from "../format.ts";
 import { projectTables } from "./projects.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
+import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import { renderMcpServers, skillsCell, type InstructionFile } from "./setup.ts";
 
@@ -29,6 +30,7 @@ export type Profile = {
   globalMcpServers: McpServer[];
   recordedInstructions: RecordedFile[];
   recordedSkills: SkillUse[];
+  recordedMcp: McpUse[];
   projects: ProfiledProject[];
   missingDirectories: string[];
 };
@@ -47,6 +49,7 @@ export function render(result: Profile, homeDir: string): string[] {
     ...globalInstructions(result.globalInstructions, short),
     ...projectTables(result, homeDir),
     ...renderMcpServers(result.globalMcpServers, result.projects, homeDir),
+    ...renderMcpUse(result.recordedMcp, result.days),
     ...renderRecordedFiles(result.recordedInstructions, {
       homeDir,
       claudeHome,

@@ -4,7 +4,12 @@ import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction } from "./model.ts";
 import { discoverAll, readSessions } from "./read.ts";
-import { recordedInstructions, recordedSkills, type SessionSkills } from "./recorded.ts";
+import {
+  recordedInstructions,
+  recordedMcp,
+  recordedSkills,
+  type SessionSkills,
+} from "./recorded.ts";
 
 export type SessionPlace = {
   cwd: string | null;
@@ -12,6 +17,7 @@ export type SessionPlace = {
   at: Date | null;
   instructions: InjectedInstruction[] | null;
   skills: SessionSkills | null;
+  mcp: { server: string; calls: number }[];
 };
 
 export type ProjectDirectory = {
@@ -45,6 +51,7 @@ export async function sessionPlaces(home: Home, since: Date) {
         at: modified.get(outcome.session.path) ?? null,
         instructions: recordedInstructions(outcome.session),
         skills: recordedSkills(outcome.session),
+        mcp: recordedMcp(outcome.session),
       });
   }
   return { places, unreadable };

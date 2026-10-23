@@ -632,3 +632,63 @@ test("profile shows which recorded skills sessions listed and used", async () =>
     { name: "figma:figma-use", listedIn: 1, usedIn: 0, byUser: 0 },
   ]);
 });
+
+test("profile lists MCP servers sessions called and whether local config has them", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-mcpuse-")));
+  const project = join(home, "work");
+  await mkdir(project, { recursive: true });
+  const lines = (records: object[]) => records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  await Bun.write(
+    join(home, ".claude.json"),
+    JSON.stringify({ mcpServers: { figma: { type: "http", url: "https://mcp.example.com" } } }),
+  );
+  await Bun.write(
+    join(home, ".codex/config.toml"),
+    '[mcp_servers.docs-site]\nurl = "https://docs.example.com/mcp"\n',
+  );
+  const call = (id: string, name: string) => ({
+    type: "assistant",
+    cwd: project,
+    message: { content: [{ type: "tool_use", id, name, input: {} }] },
+  });
+  await Bun.write(
+    join(home, ".claude/projects/p/one.jsonl"),
+    lines([
+      call("a", "mcp__figma__get_design"),
+      call("a", "mcp__figma__get_design"),
+      call("b", "mcp__figma__get_screenshot"),
+      call("c", "mcp__claude_ai_Drive__search"),
+      call("d", "Read"),
+    ]),
+  );
+  await Bun.write(
+    join(home, ".codex/sessions/2026/10/20/c.jsonl"),
+    lines([
+      { type: "session_meta", payload: { id: "c", cwd: project } },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "x",
+          input:
+            "await tools.mcp__docs_site__search({q:1}); await tools.mcp__codex_apps__drive_list({}); const n = 'tools.mcp__unused__tool';",
+        },
+      },
+    ]),
+  );
+
+  const { stdout, code } = await quench(home);
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    [
+      "MCP servers called · from session history · last 30 days",
+      "  Server           Agent        Sessions  Calls  In local config",
+      "  figma            Claude Code         1      2  yes",
+      "  claude_ai_Drive  Claude Code         1      1  no",
+      "  codex_apps       Codex               1      1  no",
+      "  docs_site        Codex               1      1  yes",
+      "  Not in local config: an account connector (claude.ai, ChatGPT apps), a plugin, a server the host app passed in, or config since removed.",
+    ].join("\n"),
+  );
+});

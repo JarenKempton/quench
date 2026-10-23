@@ -104,6 +104,7 @@ class Tally {
         case "instructions":
         case "skills":
         case "invocation":
+        case "mcp_call":
           break;
         default:
           unhandled(e);

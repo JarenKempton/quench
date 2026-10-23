@@ -97,6 +97,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
       case "instructions":
       case "skills":
       case "invocation":
+      case "mcp_call":
         continue;
       default:
         unhandled(event);
