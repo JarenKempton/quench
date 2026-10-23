@@ -391,8 +391,11 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   await skill(join(home, "shared/notes"), "name: notes\ndescription: Take notes");
   await mkdir(join(home, ".agents/skills"), { recursive: true });
   await symlink(join(home, "shared/notes"), join(home, ".agents/skills/notes"));
+  await symlink(join(home, "shared/notes"), join(home, ".claude/skills/notes"));
   await skill(join(home, ".codex/skills/.system/plan"), "name: plan\ndescription: Plan work");
-  await skill(join(repo, ".claude/skills/app-only"), "name: app-only\ndescription: App task");
+  await skill(join(home, "shared/app-skills/app-only"), "name: app-only\ndescription: App task");
+  await mkdir(join(repo, ".claude"), { recursive: true });
+  await symlink(join(home, "shared/app-skills"), join(repo, ".claude/skills"));
   await skill(join(repo, ".agents/skills/repo-skill"), "name: repo-skill\ndescription: Repo task");
   await Bun.write(
     join(home, ".claude.json"),
@@ -455,7 +458,7 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   expect(stdout).toContain(
     [
       "  Agent        Sessions  Skills        MCP  Home",
-      "  Claude Code         1  2 · 44 chars    1  ~/.claude",
+      "  Claude Code         1  3 · 59 chars    1  ~/.claude",
       "  Codex               1  2 · 28 chars    2  ~/.codex",
       "  Pi                  —  —               —  ~/.pi/agent not found; set --pi-home",
     ].join("\n"),
@@ -479,10 +482,10 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   const where = (skills: { name: string; sources: { harness: string; scope: string }[] }[]) =>
     skills.map((s) => [s.name, s.sources.map((x) => `${x.harness}:${x.scope}`)]);
   expect(where(out.globalSkills)).toEqual([
+    ["notes", ["claude-code:user", "codex:user", "pi:user"]],
     ["release", ["claude-code:user"]],
     ["review", ["claude-code:user"]],
     ["deploy", ["claude-code:user"]],
-    ["notes", ["codex:user", "pi:user"]],
     ["plan", ["codex:system"]],
   ]);
   expect(out.globalSkills.find((s: { name: string }) => s.name === "release").modelInvocable).toBe(
