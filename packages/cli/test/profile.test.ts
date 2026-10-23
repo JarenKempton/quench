@@ -555,6 +555,24 @@ test("profile shows which recorded skills sessions listed and used", async () =>
           content: [{ type: "input_text", text: block }],
         },
       },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "x",
+          input: `text(await tools.exec_command({cmd:"sed -n '1,80p' ${home}/.agents/skills/notes/SKILL.md"}))`,
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "y",
+          input: 'text(await tools.exec_command({cmd:"cat figma-use/SKILL.md"}))',
+        },
+      },
     ]),
   );
   const piSkills = `<available_skills>\n  <skill>\n    <name>notes</name>\n    <description>Take notes</description>\n    <location>${home}/.agents/skills/notes/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>plan</name>\n    <description>Plan</description>\n    <location>${home}/.pi/agent/skills/plan/SKILL.md</location>\n  </skill>\n</available_skills>`;
@@ -585,15 +603,16 @@ test("profile shows which recorded skills sessions listed and used", async () =>
   expect(stdout).toContain(
     [
       "Recorded skills · what session histories listed and used · last 30 days",
-      "  Agent        Sessions  Listed  Listing size     Used  Never used",
-      "  Claude Code         2       3      63 chars        2           1",
-      "  Codex               1       2     207 chars  unknown     unknown",
-      "  Pi                  1       2     370 chars        1           1",
+      "  Agent        Sessions  Listed  Listing size  Used  Never used",
+      "  Claude Code         2       3      63 chars     2           1",
+      "  Codex               1       2     207 chars     1           1",
+      "  Pi                  1       2     370 chars     1           1",
       "  Most used · Claude Code: review 2, deploy 1",
       "  Listed, never used · Claude Code: notes",
+      "  Most used · Codex: notes 1",
+      "  Listed, never used · Codex: figma:figma-use",
       "  Most used · Pi: notes 1",
       "  Listed, never used · Pi: plan",
-      "  Codex history does not record skill use, so it is unknown.",
     ].join("\n"),
   );
   const out = JSON.parse((await quench(home, "--json")).stdout);
@@ -605,8 +624,8 @@ test("profile shows which recorded skills sessions listed and used", async () =>
     { name: "deploy", listedIn: 2, usedIn: 1, byUser: 1 },
     { name: "notes", listedIn: 2, usedIn: 0, byUser: 0 },
   ]);
-  expect(byHarness.codex.map((s: { name: string }) => s.name)).toEqual([
-    "figma:figma-use",
-    "notes",
+  expect(byHarness.codex).toEqual([
+    { name: "notes", listedIn: 1, usedIn: 1, byUser: 0 },
+    { name: "figma:figma-use", listedIn: 1, usedIn: 0, byUser: 0 },
   ]);
 });

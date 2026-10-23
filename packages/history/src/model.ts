@@ -48,7 +48,13 @@ export type ListedSkill = { name: string; path: string | null };
 export type EventKind =
   | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
-  | { type: "tool_call"; id: string | null; name: string; fileRead?: FileReadRequest }
+  | {
+      type: "tool_call";
+      id: string | null;
+      name: string;
+      fileRead?: FileReadRequest;
+      command?: string;
+    }
   | { type: "invocation"; name: string; by: "model" | "user" }
   | {
       type: "tool_result";
