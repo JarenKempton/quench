@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { shellReads } from "../src/shell.ts";
 
-const places = { workdir: null, sessionFolder: "/repo", home: "/home/me" };
+type Places = Parameters<typeof shellReads>[1];
+
+const places: Places = { workdir: null, sessionFolder: "/repo", home: "/home/me" };
 const paths = (command: string, where = places) =>
   shellReads(command, where).map((r) => [r.program, r.path, r.base]);
 
