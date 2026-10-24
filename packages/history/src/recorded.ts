@@ -67,5 +67,16 @@ function namedSkills(
     .map(([, name]) => ({ name, by: "model" }));
 }
 
+export function recordedMcp(session: Session): { server: string; calls: number }[] {
+  const calls = new Map<string, number>();
+  const ids = new Set<string>();
+  for (const event of session.events) {
+    if (event.type !== "mcp_call" || (event.id !== null && ids.has(event.id))) continue;
+    if (event.id !== null) ids.add(event.id);
+    calls.set(event.server, (calls.get(event.server) ?? 0) + 1);
+  }
+  return [...calls].map(([server, n]) => ({ server: intern(server), calls: n }));
+}
+
 const interned = new Map<string, string>();
 const intern = (text: string) => interned.get(text) ?? interned.set(text, text).get(text)!;

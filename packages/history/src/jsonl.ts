@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Diagnostics } from "./model.ts";
+import type { Diagnostics, EventKind } from "./model.ts";
 
 export async function* jsonlLines<T>(
   path: string,
@@ -57,6 +57,16 @@ export const date = (value: string | null | undefined): Date | null => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+export const mcpCalls = (
+  text: string,
+  pattern: { prefix: string; suffix: string; id: string | null },
+): EventKind[] =>
+  [
+    ...text.matchAll(
+      new RegExp(`${pattern.prefix}mcp__([A-Za-z0-9_-]+?)__([A-Za-z0-9_-]+)${pattern.suffix}`, "g"),
+    ),
+  ].map(([, server, tool]) => ({ type: "mcp_call", id: pattern.id, server: server!, tool: tool! }));
 
 export const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 

@@ -56,6 +56,7 @@ export type EventKind =
       command?: string;
     }
   | { type: "invocation"; name: string; by: "model" | "user" }
+  | { type: "mcp_call"; id: string | null; server: string; tool: string }
   | {
       type: "tool_result";
       callId: string | null;

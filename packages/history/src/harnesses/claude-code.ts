@@ -8,7 +8,7 @@ import { checkout, repositoryRoot } from "../files.ts";
 import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
+import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
   Diagnostics,
@@ -412,6 +412,7 @@ function assistant(line: Line): EventKind[] {
       const skill = block.name === "Skill" ? SkillInput.safeParse(block.input) : null;
       const shell = block.name === "Bash" ? BashInput.safeParse(block.input) : null;
       if (skill?.success) out.push({ type: "invocation", name: skill.data.skill, by: "model" });
+      out.push(...mcpCalls(block.name ?? "", { prefix: "^", suffix: "$", id: block.id ?? null }));
       out.push({
         type: "tool_call",
         id: block.id ?? null,

@@ -156,7 +156,12 @@ listing, the median number of skills listed and listing size, which listed skill
 used and which were never used. A use is the model invoking a listed skill (Claude Code's
 Skill tool), reading its file, or running a shell command or code that names its exact
 listed path, which is how Codex loads skills, or the user running it as a command.
-Relative paths are not resolved, so shell-based use is a lower bound. The command makes no model calls and writes no files or caches.
+Relative paths are not resolved, so shell-based use is a lower bound.
+
+MCP servers called come from the MCP tool calls sessions recorded, per agent, with
+sessions and calls, and whether the agent's local config has a server of that name. Servers
+missing from local config are account connectors (claude.ai, ChatGPT apps), plugins,
+servers the host app passed in, or config since removed. The command makes no model calls and writes no files or caches.
 
 ## Idle worktrees
 

@@ -7,7 +7,7 @@ import { repositoryRoot } from "../files.ts";
 import { describeServer, record, type McpEntry } from "../mcp.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
+import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
 
 const count = z.number().nullish();
@@ -173,6 +173,7 @@ export const codex: Harness<"codex"> = {
       if (loaded) events.push({ ...loaded, at });
       const listing = skillListing(line);
       if (listing) events.push({ ...listing, at });
+      for (const call of mcpCallsOf(line)) events.push({ ...call, at });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
@@ -262,6 +263,19 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
     default:
       return null;
   }
+}
+
+function mcpCallsOf(line: Line): EventKind[] {
+  const p = line.payload;
+  if (line.type !== "response_item") return [];
+  if (p?.type !== "function_call" && p?.type !== "custom_tool_call") return [];
+  const input = p.input ?? p.arguments;
+  return [
+    ...mcpCalls(p.name ?? "", { prefix: "^", suffix: "$", id: p.call_id ?? null }),
+    ...(typeof input === "string"
+      ? mcpCalls(input, { prefix: "tools\\.", suffix: "\\(", id: null })
+      : []),
+  ];
 }
 
 const commandOf = (input: unknown) => (typeof input === "string" ? { command: input } : {});
