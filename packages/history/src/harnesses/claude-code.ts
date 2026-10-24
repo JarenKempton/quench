@@ -86,13 +86,25 @@ const Line = z.looseObject({
 });
 type Line = z.infer<typeof Line>;
 
+const BashInput = z.looseObject({
+  /** Shell command the model ran. */
+  command: z.string(),
+});
+
+const SkillInput = z.looseObject({
+  /** Name of the skill the model invoked. */
+  skill: z.string(),
+});
+
 const Attachment = z.looseObject({
-  /** `instructions` (memory files loaded at start), `nested_memory` (a subdirectory file loaded on demand); others such as `skill_listing` are not instructions. */
+  /** `instructions` (memory files loaded at start), `nested_memory` (a subdirectory file loaded on demand), `skill_listing` (skills listed to the model). */
   type: z.string(),
   /** On `instructions`: one entry per loaded file (see `InstructionFile`). */
   files: z.array(z.unknown()).nullish(),
-  /** On `nested_memory`: the loaded file (see `InstructionFile`). */
+  /** On `nested_memory`: the loaded file (see `InstructionFile`); on `skill_listing`: the listing text. */
   content: z.unknown().optional(),
+  /** On `skill_listing`: names of the skills listed. */
+  names: z.array(z.string()).nullish(),
 });
 
 const InstructionFile = z.looseObject({
@@ -151,6 +163,7 @@ export const claudeCode: Harness<"claude-code"> = {
   home: HOME,
   sourceReads: true,
   injectedInstructions: "per-file",
+  skillUse: true,
 
   async steering(home, project) {
     const user = home.of(HOME);
@@ -309,10 +322,24 @@ function eventsOf(line: Line): EventKind[] {
     case "user":
       return user(line);
     case "attachment":
-      return instructions(line.attachment);
+      return [...instructions(line.attachment), ...skillListing(line.attachment)];
     default:
       return [];
   }
+}
+
+function skillListing(raw: unknown): EventKind[] {
+  const attachment = Attachment.safeParse(raw);
+  if (!attachment.success || attachment.data.type !== "skill_listing" || !attachment.data.names)
+    return [];
+  const content = attachment.data.content;
+  return [
+    {
+      type: "skills",
+      listed: attachment.data.names.map((name) => ({ name, path: null })),
+      chars: typeof content === "string" ? content.length : 0,
+    },
+  ];
 }
 
 function instructions(raw: unknown): EventKind[] {
@@ -382,10 +409,14 @@ function assistant(line: Line): EventKind[] {
       });
     } else if (block.type === "tool_use") {
       const input = block.name === "Read" ? ReadInput.safeParse(block.input) : null;
+      const skill = block.name === "Skill" ? SkillInput.safeParse(block.input) : null;
+      const shell = block.name === "Bash" ? BashInput.safeParse(block.input) : null;
+      if (skill?.success) out.push({ type: "invocation", name: skill.data.skill, by: "model" });
       out.push({
         type: "tool_call",
         id: block.id ?? null,
         name: block.name ?? "",
+        ...(shell?.success ? { command: shell.data.command } : {}),
         ...(input?.success
           ? {
               fileRead: {
@@ -427,7 +458,10 @@ function user(line: Line): EventKind[] {
   const flagged = line.isMeta === true || line.isCompactSummary === true;
   const command = slashCommand(text);
   if (command && !flagged)
-    return [{ type: "message", author: "user", origin: origin(line), text: command }];
+    return [
+      { type: "message", author: "user", origin: origin(line), text: command },
+      { type: "invocation", name: command.split(" ")[0]!.replace(/^\//, ""), by: "user" },
+    ];
   const injected = flagged || injectedTag(text) || HARNESS_NOTES.some((n) => text.startsWith(n));
   return [
     {

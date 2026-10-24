@@ -149,7 +149,14 @@ files with scope and state (`on`, `off`, or `needs approval` for an unapproved
 `.mcp.json` server). Only the server name, transport and command name or URL host are
 shown; arguments, environment, headers and full URLs are never read out, and tool
 definitions are not counted. Built-in and plugin skills and plugin or managed MCP servers
-are not counted yet. The command makes no model calls and writes no files or caches.
+are not counted yet.
+
+Recorded skills come from the skill lists histories logged: per agent, the sessions with a
+listing, the median number of skills listed and listing size, which listed skills were
+used and which were never used. A use is the model invoking a listed skill (Claude Code's
+Skill tool), reading its file, or running a shell command or code that names its exact
+listed path, which is how Codex loads skills, or the user running it as a command.
+Relative paths are not resolved, so shell-based use is a lower bound. The command makes no model calls and writes no files or caches.
 
 ## Idle worktrees
 

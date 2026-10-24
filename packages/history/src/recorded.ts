@@ -1,5 +1,37 @@
 import { sha256 } from "./jsonl.ts";
-import type { InjectedInstruction, Session } from "./model.ts";
+import type { InjectedInstruction, ListedSkill, Session } from "./model.ts";
+
+export type SessionSkills = {
+  listed: ListedSkill[];
+  upFront: { count: number; chars: number };
+  used: { name: string; by: "model" | "user" }[];
+};
+
+export function recordedSkills(session: Session): SessionSkills | null {
+  const listings = session.events.flatMap((e) => (e.type === "skills" ? [e] : []));
+  if (!listings.length) return null;
+  const listed = new Map(listings.flatMap((l) => l.listed).map((s) => [s.name, s]));
+  const byPath = new Map([...listed.values()].flatMap((s) => (s.path ? [[s.path, s.name]] : [])));
+  const used = new Map<string, "model" | "user">();
+  for (const event of session.events) {
+    const uses =
+      event.type === "invocation"
+        ? [{ name: event.name, by: event.by }]
+        : event.type === "tool_call"
+          ? namedSkills(event, byPath)
+          : [];
+    for (const use of uses)
+      if (listed.has(use.name) && !used.has(use.name)) used.set(use.name, use.by);
+  }
+  return {
+    listed: [...listed.values()].map((skill) => ({
+      name: intern(skill.name),
+      path: skill.path && intern(skill.path),
+    })),
+    upFront: { count: listings[0]!.listed.length, chars: listings[0]!.chars },
+    used: [...used].map(([name, by]) => ({ name: intern(name), by })),
+  };
+}
 
 export type DiskComparison = "same" | "differs" | "missing" | "not comparable";
 
@@ -25,3 +57,15 @@ export async function compareWithDisk(record: InjectedInstruction): Promise<Disk
     ? "same"
     : "differs";
 }
+
+function namedSkills(
+  call: Extract<Session["events"][number], { type: "tool_call" }>,
+  byPath: Map<string, string>,
+): { name: string; by: "model" }[] {
+  return [...byPath]
+    .filter(([path]) => call.fileRead?.path === path || call.command?.includes(path))
+    .map(([, name]) => ({ name, by: "model" }));
+}
+
+const interned = new Map<string, string>();
+const intern = (text: string) => interned.get(text) ?? interned.set(text, text).get(text)!;

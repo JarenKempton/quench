@@ -502,3 +502,133 @@ test("profile lists skills and MCP servers each agent finds, without reading out
       .map((s) => [s.name, s.sources.map((x) => `${x.harness}:${x.scope}`)]),
   ).toEqual([["app-only", ["claude-code:project"]]]);
 });
+
+test("profile shows which recorded skills sessions listed and used", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-skilluse-")));
+  const project = join(home, "work");
+  await mkdir(project, { recursive: true });
+  const lines = (records: object[]) => records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  const listing = (names: string[]) => ({
+    type: "attachment",
+    cwd: project,
+    attachment: {
+      type: "skill_listing",
+      names,
+      content: names.map((n) => `- ${n}: does ${n}`).join("\n"),
+    },
+  });
+  const skillCall = (skill: string) => ({
+    type: "assistant",
+    cwd: project,
+    message: { content: [{ type: "tool_use", id: skill, name: "Skill", input: { skill } }] },
+  });
+  const command = (name: string) => ({
+    type: "user",
+    cwd: project,
+    message: { content: `<command-name>/${name}</command-name>\n<command-args></command-args>` },
+  });
+  await Bun.write(
+    join(home, ".claude/projects/p/one.jsonl"),
+    lines([listing(["review", "deploy", "notes"]), skillCall("review"), command("compact")]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/two.jsonl"),
+    lines([listing(["review", "deploy", "notes"]), command("deploy"), skillCall("review")]),
+  );
+  await Bun.write(join(home, ".claude/projects/p/three.jsonl"), lines([command("review")]));
+  const block = [
+    "<skills_instructions>",
+    "## Skills",
+    "### Skill roots",
+    `- \`r0\` = \`${home}/.agents/skills\``,
+    "### Available skills",
+    "- notes: Take notes (file: r0/notes/SKILL.md)",
+    "- figma:figma-use: Use Figma (file: r0/figma-use/SKILL.md)",
+    "</skills_instructions>",
+  ].join("\n");
+  await Bun.write(
+    join(home, ".codex/sessions/2026/10/20/c.jsonl"),
+    lines([
+      { type: "session_meta", payload: { id: "c", cwd: project } },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "developer",
+          content: [{ type: "input_text", text: block }],
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "x",
+          input: `text(await tools.exec_command({cmd:"sed -n '1,80p' ${home}/.agents/skills/notes/SKILL.md"}))`,
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "y",
+          input: 'text(await tools.exec_command({cmd:"cat figma-use/SKILL.md"}))',
+        },
+      },
+    ]),
+  );
+  const piSkills = `<available_skills>\n  <skill>\n    <name>notes</name>\n    <description>Take notes</description>\n    <location>${home}/.agents/skills/notes/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>plan</name>\n    <description>Plan</description>\n    <location>${home}/.pi/agent/skills/plan/SKILL.md</location>\n  </skill>\n</available_skills>`;
+  await Bun.write(
+    join(home, ".pi/agent/sessions/x/p.jsonl"),
+    lines([
+      { type: "session", id: "p", cwd: project },
+      { type: "message", message: { role: "system", content: "", sections: { skills: piSkills } } },
+      {
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "r",
+              name: "read",
+              arguments: { path: `${home}/.agents/skills/notes/SKILL.md` },
+            },
+          ],
+        },
+      },
+    ]),
+  );
+
+  const { stdout, code } = await quench(home);
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    [
+      "Recorded skills · what session histories listed and used · last 30 days",
+      "  Agent        Sessions  Listed  Listing size  Used  Never used",
+      "  Claude Code         2       3      63 chars     2           1",
+      "  Codex               1       2     207 chars     1           1",
+      "  Pi                  1       2     370 chars     1           1",
+      "  Most used · Claude Code: review 2, deploy 1",
+      "  Listed, never used · Claude Code: notes",
+      "  Most used · Codex: notes 1",
+      "  Listed, never used · Codex: figma:figma-use",
+      "  Most used · Pi: notes 1",
+      "  Listed, never used · Pi: plan",
+    ].join("\n"),
+  );
+  const out = JSON.parse((await quench(home, "--json")).stdout);
+  const byHarness = Object.fromEntries(
+    out.recordedSkills.map((u: { harness: string; skills: object[] }) => [u.harness, u.skills]),
+  );
+  expect(byHarness["claude-code"]).toEqual([
+    { name: "review", listedIn: 2, usedIn: 2, byUser: 0 },
+    { name: "deploy", listedIn: 2, usedIn: 1, byUser: 1 },
+    { name: "notes", listedIn: 2, usedIn: 0, byUser: 0 },
+  ]);
+  expect(byHarness.codex).toEqual([
+    { name: "notes", listedIn: 1, usedIn: 1, byUser: 0 },
+    { name: "figma:figma-use", listedIn: 1, usedIn: 0, byUser: 0 },
+  ]);
+});

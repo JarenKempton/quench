@@ -46,6 +46,10 @@ const Line = z.looseObject({
       role: z.string().nullish(),
       /** Tool name on tool calls. */
       name: z.string().nullish(),
+      /** Tool input on `custom_tool_call`: code or a command, as text. */
+      input: z.unknown().optional(),
+      /** Tool arguments on `function_call`, as JSON text. */
+      arguments: z.unknown().optional(),
       /** Links a tool call to its output. */
       call_id: z.string().nullish(),
       /** Message content: an array of `input_text` / `output_text` parts. */
@@ -78,6 +82,7 @@ export const codex: Harness<"codex"> = {
   home: HOME,
   sourceReads: false,
   injectedInstructions: "combined",
+  skillUse: true,
 
   async skills(home, project) {
     const codex = home.of(HOME);
@@ -166,6 +171,8 @@ export const codex: Harness<"codex"> = {
       }
       const loaded = instructions(line);
       if (loaded) events.push({ ...loaded, at });
+      const listing = skillListing(line);
+      if (listing) events.push({ ...listing, at });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {
@@ -238,7 +245,12 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
     }
     case "function_call":
     case "custom_tool_call":
-      return { type: "tool_call", id: p.call_id ?? null, name: p.name ?? "" };
+      return {
+        type: "tool_call",
+        id: p.call_id ?? null,
+        name: p.name ?? "",
+        ...commandOf(p.input ?? p.arguments),
+      };
     case "function_call_output":
     case "custom_tool_call_output":
       return {
@@ -252,6 +264,8 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
   }
 }
 
+const commandOf = (input: unknown) => (typeof input === "string" ? { command: input } : {});
+
 const INSTRUCTIONS =
   /^# AGENTS\.md instructions(?: for (.+))?\n\n<INSTRUCTIONS>\n([\s\S]*)\n<\/INSTRUCTIONS>\s*$/;
 
@@ -263,6 +277,24 @@ const HistoryItem = z.looseObject({
   /** Message content: an array of `input_text` / `output_text` parts. */
   content: z.unknown().optional(),
 });
+
+const SKILLS = /<skills_instructions>([\s\S]*?)<\/skills_instructions>/;
+
+function skillListing(line: Line): EventKind | null {
+  const p = line.payload;
+  if (line.type !== "response_item" || p?.type !== "message" || p.role !== "developer") return null;
+  const block = SKILLS.exec(textOf(p.content))?.[1];
+  if (!block) return null;
+  const roots = new Map(
+    [...block.matchAll(/^- `(r\d+)` = `([^`]+)`$/gm)].map(([, id, path]) => [id!, path!]),
+  );
+  const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(([, name, file]) => {
+    const [root, ...rest] = file!.split("/");
+    const base = roots.get(root!);
+    return { name: name!, path: base ? [base, ...rest].join("/") : file! };
+  });
+  return { type: "skills", listed, chars: block.length };
+}
 
 function instructions(line: Line): EventKind | null {
   const p = line.payload;

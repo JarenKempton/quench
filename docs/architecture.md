@@ -17,9 +17,11 @@ A `Session` is an ordered list of typed events:
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text`, optional `sender` evidence |
 | `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
-| `tool_call` / `tool_result` | ids, name, `isError`, size of the result                                                                             |
+| `tool_call` / `tool_result` | ids, name, `isError`, size of the result; shell command text when the harness records one                            |
 | `compaction`                | trigger, tokens before                                                                                               |
 | `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count   |
+| `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                   |
+| `invocation`                | a named skill or command invoked, `by` model or user                                                                 |
 
 Subagent sessions point at their parent with `parent`.
 

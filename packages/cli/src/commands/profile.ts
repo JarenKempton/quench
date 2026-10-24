@@ -23,6 +23,7 @@ import {
   type SteeringFile,
 } from "@quench/history";
 import { ago, json, plural, size, table, tokens } from "../format.ts";
+import { median, renderSkillUse, skillUse, type SkillUse } from "../recorded-skills.ts";
 
 type InstructionFile = Omit<SteeringFile, "rules"> & { rules: number };
 
@@ -102,6 +103,7 @@ export async function profile(
     globalSkills: [...globalSkills.values()],
     globalMcpServers: [...globalMcp.values()],
     recordedInstructions: await recordedFiles(places),
+    recordedSkills: skillUse(places),
     projects: profiled,
     missingDirectories: found.missing,
     limitations: [
@@ -111,6 +113,7 @@ export async function profile(
       "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",
       "A recorded file is the same as disk now when its hash matches the file's text exactly, or with one final newline removed as Claude Code does. Anything else differs: usually the file changed since, possibly other processing by the harness.",
       "Skills are SKILL.md folders in each agent's documented locations on disk now. Up-front size is name plus description before each agent's own caps and budgets; bodies load on demand. Built-in and plugin skills, managed and /etc locations, and Codex agents/openai.yaml policies are not read. Codex and Pi project trust is approximated from user config, or assumed for Pi.",
+      "Recorded skills are the skill lists session histories logged: Claude Code's listing, Codex's skills block and Pi's skills section. Listing size is the first listing in each session. Use counts sessions where the model invoked a listed skill (Claude Code's Skill tool), read its SKILL.md, or ran a shell command or code naming that exact listed path, or the user ran it as a command. Relative paths are not resolved, so shell-based use (how Codex loads skills) is a lower bound, and a command editing the file counts too.",
       "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Tool definitions need a live connection and are not counted. Plugin and managed servers are not read.",
     ],
   };
@@ -194,12 +197,6 @@ function diskNow(file: RecordedFile): string {
     .join(", ");
 }
 
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)]!;
-}
-
 type Profile = {
   days: number;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
@@ -208,6 +205,7 @@ type Profile = {
   globalSkills: Skill[];
   globalMcpServers: McpServer[];
   recordedInstructions: RecordedFile[];
+  recordedSkills: SkillUse[];
   projects: (Project & {
     instructions: { directory: string; files: InstructionFile[] };
     recordedLoad: { sessions: number; medianChars: number | null };
@@ -407,6 +405,8 @@ function render(result: Profile, homeDir: string): string[] {
     if (result.recordedInstructions.length > shown.length)
       lines.push(`  … ${result.recordedInstructions.length - shown.length} more in --json`);
   }
+
+  lines.push(...renderSkillUse(result.recordedSkills, result.days));
 
   const warnings = result.projects.flatMap((p) =>
     p.warnings.map((w) => `  ${basename(p.root)}: ${w}`),
