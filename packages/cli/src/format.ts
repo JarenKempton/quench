@@ -63,3 +63,19 @@ export function ago(iso: string | null, now = new Date()): string {
   const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
   return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 }
+
+export const count = (n: number) => n.toLocaleString("en-US");
+
+export const chars = (n: number) => `${tokens(n)} chars`;
+
+export const shortPath = (path: string, homeDir: string) =>
+  path === homeDir || path.startsWith(`${homeDir}/`) ? `~${path.slice(homeDir.length)}` : path;
+
+export const projectName = (root: string, homeDir: string) =>
+  root === homeDir ? "~" : (root.split("/").at(-1) ?? root);
+
+export function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
