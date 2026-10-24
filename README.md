@@ -138,8 +138,18 @@ Copies of one file across worktrees fold into one row with a state per checkout.
 is exact, allowing only the single final newline Claude Code drops. Text a harness
 transformed (Claude Code stripping HTML comments) and Codex's combined per-directory
 blocks are not comparable. Sessions from harness versions that recorded nothing count as
-unknown, not zero. Skills, MCP servers and plugins are not profiled yet. The command makes
-no model calls and writes no files or caches.
+unknown, not zero.
+
+Skills come from each agent's documented locations: user and project skill folders,
+Claude Code's legacy commands and its fallback to the main checkout's skills in a
+worktree, Codex's `~/.agents/skills` and bundled system skills, and Pi's nested skill
+folders. The profile counts skills the model can see and their up-front name and
+description size; bodies load on demand. MCP servers are read from each agent's config
+files with scope and state (`on`, `off`, or `needs approval` for an unapproved
+`.mcp.json` server). Only the server name, transport and command name or URL host are
+shown; arguments, environment, headers and full URLs are never read out, and tool
+definitions are not counted. Built-in and plugin skills and plugin or managed MCP servers
+are not counted yet. The command makes no model calls and writes no files or caches.
 
 ## Idle worktrees
 

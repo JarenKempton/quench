@@ -26,8 +26,9 @@ Subagent sessions point at their parent with `parent`.
 ## Harness adapters
 
 An adapter implements `Harness`: `home` names its data directory and override variable, `discover(home)` lists session files, `read(ref)`
-turns one into a `Session`, and `steering(home, project)` lists candidate instruction
-locations. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
+turns one into a `Session`, `steering(home, project)` lists candidate instruction
+locations, `skills(home, project)` lists skill directories and `mcp(home, project)` reads
+configured MCP servers as name, scope, transport and command name or URL host only. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
 
 - **Validate each line with zod.** Lines that don't fit are counted in
   `diagnostics.unparsed` and shown in the report, so a format change is visible instead

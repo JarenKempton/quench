@@ -1,8 +1,12 @@
+import { stat } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { z } from "zod";
 import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { checkout, repositoryRoot } from "../files.ts";
+import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
+import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type {
@@ -167,6 +171,80 @@ export const claudeCode: Harness<"claude-code"> = {
       roots.push({ path: join(dir, ".claude/rules"), scope, directory: true });
     }
     return roots;
+  },
+
+  async skills(home, project) {
+    const dirs = await ancestorDirs(project, true);
+    const repo = await checkout(project);
+    const scope = (dir: string) => (dir === project ? "project" : "ancestor");
+    const own = await stat(join(repo?.top ?? project, ".claude/skills")).catch(() => null);
+    const main = repo && repo.top !== repo.root && !own ? [repo.root] : [];
+    return [
+      { path: join(home.of(HOME), "skills"), scope: "user", layout: "folders" },
+      { path: join(home.of(HOME), "commands"), scope: "user", layout: "commands" },
+      ...main.map(
+        (dir): SkillRoot => ({
+          path: join(dir, ".claude/skills"),
+          scope: "project",
+          layout: "folders",
+        }),
+      ),
+      ...dirs.flatMap((dir): SkillRoot[] => [
+        { path: join(dir, ".claude/skills"), scope: scope(dir), layout: "folders" },
+        { path: join(dir, ".claude/commands"), scope: scope(dir), layout: "commands" },
+      ]),
+    ];
+  },
+
+  async mcp(home, project) {
+    const configDir = home.of(HOME);
+    const globalConfig =
+      configDir === join(home.dir, ".claude")
+        ? join(home.dir, ".claude.json")
+        : join(configDir, ".claude.json");
+    const global = record(await readJson(globalConfig));
+    const key = (await repositoryRoot(project)) ?? project;
+    const settings = await Promise.all(
+      [
+        join(configDir, "settings.json"),
+        join(project, ".claude/settings.json"),
+        join(project, ".claude/settings.local.json"),
+      ].map(async (path) => record(await readJson(path).catch(() => null))),
+    );
+    const listed = (field: string) =>
+      settings.flatMap((s) => (Array.isArray(s[field]) ? (s[field] as unknown[]) : []));
+    const servers = new Map<string, McpEntry>();
+    const add = (
+      entries: unknown,
+      scope: McpEntry["scope"],
+      source: string,
+      enabled: (name: string) => boolean | null,
+    ) => {
+      for (const [name, config] of Object.entries(record(entries)))
+        servers.set(name, {
+          name,
+          scope,
+          source,
+          enabled: enabled(name),
+          ...describeServer(config),
+        });
+    };
+    add(global.mcpServers, "user", globalConfig, () => true);
+    for (const dir of await ancestorDirs(project)) {
+      const path = join(dir, ".mcp.json");
+      const file = await readJson(path).catch(() => null);
+      if (file)
+        add(file.mcpServers, "project", path, (name) =>
+          listed("disabledMcpjsonServers").includes(name)
+            ? false
+            : settings.some((s) => s.enableAllProjectMcpServers === true) ||
+                listed("enabledMcpjsonServers").includes(name)
+              ? true
+              : null,
+        );
+    }
+    add(record(record(global.projects)[key]).mcpServers, "local", globalConfig, () => true);
+    return [...servers.values()];
   },
 
   async discover(home: Home): Promise<SessionRef[]> {

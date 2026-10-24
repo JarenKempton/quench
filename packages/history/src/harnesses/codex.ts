@@ -3,6 +3,9 @@ import { z } from "zod";
 import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { repositoryRoot } from "../files.ts";
+import { describeServer, record, type McpEntry } from "../mcp.ts";
+import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, injectedTag, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind } from "../model.ts";
@@ -75,6 +78,56 @@ export const codex: Harness<"codex"> = {
   home: HOME,
   sourceReads: false,
   injectedInstructions: "combined",
+
+  async skills(home, project) {
+    const codex = home.of(HOME);
+    const dirs = await ancestorDirs(project, true);
+    const scope = (dir: string) => (dir === project ? "project" : "ancestor");
+    const trusted = await trustedProject(home, project);
+    return [
+      ...(trusted
+        ? dirs.map(
+            (dir): SkillRoot => ({
+              path: join(dir, ".codex/skills"),
+              scope: scope(dir),
+              layout: "folders",
+            }),
+          )
+        : []),
+      { path: join(codex, "skills"), scope: "user", layout: "folders" },
+      { path: join(home.dir, ".agents/skills"), scope: "user", layout: "folders" },
+      { path: join(codex, "skills/.system"), scope: "system", layout: "folders" },
+      ...dirs.map(
+        (dir): SkillRoot => ({
+          path: join(dir, ".agents/skills"),
+          scope: scope(dir),
+          layout: "folders",
+        }),
+      ),
+    ];
+  },
+
+  async mcp(home, project) {
+    const servers = new Map<string, McpEntry>();
+    const add = (path: string, config: Record<string, unknown>, scope: McpEntry["scope"]) => {
+      for (const [name, entry] of Object.entries(record(config.mcp_servers)))
+        servers.set(name, {
+          name,
+          scope,
+          source: path,
+          enabled: record(entry).enabled !== false,
+          ...describeServer(entry),
+        });
+    };
+    const user = join(home.of(HOME), "config.toml");
+    add(user, await readToml(user), "user");
+    if (await trustedProject(home, project))
+      for (const dir of await ancestorDirs(project, true)) {
+        const path = join(dir, ".codex/config.toml");
+        if (path !== user) add(path, await readToml(path), "project");
+      }
+    return [...servers.values()];
+  },
 
   async steering(home, project) {
     const user = home.of(HOME);
@@ -249,3 +302,16 @@ function instructions(line: Line): EventKind | null {
 
 const injected = (text: string) =>
   injectedTag(text) || INJECTED_HEADINGS.some((h) => text.startsWith(h));
+
+async function readToml(path: string): Promise<Record<string, unknown>> {
+  const text = await Bun.file(path)
+    .text()
+    .catch(() => null);
+  return text === null ? {} : record(Bun.TOML.parse(text));
+}
+
+async function trustedProject(home: Home, project: string): Promise<boolean> {
+  const projects = record((await readToml(join(home.of(HOME), "config.toml"))).projects);
+  const candidates = [...(await ancestorDirs(project)), (await repositoryRoot(project)) ?? project];
+  return candidates.some((dir) => record(projects[dir]).trust_level === "trusted");
+}
