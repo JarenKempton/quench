@@ -8,7 +8,7 @@ import { describeServer, record, type McpEntry } from "../mcp.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
-import type { Diagnostics, Event, EventKind } from "../model.ts";
+import type { Diagnostics, Event, EventKind, ShellCommand } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -250,7 +250,7 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
         type: "tool_call",
         id: p.call_id ?? null,
         name: p.name ?? "",
-        ...commandOf(p.input ?? p.arguments),
+        ...shellOf(p.name ?? "", p.input ?? p.arguments),
       };
     case "function_call_output":
     case "custom_tool_call_output":
@@ -278,7 +278,62 @@ function mcpCallsOf(line: Line): EventKind[] {
   ];
 }
 
-const commandOf = (input: unknown) => (typeof input === "string" ? { command: input } : {});
+const ShellArgs = z.looseObject({
+  /** Command on `exec_command`, as one string. */
+  cmd: z.string().nullish(),
+  /** Command on `shell` (an argv array) or `shell_command` (a string). */
+  command: z.union([z.string(), z.array(z.string())]).nullish(),
+  /** Folder the command ran in. */
+  workdir: z.string().nullish(),
+});
+
+function shellOf(name: string, input: unknown): { shell?: ShellCommand[] } {
+  if (typeof input !== "string") return {};
+  if (name === "exec") {
+    const shell = [...input.matchAll(/\bexec_command\(\s*\{/g)].map((m) =>
+      literalFields(input, m.index + m[0].length),
+    );
+    return shell.length
+      ? { shell: shell.map((f) => ({ command: f.cmd ?? null, workdir: f.workdir ?? null })) }
+      : {};
+  }
+  if (!["exec_command", "shell", "shell_command"].includes(name)) return {};
+  const args = ShellArgs.safeParse(parseJson(input));
+  if (!args.success) return { shell: [{ command: null, workdir: null }] };
+  const argv = args.data.command;
+  const command = Array.isArray(argv)
+    ? argv.length === 3 && /(^|\/)(ba|z)?sh$/.test(argv[0]!) && /^-l?c$/.test(argv[1]!)
+      ? argv[2]!
+      : argv.join(" ")
+    : (args.data.cmd ?? argv ?? null);
+  return { shell: [{ command, workdir: args.data.workdir ?? null }] };
+}
+
+const FIELD =
+  /\s*([A-Za-z_]+|"[A-Za-z_]+")\s*:\s*("(?:[^"\\]|\\.)*"|`(?:[^`\\$]|\\.)*`|[^,}]*)\s*([,}])/y;
+
+function literalFields(code: string, from: number): Record<string, string | null> {
+  const fields: Record<string, string | null> = {};
+  FIELD.lastIndex = from;
+  for (let m = FIELD.exec(code); m; m = FIELD.exec(code)) {
+    const value = m[2]!.trim();
+    fields[m[1]!.replaceAll('"', "")] = value.startsWith('"')
+      ? (parseJson(value) as string)
+      : value.startsWith("`")
+        ? value.slice(1, -1).replace(/\\(.)/g, "$1")
+        : null;
+    if (m[3] === "}") break;
+  }
+  return fields;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 const INSTRUCTIONS =
   /^# AGENTS\.md instructions(?: for (.+))?\n\n<INSTRUCTIONS>\n([\s\S]*)\n<\/INSTRUCTIONS>\s*$/;

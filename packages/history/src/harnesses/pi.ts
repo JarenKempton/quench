@@ -234,7 +234,7 @@ function assistant(m: Message): EventKind[] {
         type: "tool_call",
         id: item.data.id ?? null,
         name: item.data.name ?? "",
-        ...(shell?.success ? { command: shell.data.command } : {}),
+        ...(shell?.success ? { shell: [{ command: shell.data.command, workdir: null }] } : {}),
         ...(input?.success
           ? {
               fileRead: {

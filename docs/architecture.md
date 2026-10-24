@@ -17,7 +17,7 @@ A `Session` is an ordered list of typed events:
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text`, optional `sender` evidence |
 | `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
-| `tool_call` / `tool_result` | ids, name, `isError`, size of the result; shell command text when the harness records one                            |
+| `tool_call` / `tool_result` | ids, name, `isError`, size of the result; shell commands with their working folder when the harness records them     |
 | `compaction`                | trigger, tokens before                                                                                               |
 | `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count   |
 | `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                   |
@@ -86,8 +86,10 @@ explicitly reports unsupported coverage.
 `sourceTrace` joins these normalized events by unique call IDs and transcript order, without
 branching on tool names or harness names. Failed, missing, ambiguous and unsupported results
 remain distinguishable. Returned metadata retains the path and reported range, not a claim of
-full delivery, continued context retention or rule compliance. Shell/MCP sources are outside
-this slice; current source files are never opened to fill historical gaps.
+full delivery, continued context retention or rule compliance. Shell reads come from parsing
+each recorded command (`shell.ts`): reader programs and `<` input, with the folder each path
+was resolved against. MCP sources are outside this slice; current source files are never
+opened to fill historical gaps.
 
 Adapters also declare how they record injected instructions: `per-file` (Claude Code
 `instructions`/`nested_memory` attachments, deduplicated by line id; Pi `project_context`

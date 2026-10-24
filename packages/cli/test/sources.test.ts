@@ -67,7 +67,7 @@ test("sources traces recorded document reads without consulting today's source f
     call("docs", "Read", { file_path: source, offset: 5, limit: 1 }),
     result("docs", returnedText, { toolUseResult: metadata(source) }),
     call("shell", "Bash", { command: "cat README.md" }),
-    result("shell", "Not attributed from command text."),
+    result("shell", "# Readme"),
   ]);
   const before = await Bun.file(path).text();
   const json = await run(home, path, "--json");
@@ -77,9 +77,19 @@ test("sources traces recorded document reads without consulting today's source f
   expect(out.session).toMatchObject({ path, harness: "claude-code", cwd: "/historical/project" });
   expect(out.coverage).toMatchObject({
     nativeFileReads: "supported",
-    otherToolCalls: 1,
+    otherToolCalls: 0,
+    shellCommands: 1,
     unmatchedFileResults: 0,
   });
+  expect(out.shell).toMatchObject([
+    {
+      program: "cat",
+      path: "/historical/project/README.md",
+      base: "session folder",
+      status: "ran",
+      outputChars: 8,
+    },
+  ]);
   expect(out.reads).toHaveLength(1);
   expect(out.reads[0]).toMatchObject({
     callId: "docs",
@@ -98,7 +108,10 @@ test("sources traces recorded document reads without consulting today's source f
   expect(text.stdout).toContain("Recorded file reads");
   expect(text.stdout).toContain(source);
   expect(text.stdout).toContain("reported lines 5–5 of 20");
-  expect(text.stdout).toContain("Shell/MCP reads");
+  expect(text.stdout).toContain(
+    "ran · cat · /historical/project/README.md · relative to session folder · call shell",
+  );
+  expect(text.stdout).toContain("MCP reads");
   expect(await Bun.file(path).text()).toBe(before);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
   await rename(join(home, ".claude"), join(home, "store"));
@@ -247,6 +260,8 @@ test("sources traces Pi read output without inventing result paths or line range
   expect(report.coverage).toEqual({
     nativeFileReads: "supported",
     otherToolCalls: 2,
+    shellCommands: 0,
+    unrecordedCommands: 0,
     unmatchedFileResults: 0,
     unparsedRecords: 0,
     injectedInstructions: "per-file",
@@ -588,4 +603,65 @@ test("recorded instructions do not move run boundaries or timing", async () => {
   expect(await proc.exited).toBe(0);
   const runs = out.runs ?? out;
   expect(runs.at(-1).endedAt).toBe("2026-10-22T10:00:01.000Z");
+});
+
+test("sources traces shell reads in Codex code-mode scripts and older shell calls", async () => {
+  const home = await mkdtemp(join(tmpdir(), "quench-sources-"));
+  const codex = join(home, ".codex/sessions/2026/10/22/rollout.jsonl");
+  const item = (payload: Record<string, unknown>) => ({
+    type: "response_item",
+    timestamp: stamp,
+    payload,
+  });
+  await Bun.write(
+    codex,
+    [
+      {
+        type: "session_meta",
+        timestamp: stamp,
+        payload: { id: "codex", cwd: "/historical/project" },
+      },
+      item({
+        type: "custom_tool_call",
+        name: "exec",
+        call_id: "script",
+        input: [
+          'const a = await tools.exec_command({cmd:"sed -n \\"1,40p\\" AGENTS.md && cat docs/guide.md","max_output_tokens":4000});',
+          'const b = await tools.exec_command({workdir:"/elsewhere", cmd:"head -5 notes.md"});',
+          "const c = await tools.exec_command({cmd: command});",
+        ].join("\n"),
+      }),
+      item({ type: "custom_tool_call_output", call_id: "script", output: "Script completed" }),
+      item({
+        type: "function_call",
+        name: "shell",
+        call_id: "old",
+        arguments: JSON.stringify({ command: ["bash", "-lc", "cat README.md"], workdir: "/older" }),
+      }),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const result = await run(home, codex, "--json");
+  expect(result.code).toBe(0);
+  const report = JSON.parse(result.stdout);
+  expect(report.coverage).toMatchObject({
+    shellCommands: 4,
+    unrecordedCommands: 1,
+    otherToolCalls: 0,
+  });
+  expect(
+    report.shell.map((r: { path: string; base: string; status: string; callId: string }) => [
+      r.path,
+      r.base,
+      r.status,
+      r.callId,
+    ]),
+  ).toEqual([
+    ["/historical/project/AGENTS.md", "session folder", "ran", "script"],
+    ["/historical/project/docs/guide.md", "session folder", "ran", "script"],
+    ["/elsewhere/notes.md", "workdir", "ran", "script"],
+    ["/older/README.md", "workdir", "missing-result", "old"],
+  ]);
+  expect(report.warnings.join(" ")).toContain("1 shell command was not recorded as literal text");
 });

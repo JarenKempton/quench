@@ -1,4 +1,5 @@
 import { harnessById } from "./harnesses/index.ts";
+import { shellReads, type ShellRead } from "./shell.ts";
 import type {
   Event,
   FileReadRequest,
@@ -17,7 +18,21 @@ type SourceRead = {
   returned: FileReadResult | null;
 };
 
-export function sourceTrace(session: Session) {
+type ShellSourceRead = ShellRead & {
+  callId: string | null;
+  requestedAt: Date | null;
+  workdir: string | null;
+  status: "ran" | "failed" | "missing-result" | "unknown";
+  reason: string | null;
+  outputChars: number | null;
+};
+
+type ToolResult = Extract<Event, { type: "tool_result" }>;
+type Match =
+  | { result: ToolResult; index: number }
+  | { result: null; problem: string; missing: boolean };
+
+export function sourceTrace(session: Session, home: string | null) {
   const calls = new Map<string, number[]>();
   const results = new Map<string, number[]>();
   const usedResults = new Set<number>();
@@ -25,7 +40,7 @@ export function sourceTrace(session: Session) {
   session.events.forEach((event, index) => {
     if (event.type === "tool_call") {
       if (event.id !== null) calls.set(event.id, [...(calls.get(event.id) ?? []), index]);
-      if (!event.fileRead) otherToolCalls++;
+      if (!event.fileRead && !event.shell) otherToolCalls++;
     }
     if (event.type === "tool_result" && event.callId !== null)
       results.set(event.callId, [...(results.get(event.callId) ?? []), index]);
@@ -41,18 +56,14 @@ export function sourceTrace(session: Session) {
       reason: null,
       returned: null,
     };
-    const matches = event.id === null ? [] : (results.get(event.id) ?? []);
-    if (event.id === null || calls.get(event.id)?.length !== 1 || matches.length > 1) {
-      read.reason = "Call and result cannot be matched uniquely.";
-    } else if (matches.length === 0) {
-      read.status = "missing-result";
-      read.reason = "No result is recorded for this call.";
-    } else if (matches[0]! <= index) {
-      read.reason = "The result precedes its call in the transcript.";
+    const match = matchOf(event.id, index);
+    if (!match.result) {
+      read.status = match.missing ? "missing-result" : "unknown";
+      read.reason = match.problem;
     } else {
-      const result = session.events[matches[0]!] as Extract<Event, { type: "tool_result" }>;
+      const result = match.result;
       read.resultAt = result.at;
-      usedResults.add(matches[0]!);
+      usedResults.add(match.index);
       if (result.isError === true) {
         read.status = "failed";
         read.reason = "The tool reported an error.";
@@ -65,6 +76,54 @@ export function sourceTrace(session: Session) {
     }
     return [read];
   });
+  let unrecordedCommands = 0;
+  const shell: ShellSourceRead[] = session.events.flatMap((event, index) => {
+    if (event.type !== "tool_call" || !event.shell) return [];
+    const match = matchOf(event.id, index);
+    return event.shell.flatMap(({ command, workdir }) => {
+      if (command === null) {
+        unrecordedCommands++;
+        return [];
+      }
+      return shellReads(command, { workdir, sessionFolder: session.cwd, home }).map((read) => ({
+        ...read,
+        callId: event.id,
+        requestedAt: event.at,
+        workdir,
+        status: !match.result
+          ? match.missing
+            ? "missing-result"
+            : "unknown"
+          : match.result.isError === true
+            ? "failed"
+            : "ran",
+        reason: match.result
+          ? match.result.isError === true
+            ? "The command reported an error."
+            : null
+          : match.problem,
+        outputChars: match.result?.chars ?? null,
+      }));
+    });
+  });
+  function matchOf(id: string | null, index: number): Match {
+    const matches = id === null ? [] : (results.get(id) ?? []);
+    if (id === null || calls.get(id)?.length !== 1 || matches.length > 1)
+      return {
+        result: null,
+        problem: "Call and result cannot be matched uniquely.",
+        missing: false,
+      };
+    if (matches.length === 0)
+      return { result: null, problem: "No result is recorded for this call.", missing: true };
+    if (matches[0]! <= index)
+      return {
+        result: null,
+        problem: "The result precedes its call in the transcript.",
+        missing: false,
+      };
+    return { result: session.events[matches[0]!] as ToolResult, index: matches[0]! };
+  }
   const instructions: (InjectedInstruction & { at: Date | null })[] = [];
   let unreadableInstructions = 0;
   for (const event of session.events) {
@@ -94,6 +153,14 @@ export function sourceTrace(session: Session) {
     warnings.push(
       `${unmatchedFileResults} file results could not be linked to a unique native read call.`,
     );
+  if (unrecordedCommands)
+    warnings.push(
+      `${unrecordedCommands} shell ${unrecordedCommands === 1 ? "command was" : "commands were"} not recorded as literal text; their reads are not traced.`,
+    );
+  if (shell.some((read) => read.path === null))
+    warnings.push(
+      "Some shell reads name a path built at run time or relative to an unknown folder; their paths are not resolved.",
+    );
   if (reads.some((read) => read.status === "unknown"))
     warnings.push(
       "Some read attempts lack reliable source attribution; inspect their recorded reasons.",
@@ -108,16 +175,23 @@ export function sourceTrace(session: Session) {
     coverage: {
       nativeFileReads: supported ? "supported" : "unsupported",
       otherToolCalls,
+      shellCommands: session.events.reduce(
+        (n, e) => n + (e.type === "tool_call" ? (e.shell?.length ?? 0) : 0),
+        0,
+      ),
+      unrecordedCommands,
       unmatchedFileResults,
       unparsedRecords: session.diagnostics.unparsed,
       injectedInstructions: injected,
       unreadableInstructions,
     },
     reads,
+    shell,
     instructions,
     warnings,
     limitations: [
-      "Only recorded native text-file reads are traced. Shell/MCP reads, imports and skill loading are not reconstructed.",
+      "Native text-file reads are traced from the harness's read tool. Shell reads are parsed from recorded commands: cat, head, tail, sed without -i, nl, bat, less and more, plus < input. Searches (grep, rg), scripts, editors and other programs are not counted as reads. MCP reads, imports and skill loading are not reconstructed.",
+      "Shell read paths are resolved against a cd earlier in the same command, the recorded working folder (Codex), or else the session folder. Claude Code keeps the shell folder between commands, so a relative path after an earlier cd may resolve wrong. Paths built from variables, globs or substitutions are not resolved. Output size covers the whole command, not one file, and a command that ran is not proof the file was printed.",
       "Injected instructions are the text the harness recorded adding to context, hashed as recorded, including entries re-injected after compaction or inherited by a fork. Claude Code and Pi record each file; Codex records one combined block per directory without file boundaries. Harnesses may process text before injecting it (Claude Code strips HTML comments), so hashes need not match the file's bytes. Recorded text is not proof a rule was followed.",
       "Returned output is transcript evidence, not proof it was used, obeyed or retained after compaction. Reported line ranges do not guarantee complete file delivery.",
       "No current source files are opened. Hashes identify recorded tool text, including wrappers, not source-file bytes.",

@@ -1,0 +1,240 @@
+import { basename, isAbsolute, join, resolve } from "node:path";
+
+export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
+
+export type ShellRead = {
+  program: string;
+  written: string;
+  path: string | null;
+  base: ShellReadBase | null;
+};
+
+type Word = { text: string; dynamic: boolean };
+type Segment = { words: Word[]; inputs: Word[] };
+
+const READERS: Record<string, string> = {
+  cat: "",
+  nl: "bdfhilnsvw",
+  head: "nc",
+  tail: "ncs",
+  sed: "efl",
+  bat: "lrHm",
+  batcat: "lrHm",
+  less: "",
+  more: "",
+};
+
+const OPERATORS = ["&&", "||", ";;", "|&", "|", ";", "&", "\n", "(", ")"];
+
+export function shellReads(
+  command: string,
+  places: { workdir: string | null; sessionFolder: string | null; home: string | null },
+): ShellRead[] {
+  const reads: ShellRead[] = [];
+  let dir: { path: string; base: ShellReadBase } | null = places.workdir
+    ? { path: places.workdir, base: "workdir" }
+    : places.sessionFolder
+      ? { path: places.sessionFolder, base: "session folder" }
+      : null;
+  for (const segment of segments(command)) {
+    const start = segment.words.findIndex((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w.text));
+    const words = start === -1 ? [] : segment.words.slice(start);
+    const program = words[0] && !words[0].dynamic ? basename(words[0].text) : null;
+    if (program === "cd") {
+      const target = words[1];
+      dir =
+        !target || target.text === "~"
+          ? places.home
+            ? { path: places.home, base: "home" }
+            : null
+          : located(target, dir, places.home, "cd");
+      continue;
+    }
+    if (!program || !(program in READERS)) continue;
+    for (const word of [...(operands(program, words.slice(1)) ?? []), ...segment.inputs]) {
+      const at = located(word, dir, places.home, null);
+      reads.push({ program, written: word.text, path: at?.path ?? null, base: at?.base ?? null });
+    }
+  }
+  return reads;
+}
+
+function located(
+  word: Word,
+  dir: { path: string; base: ShellReadBase } | null,
+  home: string | null,
+  as: "cd" | null,
+): { path: string; base: ShellReadBase } | null {
+  if (word.dynamic || word.text === "-") return null;
+  if (isAbsolute(word.text)) return { path: resolve(word.text), base: as ?? "absolute" };
+  if (word.text === "~" || word.text.startsWith("~/"))
+    return home ? { path: join(home, word.text.slice(1)), base: as ?? "home" } : null;
+  if (word.text.startsWith("~") || !dir) return null;
+  return { path: resolve(dir.path, word.text), base: as ?? dir.base };
+}
+
+function operands(program: string, args: Word[]): Word[] | null {
+  const valued = READERS[program]!;
+  const files: Word[] = [];
+  let scriptGiven = false;
+  let options = true;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (options && arg.text === "--") {
+      options = false;
+      continue;
+    }
+    if (options && arg.text.startsWith("--")) {
+      if (program === "sed" && arg.text.startsWith("--in-place")) return null;
+      if (program === "sed" && /^--(expression|file)\b/.test(arg.text)) scriptGiven = true;
+      if (
+        !arg.text.includes("=") &&
+        /^--(lines|bytes|expression|file|line-range|language)$/.test(arg.text)
+      )
+        i++;
+      continue;
+    }
+    if (options && /^-[^\d]/.test(arg.text) && arg.text.length > 1) {
+      for (let j = 1; j < arg.text.length; j++) {
+        const letter = arg.text[j]!;
+        if (program === "sed" && letter === "i") return null;
+        if (!valued.includes(letter)) continue;
+        if (program === "sed") scriptGiven = true;
+        if (j === arg.text.length - 1) i++;
+        break;
+      }
+      continue;
+    }
+    if (options && /^[-+]\d/.test(arg.text) && (program === "head" || program === "tail")) continue;
+    if (program === "sed" && !scriptGiven) {
+      scriptGiven = true;
+      continue;
+    }
+    files.push(arg);
+  }
+  return files;
+}
+
+function segments(command: string): Segment[] {
+  const out: Segment[] = [];
+  let segment: Segment = { words: [], inputs: [] };
+  let word: Word | null = null;
+  let redirect: "in" | "out" | "string" | "heredoc" | null = null;
+  const heredocs: string[] = [];
+  const finishWord = () => {
+    if (!word) return;
+    if (redirect === "in") segment.inputs.push(word);
+    else if (redirect === "heredoc") heredocs.push(word.text);
+    else if (!redirect) segment.words.push(word);
+    redirect = null;
+    word = null;
+  };
+  const finishSegment = () => {
+    finishWord();
+    if (segment.words.length || segment.inputs.length) out.push(segment);
+    segment = { words: [], inputs: [] };
+  };
+  let i = 0;
+  while (i < command.length) {
+    const c = command[i]!;
+    if (c === "\n") finishWord();
+    if (c === "\n" && heredocs.length) {
+      finishSegment();
+      i = skipHeredocs(command, i + 1, heredocs.splice(0));
+      continue;
+    }
+    if (!word && c === "#") {
+      while (i < command.length && command[i] !== "\n") i++;
+      continue;
+    }
+    if (c === " " || c === "\t") {
+      finishWord();
+      i++;
+      continue;
+    }
+    if (c === "\\" && command[i + 1] === "\n") {
+      i += 2;
+      continue;
+    }
+    if (c === ">" || c === "<") {
+      if (word && /^\d*$|^&$/.test((word as Word).text)) word = null;
+      finishWord();
+      const op = command.slice(i).match(/^(<<<|<<-?|<\(|>>|>&|>\||<>|>|<)/)![0];
+      if (op === "<(") {
+        i = skipBalanced(command, i + 1, "(", ")");
+        word = { text: "<(…)", dynamic: true };
+        continue;
+      }
+      redirect =
+        op === "<" ? "in" : op === "<<<" ? "string" : op.startsWith("<<") ? "heredoc" : "out";
+      i += op.length;
+      continue;
+    }
+    const operator = OPERATORS.find((o) => command.startsWith(o, i));
+    if (operator) {
+      finishSegment();
+      i += operator.length;
+      continue;
+    }
+    word ??= { text: "", dynamic: false };
+    if (c === "'") {
+      const end = command.indexOf("'", i + 1);
+      const stop = end === -1 ? command.length : end;
+      word.text += command.slice(i + 1, stop);
+      i = stop + 1;
+    } else if (c === '"') {
+      i++;
+      while (i < command.length && command[i] !== '"') {
+        if (command[i] === "\\" && i + 1 < command.length) {
+          word.text += command[i + 1];
+          i += 2;
+        } else {
+          if (command[i] === "$" || command[i] === "`") word.dynamic = true;
+          word.text += command[i];
+          i++;
+        }
+      }
+      i++;
+    } else if (c === "\\") {
+      word.text += command[i + 1] ?? "";
+      i += 2;
+    } else if (c === "$" && command[i + 1] === "(") {
+      word.dynamic = true;
+      i = skipBalanced(command, i + 1, "(", ")");
+      word.text += "$(…)";
+    } else if (c === "`") {
+      word.dynamic = true;
+      const end = command.indexOf("`", i + 1);
+      i = end === -1 ? command.length : end + 1;
+      word.text += "`…`";
+    } else {
+      if ("$*?[{".includes(c)) word.dynamic = true;
+      word.text += c;
+      i++;
+    }
+  }
+  finishSegment();
+  return out;
+}
+
+function skipBalanced(text: string, from: number, open: string, close: string): number {
+  let depth = 0;
+  for (let i = from; i < text.length; i++) {
+    if (text[i] === open) depth++;
+    else if (text[i] === close && --depth === 0) return i + 1;
+  }
+  return text.length;
+}
+
+function skipHeredocs(text: string, from: number, heredocs: string[]): number {
+  let i = from;
+  for (const delimiter of heredocs) {
+    while (i < text.length) {
+      const end = text.indexOf("\n", i);
+      const line = text.slice(i, end === -1 ? text.length : end);
+      i = end === -1 ? text.length : end + 1;
+      if (line.replace(/^\t+/, "") === delimiter) break;
+    }
+  }
+  return i;
+}
