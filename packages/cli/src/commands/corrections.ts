@@ -25,6 +25,7 @@ import {
   type Tally,
   type Themes,
 } from "@quench/judge";
+import { reading } from "../progress.ts";
 import { json, quote, runFacts } from "../format.ts";
 
 const MIN_BUCKET = 15;
@@ -124,7 +125,7 @@ async function sessionRuns(
 ): Promise<SessionRuns[]> {
   const parents = new Map<string, SessionRuns>();
   const childStarts = new Map<string, (Date | null)[]>();
-  for await (const outcome of readSessions(await discoverAll(home, since))) {
+  for await (const outcome of readSessions(await discoverAll(home, since), 4, reading())) {
     if (!outcome.ok) continue;
     const s = outcome.session;
     if (s.parent) {

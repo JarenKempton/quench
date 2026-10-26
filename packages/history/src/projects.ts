@@ -4,7 +4,7 @@ import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction } from "./model.ts";
 import { recordedFailures, type SessionFailure } from "./failures.ts";
-import { discoverAll, readSessions } from "./read.ts";
+import { discoverAll, readSessions, type Progress } from "./read.ts";
 import {
   recordedInstructions,
   recordedMcp,
@@ -39,12 +39,12 @@ export type Project = {
   directories: ProjectDirectory[];
 };
 
-export async function sessionPlaces(home: Home, since: Date) {
+export async function sessionPlaces(home: Home, since: Date, onRead?: Progress) {
   const refs = await discoverAll(home, since);
   const modified = new Map(refs.map((ref) => [ref.path, ref.modified]));
   const places: SessionPlace[] = [];
   let unreadable = 0;
-  for await (const outcome of readSessions(refs, 8)) {
+  for await (const outcome of readSessions(refs, 8, onRead)) {
     if (!outcome.ok) unreadable++;
     else
       places.push({

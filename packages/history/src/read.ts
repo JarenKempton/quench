@@ -8,6 +8,8 @@ export async function discoverAll(home: Home, since: Date | null = null): Promis
   return found.flat().filter((r) => !since || !r.modified || r.modified >= since);
 }
 
+export type Progress = (done: number, total: number) => void;
+
 export type ReadOutcome =
   | { ok: true; session: Session }
   | { ok: false; ref: SessionRef; error: unknown };
@@ -15,6 +17,7 @@ export type ReadOutcome =
 export async function* readSessions(
   refs: readonly SessionRef[],
   concurrency = 4,
+  onRead: Progress = () => {},
 ): AsyncGenerator<ReadOutcome> {
   const read = (ref: SessionRef): Promise<ReadOutcome> =>
     harnessById[ref.harness].read(ref).then(
@@ -23,10 +26,12 @@ export async function* readSessions(
     );
   const pending = refs.slice(0, concurrency).map(read);
   let next = pending.length;
+  let done = 0;
   while (pending.length > 0) {
     const outcome = await pending.shift();
     const ref = refs[next++];
     if (ref) pending.push(read(ref));
+    onRead(++done, refs.length);
     if (outcome) yield outcome;
   }
 }

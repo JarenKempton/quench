@@ -32,6 +32,13 @@ async function one(harness: HarnessId, id: string): Promise<Session> {
 const messages = (s: Session, author: Author) =>
   s.events.flatMap((e) => (e.type === "message" && e.author === author ? [e.text] : []));
 
+test("reading reports progress once per session, ending at the total", async () => {
+  const refs = await discoverAll(new Home(fixtures));
+  const seen: [number, number][] = [];
+  for await (const _ of readSessions(refs, 2, (done, total) => seen.push([done, total])));
+  expect(seen).toEqual(refs.map((_, i) => [i + 1, refs.length]));
+});
+
 describe("discovery", () => {
   test("finds every harness and links subagents to their parent", async () => {
     const found = (await all(new Home(fixtures))).map((s) => [s.harness, s.id, s.parent]);
