@@ -2,16 +2,15 @@ import { realpath } from "node:fs/promises";
 import { discoverAll, harnessById, readSessions, type Home, type Session } from "@quench/history";
 import { runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
+import { latestSessionIn } from "../latest.ts";
 
 export async function runs(
   home: Home,
   file: string | undefined,
   options: { json: boolean },
 ): Promise<number> {
-  if (!file) {
-    process.stderr.write("usage: quench runs <session-file>\n");
-    return 1;
-  }
+  file ??= (await latestSessionIn(home, process.cwd())) ?? undefined;
+  if (!file) return 1;
   const path = await realpath(file).catch(() => null);
   if (!path) {
     process.stderr.write(`${file} does not exist\n`);

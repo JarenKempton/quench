@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, rename, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -883,4 +883,57 @@ test("sources traces skill listings and the loads each harness recorded", async 
   expect(none.skills).toEqual({ listings: [], loads: [] });
   expect(none.warnings.join(" ")).toContain("No skill listings are recorded in this session");
   expect(none.limitations.join(" ")).toContain("Skill loading");
+});
+
+test("sources with no file reads the latest session in this repository, worktrees included", async () => {
+  const home = await mkdtemp(join(tmpdir(), "quench-sources-"));
+  const here = await mkdtemp(join(tmpdir(), "quench-here-"));
+  const git = (...args: string[]) =>
+    Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd: here });
+  git("init", "-q");
+  git("commit", "-q", "--allow-empty", "-m", "init");
+  const worktree = `${here}-wt`;
+  git("worktree", "add", "-q", worktree);
+  const dir = join(home, ".claude/projects/demo");
+  await mkdir(dir, { recursive: true });
+  const session = (id: string, cwd: string) =>
+    Bun.write(
+      join(dir, `${id}.jsonl`),
+      JSON.stringify({ ...call(id, "Bash", { command: "cat notes.md" }), cwd, sessionId: id }) +
+        "\n",
+    );
+  await session("old-here", worktree);
+  await session("elsewhere", "/somewhere/else");
+  const past = new Date(Date.now() - 3_600_000);
+  await utimes(join(dir, "old-here.jsonl"), past, past);
+  const env = {
+    ...process.env,
+    HOME: home,
+    CLAUDE_CONFIG_DIR: "",
+    CODEX_HOME: "",
+    PI_CODING_AGENT_DIR: "",
+  };
+  const spawn = async (cwd: string) => {
+    const proc = Bun.spawn(["bun", main, "sources", "--json"], {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { stdout, stderr, code };
+  };
+  const found = await spawn(here);
+  expect(found.code).toBe(0);
+  expect(found.stderr).toContain(
+    "Latest Claude Code session in this repository, today: ~/.claude/projects/demo/old-here.jsonl",
+  );
+  expect(JSON.parse(found.stdout).shell[0].path).toBe(join(worktree, "notes.md"));
+  const none = await spawn(home);
+  expect(none.code).toBe(1);
+  expect(none.stderr).toContain("No session found in ~");
 });
