@@ -146,6 +146,13 @@ a project whose instructions dwarf the rest, idle worktrees), the busiest projec
 command to dig into each. `quench profile` prints every table below; `quench profile <section>`
 prints one. `--json` is the same full result either way.
 
+The first run reads every session in the window, with a progress line; later runs reuse
+per-session results kept in `~/.quench/local/session-places.json` (owner-only) and re-read only
+session files whose size or modified time changed. The cache holds what the profile derives
+per session (working folder, recorded instruction paths and sizes, skill names, MCP server
+names, failure kinds with a short error summary), not transcripts. It resets when the Quench
+build changes. `--no-cache` reads everything and writes nothing.
+
 Needs no arguments. It finds each harness home at its default location or override, reads
 the sessions modified in the last `--days` (default 30) and takes each session's recorded
 working directory as a project. Directories in one git repository, including linked

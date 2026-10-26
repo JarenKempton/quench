@@ -14,6 +14,7 @@ import {
   type SessionPlace,
   type Skill,
 } from "@quench/history";
+import { placeCache } from "../cache.ts";
 import { reading } from "../progress.ts";
 import { json, median } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
@@ -39,10 +40,12 @@ const LIMITATIONS = [
 
 export async function profile(
   home: Home,
-  options: { days: number; scan: string[]; json: boolean; view: View },
+  options: { days: number; scan: string[]; json: boolean; view: View; cache: boolean },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const { places, unreadable } = await sessionPlaces(home, since, reading());
+  const cache = options.cache ? await placeCache(home.dir) : undefined;
+  const { places, unreadable } = await sessionPlaces(home, since, reading(), cache);
+  await cache?.save();
   let found: Awaited<ReturnType<typeof projects>>;
   try {
     found = await projects(places, options.scan);
