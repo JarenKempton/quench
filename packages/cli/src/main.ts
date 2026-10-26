@@ -9,10 +9,12 @@ import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
 import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
+import { version } from "../package.json";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
 
 Usage:
+  quench --version                     the installed version
   quench [profile] [--days 30] [--scan <dir>] [--json]
                                        every harness home, global instructions and project found in your sessions
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
@@ -49,6 +51,7 @@ const { positionals, values } = parseArgs({
     "pi-home": { type: "string" },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
+    version: { type: "boolean", short: "v", default: false },
   },
 });
 
@@ -62,6 +65,10 @@ const days = Number(values.days);
 const examples = Number(values.examples);
 const themeLimit = Number(values["theme-limit"] ?? THEME_LIMIT);
 
+if (values.version) {
+  process.stdout.write(`quench ${version}\n`);
+  process.exit(0);
+}
 if (values.help) {
   process.stdout.write(USAGE);
   process.exit(0);

@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bunx vp check
+      - run: bunx vp run test
+      - name: Tag matches the CLI version
+        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version packages/cli/package.json)"
+      - name: Build binaries
+        run: |
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --target=bun-$target packages/cli/src/main.ts --outfile dist/quench-$target
+          done
+          ./dist/quench-linux-x64 --version
+          cd dist && sha256sum quench-* > SHA256SUMS
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/quench-* dist/SHA256SUMS --draft --generate-notes --title "$GITHUB_REF_NAME"

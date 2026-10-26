@@ -18,3 +18,4 @@ jobs:
       - run: bunx vp run test
       - run: bunx vp run compile
       - run: ./dist/quench --help
+      - run: ./dist/quench --version
