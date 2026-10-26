@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import {
   harnessById,
   harnesses,
@@ -54,7 +55,7 @@ export function renderMcpUse(uses: McpUse[], days: number): string[] {
   const shown = uses.slice(0, SHOWN);
   const lines = [
     "",
-    `MCP servers called · from session history · last ${days} days`,
+    heading(`MCP servers called · from session history · last ${days} days`),
     ...table(
       [
         ["Server", "Agent", "Sessions", "Calls", "In local config"],

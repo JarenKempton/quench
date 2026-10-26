@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import { harnessById, harnesses, type HarnessId, type SessionPlace } from "@quench/history";
 import { chars, count, median, table } from "../format.ts";
 
@@ -48,7 +49,7 @@ export function renderSkillUse(uses: SkillUse[], days: number): string[] {
   const known = uses.filter((u) => u.useRecorded);
   const lines = [
     "",
-    `Recorded skills · what session histories listed and used · last ${days} days`,
+    heading(`Recorded skills · what session histories listed and used · last ${days} days`),
     ...table(
       [
         ["Agent", "Sessions", "Listed", "Listing size", "Used", "Never used"],

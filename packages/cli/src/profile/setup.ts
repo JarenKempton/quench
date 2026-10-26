@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import {
   harnessById,
   type HarnessId,
@@ -58,7 +59,7 @@ export function renderMcpServers(
   if (!servers.length) return [];
   return [
     "",
-    "MCP servers · configured on disk now · tool definitions not counted",
+    heading("MCP servers · configured on disk now · tool definitions not counted"),
     ...table([
       ["Server", "Agent", "Scope", "Transport", "Target", "State", "Where"],
       ...servers.map((s) => [

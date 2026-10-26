@@ -41,12 +41,16 @@ export const plural = (n: number, noun: string, nouns = `${noun}s`) =>
 export const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
 export function table(rows: string[][], right: number[] = [], indent = "  "): string[] {
-  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((row) => row[i]!.length)));
+  const width = (cell: string) => Bun.stringWidth(cell);
+  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((row) => width(row[i]!))));
   return rows.map((row) =>
     (
       indent +
       row
-        .map((cell, i) => (right.includes(i) ? cell.padStart(widths[i]!) : cell.padEnd(widths[i]!)))
+        .map((cell, i) => {
+          const pad = " ".repeat(widths[i]! - width(cell));
+          return right.includes(i) ? pad + cell : cell + pad;
+        })
         .join("  ")
     ).trimEnd(),
   );

@@ -144,7 +144,8 @@ quench profile --days 90 --scan ~/code --json
 agent, a few things worth a look (skills listed but never used, the failure that repeats most,
 a project whose instructions dwarf the rest, idle worktrees), the busiest projects, and the
 command to dig into each. `quench profile` prints every table below; `quench profile <section>`
-prints one. `--json` is the same full result either way.
+prints one. `--json` is the same full result either way. Output is colored in a terminal and plain when piped,
+with `NO_COLOR` set, or on a `dumb` terminal; `FORCE_COLOR=1` forces color.
 
 The first run reads every session in the window, with a progress line; later runs reuse
 per-session results kept in `~/.quench/local/session-places.json` (owner-only) and re-read only

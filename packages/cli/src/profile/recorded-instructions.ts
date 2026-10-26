@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import { dirname, relative } from "node:path";
 import {
   checkout,
@@ -82,7 +83,7 @@ export function renderRecordedFiles(
   const shown = files.slice(0, SHOWN);
   const lines = [
     "",
-    "Recorded instructions · what session histories logged loading · worktrees folded",
+    heading("Recorded instructions · what session histories logged loading · worktrees folded"),
     ...table(
       [
         ["File", "Agents", "Sessions", "Last recorded", "Size", "Disk now"],
