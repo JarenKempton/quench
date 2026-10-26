@@ -17,6 +17,24 @@ Claude Code
   Effort            high 33%, medium 33%, unknown 33%
 ```
 
+## Install
+
+Download the binary for your machine from the [releases](https://github.com/JarenKempton/quench/releases)
+(Linux and macOS, x64 and arm64) and put it on your `PATH`:
+
+```sh
+gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output ~/.local/bin/quench
+chmod +x ~/.local/bin/quench
+quench --version
+```
+
+Swap in `linux-arm64`, `darwin-x64` or `darwin-arm64`. `SHA256SUMS` in the release lists each
+binary's checksum. The macOS binaries are not signed; a copy downloaded with a browser needs
+`xattr -d com.apple.quarantine quench` before it runs.
+
+Then run `quench` with no arguments for the profile of every agent and project in your
+history.
+
 ## Commands
 
 | Command                                  | What it shows                                                                         |
@@ -283,7 +301,8 @@ makes no model calls, reads no host database and writes no files or caches.
 ## Status
 
 Early and changing. Direction and scope: [#45](https://github.com/JarenKempton/quench/issues/45).
-No prebuilt releases yet.
+Releases are built by `.github/workflows/release.yml` when a `v*` tag matching
+`packages/cli/package.json`'s version is pushed, and published as a draft to review first.
 
 ## Run from source
 
