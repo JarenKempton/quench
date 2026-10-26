@@ -21,9 +21,9 @@ Usage:
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
   quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
-  quench runs <session-file> [--json]  one session as prompt → what the agent did → your reply
+  quench runs [session-file] [--json]  one session as prompt → what the agent did → your reply
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
-  quench sources <session-file> [--json]  recorded file reads and source coverage gaps (offline)
+  quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)

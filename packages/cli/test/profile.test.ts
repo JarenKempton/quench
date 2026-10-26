@@ -99,7 +99,7 @@ test("profile with no arguments finds projects from session directories and grou
       "Dig in",
       "  quench profile            every table, in full",
       "  quench profile <section>  one of: projects, mcp, instructions, skills, failures",
-      "  quench sources <file>     what one session read",
+      "  quench sources            what your latest session in this folder read",
       "  quench --help             all commands",
       "",
     ].join("\n"),

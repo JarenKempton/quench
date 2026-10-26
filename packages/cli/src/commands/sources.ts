@@ -2,16 +2,20 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { discoverAll, harnessById, sourceTrace, type Home } from "@quench/history";
 import { json } from "../format.ts";
+import { latestSessionIn } from "../latest.ts";
 
 export async function sources(
   home: Home,
   files: string[],
   options: { json: boolean },
 ): Promise<number> {
-  if (files.length !== 1) {
-    process.stderr.write("sources requires exactly one session file\n");
+  if (files.length > 1) {
+    process.stderr.write("sources takes one session file\n");
     return 1;
   }
+  const latest = files.length ? null : await latestSessionIn(home, process.cwd());
+  if (!files.length && !latest) return 1;
+  if (latest) files = [latest];
   try {
     const path = await realpath(files[0]!);
     const refs = await discoverAll(home);

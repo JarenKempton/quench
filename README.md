@@ -43,10 +43,10 @@ history.
 | `quench profile [section]`               | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`          |
 | `quench worktrees [--days 30] [--json]`  | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
 | `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
-| `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
+| `quench runs [session-file] [--json]`    | One session as prompt → what the agent did → your reply; default: latest one here     |
 | `quench corrections [--dry-run]`         | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]` | Current instruction-file inventory and source rule candidates; offline                |
-| `quench sources <session-file> [--json]` | Recorded file reads, returned ranges and explicit source-coverage gaps; offline       |
+| `quench sources [session-file] [--json]` | What one session read and loaded; default: the latest session in this folder; offline |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
@@ -247,10 +247,13 @@ reads no session/host history, and writes no files or caches, even when a key is
 ## Recorded session sources
 
 ```sh
+quench sources
 quench sources /path/to/discovered/session.jsonl --json
 ```
 
-Reads one session found in the configured harness history directories. Claude Code's adapter
+With no file, it picks the most recent session (any agent) whose working folder is the current
+folder or inside it, and says which on stderr. Reads one session found in the configured harness
+history directories. Claude Code's adapter
 traces native `Read` calls when the transcript retains structured text-file results. Pi's adapter
 traces native `read` requests and successful text-only results.
 Any filename can appear, including README files, arbitrary documentation and skill references;
