@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import { harnessById, type HarnessId, type SessionPlace } from "@quench/history";
 import { chars, count, projectName, table } from "../format.ts";
 
@@ -68,7 +69,7 @@ export function renderFailures(summary: FailureSummary, days: number, homeDir: s
   const shown = summary.repeated.slice(0, SHOWN);
   const lines = [
     "",
-    `Repeated failures · tool calls that failed the same way · last ${days} days`,
+    heading(`Repeated failures · tool calls that failed the same way · last ${days} days`),
     ...table(
       [
         ["Project", "Kind", "What", "Failures", "Sessions", "In a row", "Output", "Agents"],

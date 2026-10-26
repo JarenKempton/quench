@@ -1,3 +1,4 @@
+import { bold, dim, heading, title } from "../style.ts";
 import {
   harnessById,
   type HarnessId,
@@ -94,7 +95,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
 function agentsTable(result: Profile, short: (path: string) => string): string[] {
   const sessions = result.homes.reduce((n, h) => n + h.sessions, 0);
   const lines = [
-    `Quench profile · last ${result.days} days · ${count(sessions)} sessions · instruction files as they are on disk now`,
+    `${title("QUENCH")}  ${bold(`Profile · last ${result.days} days · ${count(sessions)} sessions`)} ${dim("· instruction files as they are on disk now")}`,
     "",
     ...table(
       [
@@ -126,7 +127,7 @@ function agentsTable(result: Profile, short: (path: string) => string): string[]
 }
 
 function globalInstructions(files: InstructionFile[], short: (path: string) => string): string[] {
-  const lines = ["", "Global instructions · every project, before project files"];
+  const lines = ["", heading("Global instructions · every project, before project files")];
   if (!files.length) return [...lines, "  none found"];
   return [
     ...lines,

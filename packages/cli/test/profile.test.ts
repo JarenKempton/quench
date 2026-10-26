@@ -85,46 +85,47 @@ test("profile with no arguments finds projects from session directories and grou
   expect(summary.code).toBe(0);
   expect(summary.stdout).toBe(
     [
-      "Quench · last 30 days · 5 sessions (Codex 5)",
+      " QUENCH   last 30 days · 5 sessions · Codex 5",
       "",
-      "Every session starts with",
-      "  Codex  21 B global instructions  no skill listing recorded",
-      "  Each project adds its own instruction files on top.",
+      "▍Every session starts with",
+      "  Codex  21 B instructions  no skill list",
+      "  Projects add their own instruction files on top.",
       "",
-      "Busiest projects",
-      "  Project  Sessions  Last used   Instructions per session",
-      "  app             3  today                              —",
-      "  scratch         1  2 days ago                         —",
+      "▍Busiest projects",
+      "  app      3 sessions  today       no instructions recorded",
+      "  scratch   1 session  2 days ago  no instructions recorded",
       "",
-      "Dig in",
-      "  quench profile            every table, in full",
-      "  quench profile <section>  one of: projects, mcp, instructions, skills, failures",
-      "  quench sources            what your latest session in this folder read",
-      "  quench --help             all commands",
+      "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",
       "",
     ].join("\n"),
   );
+
+  const colored = Bun.spawnSync(["bun", main], {
+    env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: "", CODEX_HOME: "", FORCE_COLOR: "1" },
+  }).stdout.toString();
+  expect(colored).toContain("\x1b[1m");
+  expect(Bun.stripANSI(colored)).toBe(summary.stdout);
 
   const bare = await quench(home, "profile");
   expect(bare.code).toBe(0);
   expect(bare.stdout).toBe(
     [
-      "Quench profile · last 30 days · 5 sessions · instruction files as they are on disk now",
+      " QUENCH   Profile · last 30 days · 5 sessions · instruction files as they are on disk now",
       "",
       "  Agent        Sessions  Skills  MCP  Home",
       "  Claude Code         0  0         0  ~/.claude",
       "  Codex               5  0         0  ~/.codex",
       "  Pi                  —  —         —  ~/.pi/agent not found; set --pi-home",
       "",
-      "Global instructions · every project, before project files",
+      "▍Global instructions · every project, before project files",
       "  ~/.claude/CLAUDE.md  25 B  Claude Code",
       "  ~/.codex/AGENTS.md   21 B  Codex",
       "",
-      "Projects · 1 git repository · project instruction size per agent",
+      "▍Projects · 1 git repository · project instruction size per agent",
       "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
       "  app             3  today             22 B   22 B                 —       —    —  AGENTS.md          1 · 0 idle  ~/code/app",
       "",
-      "Other folders · 1 folder outside git · 1 session",
+      "▍Other folders · 1 folder outside git · 1 session",
       "  Project  Sessions  Last used   Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Path",
       "  scratch         1  2 days ago            —      —                 —       —    —  none               ~/scratch",
       "",
@@ -375,7 +376,7 @@ test("profile shows the instructions sessions recorded loading and whether disk 
   );
   expect(stdout).toContain(
     [
-      "Recorded instructions · what session histories logged loading · worktrees folded",
+      "▍Recorded instructions · what session histories logged loading · worktrees folded",
       "  File                       Agents       Sessions  Last recorded      Size  Disk now",
       "  ~/.claude/CLAUDE.md        Claude Code         2  today          24 chars  same",
       "  app/CLAUDE.md              Claude Code         2  today          21 chars  1 same, 1 differs",
@@ -489,7 +490,7 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   );
   expect(stdout).toContain(
     [
-      "MCP servers · configured on disk now · tool definitions not counted",
+      "▍MCP servers · configured on disk now · tool definitions not counted",
       "  Server   Agent        Scope    Transport  Target            State           Where",
       "  figma    Claude Code  user     http       mcp.example.com   on              all projects",
       "  docs     Codex        user     http       docs.example.com  on              all projects",
@@ -629,7 +630,7 @@ test("profile shows which recorded skills sessions listed and used", async () =>
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
-      "Recorded skills · what session histories listed and used · last 30 days",
+      "▍Recorded skills · what session histories listed and used · last 30 days",
       "  Agent        Sessions  Listed  Listing size  Used  Never used",
       "  Claude Code         2       3      63 chars     2           1",
       "  Codex               1       2     207 chars     1           1",
@@ -706,7 +707,7 @@ test("profile lists MCP servers sessions called and whether local config has the
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
-      "MCP servers called · from session history · last 30 days",
+      "▍MCP servers called · from session history · last 30 days",
       "  Server           Agent        Sessions  Calls  In local config",
       "  figma            Claude Code         1      2  yes",
       "  claude_ai_Drive  Claude Code         1      1  no",
@@ -793,7 +794,7 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
-      "Repeated failures · tool calls that failed the same way · last 30 days",
+      "▍Repeated failures · tool calls that failed the same way · last 30 days",
       "  Project  Kind             What                         Failures  Sessions  In a row     Output  Agents",
       "  work     rejected         guard: blocked — force push         3         1         3  225 chars  Claude Code",
       "  work     no such file     docs/setup.md                       3         2         2   60 chars  Claude Code",
@@ -807,15 +808,15 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   expect(json.recordedFailures.failures).toBe(9);
   const section = await quench(home, "profile", "failures");
   expect(section.stdout.split("\n")[0]).toBe(
-    "Repeated failures · tool calls that failed the same way · last 30 days",
+    "▍Repeated failures · tool calls that failed the same way · last 30 days",
   );
   expect(section.stdout).not.toContain("Projects ·");
   expect((await quench(home)).stdout).toContain(
     [
-      "Worth a look",
-      '  • In work, "guard: blocked — force push" failed 3 times across 1',
-      "    session.",
-      "    → quench profile failures",
+      "▍Worth a look",
+      '  1. "guard: blocked — force push" failed 3× in work',
+      "     1 session · 225 chars of output",
+      "     → quench profile failures",
     ].join("\n"),
   );
   const unknown = await quench(home, "profile", "nope");

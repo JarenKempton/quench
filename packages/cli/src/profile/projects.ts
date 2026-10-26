@@ -1,3 +1,4 @@
+import { heading } from "../style.ts";
 import { relative } from "node:path";
 import { harnessById, type HarnessId } from "@quench/history";
 import { ago, chars, count, plural, projectName, shortPath, size, table } from "../format.ts";
@@ -36,7 +37,9 @@ export function projectTables(result: Profile, homeDir: string): string[] {
   const other = result.projects.filter((p) => !p.git);
   const lines = [
     "",
-    `Projects · ${plural(repos.length, "git repository", "git repositories")} · project instruction size per agent`,
+    heading(
+      `Projects · ${plural(repos.length, "git repository", "git repositories")} · project instruction size per agent`,
+    ),
     ...(repos.length ? table([header, ...repos.map(row)], numeric) : ["  none found"]),
   ];
   if (!other.length) return lines;
@@ -44,10 +47,12 @@ export function projectTables(result: Profile, homeDir: string): string[] {
   const withoutWorktrees = (cells: string[]) => cells.filter((_, i) => i !== header.length - 2);
   lines.push(
     "",
-    `Other folders · ${plural(other.length, "folder")} outside git · ${plural(
-      other.reduce((n, p) => n + p.sessions, 0),
-      "session",
-    )}`,
+    heading(
+      `Other folders · ${plural(other.length, "folder")} outside git · ${plural(
+        other.reduce((n, p) => n + p.sessions, 0),
+        "session",
+      )}`,
+    ),
     ...table([header, ...shown.map(row)].map(withoutWorktrees), numeric),
   );
   if (other.length > shown.length) lines.push(`  … ${other.length - shown.length} more in --json`);
