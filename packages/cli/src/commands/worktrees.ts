@@ -6,6 +6,7 @@ import {
   type Home,
   type WorktreeCheck,
 } from "@quench/history";
+import { reading } from "../progress.ts";
 import { json, plural } from "../format.ts";
 
 export async function worktrees(
@@ -13,7 +14,7 @@ export async function worktrees(
   options: { days: number; json: boolean },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const { places } = await sessionPlaces(home, since);
+  const { places } = await sessionPlaces(home, since, reading());
   const found = await projects(places);
   const repositories = [];
   for (const project of found.projects.filter((p) => p.git)) {

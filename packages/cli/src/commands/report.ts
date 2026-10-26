@@ -6,6 +6,7 @@ import {
   type Distribution,
   type HarnessReport,
 } from "@quench/insights";
+import { reading } from "../progress.ts";
 import { json, tokens } from "../format.ts";
 
 export async function report(
@@ -15,7 +16,7 @@ export async function report(
   const since = new Date(Date.now() - options.days * 86_400_000);
   const builder = new ReportBuilder();
   let unreadable = 0;
-  for await (const outcome of readSessions(await discoverAll(home, since))) {
+  for await (const outcome of readSessions(await discoverAll(home, since), 4, reading())) {
     if (outcome.ok) builder.add(outcome.session);
     else unreadable += 1;
   }

@@ -14,6 +14,7 @@ import {
   type SessionPlace,
   type Skill,
 } from "@quench/history";
+import { reading } from "../progress.ts";
 import { json, median } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
@@ -41,7 +42,7 @@ export async function profile(
   options: { days: number; scan: string[]; json: boolean },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const { places, unreadable } = await sessionPlaces(home, since);
+  const { places, unreadable } = await sessionPlaces(home, since, reading());
   let found: Awaited<ReturnType<typeof projects>>;
   try {
     found = await projects(places, options.scan);
