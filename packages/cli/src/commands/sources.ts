@@ -25,7 +25,7 @@ export async function sources(
       }
     }
     if (!ref) throw new Error(`${path} is not a session any known harness discovered`);
-    const report = sourceTrace(await harnessById[ref.harness].read(ref));
+    const report = sourceTrace(await harnessById[ref.harness].read(ref), home.dir);
     if (options.json) process.stdout.write(json(report));
     else {
       const lines = [
@@ -53,6 +53,14 @@ export async function sources(
         }
         if (read.reason) lines.push(`  ${read.reason}`);
       }
+      lines.push(
+        "",
+        `Shell reads: ${report.shell.filter((r) => r.kind === "read").length} reads and ${report.shell.filter((r) => r.kind === "search").length} searches from ${report.coverage.shellCommands} recorded commands`,
+      );
+      for (const read of report.shell)
+        lines.push(
+          `  ${read.status} · ${read.kind === "search" ? `${read.program} search ${JSON.stringify(read.pattern ?? "")}` : read.program} · ${read.path ?? `${read.written} (path not resolved)`}${read.base && read.base !== "absolute" ? ` · relative to ${read.base}` : ""} · call ${read.callId ?? "unknown"}${read.reason ? ` · ${read.reason}` : ""}`,
+        );
       lines.push(
         "",
         `Injected instructions: ${report.coverage.injectedInstructions} · ${report.instructions.length} recorded`,

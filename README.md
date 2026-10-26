@@ -218,8 +218,8 @@ Reads one session found in the configured harness history directories. Claude Co
 traces native `Read` calls when the transcript retains structured text-file results. Pi's adapter
 traces native `read` requests and successful text-only results.
 Any filename can appear, including README files, arbitrary documentation and skill references;
-current copies of those source files are never opened. Codex explicitly reports that
-source tracing is not yet supported, rather than treating empty output as no loaded sources.
+current copies of those source files are never opened. Codex has no native read tool, so its
+native tracing is reported as unsupported; its reads show up as shell reads below.
 
 Each attempt retains its call ID, request timestamp/path/offset/limit, result timestamp and
 status: returned, failed, missing result or unknown. Returned evidence includes the recorded
@@ -230,6 +230,19 @@ against today's filesystem or assuming they identify local files. Text can inclu
 instead of file content. Normalized events retain the fingerprint instead of the text.
 Duplicate or out-of-order call/result IDs and malformed metadata remain uncertain. Parse gaps
 and unmatched file results warn; other tool calls remain visible as an unattributed count.
+
+**Shell reads** come from the commands each agent recorded running: Claude Code's and Pi's
+shell tool, and Codex's `exec_command`, including several calls inside one code-mode script.
+`cat`, `head`, `tail`, `sed` (not `sed -i`), `nl`, `bat`, `less`, `more` and `<` input count
+as reads. Searches (`grep`, `rg`, `ag`, `git grep`) are listed separately as searches, with
+the pattern and the files or folders searched; a search returns matching lines, not the file,
+so it is never counted as a read. A search of piped input is not a file search. Scripts,
+remote `ssh` commands and heredoc bodies are not parsed. Each read keeps
+the program, the path as written and the resolved path. It also records what the path was
+resolved from: absolute, home, a `cd` earlier in the same command, Codex's recorded working
+folder, or the session folder. Paths built from variables, globs or substitutions stay
+unresolved, and commands not recorded as literal text are counted. Status says whether the
+command ran, failed or has no result. Output size covers the whole command, not one file.
 
 The same report lists **instructions the harness recorded injecting** into context, with their
 timestamp, path, native label (for example Claude Code's `User`, `Project`, `Local`, `AutoMem`)
@@ -243,7 +256,7 @@ listed at that point. A session with none gets a warning, since older harness ve
 record them. Malformed entries are counted and warned. Recorded instructions show what was in
 context, not that a rule was followed.
 
-This is partial session evidence. Shell/MCP reads, automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
+This is partial session evidence. MCP reads, automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
 result does not prove the model used or obeyed it, retained it after compaction, or received
 the complete file. Reported ranges are metadata, not a completeness guarantee. The command
 makes no model calls, reads no host database and writes no files or caches.

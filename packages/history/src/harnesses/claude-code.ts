@@ -417,7 +417,7 @@ function assistant(line: Line): EventKind[] {
         type: "tool_call",
         id: block.id ?? null,
         name: block.name ?? "",
-        ...(shell?.success ? { command: shell.data.command } : {}),
+        ...(shell?.success ? { shell: [{ command: shell.data.command, workdir: null }] } : {}),
         ...(input?.success
           ? {
               fileRead: {

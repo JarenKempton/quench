@@ -43,6 +43,8 @@ export type InjectedInstruction = {
   textDiffersFromFile: boolean | null;
 };
 
+export type ShellCommand = { command: string | null; workdir: string | null };
+
 export type ListedSkill = { name: string; path: string | null };
 
 export type EventKind =
@@ -53,7 +55,7 @@ export type EventKind =
       id: string | null;
       name: string;
       fileRead?: FileReadRequest;
-      command?: string;
+      shell?: ShellCommand[];
     }
   | { type: "invocation"; name: string; by: "model" | "user" }
   | { type: "mcp_call"; id: string | null; server: string; tool: string }
