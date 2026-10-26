@@ -15,6 +15,7 @@ import {
   type Skill,
 } from "@quench/history";
 import { json, median } from "../format.ts";
+import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { skillUse } from "../profile/recorded-skills.ts";
@@ -31,6 +32,7 @@ const LIMITATIONS = [
   "Skills are SKILL.md folders in each agent's documented locations on disk now. Up-front size is name plus description before each agent's own caps and budgets; bodies load on demand. Built-in and plugin skills, managed and /etc locations, and Codex agents/openai.yaml policies are not read. Codex and Pi project trust is approximated from user config, or assumed for Pi.",
   "Recorded skills are the skill lists session histories logged: Claude Code's listing, Codex's skills block and Pi's skills section. Listing size is the first listing in each session. Use counts sessions where the model invoked a listed skill (Claude Code's Skill tool), read its SKILL.md, or ran a shell command or code naming that exact listed path, or the user ran it as a command. Relative paths are not resolved, so shell-based use (how Codex loads skills) is a lower bound, and a command editing the file counts too.",
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
+  "Repeated failures are tool results a session recorded as errors, grouped per project by kind and by what failed: the missing path or command named in the error text, the read path, or the command's program and subcommand. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.",
   "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Tool definitions need a live connection and are not counted. Plugin and managed servers are not read.",
 ];
 
@@ -77,6 +79,7 @@ export async function profile(
     recordedInstructions: await recordedFiles(places),
     recordedSkills: skillUse(places),
     recordedMcp: mcpUse(places, [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)]),
+    recordedFailures: repeatedFailures(found.placesByRoot),
     projects: profiled,
     missingDirectories: found.missing,
     limitations: [

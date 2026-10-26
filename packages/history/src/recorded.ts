@@ -82,4 +82,4 @@ export function recordedMcp(session: Session): { server: string; calls: number }
 }
 
 const interned = new Map<string, string>();
-const intern = (text: string) => interned.get(text) ?? interned.set(text, text).get(text)!;
+export const intern = (text: string) => interned.get(text) ?? interned.set(text, text).get(text)!;

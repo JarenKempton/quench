@@ -8,6 +8,7 @@ import { checkout, repositoryRoot } from "../files.ts";
 import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
+import { failureOf } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
@@ -433,6 +434,11 @@ function assistant(line: Line): EventKind[] {
   return out;
 }
 
+const rejected = (text: string) =>
+  /^\s*<tool_use_error>|hook error|permission request|doesn't want to|interrupted before/.test(
+    text.slice(0, 400),
+  );
+
 function user(line: Line): EventKind[] {
   const content = line.message?.content;
   const results = blocks(content).filter((b) => b.type === "tool_result");
@@ -445,11 +451,13 @@ function user(line: Line): EventKind[] {
         (typeof b.content === "string" || text.length > 0)
           ? readResult(line.toolUseResult, text)
           : null;
+      const failure = failureOf(text, b.is_error ?? null, rejected(text));
       return {
         type: "tool_result",
         callId: b.tool_use_id ?? null,
         isError: b.is_error ?? null,
         chars: text.length,
+        ...(failure ? { failure } : {}),
         ...(fileRead ? { fileRead } : {}),
       };
     });

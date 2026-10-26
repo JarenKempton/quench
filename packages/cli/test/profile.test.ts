@@ -692,3 +692,93 @@ test("profile lists MCP servers sessions called and whether local config has the
     ].join("\n"),
   );
 });
+
+test("profile lists failures that repeat in a project, by kind and what failed", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-failures-")));
+  const project = join(home, "work");
+  await mkdir(project, { recursive: true });
+  const lines = (records: object[]) => records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  const call = (id: string, name: string, input: object) => ({
+    type: "assistant",
+    cwd: project,
+    message: { content: [{ type: "tool_use", id, name, input }] },
+  });
+  const result = (id: string, content: string, isError = true) => ({
+    type: "user",
+    cwd: project,
+    message: { content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] },
+  });
+  const missingRead = (id: string) => [
+    call(id, "Read", { file_path: join(project, "docs/setup.md") }),
+    result(id, "File does not exist."),
+  ];
+  await Bun.write(
+    join(home, ".claude/projects/p/one.jsonl"),
+    lines([
+      ...missingRead("r1"),
+      ...missingRead("r2"),
+      call("g", "Bash", { command: "grep -n needle src/a.ts" }),
+      result("g", "Exit code 1"),
+      call("c", "Bash", { command: "git status && npm test" }),
+      result("c", "Exit code 1\nnpm error Missing script: test"),
+      ...[1, 2, 3].flatMap((n) => [
+        call(`h${n}`, "Bash", { command: "git push --force" }),
+        result(
+          `h${n}`,
+          "PreToolUse:Bash hook error: [/hooks/guard.sh]: guard: blocked — force push.",
+        ),
+      ]),
+    ]),
+  );
+  await Bun.write(join(home, ".claude/projects/p/two.jsonl"), lines(missingRead("r3")));
+  const codex = (id: string) =>
+    Bun.write(
+      join(home, `.codex/sessions/2026/10/20/${id}.jsonl`),
+      lines([
+        { type: "session_meta", payload: { id, cwd: project } },
+        {
+          type: "response_item",
+          payload: {
+            type: "custom_tool_call",
+            name: "exec",
+            call_id: "x",
+            input:
+              'const r = await tools.exec_command({cmd:"pytest -q"}); text(JSON.stringify(r));',
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "custom_tool_call_output",
+            call_id: "x",
+            output: [
+              { type: "input_text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n" },
+              {
+                type: "input_text",
+                text: '{"exit_code":127,"output":"zsh:1: command not found: pytest"}',
+              },
+            ],
+          },
+        },
+      ]),
+    );
+  await codex("c1");
+  await codex("c2");
+
+  const { stdout, code } = await quench(home);
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    [
+      "Repeated failures · tool calls that failed the same way · last 30 days",
+      "  Project  Kind             What                         Failures  Sessions  In a row     Output  Agents",
+      "  work     rejected         guard: blocked — force push         3         1         3  225 chars  Claude Code",
+      "  work     no such file     docs/setup.md                       3         2         2   60 chars  Claude Code",
+      "  work     no such command  pytest                              2         2         1  218 chars  Codex",
+      "  9 failed tool calls in all, returning 545 chars of output.",
+    ].join("\n"),
+  );
+  expect(stdout).not.toContain("grep");
+  expect(stdout).not.toContain("npm");
+  const json = JSON.parse((await quench(home, "--json")).stdout);
+  expect(json.recordedFailures.failures).toBe(9);
+});

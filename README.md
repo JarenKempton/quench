@@ -161,7 +161,17 @@ Relative paths are not resolved, so shell-based use is a lower bound.
 MCP servers called come from the MCP tool calls sessions recorded, per agent, with
 sessions and calls, and whether the agent's local config has a server of that name. Servers
 missing from local config are account connectors (claude.ai, ChatGPT apps), plugins,
-servers the host app passed in, or config since removed. The command makes no model calls and writes no files or caches.
+servers the host app passed in, or config since removed.
+
+**Repeated failures** lists tool calls that failed the same way more than once, per project:
+the same missing file, the same missing command, the same rejection by a hook or the agent,
+the same bad tool input, or the same single command exiting nonzero. Each row shows how many
+times it failed, in how many sessions, the longest streak in a row and the output it added
+to context. Failures come from each harness's error flag. Codex has none, so its failures are
+commands whose script printed a nonzero exit code, a lower bound. A search that found nothing
+(`grep`, `rg`, `diff` exiting 1) is not a failure, and a chain of several commands that
+fails is counted in the total but not attributed. The tokens of the turns around a failure
+are not counted. The command makes no model calls and writes no files or caches.
 
 ## Idle worktrees
 
