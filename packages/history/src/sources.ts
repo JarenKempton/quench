@@ -1,4 +1,5 @@
 import { harnessById } from "./harnesses/index.ts";
+import { recordedSkillLoading } from "./skill-loads.ts";
 import { shellReads, type ShellRead } from "./shell.ts";
 import type {
   Event,
@@ -173,6 +174,7 @@ export function sourceTrace(session: Session, home: string | null) {
       };
     return { result: session.events[matches[0]!] as ToolResult, index: matches[0]! };
   }
+  const skills = recordedSkillLoading(session, reads, shell);
   const instructions: (InjectedInstruction & { at: Date | null })[] = [];
   let unreadableInstructions = 0;
   for (const event of session.events) {
@@ -214,6 +216,15 @@ export function sourceTrace(session: Session, home: string | null) {
     warnings.push(
       "Some read attempts lack reliable source attribution; inspect their recorded reasons.",
     );
+  if (!skills.listings.length)
+    warnings.push(
+      "No skill listings are recorded in this session. Older harness versions did not record them, so this does not mean no skills were offered or loaded.",
+    );
+  const listedSkills = skills.listings.flatMap((listing) => listing.listed);
+  if (listedSkills.length && listedSkills.every((skill) => skill.path === null))
+    warnings.push(
+      "Recorded skill listings name no file paths, so skill files read directly cannot be matched to a skill; only recorded invocations are shown as loads.",
+    );
   if (session.diagnostics.unparsed)
     warnings.push(
       `${session.diagnostics.unparsed} history records could not be parsed; coverage is incomplete.`,
@@ -233,14 +244,17 @@ export function sourceTrace(session: Session, home: string | null) {
       unparsedRecords: session.diagnostics.unparsed,
       injectedInstructions: injected,
       unreadableInstructions,
+      skillListings: skills.listings.length,
     },
     reads,
     shell,
     mcp,
+    skills,
     instructions,
     warnings,
     limitations: [
-      "Native text-file reads are traced from the harness's read tool. Shell reads are parsed from recorded commands: cat, head, tail, sed without -i, nl, bat, less and more, plus < input. Searches (grep, rg, ag, git grep) are listed separately with their pattern and the files or folders searched; their output is only matching lines, so a search is not a read of the file. Inline Python, JavaScript and Ruby code (-c, -e or a heredoc) is scanned for file opens with a written-out path or a variable set once to one, listed as script reads or writes; a script only puts a file into context if it prints it. Script files run are listed by name; what they open is not known. Editors and other programs are not parsed. Imports and skill loading are not reconstructed.",
+      "Native text-file reads are traced from the harness's read tool. Shell reads are parsed from recorded commands: cat, head, tail, sed without -i, nl, bat, less and more, plus < input. Searches (grep, rg, ag, git grep) are listed separately with their pattern and the files or folders searched; their output is only matching lines, so a search is not a read of the file. Inline Python, JavaScript and Ruby code (-c, -e or a heredoc) is scanned for file opens with a written-out path or a variable set once to one, listed as script reads or writes; a script only puts a file into context if it prints it. Script files run are listed by name; what they open is not known. Editors and other programs are not parsed. Imports are not reconstructed.",
+      "Skill loading is traced from recorded listings and loads. A listing is the index offered to the model: names, plus file paths where the harness records them (Claude Code records names only). A load is recorded evidence a skill was invoked or its listed file was read by the read tool, a shell reader or an inline script. A skill file read without a recorded listing path cannot be matched to a skill, and no folder is crawled to infer one. An invocation records no body size, and a shell or script load's size covers the whole command, not the skill alone.",
       "Shell read paths are resolved against a cd earlier in the same command, the recorded working folder (Codex), or else the session folder. Claude Code keeps the shell folder between commands, so a relative path after an earlier cd may resolve wrong. Paths built from variables, globs or substitutions are not resolved. Output size covers the whole command, not one file, and a command that ran is not proof the file was printed.",
       "MCP calls are listed by server and tool with the size of their output. Their arguments are never read out, so which document, page or record a call fetched is not shown. Calls made inside a Codex code-mode script share that script's output and status.",
       "Injected instructions are the text the harness recorded adding to context, hashed as recorded, including entries re-injected after compaction or inherited by a fork. Claude Code and Pi record each file; Codex records one combined block per directory without file boundaries. Harnesses may process text before injecting it (Claude Code strips HTML comments), so hashes need not match the file's bytes. Recorded text is not proof a rule was followed.",

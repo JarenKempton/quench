@@ -266,6 +266,7 @@ test("sources traces Pi read output without inventing result paths or line range
     unparsedRecords: 0,
     injectedInstructions: "per-file",
     unreadableInstructions: 0,
+    skillListings: 0,
   });
   expect(report.reads[0]).toMatchObject({
     callId: "docs",
@@ -746,4 +747,140 @@ test("sources lists MCP calls by server and tool, never their arguments", async 
   ]);
   expect(codexReport.coverage.otherToolCalls).toBe(0);
   expect(fromCodex.stdout).not.toContain("private customer name");
+});
+
+test("sources traces skill listings and the loads each harness recorded", async () => {
+  const content = "- review: does review\n- deploy: does deploy";
+  const { home, path } = await fixture([
+    {
+      type: "attachment",
+      timestamp: stamp,
+      cwd: "/historical/project",
+      attachment: { type: "skill_listing", names: ["review", "deploy"], content },
+    },
+    call("s1", "Skill", { skill: "review" }),
+    {
+      type: "user",
+      timestamp: stamp,
+      cwd: "/historical/project",
+      message: { content: "<command-name>/deploy</command-name>\n<command-args></command-args>" },
+    },
+  ]);
+  const json = await run(home, path, "--json");
+  expect(json.code).toBe(0);
+  const report = JSON.parse(json.stdout);
+  expect(report.coverage.skillListings).toBe(1);
+  expect(report.skills.listings).toMatchObject([
+    {
+      chars: content.length,
+      listed: [
+        { name: "review", path: null },
+        { name: "deploy", path: null },
+      ],
+    },
+  ]);
+  expect(
+    report.skills.loads.map((l: Record<string, unknown>) => [l.name, l.how, l.by, l.path]),
+  ).toEqual([
+    ["review", "invoked", "model", null],
+    ["deploy", "invoked", "user", null],
+  ]);
+  expect(report.warnings.join(" ")).toContain("name no file paths");
+  const text = await run(home, path);
+  expect(text.stdout).toContain("Skill loading: 1 listing · 2 listed · 2 loads");
+  expect(text.stdout).toContain("  invoked · review · by model · path not recorded");
+
+  const pi = join(home, ".pi/agent/sessions/demo/session.jsonl");
+  const skillPath = "/historical/skills/notes/SKILL.md";
+  const body = "# Notes skill";
+  const piRow = (message: Record<string, unknown>) => ({
+    type: "message",
+    timestamp: stamp,
+    message,
+  });
+  await Bun.write(
+    pi,
+    [
+      { type: "session", id: "pi-skills", cwd: "/historical/project" },
+      piRow({
+        role: "system",
+        content: "",
+        sections: {
+          skills: `<skill><name>notes</name><description>Take notes</description><location>${skillPath}</location></skill>`,
+        },
+      }),
+      piRow({
+        role: "assistant",
+        content: [{ type: "toolCall", id: "skill", name: "read", arguments: { path: skillPath } }],
+      }),
+      piRow({
+        role: "toolResult",
+        toolCallId: "skill",
+        toolName: "read",
+        isError: false,
+        content: [{ type: "text", text: body }],
+      }),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const piReport = JSON.parse((await run(home, pi, "--json")).stdout);
+  expect(piReport.skills.listings).toMatchObject([
+    { listed: [{ name: "notes", path: skillPath }] },
+  ]);
+  expect(piReport.skills.loads).toMatchObject([
+    {
+      name: "notes",
+      how: "read",
+      path: skillPath,
+      status: "returned",
+      chars: body.length,
+      callId: "skill",
+    },
+  ]);
+  expect(piReport.warnings.join(" ")).not.toContain("name no file paths");
+
+  const codex = join(home, ".codex/sessions/2026/10/22/rollout.jsonl");
+  const item = (payload: Record<string, unknown>) => ({
+    type: "response_item",
+    timestamp: stamp,
+    payload,
+  });
+  const block = [
+    "<skills_instructions>",
+    "- `r0` = `/historical/skills`",
+    "- notes: Take notes (file: r0/notes/SKILL.md)",
+    "</skills_instructions>",
+  ].join("\n");
+  await Bun.write(
+    codex,
+    [
+      {
+        type: "session_meta",
+        timestamp: stamp,
+        payload: { id: "codex", cwd: "/historical/project" },
+      },
+      item({ type: "message", role: "developer", content: [{ type: "input_text", text: block }] }),
+      item({
+        type: "function_call",
+        name: "shell",
+        call_id: "load",
+        arguments: JSON.stringify({ command: ["bash", "-lc", `cat ${skillPath}`] }),
+      }),
+      item({ type: "function_call_output", call_id: "load", output: body }),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const codexReport = JSON.parse((await run(home, codex, "--json")).stdout);
+  expect(codexReport.skills.loads).toMatchObject([
+    { name: "notes", how: "shell-read", path: skillPath, status: "ran", callId: "load" },
+  ]);
+
+  const bare = join(home, ".pi/agent/sessions/demo/bare.jsonl");
+  await Bun.write(bare, JSON.stringify({ type: "session", id: "bare", cwd: "/x" }) + "\n");
+  const none = JSON.parse((await run(home, bare, "--json")).stdout);
+  expect(none.skills).toEqual({ listings: [], loads: [] });
+  expect(none.warnings.join(" ")).toContain("No skill listings are recorded in this session");
+  expect(none.limitations.join(" ")).toContain("Skill loading");
 });
