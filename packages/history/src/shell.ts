@@ -1,9 +1,10 @@
 import { basename, isAbsolute, join, resolve } from "node:path";
+import { scriptAccesses } from "./scripts.ts";
 
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
 
 export type ShellRead = {
-  kind: "read" | "search";
+  kind: "read" | "search" | "script-read" | "script-write" | "script-run";
   program: string;
   pattern: string | null;
   written: string;
@@ -12,7 +13,7 @@ export type ShellRead = {
 };
 
 type Word = { text: string; dynamic: boolean };
-type Segment = { words: Word[]; inputs: Word[]; piped: boolean };
+type Segment = { words: Word[]; inputs: Word[]; piped: boolean; heredoc: string | null };
 
 const READERS: Record<string, string> = {
   cat: "",
@@ -62,6 +63,26 @@ export function shellReads(
             ? { path: places.home, base: "home" }
             : null
           : located(target, dir, places.home, "cd");
+      continue;
+    }
+    const script = scriptAccesses(words, segment.heredoc);
+    if (script) {
+      for (const access of script.accesses) {
+        const at = located(
+          { text: access.written, dynamic: !access.literal },
+          dir,
+          places.home,
+          null,
+        );
+        reads.push({
+          kind: `script-${access.access}`,
+          program: script.program,
+          pattern: null,
+          written: access.written,
+          path: at?.path ?? null,
+          base: at?.base ?? null,
+        });
+      }
       continue;
     }
     const search = program && searchOf(program, words, segment.piped, dir, places.home);
@@ -239,14 +260,14 @@ function operands(program: string, args: Word[]): Word[] | null {
 
 function segments(command: string): Segment[] {
   const out: Segment[] = [];
-  let segment: Segment = { words: [], inputs: [], piped: false };
+  let segment: Segment = { words: [], inputs: [], piped: false, heredoc: null };
   let word: Word | null = null;
   let redirect: "in" | "out" | "string" | "heredoc" | null = null;
-  const heredocs: string[] = [];
+  const heredocs: { delimiter: string; owner: Segment }[] = [];
   const finishWord = () => {
     if (!word) return;
     if (redirect === "in") segment.inputs.push(word);
-    else if (redirect === "heredoc") heredocs.push(word.text);
+    else if (redirect === "heredoc") heredocs.push({ delimiter: word.text, owner: segment });
     else if (!redirect) segment.words.push(word);
     redirect = null;
     word = null;
@@ -254,7 +275,7 @@ function segments(command: string): Segment[] {
   const finishSegment = (piped = false) => {
     finishWord();
     if (segment.words.length || segment.inputs.length) out.push(segment);
-    segment = { words: [], inputs: [], piped };
+    segment = { words: [], inputs: [], piped, heredoc: null };
   };
   let i = 0;
   while (i < command.length) {
@@ -262,7 +283,7 @@ function segments(command: string): Segment[] {
     if (c === "\n") finishWord();
     if (c === "\n" && heredocs.length) {
       finishSegment();
-      i = skipHeredocs(command, i + 1, heredocs.splice(0));
+      i = readHeredocs(command, i + 1, heredocs.splice(0));
       continue;
     }
     if (!word && c === "#") {
@@ -350,15 +371,26 @@ function skipBalanced(text: string, from: number, open: string, close: string): 
   return text.length;
 }
 
-function skipHeredocs(text: string, from: number, heredocs: string[]): number {
+function readHeredocs(
+  text: string,
+  from: number,
+  heredocs: { delimiter: string; owner: Segment }[],
+): number {
   let i = from;
-  for (const delimiter of heredocs) {
+  for (const { delimiter, owner } of heredocs) {
+    const start = i;
+    let bodyEnd = text.length;
     while (i < text.length) {
       const end = text.indexOf("\n", i);
       const line = text.slice(i, end === -1 ? text.length : end);
+      const lineStart = i;
       i = end === -1 ? text.length : end + 1;
-      if (line.replace(/^\t+/, "") === delimiter) break;
+      if (line.replace(/^\t+/, "") === delimiter) {
+        bodyEnd = lineStart;
+        break;
+      }
     }
+    owner.heredoc ??= text.slice(start, bodyEnd);
   }
   return i;
 }
