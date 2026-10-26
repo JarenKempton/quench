@@ -3,14 +3,16 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
 
 export type ShellRead = {
+  kind: "read" | "search";
   program: string;
+  pattern: string | null;
   written: string;
   path: string | null;
   base: ShellReadBase | null;
 };
 
 type Word = { text: string; dynamic: boolean };
-type Segment = { words: Word[]; inputs: Word[] };
+type Segment = { words: Word[]; inputs: Word[]; piped: boolean };
 
 const READERS: Record<string, string> = {
   cat: "",
@@ -23,6 +25,18 @@ const READERS: Record<string, string> = {
   less: "",
   more: "",
 };
+
+const SEARCHERS: Record<string, { valued: string; recursive: boolean }> = {
+  grep: { valued: "efmABCDd", recursive: false },
+  egrep: { valued: "efmABCDd", recursive: false },
+  fgrep: { valued: "efmABCDd", recursive: false },
+  rg: { valued: "efgtTmABCMjEr", recursive: true },
+  ag: { valued: "GgABCm", recursive: true },
+  "git grep": { valued: "efmABCO", recursive: true },
+};
+
+const SEARCH_VALUED =
+  /^--(regexp|file|max-count|context|after-context|before-context|include|exclude|exclude-dir|glob|iglob|type|type-not|replace|max-columns|threads|encoding|max-depth|ignore-file)$/;
 
 const OPERATORS = ["&&", "||", ";;", "|&", "|", ";", "&", "\n", "(", ")"];
 
@@ -50,10 +64,32 @@ export function shellReads(
           : located(target, dir, places.home, "cd");
       continue;
     }
+    const search = program && searchOf(program, words, segment.piped, dir, places.home);
+    if (search) {
+      for (const word of search.paths) {
+        const at = located(word, search.dir, places.home, null);
+        reads.push({
+          kind: "search",
+          program: search.program,
+          pattern: search.pattern,
+          written: word.text,
+          path: at?.path ?? null,
+          base: at?.base ?? null,
+        });
+      }
+      continue;
+    }
     if (!program || !(program in READERS)) continue;
     for (const word of [...(operands(program, words.slice(1)) ?? []), ...segment.inputs]) {
       const at = located(word, dir, places.home, null);
-      reads.push({ program, written: word.text, path: at?.path ?? null, base: at?.base ?? null });
+      reads.push({
+        kind: "read",
+        program,
+        pattern: null,
+        written: word.text,
+        path: at?.path ?? null,
+        base: at?.base ?? null,
+      });
     }
   }
   return reads;
@@ -76,6 +112,73 @@ export function commandSignature(command: string): string | null {
     ];
   });
   return signatures.length === 1 ? signatures[0]! : null;
+}
+
+function searchOf(
+  program: string,
+  words: Word[],
+  piped: boolean,
+  dir: { path: string; base: ShellReadBase } | null,
+  home: string | null,
+) {
+  let args = words.slice(1);
+  if (program === "git") {
+    let k = 0;
+    while (args[k]?.text.startsWith("-")) {
+      if (args[k]!.text === "-C") dir = located(args[k + 1] ?? args[k]!, dir, home, "cd");
+      k += args[k]!.text === "-C" || args[k]!.text === "-c" ? 2 : 1;
+    }
+    if (args[k]?.text !== "grep") return null;
+    args = args.slice(k + 1);
+    program = "git grep";
+  }
+  const spec = SEARCHERS[program];
+  if (!spec || args.some((a) => a.text === "--files")) return null;
+  let pattern: string | null = null;
+  let patternGiven = false;
+  let recursive = spec.recursive;
+  let options = true;
+  const paths: Word[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (options && arg.text === "--") {
+      options = false;
+      continue;
+    }
+    if (options && arg.text.startsWith("--")) {
+      const [name, value] = arg.text.split(/=(.*)/s);
+      if (/^--(recursive|dereference-recursive)$/.test(name!)) recursive = true;
+      const taken = value ?? (SEARCH_VALUED.test(name!) ? args[++i]?.text : undefined);
+      if (/^--(regexp|file)$/.test(name!)) {
+        pattern ??= taken ?? null;
+        patternGiven = true;
+      }
+      continue;
+    }
+    if (options && arg.text.startsWith("-") && arg.text.length > 1) {
+      for (let j = 1; j < arg.text.length; j++) {
+        const letter = arg.text[j]!;
+        if (letter === "r" || letter === "R") recursive ||= !spec.valued.includes(letter);
+        if (!spec.valued.includes(letter)) continue;
+        const value = j < arg.text.length - 1 ? arg.text.slice(j + 1) : args[++i]?.text;
+        if (letter === "e" || letter === "f") {
+          pattern ??= value ?? null;
+          patternGiven = true;
+        }
+        break;
+      }
+      continue;
+    }
+    if (!patternGiven) {
+      pattern = arg.text;
+      patternGiven = true;
+    } else paths.push(arg);
+  }
+  if (!paths.length) {
+    if (piped || !recursive) return null;
+    paths.push({ text: ".", dynamic: false });
+  }
+  return { program, pattern, paths, dir };
 }
 
 function located(
@@ -136,7 +239,7 @@ function operands(program: string, args: Word[]): Word[] | null {
 
 function segments(command: string): Segment[] {
   const out: Segment[] = [];
-  let segment: Segment = { words: [], inputs: [] };
+  let segment: Segment = { words: [], inputs: [], piped: false };
   let word: Word | null = null;
   let redirect: "in" | "out" | "string" | "heredoc" | null = null;
   const heredocs: string[] = [];
@@ -148,10 +251,10 @@ function segments(command: string): Segment[] {
     redirect = null;
     word = null;
   };
-  const finishSegment = () => {
+  const finishSegment = (piped = false) => {
     finishWord();
     if (segment.words.length || segment.inputs.length) out.push(segment);
-    segment = { words: [], inputs: [] };
+    segment = { words: [], inputs: [], piped };
   };
   let i = 0;
   while (i < command.length) {
@@ -191,7 +294,7 @@ function segments(command: string): Segment[] {
     }
     const operator = OPERATORS.find((o) => command.startsWith(o, i));
     if (operator) {
-      finishSegment();
+      finishSegment(operator === "|" || operator === "|&");
       i += operator.length;
       continue;
     }
@@ -205,7 +308,9 @@ function segments(command: string): Segment[] {
       i++;
       while (i < command.length && command[i] !== '"') {
         if (command[i] === "\\" && i + 1 < command.length) {
-          word.text += command[i + 1];
+          word.text += '$`"\\\n'.includes(command[i + 1]!)
+            ? command[i + 1]
+            : command.slice(i, i + 2);
           i += 2;
         } else {
           if (command[i] === "$" || command[i] === "`") word.dynamic = true;
