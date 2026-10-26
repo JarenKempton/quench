@@ -7,6 +7,7 @@ import {
 } from "@quench/history";
 import { count, plural, projectName, shortPath, size, table } from "../format.ts";
 import { projectTables } from "./projects.ts";
+import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
@@ -31,6 +32,7 @@ export type Profile = {
   recordedInstructions: RecordedFile[];
   recordedSkills: SkillUse[];
   recordedMcp: McpUse[];
+  recordedFailures: FailureSummary;
   projects: ProfiledProject[];
   missingDirectories: string[];
 };
@@ -56,6 +58,7 @@ export function render(result: Profile, homeDir: string): string[] {
       roots: result.projects.map((p) => p.root),
     }),
     ...renderSkillUse(result.recordedSkills, result.days),
+    ...renderFailures(result.recordedFailures, result.days, homeDir),
     ...footer(result, homeDir),
   ];
 }

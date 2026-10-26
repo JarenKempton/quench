@@ -45,6 +45,16 @@ export type InjectedInstruction = {
 
 export type ShellCommand = { command: string | null; workdir: string | null };
 
+export type FailureKind =
+  | "rejected"
+  | "invalid-input"
+  | "missing-program"
+  | "missing-path"
+  | "exit-code"
+  | "error";
+
+export type Failure = { kind: FailureKind; detail: string | null; exitCode: number | null };
+
 export type ListedSkill = { name: string; path: string | null };
 
 export type EventKind =
@@ -64,6 +74,7 @@ export type EventKind =
       callId: string | null;
       isError: boolean | null;
       chars: number;
+      failure?: Failure;
       fileRead?: FileReadResult;
     }
   | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null }

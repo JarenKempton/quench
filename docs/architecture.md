@@ -13,16 +13,16 @@ packages/cli        the `quench` command; composition and formatting
 
 A `Session` is an ordered list of typed events:
 
-| Event                       | Fields                                                                                                               |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text`, optional `sender` evidence |
-| `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                    |
-| `tool_call` / `tool_result` | ids, name, `isError`, size of the result; shell commands with their working folder when the harness records them     |
-| `compaction`                | trigger, tokens before                                                                                               |
-| `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count   |
-| `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                   |
-| `invocation`                | a named skill or command invoked, `by` model or user                                                                 |
-| `mcp_call`                  | an MCP tool call: server and tool names, call id when recorded                                                       |
+| Event                       | Fields                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `message`                   | `author` (user, assistant, injected), `origin` (typed, scheduled, host, unknown), `text`, optional `sender` evidence   |
+| `inference`                 | `model`, `effort`, `usage` (input, cacheRead, cacheWrite, output)                                                      |
+| `tool_call` / `tool_result` | ids, name, `isError`, size of the result; shell commands with their working folder; a failure kind from the error text |
+| `compaction`                | trigger, tokens before                                                                                                 |
+| `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count     |
+| `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                     |
+| `invocation`                | a named skill or command invoked, `by` model or user                                                                   |
+| `mcp_call`                  | an MCP tool call: server and tool names, call id when recorded                                                         |
 
 Subagent sessions point at their parent with `parent`.
 

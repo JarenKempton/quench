@@ -5,6 +5,7 @@ import { NotASession, sessionRef, type Harness, type SessionRef } from "../harne
 import type { Home } from "../home.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
+import { failureOf } from "../failures.ts";
 import { date, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
 
@@ -177,12 +178,14 @@ function message(m: Message): EventKind[] {
       ];
     case "toolResult": {
       const value = textOf(m.content);
+      const failure = failureOf(value, m.isError ?? null);
       return [
         {
           type: "tool_result",
           callId: m.toolCallId ?? null,
           isError: m.isError ?? null,
           chars: value.length,
+          ...(failure ? { failure } : {}),
           ...(m.toolName === "read" &&
           m.isError === false &&
           ReadContent.safeParse(m.content).success

@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction } from "./model.ts";
+import { recordedFailures, type SessionFailure } from "./failures.ts";
 import { discoverAll, readSessions } from "./read.ts";
 import {
   recordedInstructions,
@@ -18,6 +19,7 @@ export type SessionPlace = {
   instructions: InjectedInstruction[] | null;
   skills: SessionSkills | null;
   mcp: { server: string; calls: number }[];
+  failures: SessionFailure[];
 };
 
 export type ProjectDirectory = {
@@ -52,6 +54,7 @@ export async function sessionPlaces(home: Home, since: Date) {
         instructions: recordedInstructions(outcome.session),
         skills: recordedSkills(outcome.session),
         mcp: recordedMcp(outcome.session),
+        failures: recordedFailures(outcome.session),
       });
   }
   return { places, unreadable };

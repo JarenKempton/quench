@@ -7,6 +7,7 @@ import { repositoryRoot } from "../files.ts";
 import { describeServer, record, type McpEntry } from "../mcp.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
+import { failureOf } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind, ShellCommand } from "../model.ts";
 
@@ -253,13 +254,20 @@ function responseItem(p: NonNullable<Line["payload"]>): EventKind | null {
         ...shellOf(p.name ?? "", p.input ?? p.arguments),
       };
     case "function_call_output":
-    case "custom_tool_call_output":
+    case "custom_tool_call_output": {
+      const text = textOf(p.output);
+      const failure = failureOf(
+        text.replace(/^Script completed\nWall time [^\n]*\nOutput:\n/, ""),
+        null,
+      );
       return {
         type: "tool_result",
         callId: p.call_id ?? null,
-        isError: null,
-        chars: textOf(p.output).length,
+        isError: failure ? true : null,
+        chars: text.length,
+        ...(failure ? { failure } : {}),
       };
+    }
     default:
       return null;
   }
