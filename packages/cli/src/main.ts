@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { Home, harnessById } from "@quench/history";
 import { THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
-import { HOME_FLAGS, profile } from "./commands/profile.ts";
+import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
 import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
@@ -15,8 +15,9 @@ const USAGE = `quench — see what your coding agents load, what it costs, and h
 
 Usage:
   quench --version                     the installed version
-  quench [profile] [--days 30] [--scan <dir>] [--json]
-                                       every harness home, global instructions and project found in your sessions
+  quench [--days 30] [--scan <dir>]   a short summary: what sessions start with and what is worth a look
+  quench profile [section] [--days 30] [--scan <dir>] [--json]
+                                       every table, or one section: ${SECTIONS.join(", ")}
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
   quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
@@ -60,7 +61,7 @@ for (const [flag, harness] of Object.entries(HOME_FLAGS)) {
   const dir = values[flag as keyof typeof HOME_FLAGS];
   if (home && dir) home = home.withVar(harnessById[harness].home.variable, dir);
 }
-const [command = "profile", ...rest] = positionals;
+const [command = "summary", ...rest] = positionals;
 const days = Number(values.days);
 const examples = Number(values.examples);
 const themeLimit = Number(values["theme-limit"] ?? THEME_LIMIT);
@@ -99,15 +100,35 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
   process.exit(1);
 }
 
-if (values.scan.length && command !== "profile") {
+if (values.scan.length && command !== "profile" && command !== "summary") {
   process.stderr.write("--scan is only available for profile\n");
   process.exit(1);
 }
 
 switch (command) {
-  case "profile":
-    process.exitCode = await profile(home, { days, scan: values.scan, json: values.json });
+  case "summary":
+    process.exitCode = await profile(home, {
+      days,
+      scan: values.scan,
+      json: values.json,
+      view: "summary",
+    });
     break;
+  case "profile": {
+    const view = rest[0] ?? "full";
+    if (view !== "full" && !SECTIONS.includes(view as (typeof SECTIONS)[number])) {
+      process.stderr.write(`unknown section "${view}"; use one of: ${SECTIONS.join(", ")}\n`);
+      process.exitCode = 1;
+      break;
+    }
+    process.exitCode = await profile(home, {
+      days,
+      scan: values.scan,
+      json: values.json,
+      view: view as (typeof SECTIONS)[number] | "full",
+    });
+    break;
+  }
   case "sources":
     process.exitCode = await sources(home, rest, { json: values.json });
     break;

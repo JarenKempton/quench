@@ -12,6 +12,7 @@ import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import { renderMcpServers, skillsCell, type InstructionFile } from "./setup.ts";
+import { summary } from "./summary.ts";
 
 export type ProfiledProject = Project & {
   instructions: { directory: string; files: InstructionFile[] };
@@ -43,22 +44,49 @@ export const HOME_FLAGS = {
   "pi-home": "pi",
 } as const;
 
-export function render(result: Profile, homeDir: string): string[] {
+export const SECTIONS = ["projects", "mcp", "instructions", "skills", "failures"] as const;
+
+export type View = "summary" | "full" | (typeof SECTIONS)[number];
+
+export function render(result: Profile, homeDir: string, view: View): string[] {
   const short = (path: string) => shortPath(path, homeDir);
   const claudeHome = result.homes.find((h) => h.harness === "claude-code")!.path;
+  const sections = {
+    projects: () => projectTables(result, homeDir),
+    mcp: () => [
+      ...renderMcpServers(result.globalMcpServers, result.projects, homeDir),
+      ...renderMcpUse(result.recordedMcp, result.days),
+    ],
+    instructions: () => [
+      ...globalInstructions(result.globalInstructions, short),
+      ...renderRecordedFiles(result.recordedInstructions, {
+        homeDir,
+        claudeHome,
+        roots: result.projects.map((p) => p.root),
+      }),
+    ],
+    skills: () => renderSkillUse(result.recordedSkills, result.days),
+    failures: () => renderFailures(result.recordedFailures, result.days, homeDir),
+  };
+  if (view === "summary") return summary(result, homeDir);
+  if (view !== "full") {
+    const lines = sections[view]();
+    return lines.length
+      ? lines.slice(1)
+      : [`Nothing recorded for ${view} in the last ${result.days} days.`];
+  }
   return [
     ...agentsTable(result, short),
     ...globalInstructions(result.globalInstructions, short),
-    ...projectTables(result, homeDir),
-    ...renderMcpServers(result.globalMcpServers, result.projects, homeDir),
-    ...renderMcpUse(result.recordedMcp, result.days),
+    ...sections.projects(),
+    ...sections.mcp(),
     ...renderRecordedFiles(result.recordedInstructions, {
       homeDir,
       claudeHome,
       roots: result.projects.map((p) => p.root),
     }),
-    ...renderSkillUse(result.recordedSkills, result.days),
-    ...renderFailures(result.recordedFailures, result.days, homeDir),
+    ...sections.skills(),
+    ...sections.failures(),
     ...footer(result, homeDir),
   ];
 }
