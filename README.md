@@ -39,7 +39,8 @@ history.
 
 | Command                                  | What it shows                                                                         |
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| `quench [profile] [--scan <dir>]`        | Every harness home, global instructions and each project your sessions ran in         |
+| `quench`                                 | A short summary: what sessions start with, what is worth a look, busiest projects     |
+| `quench profile [section]`               | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`          |
 | `quench worktrees [--days 30] [--json]`  | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
 | `quench report [--days 30] [--json]`     | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs <session-file> [--json]`    | One session as prompt → what the agent did → your reply                               |
@@ -135,8 +136,15 @@ is implied by local replay tests.
 
 ```sh
 quench
+quench profile failures
 quench profile --days 90 --scan ~/code --json
 ```
+
+`quench` with no arguments prints a one-screen summary: what every session starts with per
+agent, a few things worth a look (skills listed but never used, the failure that repeats most,
+a project whose instructions dwarf the rest, idle worktrees), the busiest projects, and the
+command to dig into each. `quench profile` prints every table below; `quench profile <section>`
+prints one. `--json` is the same full result either way.
 
 Needs no arguments. It finds each harness home at its default location or override, reads
 the sessions modified in the last `--days` (default 30) and takes each session's recorded

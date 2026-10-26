@@ -81,7 +81,31 @@ test("profile with no arguments finds projects from session directories and grou
   await utimes(join(sessions, "d.jsonl"), older, older);
   await utimes(join(home, "pi-elsewhere/sessions/p.jsonl"), older, older);
 
-  const bare = await quench(home);
+  const summary = await quench(home);
+  expect(summary.code).toBe(0);
+  expect(summary.stdout).toBe(
+    [
+      "Quench · last 30 days · 5 sessions (Codex 5)",
+      "",
+      "Every session starts with",
+      "  Codex  21 B global instructions  no skill listing recorded",
+      "  Each project adds its own instruction files on top.",
+      "",
+      "Busiest projects",
+      "  Project  Sessions  Last used   Instructions per session",
+      "  app             3  today                              —",
+      "  scratch         1  2 days ago                         —",
+      "",
+      "Dig in",
+      "  quench profile            every table, in full",
+      "  quench profile <section>  one of: projects, mcp, instructions, skills, failures",
+      "  quench sources <file>     what one session read",
+      "  quench --help             all commands",
+      "",
+    ].join("\n"),
+  );
+
+  const bare = await quench(home, "profile");
   expect(bare.code).toBe(0);
   expect(bare.stdout).toBe(
     [
@@ -210,7 +234,7 @@ test("worktrees lists idle worktrees safe to remove and why others are kept, wit
   await codexSession(sessions, "a", wt("active"));
   await codexSession(sessions, "b", repo);
 
-  const profile = await quench(home);
+  const profile = await quench(home, "profile");
   expect(profile.stdout).toContain("6 · 4 idle");
   expect(profile.stdout).toContain("`quench worktrees` shows which are safe to remove.");
 
@@ -341,7 +365,7 @@ test("profile shows the instructions sessions recorded loading and whether disk 
   const yesterday = new Date(Date.now() - 86_400_000);
   await utimes(join(claudeHome, "projects/sessions/two.jsonl"), yesterday, yesterday);
 
-  const { stdout, code } = await quench(home);
+  const { stdout, code } = await quench(home, "profile");
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
@@ -453,7 +477,7 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   const earlier = new Date(Date.now() - 86_400_000);
   await utimes(join(home, ".claude/projects/s/one.jsonl"), earlier, earlier);
 
-  const { stdout, code } = await quench(home);
+  const { stdout, code } = await quench(home, "profile");
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
@@ -601,7 +625,7 @@ test("profile shows which recorded skills sessions listed and used", async () =>
     ]),
   );
 
-  const { stdout, code } = await quench(home);
+  const { stdout, code } = await quench(home, "profile");
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
@@ -678,7 +702,7 @@ test("profile lists MCP servers sessions called and whether local config has the
     ]),
   );
 
-  const { stdout, code } = await quench(home);
+  const { stdout, code } = await quench(home, "profile");
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
@@ -765,7 +789,7 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   await codex("c1");
   await codex("c2");
 
-  const { stdout, code } = await quench(home);
+  const { stdout, code } = await quench(home, "profile");
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
@@ -781,4 +805,20 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   expect(stdout).not.toContain("npm");
   const json = JSON.parse((await quench(home, "--json")).stdout);
   expect(json.recordedFailures.failures).toBe(9);
+  const section = await quench(home, "profile", "failures");
+  expect(section.stdout.split("\n")[0]).toBe(
+    "Repeated failures · tool calls that failed the same way · last 30 days",
+  );
+  expect(section.stdout).not.toContain("Projects ·");
+  expect((await quench(home)).stdout).toContain(
+    [
+      "Worth a look",
+      '  • In work, "guard: blocked — force push" failed 3 times across 1',
+      "    session.",
+      "    → quench profile failures",
+    ].join("\n"),
+  );
+  const unknown = await quench(home, "profile", "nope");
+  expect(unknown.code).toBe(1);
+  expect(unknown.stderr).toContain('unknown section "nope"');
 });

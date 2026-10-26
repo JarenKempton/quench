@@ -20,10 +20,10 @@ import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { skillUse } from "../profile/recorded-skills.ts";
-import { render, type Profile, type ProfiledProject } from "../profile/render.ts";
+import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
 import { splitInstructions, splitSkills, type InstructionFile } from "../profile/setup.ts";
 
-export { HOME_FLAGS } from "../profile/render.ts";
+export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
@@ -39,7 +39,7 @@ const LIMITATIONS = [
 
 export async function profile(
   home: Home,
-  options: { days: number; scan: string[]; json: boolean },
+  options: { days: number; scan: string[]; json: boolean; view: View },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
   const { places, unreadable } = await sessionPlaces(home, since, reading());
@@ -88,7 +88,9 @@ export async function profile(
       ...LIMITATIONS,
     ],
   };
-  process.stdout.write(options.json ? json(result) : render(result, home.dir).join("\n") + "\n");
+  process.stdout.write(
+    options.json ? json(result) : render(result, home.dir, options.view).join("\n") + "\n",
+  );
   return 0;
 }
 
