@@ -55,11 +55,11 @@ export async function sources(
       }
       lines.push(
         "",
-        `Shell reads: ${report.shell.filter((r) => r.kind === "read").length} reads and ${report.shell.filter((r) => r.kind === "search").length} searches from ${report.coverage.shellCommands} recorded commands`,
+        `Shell reads: ${report.shell.filter((r) => r.kind === "read").length} reads and ${report.shell.filter((r) => r.kind === "search").length} searches and ${report.shell.filter((r) => r.kind.startsWith("script")).length} script file accesses from ${report.coverage.shellCommands} recorded commands`,
       );
       for (const read of report.shell)
         lines.push(
-          `  ${read.status} · ${read.kind === "search" ? `${read.program} search ${JSON.stringify(read.pattern ?? "")}` : read.program} · ${read.path ?? `${read.written} (path not resolved)`}${read.base && read.base !== "absolute" ? ` · relative to ${read.base}` : ""} · call ${read.callId ?? "unknown"}${read.reason ? ` · ${read.reason}` : ""}`,
+          `  ${read.status} · ${read.kind === "search" ? `${read.program} search ${JSON.stringify(read.pattern ?? "")}` : read.kind.startsWith("script-") ? `${read.program} script ${read.kind.slice(7)}` : read.program} · ${read.path ?? `${read.written} (path not resolved)`}${read.base && read.base !== "absolute" ? ` · relative to ${read.base}` : ""} · call ${read.callId ?? "unknown"}${read.reason ? ` · ${read.reason}` : ""}`,
         );
       lines.push(
         "",

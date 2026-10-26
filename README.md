@@ -246,8 +246,13 @@ shell tool, and Codex's `exec_command`, including several calls inside one code-
 `cat`, `head`, `tail`, `sed` (not `sed -i`), `nl`, `bat`, `less`, `more` and `<` input count
 as reads. Searches (`grep`, `rg`, `ag`, `git grep`) are listed separately as searches, with
 the pattern and the files or folders searched; a search returns matching lines, not the file,
-so it is never counted as a read. A search of piped input is not a file search. Scripts,
-remote `ssh` commands and heredoc bodies are not parsed. Each read keeps
+so it is never counted as a read. A search of piped input is not a file search.
+Inline Python, JavaScript and Ruby (`python3 - <<EOF`, `-c`, `node -e`) is scanned for file
+opens such as `open(p, 'w')`, `Path(x).read_text()` or `readFileSync(x)`, when the path is
+written out or held in a variable set once. These are listed as script reads or writes,
+never as reads, because a script only shows the agent a file it prints. Script files run
+(`python3 scripts/x.py`, `uv run`, `npx tsx`) are listed by name; what they open isn't
+known. Remote `ssh` commands are not parsed. Each read keeps
 the program, the path as written and the resolved path. It also records what the path was
 resolved from: absolute, home, a `cd` earlier in the same command, Codex's recorded working
 folder, or the session folder. Paths built from variables, globs or substitutions stay

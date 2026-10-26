@@ -75,3 +75,49 @@ test("searches are listed apart from reads, with the pattern and what was search
     searches("git log | grep fix; git log | rg fix; grep -r todo; grep plain; rg --files src"),
   ).toEqual([["search", "grep", "todo", "/repo"]]);
 });
+
+test("scripts report the files their code opens, as script reads and writes", () => {
+  const scripts = (command: string) =>
+    shellReads(command, places)
+      .filter((r) => r.kind.startsWith("script"))
+      .map((r) => [r.kind, r.program, r.path ?? `?${r.written}`]);
+  expect(
+    scripts(
+      [
+        "python3 - <<'PY'",
+        "from pathlib import Path",
+        "p = 'src/app.ts'",
+        "s = open(p).read()",
+        "open(p, 'w').write(s)",
+        "cfg = Path('/etc/app.toml').read_text()",
+        "with open(f'logs/{day}.log') as f: pass",
+        "PY",
+      ].join("\n"),
+    ),
+  ).toEqual([
+    ["script-read", "python3", "/repo/src/app.ts"],
+    ["script-write", "python3", "/repo/src/app.ts"],
+    ["script-read", "python3", "?f'logs/{day}.log'"],
+    ["script-read", "python3", "/etc/app.toml"],
+  ]);
+  expect(
+    scripts(
+      `node -e "const f = 'package.json'; JSON.parse(require('fs').readFileSync(f)); fs.writeFileSync('out.json', '')"`,
+    ),
+  ).toEqual([
+    ["script-read", "node", "/repo/package.json"],
+    ["script-write", "node", "/repo/out.json"],
+  ]);
+  expect(
+    scripts(
+      `python3 -I -c "p='a.md'; open(p).read(); p='b.md'; open(p, 'a').write('x'); Path('c.md').open('w')"`,
+    ),
+  ).toEqual([
+    ["script-read", "python3", "/repo/a.md"],
+    ["script-write", "python3", "/repo/b.md"],
+    ["script-write", "python3", "/repo/c.md"],
+  ]);
+  expect(scripts("uv run python scripts/report.py --days 3 && python3 -m pytest -q")).toEqual([
+    ["script-run", "python", "/repo/scripts/report.py"],
+  ]);
+});
