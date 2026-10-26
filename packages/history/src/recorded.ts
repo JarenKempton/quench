@@ -74,8 +74,11 @@ export function recordedMcp(session: Session): { server: string; calls: number }
   const calls = new Map<string, number>();
   const ids = new Set<string>();
   for (const event of session.events) {
-    if (event.type !== "mcp_call" || (event.id !== null && ids.has(event.id))) continue;
-    if (event.id !== null) ids.add(event.id);
+    if (event.type !== "mcp_call") continue;
+    if (event.id !== null && !event.inScript) {
+      if (ids.has(event.id)) continue;
+      ids.add(event.id);
+    }
     calls.set(event.server, (calls.get(event.server) ?? 0) + 1);
   }
   return [...calls].map(([server, n]) => ({ server: intern(server), calls: n }));

@@ -111,7 +111,7 @@ test("sources traces recorded document reads without consulting today's source f
   expect(text.stdout).toContain(
     "ran · cat · /historical/project/README.md · relative to session folder · call shell",
   );
-  expect(text.stdout).toContain("MCP reads");
+  expect(text.stdout).toContain("MCP calls are listed by server and tool");
   expect(await Bun.file(path).text()).toBe(before);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
   await rename(join(home, ".claude"), join(home, "store"));
@@ -664,4 +664,86 @@ test("sources traces shell reads in Codex code-mode scripts and older shell call
     ["/older/README.md", "workdir", "missing-result", "old"],
   ]);
   expect(report.warnings.join(" ")).toContain("1 shell command was not recorded as literal text");
+});
+
+test("sources lists MCP calls by server and tool, never their arguments", async () => {
+  const secret = { query: "private customer name", token: "sk-hidden" };
+  const { home, path } = await fixture([
+    call("docs", "mcp__docs_site__fetch_page", secret),
+    call("docs", "mcp__docs_site__fetch_page", secret),
+    result("docs", "Page text"),
+    call("broken", "mcp__tracker__get_issue", secret),
+    {
+      type: "user",
+      timestamp: stamp,
+      message: {
+        content: [
+          { type: "tool_result", tool_use_id: "broken", content: "Denied", is_error: true },
+        ],
+      },
+    },
+    call("pending", "mcp__tracker__search", secret),
+    call("plain", "Grep", { pattern: "x" }),
+  ]);
+  const json = await run(home, path, "--json");
+  expect(json.code).toBe(0);
+  const report = JSON.parse(json.stdout);
+  expect(
+    report.mcp.map((c: Record<string, unknown>) => [c.server, c.tool, c.status, c.outputChars]),
+  ).toEqual([
+    ["docs_site", "fetch_page", "unknown", null],
+    ["tracker", "get_issue", "failed", 6],
+    ["tracker", "search", "missing-result", null],
+  ]);
+  expect(report.coverage.otherToolCalls).toBe(1);
+  const text = await run(home, path);
+  expect(text.stdout).toContain("MCP calls: 3 to 2 servers");
+  expect(text.stdout).toContain("  failed · tracker · get_issue · 6 characters · call broken");
+  for (const out of [json.stdout, text.stdout]) {
+    expect(out).not.toContain("private customer name");
+    expect(out).not.toContain("sk-hidden");
+  }
+
+  const codexHome = await mkdtemp(join(tmpdir(), "quench-sources-"));
+  const codex = join(codexHome, ".codex/sessions/2026/10/22/rollout.jsonl");
+  const item = (payload: Record<string, unknown>) => ({
+    type: "response_item",
+    timestamp: stamp,
+    payload,
+  });
+  await Bun.write(
+    codex,
+    [
+      { type: "session_meta", timestamp: stamp, payload: { id: "codex", cwd: "/project" } },
+      item({
+        type: "function_call",
+        name: "mcp__docs_site__fetch_page",
+        call_id: "direct",
+        arguments: JSON.stringify(secret),
+      }),
+      item({ type: "function_call_output", call_id: "direct", output: "Page text" }),
+      item({
+        type: "custom_tool_call",
+        name: "exec",
+        call_id: "script",
+        input:
+          "await tools.mcp__tracker__search({q:'private customer name'}); await tools.mcp__tracker__search({q:2});",
+      }),
+      item({ type: "custom_tool_call_output", call_id: "script", output: "Script completed" }),
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n") + "\n",
+  );
+  const fromCodex = await run(codexHome, codex, "--json");
+  expect(fromCodex.code).toBe(0);
+  const codexReport = JSON.parse(fromCodex.stdout);
+  expect(
+    codexReport.mcp.map((c: Record<string, unknown>) => [c.server, c.callId, c.inScript, c.status]),
+  ).toEqual([
+    ["docs_site", "direct", false, "returned"],
+    ["tracker", "script", true, "returned"],
+    ["tracker", "script", true, "returned"],
+  ]);
+  expect(codexReport.coverage.otherToolCalls).toBe(0);
+  expect(fromCodex.stdout).not.toContain("private customer name");
 });

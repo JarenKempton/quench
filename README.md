@@ -271,7 +271,11 @@ listed at that point. A session with none gets a warning, since older harness ve
 record them. Malformed entries are counted and warned. Recorded instructions show what was in
 context, not that a rule was followed.
 
-This is partial session evidence. MCP reads, automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
+It also lists **MCP calls** by server and tool, with whether a result came back and its size.
+Arguments are never read out, so which page, document or record a call fetched is not shown.
+Calls inside a Codex code-mode script share that script's result.
+
+This is partial session evidence. Automatic imports, skill loading, images and unchanged-file references are not reconstructed. A recorded text
 result does not prove the model used or obeyed it, retained it after compaction, or received
 the complete file. Reported ranges are metadata, not a completeness guarantee. The command
 makes no model calls, reads no host database and writes no files or caches.

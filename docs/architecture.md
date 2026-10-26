@@ -22,7 +22,7 @@ A `Session` is an ordered list of typed events:
 | `instructions`              | injected instruction text recorded by the harness: path/directory, native label, SHA-256, length, unreadable count     |
 | `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                     |
 | `invocation`                | a named skill or command invoked, `by` model or user                                                                   |
-| `mcp_call`                  | an MCP tool call: server and tool names, call id when recorded                                                         |
+| `mcp_call`                  | an MCP tool call: server and tool names, call id when recorded, `inScript` for a Codex code-mode script call           |
 
 Subagent sessions point at their parent with `parent`.
 
@@ -88,8 +88,10 @@ branching on tool names or harness names. Failed, missing, ambiguous and unsuppo
 remain distinguishable. Returned metadata retains the path and reported range, not a claim of
 full delivery, continued context retention or rule compliance. Shell reads come from parsing
 each recorded command (`shell.ts`): reader programs and `<` input, with the folder each path
-was resolved against. MCP sources are outside this slice; current source files are never
-opened to fill historical gaps.
+was resolved against. MCP calls are listed by server and tool with their output size; their
+arguments are never read. A Codex code-mode script's MCP calls carry the script's call id and
+`inScript`, so they share its result. Current source files are never opened to fill historical
+gaps.
 
 Adapters also declare how they record injected instructions: `per-file` (Claude Code
 `instructions`/`nested_memory` attachments, deduplicated by line id; Pi `project_context`
