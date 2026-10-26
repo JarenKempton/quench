@@ -23,6 +23,7 @@ export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export {
   projects,
   sessionPlaces,
+  type PlaceCache,
   type Project,
   type ProjectDirectory,
   type SessionPlace,

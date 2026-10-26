@@ -31,6 +31,9 @@ Usage:
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 
+quench, profile and worktrees keep per-session results in ~/.quench/local/session-places.json,
+re-reading only sessions that changed. --no-cache reads everything and writes nothing.
+
 Harness homes are found at their default locations or their own environment variables
 (CLAUDE_CONFIG_DIR, CODEX_HOME, PI_CODING_AGENT_DIR). Override with --claude-home,
 --codex-home or --pi-home <dir> on any command.
@@ -53,6 +56,7 @@ const { positionals, values } = parseArgs({
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
     version: { type: "boolean", short: "v", default: false },
+    "no-cache": { type: "boolean", default: false },
   },
 });
 
@@ -112,6 +116,7 @@ switch (command) {
       scan: values.scan,
       json: values.json,
       view: "summary",
+      cache: !values["no-cache"],
     });
     break;
   case "profile": {
@@ -126,6 +131,7 @@ switch (command) {
       scan: values.scan,
       json: values.json,
       view: view as (typeof SECTIONS)[number] | "full",
+      cache: !values["no-cache"],
     });
     break;
   }
@@ -136,7 +142,11 @@ switch (command) {
     process.exitCode = await steering(home, rest, { json: values.json });
     break;
   case "worktrees":
-    process.exitCode = await worktrees(home, { days, json: values.json });
+    process.exitCode = await worktrees(home, {
+      days,
+      json: values.json,
+      cache: !values["no-cache"],
+    });
     break;
   case "report":
     process.exitCode = await report(home, { days, json: values.json });

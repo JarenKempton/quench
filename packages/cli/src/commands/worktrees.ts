@@ -6,15 +6,18 @@ import {
   type Home,
   type WorktreeCheck,
 } from "@quench/history";
+import { placeCache } from "../cache.ts";
 import { reading } from "../progress.ts";
 import { json, plural } from "../format.ts";
 
 export async function worktrees(
   home: Home,
-  options: { days: number; json: boolean },
+  options: { days: number; json: boolean; cache: boolean },
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const { places } = await sessionPlaces(home, since, reading());
+  const cache = options.cache ? await placeCache(home.dir) : undefined;
+  const { places } = await sessionPlaces(home, since, reading(), cache);
+  await cache?.save();
   const found = await projects(places);
   const repositories = [];
   for (const project of found.projects.filter((p) => p.git)) {

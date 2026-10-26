@@ -39,24 +39,50 @@ export type Project = {
   directories: ProjectDirectory[];
 };
 
-export async function sessionPlaces(home: Home, since: Date, onRead?: Progress) {
+export type PlaceCache = {
+  get(path: string, stamp: string): SessionPlace | undefined;
+  set(path: string, stamp: string, place: SessionPlace): void;
+};
+
+export async function sessionPlaces(
+  home: Home,
+  since: Date,
+  onRead?: Progress,
+  cache?: PlaceCache,
+) {
   const refs = await discoverAll(home, since);
   const modified = new Map(refs.map((ref) => [ref.path, ref.modified]));
-  const places: SessionPlace[] = [];
-  let unreadable = 0;
-  for await (const outcome of readSessions(refs, 8, onRead)) {
-    if (!outcome.ok) unreadable++;
-    else
-      places.push({
-        cwd: outcome.session.cwd,
-        harness: outcome.session.harness,
-        at: modified.get(outcome.session.path) ?? null,
-        instructions: recordedInstructions(outcome.session),
-        skills: recordedSkills(outcome.session),
-        mcp: recordedMcp(outcome.session),
-        failures: recordedFailures(outcome.session),
-      });
+  const stamps = new Map<string, string>();
+  const found = new Map<string, SessionPlace>();
+  const uncached = [];
+  for (const ref of refs) {
+    const info = cache && (await stat(ref.path).catch(() => null));
+    const stamp = info ? `${info.size}:${info.mtimeMs}` : null;
+    const hit = stamp ? cache?.get(ref.path, stamp) : undefined;
+    if (hit) found.set(ref.path, hit);
+    else uncached.push(ref);
+    if (stamp) stamps.set(ref.path, stamp);
   }
+  let unreadable = 0;
+  for await (const outcome of readSessions(uncached, 8, onRead)) {
+    if (!outcome.ok) {
+      unreadable++;
+      continue;
+    }
+    const place: SessionPlace = {
+      cwd: outcome.session.cwd,
+      harness: outcome.session.harness,
+      at: modified.get(outcome.session.path) ?? null,
+      instructions: recordedInstructions(outcome.session),
+      skills: recordedSkills(outcome.session),
+      mcp: recordedMcp(outcome.session),
+      failures: recordedFailures(outcome.session),
+    };
+    found.set(outcome.session.path, place);
+    const stamp = stamps.get(outcome.session.path);
+    if (stamp) cache?.set(outcome.session.path, stamp, place);
+  }
+  const places = refs.flatMap((ref) => found.get(ref.path) ?? []);
   return { places, unreadable };
 }
 
