@@ -10,6 +10,7 @@ export { sourceTrace } from "./sources.ts";
 export {
   compareWithDisk,
   recordedInstructions,
+  recordedMcp,
   recordedSkills,
   type DiskComparison,
   type SessionSkills,

@@ -1,5 +1,5 @@
 import { harnessById, harnesses, type HarnessId, type SessionPlace } from "@quench/history";
-import { table, tokens } from "./format.ts";
+import { chars, count, median, table } from "../format.ts";
 
 export type SkillUse = {
   harness: HarnessId;
@@ -54,9 +54,9 @@ export function renderSkillUse(uses: SkillUse[], days: number): string[] {
         ["Agent", "Sessions", "Listed", "Listing size", "Used", "Never used"],
         ...uses.map((u) => [
           harnessById[u.harness].label,
-          u.sessions.toLocaleString("en-US"),
+          count(u.sessions),
           u.medianListed === null ? "—" : String(u.medianListed),
-          u.medianChars === null ? "—" : `${tokens(u.medianChars)} chars`,
+          u.medianChars === null ? "—" : chars(u.medianChars),
           u.useRecorded ? String(u.skills.filter((s) => s.usedIn).length) : "unknown",
           u.useRecorded ? String(u.skills.filter((s) => !s.usedIn).length) : "unknown",
         ]),
@@ -82,9 +82,3 @@ export function renderSkillUse(uses: SkillUse[], days: number): string[] {
 const list = (items: string[]) =>
   items.slice(0, SHOWN).join(", ") +
   (items.length > SHOWN ? `, … ${items.length - SHOWN} more in --json` : "");
-
-export function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)]!;
-}
