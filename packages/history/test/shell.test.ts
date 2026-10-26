@@ -5,7 +5,9 @@ type Places = Parameters<typeof shellReads>[1];
 
 const places: Places = { workdir: null, sessionFolder: "/repo", home: "/home/me" };
 const paths = (command: string, where = places) =>
-  shellReads(command, where).map((r) => [r.program, r.path, r.base]);
+  shellReads(command, where)
+    .filter((r) => r.kind === "read")
+    .map((r) => [r.program, r.path, r.base]);
 
 test("reads come from reader programs, options and their values skipped", () => {
   expect(
@@ -54,4 +56,22 @@ test("cd and the recorded workdir move relative paths; run-time paths stay unres
   expect(paths("cat a.md", { workdir: null, sessionFolder: null, home: null })).toEqual([
     ["cat", null, null],
   ]);
+});
+
+test("searches are listed apart from reads, with the pattern and what was searched", () => {
+  const searches = (command: string) =>
+    shellReads(command, places).map((r) => [r.kind, r.program, r.pattern, r.path]);
+  expect(
+    searches(
+      "grep -n -A 2 \"need\\|le\" src/a.ts lib && rg -g '*.ts' --type ts haystack && git -C /other grep -e x -- docs",
+    ),
+  ).toEqual([
+    ["search", "grep", "need\\|le", "/repo/src/a.ts"],
+    ["search", "grep", "need\\|le", "/repo/lib"],
+    ["search", "rg", "haystack", "/repo"],
+    ["search", "git grep", "x", "/other/docs"],
+  ]);
+  expect(
+    searches("git log | grep fix; git log | rg fix; grep -r todo; grep plain; rg --files src"),
+  ).toEqual([["search", "grep", "todo", "/repo"]]);
 });
