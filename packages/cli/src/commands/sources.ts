@@ -63,6 +63,14 @@ export async function sources(
         );
       lines.push(
         "",
+        `MCP calls: ${report.mcp.length} to ${new Set(report.mcp.map((c) => c.server)).size} servers`,
+      );
+      for (const call of report.mcp)
+        lines.push(
+          `  ${call.status} · ${call.server} · ${call.tool}${call.outputChars === null ? "" : ` · ${call.outputChars} characters`} · call ${call.callId ?? "unknown"}${call.reason ? ` · ${call.reason}` : ""}`,
+        );
+      lines.push(
+        "",
         `Injected instructions: ${report.coverage.injectedInstructions} · ${report.instructions.length} recorded`,
       );
       for (const file of report.instructions)

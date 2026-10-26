@@ -281,7 +281,9 @@ function mcpCallsOf(line: Line): EventKind[] {
   return [
     ...mcpCalls(p.name ?? "", { prefix: "^", suffix: "$", id: p.call_id ?? null }),
     ...(typeof input === "string"
-      ? mcpCalls(input, { prefix: "tools\\.", suffix: "\\(", id: null })
+      ? mcpCalls(input, { prefix: "tools\\.", suffix: "\\(", id: p.call_id ?? null }).map(
+          (call) => ({ ...call, inScript: true }),
+        )
       : []),
   ];
 }

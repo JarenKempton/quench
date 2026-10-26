@@ -27,6 +27,17 @@ type ShellSourceRead = ShellRead & {
   outputChars: number | null;
 };
 
+type McpSourceCall = {
+  server: string;
+  tool: string;
+  callId: string | null;
+  requestedAt: Date | null;
+  inScript: boolean;
+  status: "returned" | "failed" | "missing-result" | "unknown";
+  reason: string | null;
+  outputChars: number | null;
+};
+
 type ToolResult = Extract<Event, { type: "tool_result" }>;
 type Match =
   | { result: ToolResult; index: number }
@@ -36,11 +47,15 @@ export function sourceTrace(session: Session, home: string | null) {
   const calls = new Map<string, number[]>();
   const results = new Map<string, number[]>();
   const usedResults = new Set<number>();
+  const mcpCallIds = new Set(
+    session.events.flatMap((e) => (e.type === "mcp_call" && e.id !== null ? [e.id] : [])),
+  );
   let otherToolCalls = 0;
   session.events.forEach((event, index) => {
     if (event.type === "tool_call") {
       if (event.id !== null) calls.set(event.id, [...(calls.get(event.id) ?? []), index]);
-      if (!event.fileRead && !event.shell) otherToolCalls++;
+      if (!event.fileRead && !event.shell && !(event.id !== null && mcpCallIds.has(event.id)))
+        otherToolCalls++;
     }
     if (event.type === "tool_result" && event.callId !== null)
       results.set(event.callId, [...(results.get(event.callId) ?? []), index]);
@@ -105,6 +120,40 @@ export function sourceTrace(session: Session, home: string | null) {
         outputChars: match.result?.chars ?? null,
       }));
     });
+  });
+  const seenMcp = new Set<string>();
+  const mcp: McpSourceCall[] = session.events.flatMap((event, index) => {
+    if (event.type !== "mcp_call") return [];
+    if (event.id !== null && !event.inScript) {
+      if (seenMcp.has(event.id)) return [];
+      seenMcp.add(event.id);
+    }
+    const match = matchOf(event.id, index);
+    const failed = match.result?.isError === true;
+    return [
+      {
+        server: event.server,
+        tool: event.tool,
+        callId: event.id,
+        requestedAt: event.at,
+        inScript: event.inScript ?? false,
+        status: !match.result
+          ? match.missing
+            ? "missing-result"
+            : "unknown"
+          : failed
+            ? "failed"
+            : "returned",
+        reason: !match.result
+          ? match.problem
+          : failed
+            ? "The tool reported an error."
+            : event.inScript
+              ? "Output covers the whole script, not this call alone."
+              : null,
+        outputChars: match.result?.chars ?? null,
+      },
+    ];
   });
   function matchOf(id: string | null, index: number): Match {
     const matches = id === null ? [] : (results.get(id) ?? []);
@@ -187,11 +236,13 @@ export function sourceTrace(session: Session, home: string | null) {
     },
     reads,
     shell,
+    mcp,
     instructions,
     warnings,
     limitations: [
-      "Native text-file reads are traced from the harness's read tool. Shell reads are parsed from recorded commands: cat, head, tail, sed without -i, nl, bat, less and more, plus < input. Searches (grep, rg, ag, git grep) are listed separately with their pattern and the files or folders searched; their output is only matching lines, so a search is not a read of the file. Inline Python, JavaScript and Ruby code (-c, -e or a heredoc) is scanned for file opens with a written-out path or a variable set once to one, listed as script reads or writes; a script only puts a file into context if it prints it. Script files run are listed by name; what they open is not known. Editors and other programs are not parsed. MCP reads, imports and skill loading are not reconstructed.",
+      "Native text-file reads are traced from the harness's read tool. Shell reads are parsed from recorded commands: cat, head, tail, sed without -i, nl, bat, less and more, plus < input. Searches (grep, rg, ag, git grep) are listed separately with their pattern and the files or folders searched; their output is only matching lines, so a search is not a read of the file. Inline Python, JavaScript and Ruby code (-c, -e or a heredoc) is scanned for file opens with a written-out path or a variable set once to one, listed as script reads or writes; a script only puts a file into context if it prints it. Script files run are listed by name; what they open is not known. Editors and other programs are not parsed. Imports and skill loading are not reconstructed.",
       "Shell read paths are resolved against a cd earlier in the same command, the recorded working folder (Codex), or else the session folder. Claude Code keeps the shell folder between commands, so a relative path after an earlier cd may resolve wrong. Paths built from variables, globs or substitutions are not resolved. Output size covers the whole command, not one file, and a command that ran is not proof the file was printed.",
+      "MCP calls are listed by server and tool with the size of their output. Their arguments are never read out, so which document, page or record a call fetched is not shown. Calls made inside a Codex code-mode script share that script's output and status.",
       "Injected instructions are the text the harness recorded adding to context, hashed as recorded, including entries re-injected after compaction or inherited by a fork. Claude Code and Pi record each file; Codex records one combined block per directory without file boundaries. Harnesses may process text before injecting it (Claude Code strips HTML comments), so hashes need not match the file's bytes. Recorded text is not proof a rule was followed.",
       "Returned output is transcript evidence, not proof it was used, obeyed or retained after compaction. Reported line ranges do not guarantee complete file delivery.",
       "No current source files are opened. Hashes identify recorded tool text, including wrappers, not source-file bytes.",

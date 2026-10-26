@@ -68,7 +68,7 @@ export type EventKind =
       shell?: ShellCommand[];
     }
   | { type: "invocation"; name: string; by: "model" | "user" }
-  | { type: "mcp_call"; id: string | null; server: string; tool: string }
+  | { type: "mcp_call"; id: string | null; server: string; tool: string; inScript?: boolean }
   | {
       type: "tool_result";
       callId: string | null;
