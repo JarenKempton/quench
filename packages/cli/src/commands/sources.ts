@@ -69,6 +69,23 @@ export async function sources(
         lines.push(
           `  ${call.status} · ${call.server} · ${call.tool}${call.outputChars === null ? "" : ` · ${call.outputChars} characters`} · call ${call.callId ?? "unknown"}${call.reason ? ` · ${call.reason}` : ""}`,
         );
+      const listed = new Map<string, string | null>();
+      for (const listing of report.skills.listings)
+        for (const skill of listing.listed)
+          if (!listed.has(skill.name) || (listed.get(skill.name) === null && skill.path !== null))
+            listed.set(skill.name, skill.path);
+      lines.push(
+        "",
+        `Skill loading: ${report.skills.listings.length} ${report.skills.listings.length === 1 ? "listing" : "listings"} · ${listed.size} listed · ${report.skills.loads.length} ${report.skills.loads.length === 1 ? "load" : "loads"}`,
+      );
+      for (const [name, skillPath] of listed)
+        lines.push(`  listed · ${name} · ${skillPath ?? "path not recorded"}`);
+      for (const load of report.skills.loads)
+        lines.push(
+          load.how === "invoked"
+            ? `  invoked · ${load.name} · by ${load.by ?? "unknown"} · ${load.path ?? "path not recorded"}`
+            : `  ${load.how} · ${load.name} · ${load.path ?? "path not recorded"} · ${load.status ?? "unknown"}${load.chars === null ? "" : ` · ${load.chars} characters`} · call ${load.callId ?? "unknown"}`,
+        );
       lines.push(
         "",
         `Injected instructions: ${report.coverage.injectedInstructions} · ${report.instructions.length} recorded`,
