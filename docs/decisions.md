@@ -73,6 +73,9 @@ retired with it and live in git history.
 - **Run records may list tool names; analysis may not depend on them.** `runs --json` lists
   each call's recorded name, MCP server, outcome and result size as raw data. Patterns and
   rankings still use structural fields only, because hosts rename tools.
+- **Releases run on two channels, nightly and stable.** Every merge to `main` replaces one
+  rolling `nightly` pre-release; a maintainer cuts stable by choosing patch, minor or major.
+  The version is stamped at build time, never committed. `quench update` downloads with `gh`.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,
