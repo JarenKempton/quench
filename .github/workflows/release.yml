@@ -2,14 +2,29 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Stable release: which part of the version to bump"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
+    name: ${{ github.event_name == 'workflow_dispatch' && 'Stable' || 'Nightly' }}
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -18,16 +33,40 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx vp check
       - run: bunx vp run test
-      - name: Tag matches the CLI version
-        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version packages/cli/package.json)"
+      - id: version
+        name: Pick the version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          latest=$(gh release view --json tagName --jq .tagName 2>/dev/null || echo v0.0.0)
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          case "$BUMP" in
+            major) version="$((major + 1)).0.0" ;;
+            minor) version="$major.$((minor + 1)).0" ;;
+            patch) version="$major.$minor.$((patch + 1))" ;;
+            *) version="${latest#v}-nightly.$GITHUB_RUN_NUMBER" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
-            bun build --compile --target=bun-$target packages/cli/src/main.ts --outfile dist/quench-$target
+            bun build --compile --target=bun-$target \
+              --define "process.env.QUENCH_VERSION=\"$VERSION\"" \
+              packages/cli/src/main.ts --outfile dist/quench-$target
           done
-          ./dist/quench-linux-x64 --version
-          cd dist && sha256sum quench-* > SHA256SUMS
-      - name: Draft release
+          test "$(./dist/quench-linux-x64 --version)" = "quench $VERSION"
+      - name: Publish nightly
+        if: github.event_name == 'push'
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/quench-* dist/SHA256SUMS --draft --generate-notes --title "$GITHUB_REF_NAME"
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release delete nightly --yes --cleanup-tag || true
+          gh release create nightly dist/quench-* --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Nightly $VERSION" --notes "Built from $GITHUB_SHA. Install with: quench update --channel nightly"
+      - name: Publish stable
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release create "v$VERSION" dist/quench-* --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes

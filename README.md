@@ -32,6 +32,13 @@ Swap in `linux-arm64`, `darwin-x64` or `darwin-arm64`. `SHA256SUMS` in the relea
 binary's checksum. The macOS binaries are not signed; a copy downloaded with a browser needs
 `xattr -d com.apple.quarantine quench` before it runs.
 
+Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh auth login`).
+
+| Channel | Published                                            | Switch with                       |
+| ------- | ---------------------------------------------------- | --------------------------------- |
+| stable  | Actions → Release → Run workflow (patch/minor/major) | `quench update --channel stable`  |
+| nightly | On every merge to `main`, replacing the last one     | `quench update --channel nightly` |
+
 Then run `quench` with no arguments for the profile of every agent and project in your
 history.
 
