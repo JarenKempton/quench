@@ -70,6 +70,9 @@ retired with it and live in git history.
   Unsupported adapters and missing/ambiguous results remain explicit. Source filenames do not
   determine relevance, and current files never fill historical gaps. Returned tool text is
   fingerprinted without claiming complete delivery, continued retention or causal influence.
+- **Run records may list tool names; analysis may not depend on them.** `runs --json` lists
+  each call's recorded name, MCP server, outcome and result size as raw data. Patterns and
+  rankings still use structural fields only, because hosts rename tools.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,
