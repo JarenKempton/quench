@@ -3,24 +3,12 @@ import Mark from "./Mark.astro";
 ---
 
 <footer class="title-block">
-  <div class="tb-cell tb-mark">
-    <span class="tb-label">Project</span>
-    <Mark />
-  </div>
-  <div class="tb-cell tb-title">
-    <span class="tb-label">Title</span>
-    <p>
-      Read-only. Reads Claude Code, Codex and Pi history in place. Nothing leaves your machine unless you opt in.
-    </p>
-  </div>
-  <div class="tb-cell"><span class="tb-label">Dwg no.</span>QN-001</div>
-  <div class="tb-cell"><span class="tb-label">Scale</span>NTS</div>
-  <div class="tb-cell"><span class="tb-label">Sheet</span>1 of 1</div>
-  <div class="tb-cell tb-notes">
-    <span class="tb-label">Source</span>
-    <p>
-      Every plate on this sheet is real <code>quench</code> output, run against a synthetic demo history.{" "}
-      <a href="https://github.com/JarenKempton/quench">github.com/JarenKempton/quench</a>
-    </p>
+  <div class="tb-cell"><Mark /></div>
+  <div class="tb-cell tb-wide">Read-only. Nothing leaves your machine unless you opt in.</div>
+  <div class="tb-cell"><span class="tb-label">Dwg</span>QN-001</div>
+  <div class="tb-cell"><span class="tb-label">Sheet</span>1 / 1</div>
+  <div class="tb-cell tb-source">
+    Plates are real <code>quench</code> output on a synthetic history ·{" "}
+    <a href="https://github.com/JarenKempton/quench">GitHub</a>
   </div>
 </footer>

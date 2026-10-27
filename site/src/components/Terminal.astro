@@ -14,11 +14,7 @@ const { plate, title, command, output, truncated = false, class: extra } = Astro
 ---
 
 <figure class:list={["plate", extra]} aria-label={`Plate ${plate}: ${title} output`}>
-  <i class="crop tl"></i><i class="crop tr"></i><i class="crop bl"></i><i class="crop br"></i>
-  <figcaption>
-    <span class="plate-no">Plate {plate}</span>
-    <span class="plate-title">{title}</span>
-    <span class="plate-scale">Scale 1:1</span>
-  </figcaption>
-  <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot />{truncated && <>{"\n"}<span class="d">⋯ continued</span></>}</pre>
+  <i class="crop tl"></i><i class="crop br"></i>
+  <figcaption><span class="plate-no">{plate}</span>{title}</figcaption>
+  <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot />{truncated && <>{"\n"}<span class="d">⋯</span></>}</pre>
 </figure>

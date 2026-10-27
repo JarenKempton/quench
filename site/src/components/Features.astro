@@ -7,33 +7,29 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <p class="section-tag"><span class="bubble">C</span>Section C-C · What it shows</p>
-  <h2 id="features-title">Four questions, answered from history <em>you already have.</em></h2>
+  <p class="label"><b>C</b>Readings</p>
+  <h2 id="features-title">Four readings from history <em>you already have.</em></h2>
 
-  <Feature index={1} title="What each session starts with, and what it costs" command="quench report" output={report} truncated>
-    Per harness: the starting load, peak context, compactions, tool errors, and which models and effort levels you
-    actually use.
+  <Feature index={1} title="What a session starts with" command="quench report" output={report} truncated>
+    Starting load, peak context, compactions, errors, models and effort, per harness.
   </Feature>
 
-  <Feature index={2} title="What loads, and what goes unused" command="quench profile skills" output={skills}>
-    Skills, MCP servers and instruction files, per agent and per project. Quench compares what sessions were offered
-    with what they called, so dead weight stands out.
+  <Feature index={2} title="What loads but goes unused" command="quench profile skills" output={skills}>
+    Skills, MCP servers and instruction files: offered versus called.
   </Feature>
 
   <Feature index={3} title="Failures that repeat" command="quench profile failures" output={failures}>
-    Missing files, missing commands, hook rejections, bad tool input. Grouped by what failed, with streaks and how much
-    output each one fed back into context.
+    Grouped by what failed, with streaks and the output each fed back.
   </Feature>
 
   <Feature
     index={4}
-    title="What an agent read, and where its context came from"
+    title="Where the context came from"
     command="quench sources"
     shown="quench sources ~/.claude/projects/…/orders.jsonl"
     output={sources}
     truncated
   >
-    One session, split by source: native file reads, shell reads and searches, MCP calls, skill loads and the
-    instruction files the harness injected. Uncertain evidence is labelled, not guessed.
+    One session's reads, searches, MCP calls and injected files. Uncertain evidence is labelled.
   </Feature>
 </section>

@@ -1,33 +1,31 @@
 ---
 const stats = [
-  { num: "26.0k", unit: "tok", label: "median, in context before the first reply" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used" },
+  { num: "26.0k", unit: "tok", label: "before the first reply, median" },
+  { num: "70", unit: "%", label: "of all tokens went to that load" },
+  { num: "9", unit: "/12", label: "skills listed, never used" },
 ];
 ---
 
 <section class="problem" id="problem" aria-labelledby="problem-title">
-  <p class="section-tag"><span class="bubble">B</span>Section B-B · The problem</p>
-  <h2 id="problem-title">Your agent carries a load <em>before you type a word.</em></h2>
+  <p class="label"><b>B</b>Problem</p>
+  <h2 id="problem-title">A load before you <em>type a word.</em></h2>
   <p class="section-lede">
-    Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every turn, and none of
-    it shows up anywhere you can see. When an agent drifts, you can't tell whether it was missing something or buried
-    under it.
+    Instructions, skills, MCP servers and memory ride along on every turn, out of sight. When an agent drifts, you
+    can't tell if it was missing something or buried under it.
   </p>
   <div class="stats">
     {
-      stats.map((s, i) => (
+      stats.map((s) => (
         <div class="stat">
           <span class="dim-line" aria-hidden="true" />
-          <span class="meas">Meas. {String(i + 1).padStart(2, "0")}</span>
           <span class="num">
             {s.num}
             <small>{s.unit}</small>
           </span>
-          <span class="label">{s.label}</span>
+          <span class="stat-label">{s.label}</span>
         </div>
       ))
     }
   </div>
-  <p class="footnote">Measured on the demo history behind every plate on this sheet.</p>
+  <p class="footnote">From the demo history behind every plate.</p>
 </section>

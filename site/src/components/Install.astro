@@ -4,19 +4,11 @@ import Terminal from "./Terminal.astro";
 
 <section class="install" id="install" aria-labelledby="install-title">
   <div class="install-copy">
-    <p class="section-tag"><span class="bubble">D</span>Section D-D · Assembly</p>
+    <p class="label"><b>D</b>Install</p>
     <h2 id="install-title">One binary. <em>No setup.</em></h2>
-    <ol class="general-notes">
-      <li>
-        Download the binary for your machine from the releases (Linux and macOS, x64 and arm64) and put it on
-        your <code>PATH</code>.
-      </li>
-      <li>Swap in <code>linux-arm64</code>, <code>darwin-x64</code> or <code>darwin-arm64</code>.</li>
-      <li>Then run <code>quench</code> with no arguments. It finds each harness home on its own, and only reads.</li>
-      <li>
-        <code>SHA256SUMS</code> in each release lists every binary's checksum. The macOS binaries are not signed; a
-        copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code> before it runs.
-      </li>
+    <ol class="notes">
+      <li>Download your build (Linux or macOS, x64 or arm64) and put it on <code>PATH</code>.</li>
+      <li>Checksums are in <code>SHA256SUMS</code>. Unsigned macOS builds need <code>xattr -d com.apple.quarantine quench</code>.</li>
     </ol>
   </div>
   <div class="install-steps">
@@ -24,7 +16,7 @@ import Terminal from "./Terminal.astro";
       <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version</Terminal
     >
     <Terminal plate="D2" title="update">
-      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
+      <span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
     >
   </div>
 </section>

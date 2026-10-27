@@ -1,11 +1,11 @@
 ---
 const layers = [
-  { part: "Harness system prompt", spec: "built in" },
-  { part: "Global instruction files", spec: "1.6 KB" },
-  { part: "Project instructions, acme-api", spec: "13.0k chars" },
-  { part: "Skill list", spec: "12 listed, 9 never used", skills: true },
-  { part: "MCP tool definitions", spec: "per server" },
-  { part: "Your first prompt", spec: "the part you typed", prompt: true },
+  { part: "System prompt", spec: "built in" },
+  { part: "Global instructions", spec: "1.6 KB" },
+  { part: "Project instructions", spec: "13.0k chars" },
+  { part: "Skill list", spec: "9 of 12 unused", skills: true },
+  { part: "MCP tools", spec: "per server" },
+  { part: "Your prompt", spec: "" },
 ];
 
 const half = 85;
@@ -68,10 +68,10 @@ const rightX = cx + half * 2 * 0.866;
                   points={poly(pt(s.x0, -half, z), pt(s.x1, -half, z), pt(s.x1, half, z), pt(s.x0, half, z))}
                 />
               ))}
-            <line class="leader" x1={rightX} y1={base - z} x2={rightX + 62} y2={base - z - 22} />
+            <line class="leader" x1={rightX} y1={base - z} x2={rightX + 61} y2={base - z - 22} />
             <circle class="leader-dot" cx={rightX} cy={base - z} r="2.6" />
-            <circle class="balloon" cx={rightX + 80} cy={base - z - 22} r="17" />
-            <text class="balloon-no" x={rightX + 80} y={base - z - 22}>
+            <circle class="balloon" cx={rightX + 74} cy={base - z - 22} r="13" />
+            <text class="balloon-no" x={rightX + 74} y={base - z - 22}>
               {i + 1}
             </text>
           </g>
@@ -83,21 +83,17 @@ const rightX = cx + half * 2 * 0.866;
       <line class="ext" x1={leftX - 8} y1={base} x2={74} y2={base}></line>
       <line class="ext" x1={leftX - 8} y1={base - top} x2={74} y2={base - top}></line>
       <line class="dim" x1={88} y1={base - 2} x2={88} y2={base - top + 2} marker-start="url(#arrow)" marker-end="url(#arrow)"></line>
-      <text class="dim-text" transform={`translate(70 ${base - top / 2}) rotate(-90)`}>26.0k TOKENS · MEDIAN</text>
+      <text class="dim-text" transform={`translate(70 ${base - top / 2}) rotate(-90)`}>26.0k tok, median</text>
     </g>
   </svg>
 
   <figcaption>
-    <span class="fig-no">Fig. 1</span>
-    <span>Starting context, exploded view. Not to scale.</span>
+    <span class="fig-no">Fig. 1</span> Starting context, exploded. Not to scale.
   </figcaption>
 
   <table class="parts">
-    <caption>Parts list</caption>
-    <thead>
-      <tr><th scope="col">Item</th><th scope="col">Part</th><th scope="col">Size</th></tr>
-    </thead>
-    <tbody>
+    <caption class="visually-hidden">Parts list</caption>
+        <tbody>
       {
         layers.map((layer, i) => (
           <tr class:list={{ flag: layer.skills }}>

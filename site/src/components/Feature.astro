@@ -12,12 +12,11 @@ interface Props {
 }
 
 const { index, title, command, shown = command, output, truncated } = Astro.props;
-const no = String(index).padStart(2, "0");
 ---
 
 <article class="feature">
   <div class="feature-copy">
-    <p class="detail"><span class="bubble split"><b>{index}</b><small>C</small></span>Detail {no}</p>
+    <p class="label"><b>C{index}</b></p>
     <h3>{title}</h3>
     <p><slot /></p>
     <Command text={command} />
