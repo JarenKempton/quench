@@ -679,15 +679,13 @@ h2 {
   pointer-events: none;
 }
 
-.tab-bar,
-.os-bar {
+.tab-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.tab-bar label,
-.os-bar label {
+.tab-bar label {
   padding: 2px 12px;
   border: 2px solid var(--faint);
   color: var(--lo);
@@ -695,8 +693,7 @@ h2 {
   user-select: none;
 }
 
-.tab-bar label:hover,
-.os-bar label:hover {
+.tab-bar label:hover {
   border-color: var(--p);
   color: var(--p);
 }
@@ -735,10 +732,10 @@ h2 {
 .tabs:has(#tab-2:checked) label[for="tab-2"],
 .tabs:has(#tab-3:checked) label[for="tab-3"],
 .tabs:has(#tab-4:checked) label[for="tab-4"],
-.install-steps:has(#os-linux-x64:checked) label[for="os-linux-x64"],
-.install-steps:has(#os-linux-arm64:checked) label[for="os-linux-arm64"],
-.install-steps:has(#os-darwin-x64:checked) label[for="os-darwin-x64"],
-.install-steps:has(#os-darwin-arm64:checked) label[for="os-darwin-arm64"] {
+.install-body:has(#os-linux-x64:checked) label[for="os-linux-x64"],
+.install-body:has(#os-linux-arm64:checked) label[for="os-linux-arm64"],
+.install-body:has(#os-darwin-x64:checked) label[for="os-darwin-x64"],
+.install-body:has(#os-darwin-arm64:checked) label[for="os-darwin-arm64"] {
   background: var(--p);
   border-color: var(--p);
   color: var(--bg);
@@ -747,7 +744,7 @@ h2 {
 }
 
 .tabs:has(.tab-pick:focus-visible) .tab-bar,
-.install-steps:has(.os-pick:focus-visible) .os-bar {
+.install-body:has(.os-pick:focus-visible) .os-menu {
   outline: 2px dashed var(--p);
   outline-offset: 4px;
 }
@@ -757,17 +754,16 @@ h2 {
   display: none;
 }
 
-.install-steps:has(#os-linux-x64:checked) .os-linux-x64,
-.install-steps:has(#os-linux-arm64:checked) .os-linux-arm64,
-.install-steps:has(#os-darwin-x64:checked) .os-darwin-x64,
-.install-steps:has(#os-darwin-arm64:checked) .os-darwin-arm64 {
+.install-body:has(#os-linux-x64:checked) .os-linux-x64,
+.install-body:has(#os-linux-arm64:checked) .os-linux-arm64,
+.install-body:has(#os-darwin-x64:checked) .os-darwin-x64,
+.install-body:has(#os-darwin-arm64:checked) .os-darwin-arm64 {
   display: inline;
   color: var(--hi);
-  background: var(--ghost);
 }
 
-.install-steps:has(#os-darwin-x64:checked, #os-darwin-arm64:checked) .os-darwin {
-  display: inline;
+.install-body:has(#os-darwin-x64:checked, #os-darwin-arm64:checked) .os-darwin {
+  display: block;
 }
 
 .cmd {
@@ -779,29 +775,97 @@ h2 {
   background: var(--ghost);
 }
 
-.install {
+.install-body {
   display: grid;
-  grid-template-columns: minmax(0, 0.6fr) minmax(0, 1.4fr);
-  gap: 48px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 40px;
+  margin-top: 44px;
   align-items: start;
 }
 
-.install-steps {
+.os-menu {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  border: 6px double var(--lo);
+  padding: 10px 6px;
+}
+
+.menu-title {
+  padding: 0 12px 8px;
+  margin-bottom: 6px;
+  border-bottom: 2px solid var(--faint);
+  color: var(--lo);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.os-menu label {
+  padding: 6px 12px;
+  color: var(--lo);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.os-menu label::before {
+  content: "  ";
+  white-space: pre;
+}
+
+.os-menu label:hover {
+  color: var(--hi);
+}
+
+.install-body:has(#os-linux-x64:checked) label[for="os-linux-x64"]::before,
+.install-body:has(#os-linux-arm64:checked) label[for="os-linux-arm64"]::before,
+.install-body:has(#os-darwin-x64:checked) label[for="os-darwin-x64"]::before,
+.install-body:has(#os-darwin-arm64:checked) label[for="os-darwin-arm64"]::before {
+  content: "> ";
+}
+
+.install-main {
   min-width: 0;
 }
 
 .install .term pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.note {
-  margin: 0;
+.after {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px 20px;
+  margin: 28px 0 0;
   font-size: 14px;
+}
+
+.after dt {
   color: var(--lo);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-top: 3px;
+}
+
+.after dd {
+  margin: 0;
+  color: var(--lo);
+}
+
+.after dd span {
+  margin-left: 8px;
+}
+
+.after dt.os-darwin,
+.after dd.os-darwin {
+  display: none;
+}
+
+.install-body:has(#os-darwin-x64:checked, #os-darwin-arm64:checked) .after .os-darwin {
+  display: block;
 }
 
 footer {
@@ -836,8 +900,7 @@ footer p {
 }
 
 @media (max-width: 1100px) {
-  .hero,
-  .install {
+  .hero {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -933,7 +996,6 @@ footer p {
 .facts,
 .works,
 .tab-bar label,
-.os-bar label,
 .term figcaption,
 .more,
 .problem::before,
@@ -946,13 +1008,9 @@ footer p {
 .top nav,
 .btn,
 .facts,
-.tab-bar label,
-.os-bar label {
-  font-weight: 600;
-}
-
 .tab-bar label {
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .top .mark {
@@ -965,8 +1023,7 @@ footer p {
   padding: 8px 16px;
 }
 
-.tab-bar label,
-.os-bar label {
+.tab-bar label {
   padding: 6px 14px;
 }
 
@@ -1003,5 +1060,45 @@ footer p {
 
   .top .mark {
     font-size: 20px;
+  }
+}
+
+@media (max-width: 760px) {
+  .install-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .os-menu {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-width: 4px;
+  }
+
+  .menu-title {
+    flex-basis: 100%;
+  }
+
+  .os-menu label {
+    flex: 1 1 45%;
+    padding: 6px 8px;
+  }
+
+  .install .term pre {
+    font-size: 12px;
+  }
+
+  .after {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .after dd {
+    margin-bottom: 12px;
+  }
+
+  .after dd span {
+    display: block;
+    margin: 4px 0 0;
   }
 }
