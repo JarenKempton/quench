@@ -1,5 +1,6 @@
 ---
 import Command from "./Command.astro";
+import Stack from "./Stack.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
@@ -17,10 +18,17 @@ import summary from "../samples/summary.ansi?raw";
       <Command text="quench" />
     </div>
     <ul class="facts">
-      <li><span class="dot g"></span>Read-only</li>
-      <li><span class="dot c"></span>Zero setup</li>
-      <li><span class="dot y"></span>Stays on your machine</li>
+      <li class="mcp">Read-only</li>
+      <li class="tools">Zero setup</li>
+      <li class="system">Stays on your machine</li>
     </ul>
   </div>
-  <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+  <figure class="diagram">
+    <Stack />
+    <figcaption>Fig. 1 — What the harness sends before your first word, on every turn.</figcaption>
+  </figure>
+  <div class="hero-term">
+    <p class="callout">Run it with no arguments</p>
+    <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+  </div>
 </section>

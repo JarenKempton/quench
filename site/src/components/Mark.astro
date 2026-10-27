@@ -1,1 +1,20 @@
-<a class="mark" href="#">quench<span class="cursor">_</span></a>
+---
+import { box } from "../iso.ts";
+
+const layers = ["system", "mcp", "skills"].map((key, i) => ({ key, faces: box(0, 0, i * 9, 22, 22, 6) }));
+---
+
+<a class="mark" href="#">
+  <svg viewBox="-21 -27 42 52" aria-hidden="true">
+    {
+      layers.map((l) => (
+        <g class:list={["block", l.key]}>
+          <polygon class="f-top" points={l.faces.top} />
+          <polygon class="f-left" points={l.faces.left} />
+          <polygon class="f-right" points={l.faces.right} />
+        </g>
+      ))
+    }
+  </svg>
+  quench
+</a>

@@ -1,13 +1,15 @@
 ---
+import Gauge from "./Gauge.astro";
+
 const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used" },
+  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", ratio: 0.52, tone: "system" },
+  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", ratio: 0.7, tone: "mcp" },
+  { num: "9", unit: "/12", label: "skills listed in every session and never once used", ratio: 0.75, tone: "skills" },
 ];
 ---
 
 <section class="problem" id="problem">
-  <p class="eyebrow">The problem</p>
+  <p class="eyebrow">Fig. 2 — The problem</p>
   <h2>Your agent carries a load <em>before you type a word.</em></h2>
   <p class="section-lede">
     Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every
@@ -18,6 +20,7 @@ const stats = [
     {
       stats.map((s) => (
         <div class="stat">
+          <Gauge ratio={s.ratio} tone={s.tone} />
           <span class="num">
             {s.num}
             <small>{s.unit}</small>
