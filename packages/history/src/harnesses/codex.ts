@@ -10,6 +10,7 @@ import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind, ShellCommand } from "../model.ts";
+import { mcpServerOf } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -59,6 +60,17 @@ const Line = z.looseObject({
       output: z.unknown().optional(),
       /** On `compacted`: the items that replace the history, including re-injected instructions; inherited from the parent in forked sessions. */
       replacement_history: z.array(z.unknown()).nullish(),
+      /** On `session_meta`: the system instructions the session started with. */
+      base_instructions: z.looseObject({ text: z.string().nullish() }).nullish(),
+      /** On `additional_tools`: tool definitions sent to the model, grouped in namespaces. */
+      tools: z
+        .array(
+          z.looseObject({
+            name: z.string(),
+            tools: z.array(z.looseObject({ name: z.string() })).nullish(),
+          }),
+        )
+        .nullish(),
       /** One API call's tokens, on `token_usage_record`. */
       usage: TokenUsage.optional(),
       /** On `token_count` events; older sessions only have this, not `token_usage_record`. */
@@ -170,6 +182,8 @@ export const codex: Harness<"codex"> = {
         if (line.type === "event_msg") fallbackUsage.add(event);
         events.push(event);
       }
+      const prompt = promptOf(line);
+      if (prompt) events.push({ ...prompt, at });
       const loaded = instructions(line);
       if (loaded) events.push({ ...loaded, at });
       const listing = skillListing(line);
@@ -190,6 +204,26 @@ export const codex: Harness<"codex"> = {
 };
 
 type Turn = { model: string | null; effort: string | null };
+
+function promptOf(line: Line): EventKind | null {
+  const p = line.payload;
+  if (line.type === "session_meta" && p?.base_instructions?.text)
+    return { type: "prompt", system: p.base_instructions.text.length, tools: null };
+  if (line.type === "response_item" && p?.type === "additional_tools" && p.tools)
+    return {
+      type: "prompt",
+      system: null,
+      tools: p.tools.flatMap((namespace) =>
+        (namespace.tools ?? [namespace]).map((tool) => ({
+          name: tool.name,
+          server: mcpServerOf(namespace.name) ?? mcpServerOf(tool.name),
+          chars: JSON.stringify(tool).length,
+          deferred: false,
+        })),
+      ),
+    };
+  return null;
+}
 
 function eventOf(line: Line, turn: Turn): EventKind | null {
   const p = line.payload;

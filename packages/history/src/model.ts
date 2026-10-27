@@ -57,6 +57,10 @@ export type Failure = { kind: FailureKind; detail: string | null; exitCode: numb
 
 export type ListedSkill = { name: string; path: string | null };
 
+export type PromptTool = { name: string; server: string | null; chars: number; deferred: boolean };
+
+export const mcpServerOf = (name: string): string | null => /^mcp__(.+?)__/.exec(name)?.[1] ?? null;
+
 export type EventKind =
   | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
@@ -80,7 +84,10 @@ export type EventKind =
     }
   | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null }
   | { type: "instructions"; files: InjectedInstruction[]; unreadable: number }
-  | { type: "skills"; listed: ListedSkill[]; chars: number };
+  | { type: "skills"; listed: ListedSkill[]; chars: number }
+  | { type: "prompt"; system: number | null; tools: PromptTool[] | null }
+  | { type: "deferred_tools"; names: string[]; chars: number }
+  | { type: "mcp_instructions"; servers: string[]; chars: number };
 
 export type Event = EventKind & { at: Date | null };
 

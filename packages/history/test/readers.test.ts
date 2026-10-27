@@ -132,6 +132,55 @@ describe("Claude Code", () => {
   });
 });
 
+test("Claude Code records the request's system prompt, tool definitions and deferred tools", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quench-claude-"));
+  const tool = (name: string, defer = false) => ({
+    name,
+    description: "d",
+    ...(defer ? { defer_loading: true } : {}),
+  });
+  await Bun.write(
+    join(dir, ".claude/projects/-x/t.jsonl"),
+    [
+      {
+        type: "attachment",
+        attachment: {
+          type: "deferred_tools_delta",
+          addedNames: ["mcp__s__b"],
+          addedLines: ["mcp__s__b"],
+        },
+      },
+      {
+        type: "attachment",
+        attachment: { type: "mcp_instructions_delta", addedNames: ["s"], addedBlocks: ["use s"] },
+      },
+      {
+        type: "api-request-shape",
+        shape: {
+          system: [{ text: "abc" }, { text: "de" }],
+          tools: [tool("Read"), tool("mcp__s__a"), tool("ToolSearch", true)],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n"),
+  );
+  const [s] = await all(new Home(dir));
+  expect(s?.events.map(({ at: _, ...e }) => e)).toEqual([
+    { type: "deferred_tools", names: ["mcp__s__b"], chars: 9 },
+    { type: "mcp_instructions", servers: ["s"], chars: 5 },
+    {
+      type: "prompt",
+      system: 6,
+      tools: [
+        { name: "Read", server: null, chars: 33, deferred: false },
+        { name: "mcp__s__a", server: "s", chars: 38, deferred: false },
+        { name: "ToolSearch", server: null, chars: 60, deferred: true },
+      ],
+    },
+  ]);
+});
+
 describe("Codex", () => {
   test("hides injected instructions and splits cached input out of input", async () => {
     const s = await one("codex", "c1");

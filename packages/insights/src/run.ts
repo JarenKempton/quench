@@ -150,6 +150,9 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
       case "instructions":
       case "skills":
       case "invocation":
+      case "prompt":
+      case "deferred_tools":
+      case "mcp_instructions":
         continue;
       default:
         unhandled(event);
