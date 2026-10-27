@@ -153,16 +153,26 @@ h2 em {
   color: var(--mute);
 }
 
-.label b {
-  display: inline-grid;
-  place-items: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 6px;
-  border: 1px solid var(--cyan-2);
-  border-radius: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 48px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.section-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hair);
+}
+
+.sec-no {
   color: var(--cyan);
 }
 
@@ -634,8 +644,7 @@ h2 em {
 .problem,
 .features,
 .install {
-  padding: 96px 0;
-  border-top: 1px solid var(--hair);
+  padding: 72px 0 112px;
 }
 
 .problem h2,
@@ -723,7 +732,7 @@ h2 em {
 /* Features */
 
 .features h2 {
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .feature {
@@ -731,20 +740,12 @@ h2 em {
   grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
   gap: 64px;
   align-items: start;
-  padding: 48px 0;
-}
-
-.feature + .feature {
-  border-top: 1px dashed var(--hair);
+  padding: 32px 0;
 }
 
 .feature-copy {
   position: sticky;
   top: 32px;
-}
-
-.feature-copy .label {
-  margin-bottom: 16px;
 }
 
 .feature h3 {
@@ -754,8 +755,8 @@ h2 em {
   line-height: 1.15;
 }
 
-.feature-copy p:not(.label) {
-  margin: 0 0 22px;
+.feature-copy p {
+  margin: 0;
   font-size: 16px;
   color: var(--ink-2);
 }
@@ -792,6 +793,11 @@ h2 em {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--cyan);
+}
+
+.install .section-head {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
 }
 
 .install h2 em {
@@ -943,6 +949,11 @@ h2 em {
   .feature-copy {
     position: static;
   }
+
+  .feature {
+    gap: 20px;
+    padding: 28px 0 40px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1000,7 +1011,7 @@ h2 em {
   .problem,
   .features,
   .install {
-    padding: 64px 0;
+    padding: 48px 0 72px;
   }
 
   .hero-plate {

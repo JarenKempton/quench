@@ -1,5 +1,6 @@
 ---
 import Feature from "./Feature.astro";
+import SectionHead from "./SectionHead.astro";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
 import failures from "../samples/failures.ansi?raw";
@@ -7,7 +8,7 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <p class="label"><b>C</b>Readings</p>
+  <SectionHead no="02" name="Readings" />
   <h2 id="features-title">Four readings from history <em>you already have.</em></h2>
 
   <Feature index={1} title="What a session starts with" command="quench report" output={report} truncated>

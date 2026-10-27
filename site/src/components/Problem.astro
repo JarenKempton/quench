@@ -1,4 +1,6 @@
 ---
+import SectionHead from "./SectionHead.astro";
+
 const stats = [
   { num: "26.0k", unit: "tok", label: "before the first reply, median" },
   { num: "70", unit: "%", label: "of all tokens went to that load" },
@@ -7,7 +9,7 @@ const stats = [
 ---
 
 <section class="problem" id="problem" aria-labelledby="problem-title">
-  <p class="label"><b>B</b>Problem</p>
+  <SectionHead no="01" name="Problem" />
   <h2 id="problem-title">A load before you <em>type a word.</em></h2>
   <p class="section-lede">
     Instructions, skills, MCP servers and memory ride along on every turn, out of sight. When an agent drifts, you
