@@ -9,16 +9,14 @@ interface Props {
   shown?: string;
   output: string;
   truncated?: boolean;
-  flip?: boolean;
-  wide?: boolean;
 }
 
-const { index, title, command, shown = command, output, truncated, flip = false, wide = false } = Astro.props;
+const { index, title, command, shown = command, output, truncated } = Astro.props;
 ---
 
-<article class:list={["feature", { flip, wide }]}>
+<article class="feature">
+  <span class="index">{String(index).padStart(2, "0")}</span>
   <div class="feature-copy">
-    <span class="index">{String(index).padStart(2, "0")}</span>
     <h3>{title}</h3>
     <p><slot /></p>
     <Command text={command} />

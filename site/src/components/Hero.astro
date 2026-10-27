@@ -2,24 +2,37 @@
 import Command from "./Command.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
+
+const boot = [
+  "QUENCH CONTEXT PROFILER",
+  "SCANNING ~/.claude ........ FOUND",
+  "SCANNING ~/.codex ......... FOUND",
+  "SCANNING ~/.pi ............ FOUND",
+  "WRITE ACCESS .............. NONE",
+  "NETWORK ................... OFF",
+  "READY.",
+];
 ---
 
 <section class="hero">
   <div class="hero-copy">
+    <ol class="boot" aria-hidden="true">
+      {boot.map((line, i) => <li style={`--i:${i}`}>{line}</li>)}
+    </ol>
     <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts <em>hot.</em></h1>
+    <h1>Every session starts <span class="nowrap"><em>hot</em><span class="cursor" aria-hidden="true"></span></span></h1>
     <p class="lede">
       See what your coding agents load, what it costs, and where they go wrong. Quench reads the
       session history Claude Code, Codex and Pi already keep on your machine.
     </p>
     <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
+      <a class="btn" href="#install">[ INSTALL ]</a>
       <Command text="quench" />
     </div>
     <ul class="facts">
-      <li><span class="dot g"></span>Read-only</li>
-      <li><span class="dot c"></span>Zero setup</li>
-      <li><span class="dot y"></span>Stays on your machine</li>
+      <li>[X] READ-ONLY</li>
+      <li>[X] ZERO SETUP</li>
+      <li>[X] STAYS ON YOUR MACHINE</li>
     </ul>
   </div>
   <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />

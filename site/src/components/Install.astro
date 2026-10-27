@@ -21,7 +21,7 @@ import Terminal from "./Terminal.astro";
       <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version</Terminal
     >
     <Terminal title="update" class="term-plain">
-      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
+      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly<span class="cursor" aria-hidden="true"></span></Terminal
     >
     <p class="note">
       <code>SHA256SUMS</code> in each release lists every binary's checksum. The macOS binaries are

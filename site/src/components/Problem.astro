@@ -1,8 +1,8 @@
 ---
 const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used" },
+  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", lit: 26, of: 64 },
+  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", lit: 14, of: 20 },
+  { num: "9", unit: "/12", label: "skills listed in every session and never once used", lit: 9, of: 12 },
 ];
 ---
 
@@ -22,10 +22,13 @@ const stats = [
             {s.num}
             <small>{s.unit}</small>
           </span>
+          <span class="gauge" aria-hidden="true">
+            [{Array.from({ length: s.of }, (_, i) => <i class:list={{ on: i < s.lit }} />)}]
+          </span>
           <span class="label">{s.label}</span>
         </div>
       ))
     }
   </div>
-  <p class="footnote">Figures from the demo history behind every sample on this page.</p>
+  <p class="footnote">* Figures from the demo history behind every sample on this page.</p>
 </section>

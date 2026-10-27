@@ -23,8 +23,17 @@ const OFF: Record<string, string[]> = {
 
 const SGR = new RegExp(`(${String.fromCharCode(27)}\\[[0-9;]*m)`);
 
+const OFF_FONT = /[←-⇿⋯─-▟]/g;
+
+const cell = (glyph: string) =>
+  glyph === "█" ? `<i class="cell full"></i>` : `<i class="cell">${glyph}</i>`;
+
 const escape = (text: string) =>
-  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(OFF_FONT, cell);
 
 export function ansiToHtml(text: string): string {
   let active: string[] = [];

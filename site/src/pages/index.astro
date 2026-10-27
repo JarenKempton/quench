@@ -18,23 +18,29 @@ import Footer from "../components/Footer.astro";
       name="description"
       content="Quench reads the session history Claude Code, Codex and Pi already keep, and shows what each session starts with, what it costs, and where agents go wrong."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;700&family=Martian+Mono:wght@300;400;600&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="preload" href="/fonts/VT323-Regular.ttf" as="font" type="font/ttf" crossorigin />
   </head>
   <body>
-    <Header />
-    <main>
-      <Hero />
-      <div class="quench-rule" aria-hidden="true"></div>
-      <Problem />
-      <Features />
-      <div class="quench-rule" aria-hidden="true"></div>
-      <Install />
-    </main>
-    <Footer />
+    <input class="phosphor-pick" type="radio" name="phosphor" id="phosphor-green" checked />
+    <input class="phosphor-pick" type="radio" name="phosphor" id="phosphor-amber" />
+    <div class="screen">
+      <Header />
+      <main>
+        <Hero />
+        <Problem />
+        <Features />
+        <Install />
+      </main>
+      <Footer />
+    </div>
+    <div class="glass" aria-hidden="true"></div>
+    <div class="bezel">
+      <span class="badge">QUENCH&nbsp;MONOCHROME&nbsp;DISPLAY</span>
+      <span class="switch" role="group" aria-label="Phosphor color">
+        <label for="phosphor-green">P1 GREEN</label>
+        <label for="phosphor-amber">P3 AMBER</label>
+      </span>
+      <span class="led" aria-hidden="true"></span>
+    </div>
   </body>
 </html>
