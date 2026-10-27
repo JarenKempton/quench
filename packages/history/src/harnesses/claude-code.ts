@@ -131,7 +131,7 @@ export const Block = z.looseObject({
   text: z.unknown().optional(),
   /** On `tool_result` blocks, the `id` of the `tool_use` it answers. */
   tool_use_id: z.string().nullish(),
-  /** True when the tool failed. */
+  /** True when the tool failed; Claude Code omits it on success. */
   is_error: z.boolean().nullish(),
   /** Output of a `tool_result` block: a string or an array of blocks. */
   content: z.unknown().optional(),
@@ -439,6 +439,17 @@ const rejected = (text: string) =>
     text.slice(0, 400),
   );
 
+const ToolReference = z.object({ type: z.literal("tool_reference"), tool_name: z.string() });
+
+function referencedTools(content: unknown): { loadedTools?: string[] } {
+  if (!Array.isArray(content)) return {};
+  const names = content.flatMap((item) => {
+    const ref = ToolReference.safeParse(item);
+    return ref.success ? [ref.data.tool_name] : [];
+  });
+  return names.length ? { loadedTools: names } : {};
+}
+
 function user(line: Line): EventKind[] {
   const content = line.message?.content;
   const results = blocks(content).filter((b) => b.type === "tool_result");
@@ -455,8 +466,9 @@ function user(line: Line): EventKind[] {
       return {
         type: "tool_result",
         callId: b.tool_use_id ?? null,
-        isError: b.is_error ?? null,
+        isError: b.is_error === true,
         chars: text.length,
+        ...referencedTools(b.content),
         ...(failure ? { failure } : {}),
         ...(fileRead ? { fileRead } : {}),
       };

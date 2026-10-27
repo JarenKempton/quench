@@ -5,7 +5,17 @@ import {
   type Origin,
   type SenderEvidence,
   type Session,
+  type Usage,
 } from "@quench/history";
+
+export type ToolCall = {
+  tool: string;
+  server: string | null;
+  ok: boolean | null;
+  resultChars: number | null;
+  inScript: boolean;
+  loadedTools?: string[];
+};
 
 export type Run = {
   prompt: string | null;
@@ -23,7 +33,9 @@ export type Run = {
   inferences: number;
   contextStart: number | null;
   contextPeak: number;
+  usage: Usage;
   toolCalls: number;
+  calls: ToolCall[];
   toolErrors: number;
   compactions: number;
   subagents: number;
@@ -45,7 +57,9 @@ const emptyRun = (): Run => ({
   inferences: 0,
   contextStart: null,
   contextPeak: 0,
+  usage: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
   toolCalls: 0,
+  calls: [],
   toolErrors: 0,
   compactions: 0,
   subagents: 0,
@@ -59,6 +73,11 @@ export const durationSeconds = (r: Run): number | null =>
 export function runs(session: Session, children: readonly Session[] = []): Run[] {
   const segments: Run[] = [emptyRun()];
   let run = segments[0] as Run;
+  const byId = new Map<string, ToolCall>();
+  const mcpById = new Map<string, { server: string; tool: string }>();
+  for (const e of session.events)
+    if (e.type === "mcp_call" && e.id !== null && !e.inScript && !mcpById.has(e.id))
+      mcpById.set(e.id, { server: e.server, tool: e.tool });
   for (const event of session.events) {
     switch (event.type) {
       case "message":
@@ -81,23 +100,56 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
         run.inferences += 1;
         run.contextStart ??= context;
         run.contextPeak = Math.max(run.contextPeak, context);
+        run.usage = {
+          input: run.usage.input + event.usage.input,
+          cacheRead: run.usage.cacheRead + event.usage.cacheRead,
+          cacheWrite: run.usage.cacheWrite + event.usage.cacheWrite,
+          output: run.usage.output + event.usage.output,
+        };
         run.model = event.model ?? run.model;
         run.effort = event.effort ?? run.effort;
         break;
       }
-      case "tool_call":
+      case "tool_call": {
+        const mcp = event.id === null ? undefined : mcpById.get(event.id);
+        const call: ToolCall = {
+          tool: mcp?.tool ?? event.name,
+          server: mcp?.server ?? null,
+          ok: null,
+          resultChars: null,
+          inScript: false,
+        };
         run.toolCalls += 1;
+        run.calls.push(call);
+        if (event.id !== null) byId.set(event.id, call);
         break;
-      case "tool_result":
+      }
+      case "mcp_call":
+        if (event.inScript)
+          run.calls.push({
+            tool: event.tool,
+            server: event.server,
+            ok: null,
+            resultChars: null,
+            inScript: true,
+          });
+        continue;
+      case "tool_result": {
         run.toolErrors += event.isError === true ? 1 : 0;
+        const call = event.callId === null ? undefined : byId.get(event.callId);
+        if (call) {
+          call.ok = event.isError === null ? null : !event.isError;
+          call.resultChars = event.chars;
+          if (event.loadedTools) call.loadedTools = event.loadedTools;
+        }
         break;
+      }
       case "compaction":
         run.compactions += 1;
         break;
       case "instructions":
       case "skills":
       case "invocation":
-      case "mcp_call":
         continue;
       default:
         unhandled(event);

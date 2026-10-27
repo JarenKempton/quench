@@ -106,6 +106,30 @@ describe("Claude Code", () => {
     });
     expect(s.diagnostics.unparsed).toBe(1);
   });
+
+  test("a result without is_error succeeded, and tool search results name the tools they loaded", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "quench-claude-"));
+    const result = (id: string, content: unknown) => ({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content }] },
+    });
+    await Bun.write(
+      join(dir, ".claude/projects/-x/t.jsonl"),
+      [
+        result("a", "ok"),
+        result("b", [{ type: "tool_reference", tool_name: "mcp__biz__list_items" }]),
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n"),
+    );
+    const [s] = await all(new Home(dir));
+    expect(
+      s?.events.map((e) => (e.type === "tool_result" ? [e.isError, e.loadedTools] : null)),
+    ).toEqual([
+      [false, undefined],
+      [false, ["mcp__biz__list_items"]],
+    ]);
+  });
 });
 
 describe("Codex", () => {
