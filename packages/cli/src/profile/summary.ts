@@ -1,6 +1,7 @@
 import { harnessById } from "@quench/history";
 import { ago, chars, count, plural, projectName, size, table, tokens } from "../format.ts";
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
+import { renderStartSplit } from "./recorded-start.ts";
 import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
@@ -13,6 +14,7 @@ export function summary(result: Profile, homeDir: string): string[] {
   return [
     `${title("QUENCH")}  ${bold(`last ${result.days} days`)} ${dim("·")} ${count(sessions)} sessions ${dim(found.map((h) => `· ${harnessById[h.harness].label} ${count(h.sessions)}`).join(" "))}`,
     ...startingLoad(result),
+    ...renderStartSplit(result.recordedStart),
     ...worthALook(result, homeDir),
     ...busiest(result, homeDir),
     "",

@@ -12,6 +12,7 @@ import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
+import type { StartSplit } from "./recorded-start.ts";
 import { renderMcpServers, skillsCell, type InstructionFile } from "./setup.ts";
 import { summary } from "./summary.ts";
 
@@ -35,6 +36,7 @@ export type Profile = {
   recordedSkills: SkillUse[];
   recordedMcp: McpUse[];
   recordedFailures: FailureSummary;
+  recordedStart: StartSplit[];
   projects: ProfiledProject[];
   missingDirectories: string[];
 };

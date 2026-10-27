@@ -823,3 +823,37 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   expect(unknown.code).toBe(1);
   expect(unknown.stderr).toContain('unknown section "nope"');
 });
+
+test("the summary splits each harness's first request by source, from the cache too", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-start-")));
+  const tool = (name: string, length: number) => ({ name, description: "d".repeat(length) });
+  const lines = (...entries: object[]) => entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  await Bun.write(
+    join(home, ".claude/projects/-x/a.jsonl"),
+    lines(
+      {
+        type: "attachment",
+        attachment: { type: "skill_listing", names: ["a"], content: "s".repeat(100) },
+      },
+      {
+        type: "api-request-shape",
+        shape: {
+          system: [{ text: "x".repeat(600) }],
+          tools: [tool("Read", 170), tool("mcp__github__a", 60)],
+        },
+      },
+    ),
+  );
+  await Bun.write(join(home, ".claude/projects/-x/b.jsonl"), lines({ type: "user", cwd: home }));
+  const expected = [
+    "▍First request goes to",
+    "  Claude Code  system 60% · built-in tools 20% · MCP github 10% · skills 10%",
+    "               not recorded: system in 1/2, built-in tools in 1/2, MCP tools in 1/2",
+    "  Shares of the characters each harness recorded sending, summed over sessions.",
+  ];
+  for (const run of [1, 2]) {
+    const summary = await quench(home);
+    expect(summary.code, `run ${run}`).toBe(0);
+    expect(summary.stdout).toContain(expected.join("\n"));
+  }
+});

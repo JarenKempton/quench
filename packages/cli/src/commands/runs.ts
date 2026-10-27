@@ -1,7 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { basename } from "node:path";
-import { discoverAll, harnessById, readSessions, type Home, type Session } from "@quench/history";
-import { runs as runsOf, startingContext } from "@quench/insights";
+import {
+  discoverAll,
+  harnessById,
+  readSessions,
+  startingContext,
+  type Home,
+  type Session,
+} from "@quench/history";
+import { runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
 import { latestSessionIn } from "../latest.ts";
 
