@@ -1,4 +1,18 @@
 @font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "VT323";
   src: url("/fonts/VT323-Regular.ttf") format("truetype");
   font-display: block;
@@ -19,7 +33,9 @@
     0 0 1px rgb(var(--rgb) / 0.9),
     0 0 6px rgb(var(--rgb) / 0.55),
     0 0 18px rgb(var(--rgb) / 0.25);
+  --soft: 0 0 6px rgb(var(--rgb) / 0.3);
   --vt: "VT323", "Glass TTY VT220", ui-monospace, monospace;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --rim: 14px;
   --chin: 44px;
   --max: 1240px;
@@ -47,11 +63,10 @@ body {
   min-height: 100vh;
   background: radial-gradient(ellipse at 50% 40%, rgb(var(--rgb) / 0.07), transparent 70%), var(--bg);
   color: var(--p);
-  font-family: var(--vt);
-  font-size: 22px;
-  line-height: 1.25;
-  text-shadow: var(--glow);
-  -webkit-font-smoothing: none;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.6;
+  text-shadow: var(--soft);
   overflow-x: hidden;
   transition:
     background-color 0.6s,
@@ -117,7 +132,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.32) 0 1px, transparent 1px 3px);
+  background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.2) 0 1px, transparent 1px 3px);
   animation: flicker 0.15s steps(2) infinite;
 }
 
@@ -314,6 +329,14 @@ kbd {
 
 h1,
 h2,
+.mark,
+.stat .num {
+  font-family: var(--vt);
+  text-shadow: var(--glow);
+}
+
+h1,
+h2,
 h3 {
   margin: 0;
   font-weight: 400;
@@ -463,8 +486,8 @@ h1 .cursor {
   padding: 0 14px 12px;
   overflow-x: auto;
   font-family: inherit;
-  font-size: 19px;
-  line-height: 1.12;
+  font-size: 13.5px;
+  line-height: 1.5;
   scrollbar-width: thin;
   scrollbar-color: var(--faint) transparent;
 }
@@ -475,7 +498,6 @@ h1 .cursor {
   font-style: normal;
   text-align: center;
   font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
-  font-size: 0.84em;
   vertical-align: baseline;
   overflow: visible;
 }
@@ -642,7 +664,7 @@ h2 {
 
 .footnote {
   margin: 12px 0 0;
-  font-size: 18px;
+  font-size: 13px;
   color: var(--lo);
 }
 
@@ -778,7 +800,7 @@ h2 {
 
 .note {
   margin: 0;
-  font-size: 19px;
+  font-size: 14px;
   color: var(--lo);
 }
 
@@ -806,7 +828,7 @@ footer p {
 }
 
 .foot-small {
-  font-size: 18px;
+  font-size: 13px;
 }
 
 .foot-small a {
@@ -828,7 +850,7 @@ footer p {
   }
 
   body {
-    font-size: 20px;
+    font-size: 15px;
   }
 
   .screen {
@@ -882,7 +904,7 @@ footer p {
   }
 
   .term pre {
-    font-size: 16px;
+    font-size: 11.5px;
     padding: 0 10px 10px;
   }
 
@@ -902,5 +924,84 @@ footer p {
   *::after {
     animation: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+.top,
+.btn,
+.inline-cmd,
+.facts,
+.works,
+.tab-bar label,
+.os-bar label,
+.term figcaption,
+.more,
+.problem::before,
+.features::before,
+.install::before {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.top nav,
+.btn,
+.facts,
+.tab-bar label,
+.os-bar label {
+  font-weight: 600;
+}
+
+.tab-bar label {
+  text-transform: uppercase;
+}
+
+.top .mark {
+  font-size: 24px;
+  letter-spacing: 0.1em;
+}
+
+.inline-cmd,
+.btn {
+  padding: 8px 16px;
+}
+
+.tab-bar label,
+.os-bar label {
+  padding: 6px 14px;
+}
+
+.term figcaption {
+  top: -0.85em;
+}
+
+.lede {
+  font-size: 18px;
+}
+
+.stat .label {
+  font-size: 14px;
+  max-width: 24em;
+}
+
+.top {
+  padding: 4px 14px;
+}
+
+.top .mark {
+  text-shadow: none;
+}
+
+.mark {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .top {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  .top .mark {
+    font-size: 20px;
   }
 }
