@@ -9,28 +9,16 @@ import sources from "../samples/sources.ansi?raw";
 
 <section class="features" id="features" aria-labelledby="features-title">
   <SectionHead no="02" name="Readings" />
-  <h2 id="features-title">Four readings from history <em>you already have.</em></h2>
-
-  <Feature index={1} title="What a session starts with" command="quench report" output={report} truncated>
-    Starting load, peak context, compactions, errors, models and effort, per harness.
-  </Feature>
-
-  <Feature index={2} title="What loads but goes unused" command="quench profile skills" output={skills}>
-    Skills, MCP servers and instruction files: offered versus called.
-  </Feature>
-
-  <Feature index={3} title="Failures that repeat" command="quench profile failures" output={failures}>
-    Grouped by what failed, with streaks and the output each fed back.
-  </Feature>
-
+  <h2 id="features-title">Four <em>readings.</em></h2>
+  <Feature index={1} title="Starting load" command="quench report" output={report} truncated />
+  <Feature index={2} title="Unused skills" command="quench profile skills" output={skills} />
+  <Feature index={3} title="Repeat failures" command="quench profile failures" output={failures} />
   <Feature
     index={4}
-    title="Where the context came from"
+    title="Context sources"
     command="quench sources"
     shown="quench sources ~/.claude/projects/…/orders.jsonl"
     output={sources}
     truncated
-  >
-    One session's reads, searches, MCP calls and injected files. Uncertain evidence is labelled.
-  </Feature>
+  />
 </section>

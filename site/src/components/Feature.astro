@@ -14,9 +14,6 @@ const { index, title, command, shown = command, output, truncated } = Astro.prop
 ---
 
 <article class="feature">
-  <div class="feature-copy">
-    <h3>{title}</h3>
-    <p><slot /></p>
-  </div>
+  <h3>{title}</h3>
   <Terminal plate={String(index + 1)} title={command} command={shown} output={output} truncated={truncated} />
 </article>

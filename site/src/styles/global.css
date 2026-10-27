@@ -141,18 +141,6 @@ h2 em {
   white-space: nowrap;
 }
 
-.label {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0 0 20px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--mute);
-}
-
 .section-head {
   display: flex;
   align-items: center;
@@ -321,7 +309,7 @@ h2 em {
 
 .lede {
   max-width: 26em;
-  margin: 0 0 36px;
+  margin: 0 0 40px;
   font-size: 19px;
   color: var(--ink-2);
 }
@@ -332,25 +320,6 @@ h2 em {
   align-items: center;
   gap: 14px;
   margin-bottom: 28px;
-}
-
-.specs {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--mute);
-}
-
-.specs i {
-  width: 4px;
-  height: 4px;
-  border: 1px solid var(--cyan-2);
-  transform: rotate(45deg);
 }
 
 /* Exploded view */
@@ -464,18 +433,6 @@ h2 em {
   font-size: 14px;
   letter-spacing: 0.06em;
   text-anchor: middle;
-}
-
-.exploded figcaption {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-align: center;
-  color: var(--mute);
-}
-
-.fig-no {
-  margin-right: 8px;
-  color: var(--cyan);
 }
 
 .parts {
@@ -656,13 +613,6 @@ h2 em {
   font-size: clamp(36px, 4.6vw, 58px);
 }
 
-.section-lede {
-  max-width: 34em;
-  margin: 0 0 64px;
-  font-size: 19px;
-  color: var(--ink-2);
-}
-
 .stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -722,17 +672,11 @@ h2 em {
   color: var(--ink-2);
 }
 
-.footnote {
-  margin: 40px 0 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--mute);
-}
-
 /* Features */
 
-.features h2 {
-  margin-bottom: 32px;
+.features h2,
+.problem h2 {
+  margin-bottom: 56px;
 }
 
 .feature {
@@ -743,7 +687,7 @@ h2 em {
   padding: 32px 0;
 }
 
-.feature-copy {
+.feature h3 {
   position: sticky;
   top: 32px;
 }
@@ -755,12 +699,6 @@ h2 em {
   line-height: 1.15;
 }
 
-.feature-copy p {
-  margin: 0;
-  font-size: 16px;
-  color: var(--ink-2);
-}
-
 /* Install */
 
 .install {
@@ -770,31 +708,6 @@ h2 em {
   align-items: start;
 }
 
-.notes {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: note;
-  font-size: 16px;
-  color: var(--ink-2);
-}
-
-.notes li {
-  counter-increment: note;
-  position: relative;
-  padding: 0 0 14px 28px;
-}
-
-.notes li::before {
-  content: counter(note);
-  position: absolute;
-  left: 0;
-  top: 3px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--cyan);
-}
-
 .install .section-head {
   grid-column: 1 / -1;
   margin-bottom: 0;
@@ -802,10 +715,6 @@ h2 em {
 
 .install h2 em {
   white-space: nowrap;
-}
-
-.notes code {
-  white-space: normal;
 }
 
 .install-steps {
@@ -820,6 +729,7 @@ h2 em {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   margin: 0 calc(-1 * var(--pad));
+  color: var(--mute);
   border-top: 1px solid var(--hair);
   font-family: var(--mono);
   font-size: 12px;
@@ -851,15 +761,6 @@ h2 em {
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--mute);
-}
-
-.tb-source {
-  display: block;
-  grid-column: 1 / -1;
-  border-left: 0;
-  border-top: 1px solid var(--hair);
-  font-size: 11px;
   color: var(--mute);
 }
 
@@ -946,7 +847,7 @@ h2 em {
     margin: 0 auto;
   }
 
-  .feature-copy {
+  .feature h3 {
     position: static;
   }
 
@@ -994,8 +895,7 @@ h2 em {
     display: none;
   }
 
-  .lede,
-  .section-lede {
+  .lede {
     font-size: 17px;
   }
 
