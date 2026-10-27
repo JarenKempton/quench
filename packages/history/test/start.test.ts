@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Event, Session } from "@quench/history";
-import { startingContext } from "../src/index.ts";
+import { startingContext, type Event, type Session } from "../src/index.ts";
 
 const session = (events: Event[]): Session => ({
   id: "s",

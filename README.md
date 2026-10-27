@@ -148,9 +148,12 @@ quench profile --days 90 --scan ~/code --json
 ```
 
 `quench` with no arguments prints a one-screen summary: what every session starts with per
-agent, a few things worth a look (skills listed but never used, the failure that repeats most,
-a project whose instructions dwarf the rest, idle worktrees), the busiest projects, and the
-command to dig into each. `quench profile` prints every table below; `quench profile <section>`
+agent, where each agent's first request goes (system prompt, built-in tools, each MCP server's
+tools, deferred tools, MCP instructions, instructions, skills) as rounded shares of the
+characters it recorded sending, with any part a session did not record, a few things worth a
+look (skills listed but never used, the failure that repeats most, a project whose
+instructions dwarf the rest, idle worktrees), the busiest projects, and the command to dig
+into each. `quench profile` prints every table below; `quench profile <section>`
 prints one. `--json` is the same full result either way. Output is colored in a terminal and plain when piped,
 with `NO_COLOR` set, or on a `dumb` terminal; `FORCE_COLOR=1` forces color.
 
@@ -158,8 +161,8 @@ The first run reads every session in the window, with a progress line; later run
 per-session results kept in `~/.quench/local/session-places.json` (owner-only) and re-read only
 session files whose size or modified time changed. The cache holds what the profile derives
 per session (working folder, recorded instruction paths and sizes, skill names, MCP server
-names, failure kinds with a short error summary), not transcripts. It resets when the Quench
-build changes. `--no-cache` reads everything and writes nothing.
+names, failure kinds with a short error summary, the first request split by source), not
+transcripts. It resets when the Quench build changes. `--no-cache` reads everything and writes nothing.
 
 Needs no arguments. It finds each harness home at its default location or override, reads
 the sessions modified in the last `--days` (default 30) and takes each session's recorded

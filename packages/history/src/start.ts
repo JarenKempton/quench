@@ -1,4 +1,4 @@
-import { contextOf, type PromptTool, type Session } from "@quench/history";
+import { contextOf, type PromptTool, type Session } from "./model.ts";
 
 export type StartPart =
   | { kind: "system"; chars: number }
