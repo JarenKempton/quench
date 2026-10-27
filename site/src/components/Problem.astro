@@ -1,19 +1,13 @@
 ---
 const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", lit: 26, of: 64 },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", lit: 14, of: 20 },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used", lit: 9, of: 12 },
+  { num: "26.0k", unit: "", label: "median tokens before the first reply", lit: 26, of: 64 },
+  { num: "70", unit: "%", label: "of all tokens spent on that load", lit: 14, of: 20 },
+  { num: "9", unit: "/12", label: "skills listed, never used", lit: 9, of: 12 },
 ];
 ---
 
 <section class="problem" id="problem">
-  <p class="eyebrow">The problem</p>
   <h2>Your agent carries a load <em>before you type a word.</em></h2>
-  <p class="section-lede">
-    Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every
-    turn, and none of it shows up anywhere you can see. When an agent drifts, you can't tell whether
-    it was missing something or buried under it.
-  </p>
   <div class="stats">
     {
       stats.map((s) => (
@@ -30,5 +24,5 @@ const stats = [
       ))
     }
   </div>
-  <p class="footnote">* Figures from the demo history behind every sample on this page.</p>
+  <p class="footnote">* demo history</p>
 </section>

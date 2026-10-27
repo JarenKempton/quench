@@ -1,5 +1,4 @@
 ---
-import Command from "./Command.astro";
 import Terminal from "./Terminal.astro";
 
 interface Props {
@@ -14,12 +13,7 @@ interface Props {
 const { index, title, command, shown = command, output, truncated } = Astro.props;
 ---
 
-<article class="feature">
-  <span class="index">{String(index).padStart(2, "0")}</span>
-  <div class="feature-copy">
-    <h3>{title}</h3>
-    <p><slot /></p>
-    <Command text={command} />
-  </div>
+<article class="feature" id={`feature-${index}`} role="tabpanel" aria-label={title}>
+  <p class="feature-copy"><strong>{title}</strong> <slot /></p>
   <Terminal title={command} command={shown} output={output} truncated={truncated} />
 </article>

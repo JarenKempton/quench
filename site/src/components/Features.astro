@@ -4,53 +4,39 @@ import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
 import failures from "../samples/failures.ansi?raw";
 import sources from "../samples/sources.ansi?raw";
+
+const tabs = ["REPORT", "SKILLS", "FAILURES", "SOURCES"];
 ---
 
 <section class="features" id="features">
-  <p class="eyebrow">What it shows</p>
-  <h2>Four questions, answered from <em>history you already have.</em></h2>
+  <h2>Four questions. <em>Four commands.</em></h2>
+  <div class="tabs">
+    {tabs.map((_, i) => <input class="tab-pick" type="radio" name="feature" id={`tab-${i + 1}`} checked={i === 0} />)}
+    <div class="tab-bar" role="tablist">
+      {tabs.map((tab, i) => <label for={`tab-${i + 1}`}><kbd>F{i + 1}</kbd>{tab}</label>)}
+    </div>
 
-  <Feature
-    index={1}
-    title="What each session starts with, and what it costs"
-    command="quench report"
-    output={report}
-    truncated
-  >
-    Per harness: the starting load, peak context, compactions, tool errors, and which models and
-    effort levels you actually use.
-  </Feature>
+    <Feature index={1} title="What does a session start with?" command="quench report" output={report} truncated>
+      Starting load, peak context, compactions, models, effort.
+    </Feature>
 
-  <Feature
-    index={2}
-    title="What loads, and what goes unused"
-    command="quench profile skills"
-    output={skills}
-  >
-    Skills, MCP servers and instruction files, per agent and per project. Quench compares what
-    sessions were offered with what they called, so dead weight stands out.
-  </Feature>
+    <Feature index={2} title="What loads and never gets used?" command="quench profile skills" output={skills}>
+      Skills, MCP servers and instruction files: offered vs. called.
+    </Feature>
 
-  <Feature
-    index={3}
-    title="Failures that repeat"
-    command="quench profile failures"
-    output={failures}
-  >
-    Missing files, missing commands, hook rejections, bad tool input. Grouped by what failed, with
-    streaks and how much output each one fed back into context.
-  </Feature>
+    <Feature index={3} title="Which failures repeat?" command="quench profile failures" output={failures}>
+      Grouped by cause, with streaks and the output they cost.
+    </Feature>
 
-  <Feature
-    index={4}
-    title="What an agent read, and where its context came from"
-    command="quench sources"
-    shown="quench sources ~/.claude/projects/…/orders.jsonl"
-    output={sources}
-    truncated
-  >
-    One session, split by source: native file reads, shell reads and searches, MCP calls, skill
-    loads and the instruction files the harness injected. Uncertain evidence is labelled, not
-    guessed.
-  </Feature>
+    <Feature
+      index={4}
+      title="What did one session read?"
+      command="quench sources"
+      shown="quench sources ~/.claude/projects/…/orders.jsonl"
+      output={sources}
+      truncated
+    >
+      Every read, search, MCP call and injected file, by source.
+    </Feature>
+  </div>
 </section>

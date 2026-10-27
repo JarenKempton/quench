@@ -1,32 +1,19 @@
 ---
 import Terminal from "./Terminal.astro";
+
+const platforms = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
 ---
 
 <section class="install" id="install">
-  <div class="install-copy">
-    <p class="eyebrow">Install</p>
-    <h2>One binary. <em>No setup.</em></h2>
-    <p>
-      Download the binary for your machine from the releases (Linux and macOS, x64 and arm64) and
-      put it on your <code>PATH</code>. Swap in <code>linux-arm64</code>, <code>darwin-x64</code> or{" "}
-      <code>darwin-arm64</code>.
-    </p>
-    <p>
-      Then run <code>quench</code> with no arguments. It finds each harness home on its own, and only
-      reads.
-    </p>
-  </div>
+  <h2>One binary. <em>No setup.</em></h2>
   <div class="install-steps">
+    {platforms.map((p, i) => <input class="os-pick" type="radio" name="os" id={`os-${p}`} checked={i === 0} />)}
+    <div class="os-bar" role="radiogroup" aria-label="Platform">
+      {platforms.map((p) => <label for={`os-${p}`}>{p}</label>)}
+    </div>
     <Terminal title="install" class="term-plain">
-      <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version</Terminal
+      <span class="prompt">$</span> <span class="cmd">gh release download --repo JarenKempton/quench --pattern "quench-{platforms.map((p) => <span class={`os os-${p}`}>{p}</span>)}" --output ~/.local/bin/quench</span>{"\n"}<span class="prompt">$</span> <span class="cmd">chmod +x ~/.local/bin/quench</span>{"\n"}<span class="prompt">$</span> <span class="cmd">quench</span>{"\n"}{"\n"}<span class="d"># update later</span>{"\n"}<span class="prompt">$</span> <span class="cmd">quench update</span><span class="cursor" aria-hidden="true"></span><span class="os-darwin">{"\n"}{"\n"}<span class="d"># downloaded with a browser?</span>{"\n"}<span class="prompt">$</span> <span class="cmd">xattr -d com.apple.quarantine quench</span></span></Terminal
     >
-    <Terminal title="update" class="term-plain">
-      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly<span class="cursor" aria-hidden="true"></span></Terminal
-    >
-    <p class="note">
-      <code>SHA256SUMS</code> in each release lists every binary's checksum. The macOS binaries are
-      not signed; a copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code>{" "}
-      before it runs.
-    </p>
+    <p class="note">Click a line to select it. Checksums: <code>SHA256SUMS</code> in each release.</p>
   </div>
 </section>
