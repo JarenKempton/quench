@@ -1,26 +1,38 @@
 ---
 import Command from "./Command.astro";
+import Exploded from "./Exploded.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
 
-<section class="hero">
+<section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts <em>hot.</em></h1>
+    <p class="section-tag"><span class="bubble">A</span>A context profiler for coding agents</p>
+    <h1 id="hero-title">Every session starts <em>loaded.</em></h1>
     <p class="lede">
-      See what your coding agents load, what it costs, and where they go wrong. Quench reads the
-      session history Claude Code, Codex and Pi already keep on your machine.
+      See what your coding agents load, what it costs, and where they go wrong. Quench reads the session history
+      Claude Code, Codex and Pi already keep on your machine, and draws you the parts.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
-    <ul class="facts">
-      <li><span class="dot g"></span>Read-only</li>
-      <li><span class="dot c"></span>Zero setup</li>
-      <li><span class="dot y"></span>Stays on your machine</li>
+    <ul class="specs" aria-label="Specification">
+      <li><span>Access</span>Read-only</li>
+      <li><span>Setup</span>None</li>
+      <li><span>Data</span>Stays on your machine</li>
     </ul>
   </div>
-  <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+  <Exploded />
+</section>
+
+<section class="hero-plate" aria-label="Sample summary output">
+  <div class="plate-note">
+    <p class="note-head">Note 1</p>
+    <p>
+      Run <code>quench</code> with no arguments. It finds each harness home on its own and prints what every
+      session starts with, what is worth a look, and your busiest projects.
+    </p>
+  </div>
+  <Terminal plate="A" title="~/code/acme-api" command="quench" output={summary} />
 </section>
