@@ -23,6 +23,9 @@ A `Session` is an ordered list of typed events:
 | `skills`                    | skills the harness listed to the model: names, paths when recorded, listing length                                     |
 | `invocation`                | a named skill or command invoked, `by` model or user                                                                   |
 | `mcp_call`                  | an MCP tool call: server and tool names, call id when recorded, `inScript` for a Codex code-mode script call           |
+| `prompt`                    | an API request's system prompt length and each tool definition (name, MCP server, length, deferred) when recorded      |
+| `deferred_tools`            | tools listed by name only, loaded on demand: names and listing length                                                  |
+| `mcp_instructions`          | MCP server instructions sent to the model: servers and length                                                          |
 
 Subagent sessions point at their parent with `parent`.
 
