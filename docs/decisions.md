@@ -70,10 +70,9 @@ retired with it and live in git history.
   Unsupported adapters and missing/ambiguous results remain explicit. Source filenames do not
   determine relevance, and current files never fill historical gaps. Returned tool text is
   fingerprinted without claiming complete delivery, continued retention or causal influence.
-- **Releases run on two channels, nightly and stable.** Every merge to `main` publishes a
-  nightly pre-release. Promoting rebuilds the latest nightly's commit as stable, so stable only
-  ships code nightly users have already run. The version is stamped at build time from tags and
-  conventional commits, never committed. `quench update` follows the installed channel.
+- **Releases run on two channels, nightly and stable.** Every merge to `main` replaces one
+  rolling `nightly` pre-release; a maintainer cuts stable by choosing patch, minor or major.
+  The version is stamped at build time, never committed. `quench update` downloads with `gh`.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

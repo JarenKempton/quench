@@ -9,14 +9,14 @@ import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
 import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
-import { update, thisInstall } from "./commands/update.ts";
+import { update } from "./commands/update.ts";
 import { version } from "./version.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
 
 Usage:
   quench --version                     the installed version
-  quench update [--channel stable|nightly]  install the newest release of this channel (or switch channel)
+  quench update [--channel stable|nightly]  install the newest release of your channel, or switch channel
   quench [--days 30] [--scan <dir>]   a short summary: what sessions start with and what is worth a look
   quench profile [section] [--days 30] [--scan <dir>] [--json]
                                        every table, or one section: ${SECTIONS.join(", ")}
@@ -179,7 +179,7 @@ switch (command) {
     });
     break;
   case "update":
-    process.exitCode = await update(thisInstall(version), values.channel);
+    process.exitCode = await update(version, values.channel);
     break;
   case "runs":
     process.exitCode = await runs(home, rest[0], { json: values.json });
