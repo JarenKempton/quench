@@ -14,6 +14,7 @@ export type ToolCall = {
   ok: boolean | null;
   resultChars: number | null;
   inScript: boolean;
+  loadedTools?: string[];
 };
 
 export type Run = {
@@ -139,6 +140,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
         if (call) {
           call.ok = event.isError === null ? null : !event.isError;
           call.resultChars = event.chars;
+          if (event.loadedTools) call.loadedTools = event.loadedTools;
         }
         break;
       }

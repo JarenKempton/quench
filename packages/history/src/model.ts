@@ -74,6 +74,7 @@ export type EventKind =
       callId: string | null;
       isError: boolean | null;
       chars: number;
+      loadedTools?: string[];
       failure?: Failure;
       fileRead?: FileReadResult;
     }
