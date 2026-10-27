@@ -104,6 +104,9 @@ class Tally {
         case "instructions":
         case "skills":
         case "invocation":
+        case "prompt":
+        case "deferred_tools":
+        case "mcp_instructions":
         case "mcp_call":
           break;
         default:

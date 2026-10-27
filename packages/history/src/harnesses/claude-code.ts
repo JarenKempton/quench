@@ -20,6 +20,7 @@ import type {
   Session,
   Usage,
 } from "../model.ts";
+import { mcpServerOf } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -83,6 +84,15 @@ const Line = z.looseObject({
   message: ApiMessage.optional(),
   /** On `attachment` lines: context Claude Code added for the model (see `Attachment`). */
   attachment: z.unknown().optional(),
+  /** On `api-request-shape` lines: the system prompt and tool definitions of the API request. */
+  shape: z
+    .looseObject({
+      system: z.array(z.looseObject({ text: z.string().nullish() })).nullish(),
+      tools: z
+        .array(z.looseObject({ name: z.string(), defer_loading: z.boolean().nullish() }))
+        .nullish(),
+    })
+    .nullish(),
   toolUseResult: z.unknown().optional(),
 });
 type Line = z.infer<typeof Line>;
@@ -106,6 +116,12 @@ const Attachment = z.looseObject({
   content: z.unknown().optional(),
   /** On `skill_listing`: names of the skills listed. */
   names: z.array(z.string()).nullish(),
+  /** On `deferred_tools_delta` and `mcp_instructions_delta`: names added. */
+  addedNames: z.array(z.string()).nullish(),
+  /** On `deferred_tools_delta`: the lines naming each deferred tool. */
+  addedLines: z.array(z.string()).nullish(),
+  /** On `mcp_instructions_delta`: each server's instructions. */
+  addedBlocks: z.array(z.string()).nullish(),
 });
 
 const InstructionFile = z.looseObject({
@@ -322,11 +338,52 @@ function eventsOf(line: Line): EventKind[] {
       return assistant(line);
     case "user":
       return user(line);
+    case "api-request-shape":
+      return line.shape ? [requestShape(line.shape)] : [];
     case "attachment":
-      return [...instructions(line.attachment), ...skillListing(line.attachment)];
+      return [
+        ...instructions(line.attachment),
+        ...skillListing(line.attachment),
+        ...promptParts(line.attachment),
+      ];
     default:
       return [];
   }
+}
+
+const joinedLength = (parts: string[]) => parts.join("\n").length;
+
+function requestShape(shape: NonNullable<Line["shape"]>): EventKind {
+  return {
+    type: "prompt",
+    system: shape.system ? joinedLength(shape.system.map((part) => part.text ?? "")) : null,
+    tools:
+      shape.tools?.map((tool) => ({
+        name: tool.name,
+        server: mcpServerOf(tool.name),
+        chars: JSON.stringify(tool).length,
+        deferred: tool.defer_loading === true,
+      })) ?? null,
+  };
+}
+
+function promptParts(raw: unknown): EventKind[] {
+  const attachment = Attachment.safeParse(raw);
+  if (!attachment.success) return [];
+  const a = attachment.data;
+  if (a.type === "deferred_tools_delta" && a.addedNames?.length)
+    return [
+      { type: "deferred_tools", names: a.addedNames, chars: joinedLength(a.addedLines ?? []) },
+    ];
+  if (a.type === "mcp_instructions_delta" && a.addedNames?.length)
+    return [
+      {
+        type: "mcp_instructions",
+        servers: a.addedNames,
+        chars: joinedLength(a.addedBlocks ?? []),
+      },
+    ];
+  return [];
 }
 
 function skillListing(raw: unknown): EventKind[] {
