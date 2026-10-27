@@ -9,12 +9,14 @@ import { runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
 import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
-import { version } from "../package.json";
+import { update } from "./commands/update.ts";
+import { version } from "./version.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
 
 Usage:
   quench --version                     the installed version
+  quench update [--channel stable|nightly]  install the newest release of your channel, or switch channel
   quench [--days 30] [--scan <dir>]   a short summary: what sessions start with and what is worth a look
   quench profile [section] [--days 30] [--scan <dir>] [--json]
                                        every table, or one section: ${SECTIONS.join(", ")}
@@ -59,6 +61,7 @@ const { positionals, values } = parseArgs({
     version: { type: "boolean", short: "v", default: false },
     "no-cache": { type: "boolean", default: false },
     session: { type: "string" },
+    channel: { type: "string" },
   },
 });
 
@@ -108,6 +111,14 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
 
 if (values.session !== undefined && command !== "runs") {
   process.stderr.write("--session is only available for runs\n");
+  process.exit(1);
+}
+if (values.channel !== undefined && command !== "update") {
+  process.stderr.write("--channel is only available for update\n");
+  process.exit(1);
+}
+if (values.channel !== undefined && values.channel !== "stable" && values.channel !== "nightly") {
+  process.stderr.write("--channel must be stable or nightly\n");
   process.exit(1);
 }
 
@@ -172,6 +183,9 @@ switch (command) {
           ? { hostHistory: values["host-history"] }
           : {}),
     });
+    break;
+  case "update":
+    process.exitCode = await update(version, values.channel);
     break;
   case "runs":
     process.exitCode = await runs(home, rest[0], {
