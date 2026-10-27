@@ -1,0 +1,5 @@
+[36m▍[39m[1mRecorded skills · what session histories listed and used · last 30 days[22m
+  Agent        Sessions  Listed  Listing size  Used  Never used
+  Claude Code        19      12    1.1k chars     3           9
+  Most used · Claude Code: screenshot 6, deploy 5, review 5
+  Listed, never used · Claude Code: api-docs, brand-voice, changelog, db-migrate, i18n-check, load-test, perf-audit, release-notes, … 1 more in --json

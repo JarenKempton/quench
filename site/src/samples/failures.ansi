@@ -1,0 +1,7 @@
+[36m▍[39m[1mRepeated failures · tool calls that failed the same way · last 30 days[22m
+  Project     Kind             What                         Failures  Sessions  In a row     Output  Agents
+  acme-api    rejected         guard: blocked — force push         7         4         4  525 chars  Claude Code
+  acme-api    no such file     docs/runbook.md                     5         5         1  100 chars  Claude Code
+  storefront  no such command  pytest                              2         2         1  218 chars  Codex
+  acme-api    no such command  pytest                              2         2         1  218 chars  Codex
+  16 failed tool calls in all, returning 1.1k chars of output. In a row: the longest streak of this failure with no other result between.

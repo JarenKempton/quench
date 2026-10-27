@@ -1,0 +1,29 @@
+[46m[30m[1m QUENCH [22m[39m[49m  [1mlast 30 days[22m [90m·[39m 23 sessions [90m· Claude Code 19 · Codex 4[39m
+
+[36m▍[39m[1mEvery session starts with[22m
+  [1mClaude Code[22m  1.6 KB instructions  12 skills      [36m████████████[39m[90m[2m[22m[39m [90m1.1k chars[39m
+  [1mCodex[22m        [90mno instructions[39m      [90mno skill list[39m
+  [90mProjects add their own instruction files on top.[39m
+
+[36m▍[39m[1mWorth a look[22m
+  [41m[30m[1m 1 [22m[39m[49m [1m9 skills listed but never used[22m
+     [90mClaude Code 9 — each one costs context up front[39m
+     [36m→ quench profile skills[39m
+
+  [43m[30m[1m 2 [22m[39m[49m [1m"guard: blocked — force push" failed 7× in acme-api[22m
+     [90m4 sessions · 525 chars of output[39m
+     [36m→ quench profile failures[39m
+
+  [45m[30m[1m 3 [22m[39m[49m [1macme-api starts with 13.0k chars of instructions[22m
+     [90m3.6× your next project[39m
+     [36m→ quench profile instructions[39m
+
+  [100m[37m[1m 4 [22m[39m[49m [1m1 worktree idle for 30 days[22m
+     [36m→ quench worktrees[39m
+
+[36m▍[39m[1mBusiest projects[22m
+  [1macme-api[22m    12 sessions  [32mtoday[39m  [36m████████████[39m[90m[2m[22m[39m [90m13.0k[39m
+  [1mstorefront[22m   8 sessions  [32mtoday[39m  [36m███[39m[90m[2m█████████[22m[39m [90m3.6k[39m
+  [1mhandbook[22m     3 sessions  [32mtoday[39m  [36m██[39m[90m[2m██████████[22m[39m [90m2.1k[39m
+
+[90mMore: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help[39m

@@ -1,0 +1,27 @@
+---
+import Command from "./Command.astro";
+import Terminal from "./Terminal.astro";
+
+interface Props {
+  index: number;
+  title: string;
+  command: string;
+  shown?: string;
+  output: string;
+  truncated?: boolean;
+  flip?: boolean;
+  wide?: boolean;
+}
+
+const { index, title, command, shown = command, output, truncated, flip = false, wide = false } = Astro.props;
+---
+
+<article class:list={["feature", { flip, wide }]}>
+  <div class="feature-copy">
+    <span class="index">{String(index).padStart(2, "0")}</span>
+    <h3>{title}</h3>
+    <p><slot /></p>
+    <Command text={command} />
+  </div>
+  <Terminal title={command} command={shown} output={output} truncated={truncated} />
+</article>

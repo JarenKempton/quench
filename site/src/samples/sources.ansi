@@ -1,0 +1,22 @@
+Recorded file reads · claude-code:orders
+Evidence: session history · /tmp/me/.claude/projects/-tmp-me-code-acme-api/orders.jsonl
+Native file-read tracing: supported · 3 attempts · 1 other tool calls without source attribution
+
+returned · /tmp/me/code/acme-api/src/orders/router.ts · call t1
+  /tmp/me/code/acme-api/src/orders/router.ts · reported lines 1–84 of 84
+  recorded tool text: 1000 characters · sha256 16c537b87d886699280cbac33b3169c1bcd4f435ec1c949ed43108fe81471fd0
+
+returned · /tmp/me/code/acme-api/src/middleware/limit.ts · call t2
+  /tmp/me/code/acme-api/src/middleware/limit.ts · reported lines 1–31 of 31
+  recorded tool text: 780 characters · sha256 86716baadf245eee1d1da6dd9a0e63924dde44e865ad5363b86707830ae93a2d
+
+failed · /tmp/me/code/acme-api/docs/runbook.md · call t8
+  The tool reported an error.
+
+Shell reads: 1 reads and 1 searches and 0 script file accesses from 6 recorded commands
+  ran · cat · /tmp/me/code/acme-api/package.json · relative to session folder · call t3
+  ran · rg search "rateLimit" · /tmp/me/code/acme-api/src · relative to session folder · call t4
+
+MCP calls: 2 to 1 servers
+  returned · tracker · get_issue · 240 characters · call t6
+  returned · tracker · add_comment · 2 characters · call t7

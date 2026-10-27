@@ -1,0 +1,14 @@
+Last 30 days
+
+Claude Code
+  Sessions          19 (+0 subagent)
+  Agent runs        19
+  Model calls       53
+  Tokens processed  2.0M
+  Starting load     median 26.0k  (p10 26.0k, p90 26.0k)  (70% of tokens processed)
+  Peak context      median 50.4k  (p10 26.0k, p90 63.9k)
+  Compactions       0 in 0 sessions
+  Tool calls        34 (12 errors)
+  Models            claude-opus-5-5 100%
+  Effort            unknown 64%, high 36%
+
