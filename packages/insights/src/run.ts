@@ -5,6 +5,7 @@ import {
   type Origin,
   type SenderEvidence,
   type Session,
+  type Usage,
 } from "@quench/history";
 
 export type Run = {
@@ -23,6 +24,7 @@ export type Run = {
   inferences: number;
   contextStart: number | null;
   contextPeak: number;
+  usage: Usage;
   toolCalls: number;
   toolErrors: number;
   compactions: number;
@@ -45,6 +47,7 @@ const emptyRun = (): Run => ({
   inferences: 0,
   contextStart: null,
   contextPeak: 0,
+  usage: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
   toolCalls: 0,
   toolErrors: 0,
   compactions: 0,
@@ -81,6 +84,12 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
         run.inferences += 1;
         run.contextStart ??= context;
         run.contextPeak = Math.max(run.contextPeak, context);
+        run.usage = {
+          input: run.usage.input + event.usage.input,
+          cacheRead: run.usage.cacheRead + event.usage.cacheRead,
+          cacheWrite: run.usage.cacheWrite + event.usage.cacheWrite,
+          output: run.usage.output + event.usage.output,
+        };
         run.model = event.model ?? run.model;
         run.effort = event.effort ?? run.effort;
         break;

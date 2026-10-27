@@ -53,6 +53,15 @@ test("runs shows each prompt, what the agent did, and the reply", async () => {
   expect(stdout).toContain('→  "/review now"');
 });
 
+test("runs --session finds a session by id in any harness home", async () => {
+  const found = await quench("runs", "--session", "c1", "--json");
+  expect(found.code).toBe(0);
+  expect(JSON.parse(found.stdout).length).toBeGreaterThan(0);
+  const missing = await quench("runs", "--session", "nope");
+  expect(missing.code).toBe(1);
+  expect(missing.stderr).toContain("No session with id nope");
+});
+
 test("corrections asks for a key before sending anything, and a dry run counts what it would send", async () => {
   const noKey = await quench("corrections");
   expect(noKey.code).toBe(2);

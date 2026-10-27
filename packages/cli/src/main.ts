@@ -21,7 +21,8 @@ Usage:
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
   quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
-  quench runs [session-file] [--json]  one session as prompt → what the agent did → your reply
+  quench runs [session-file | --session <id>] [--json]
+                                       one session as prompt → what the agent did → your reply
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
@@ -57,6 +58,7 @@ const { positionals, values } = parseArgs({
     help: { type: "boolean", short: "h", default: false },
     version: { type: "boolean", short: "v", default: false },
     "no-cache": { type: "boolean", default: false },
+    session: { type: "string" },
   },
 });
 
@@ -101,6 +103,11 @@ if (values["theme-limit"] !== undefined && !values.themes) {
 }
 if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LIMIT) {
   process.stderr.write(`--theme-limit must be a whole number between 1 and ${MAX_THEME_LIMIT}\n`);
+  process.exit(1);
+}
+
+if (values.session !== undefined && command !== "runs") {
+  process.stderr.write("--session is only available for runs\n");
   process.exit(1);
 }
 
@@ -167,7 +174,10 @@ switch (command) {
     });
     break;
   case "runs":
-    process.exitCode = await runs(home, rest[0], { json: values.json });
+    process.exitCode = await runs(home, rest[0], {
+      json: values.json,
+      ...(values.session ? { session: values.session } : {}),
+    });
     break;
   default:
     process.stderr.write(`unknown command "${command}"\n\n${USAGE}`);
