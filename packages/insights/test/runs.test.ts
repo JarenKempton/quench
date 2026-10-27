@@ -145,3 +145,23 @@ test("signals bucket replies and count the corrected ones", () => {
   expect(buckets("Context when the reply came")).toEqual([["under 50k", 2, 1]]);
   expect(buckets("Harness")).toEqual([["Claude Code", 2, 1]]);
 });
+
+test("each run lists its tool calls in order, with server, outcome and result size", () => {
+  const [run] = runs(
+    session("s", null, [
+      say(0, "user", "go"),
+      call(1, 1_000, "m", "high"),
+      { type: "mcp_call", id: "a", server: "biz", tool: "list_items", at: at(2) },
+      { type: "tool_call", id: "a", name: "mcp__biz__list_items", at: at(2) },
+      { type: "tool_call", id: "b", name: "exec", at: at(3) },
+      { type: "mcp_call", id: "b", server: "biz", tool: "get_item", inScript: true, at: at(3) },
+      { type: "tool_result", callId: "a", isError: false, chars: 120, at: at(4) },
+      { type: "tool_result", callId: "b", isError: true, chars: 9, at: at(5) },
+    ]),
+  );
+  expect(run?.calls).toEqual([
+    { tool: "list_items", server: "biz", ok: true, resultChars: 120, inScript: false },
+    { tool: "exec", server: null, ok: false, resultChars: 9, inScript: false },
+    { tool: "get_item", server: "biz", ok: null, resultChars: null, inScript: true },
+  ]);
+});
