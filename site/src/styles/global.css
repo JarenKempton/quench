@@ -536,7 +536,7 @@ h3 {
   padding: 110px 0;
 }
 
-.install-copy p {
+.install-copy p:not(.eyebrow) {
   color: var(--ink-2);
   margin: 22px 0 0;
 }

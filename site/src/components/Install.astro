@@ -18,14 +18,14 @@ import Terminal from "./Terminal.astro";
   </div>
   <div class="install-steps">
     <Terminal title="install" class="term-plain">
-      <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version
-    </Terminal>
+      <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version</Terminal
+    >
     <Terminal title="update" class="term-plain">
-      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly
-    </Terminal>
+      <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
+    >
     <p class="note">
       <code>SHA256SUMS</code> in each release lists every binary's checksum. The macOS binaries are
-      not signed; a copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code>
+      not signed; a copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code>{" "}
       before it runs.
     </p>
   </div>
