@@ -32,6 +32,23 @@ Swap in `linux-arm64`, `darwin-x64` or `darwin-arm64`. `SHA256SUMS` in the relea
 binary's checksum. The macOS binaries are not signed; a copy downloaded with a browser needs
 `xattr -d com.apple.quarantine quench` before it runs.
 
+Update in place with `quench update`. It installs the newest release of the channel you're on
+after checking its SHA-256. The repository is private for now, so it uses your `gh` sign-in
+(or `GH_TOKEN`).
+
+### Release channels
+
+| Channel | Published                                                               | Version                     |
+| ------- | ----------------------------------------------------------------------- | --------------------------- |
+| stable  | When a maintainer promotes a nightly; ships that nightly's exact commit | `0.2.0`                     |
+| nightly | On every merge to `main`, as a GitHub pre-release                       | `0.2.0-nightly.20261027.14` |
+
+`quench update --channel nightly` switches to nightly, and `--channel stable` switches back.
+Nightly versions preview the next stable version, worked out from conventional commits since
+the last one (`feat` bumps the minor version, `fix` the patch; breaking changes bump the minor
+version until 1.0). Maintainers promote with **Actions → Release → Run workflow**, optionally
+giving a different version.
+
 Then run `quench` with no arguments for the profile of every agent and project in your
 history.
 
