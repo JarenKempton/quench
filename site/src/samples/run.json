@@ -1,0 +1,50 @@
+{
+  "prompt": "Add rate limiting to the orders endpoint",
+  "model": "claude-opus-5-5",
+  "inferences": 4,
+  "contextStart": 26004,
+  "contextPeak": 40503,
+  "usage": {
+    "input": 13,
+    "cacheRead": 141600,
+    "cacheWrite": 3200,
+    "output": 660
+  },
+  "startingContext": {
+    "tokens": 26004,
+    "parts": [
+      {
+        "kind": "system",
+        "chars": 9000
+      },
+      {
+        "kind": "tools",
+        "count": 12,
+        "chars": 18000
+      },
+      {
+        "kind": "mcp_tools",
+        "server": "browser",
+        "count": 22,
+        "chars": 44000
+      },
+      {
+        "kind": "mcp_tools",
+        "server": "tracker",
+        "count": 4,
+        "chars": 8000
+      },
+      {
+        "kind": "instructions",
+        "files": 2,
+        "chars": 12987
+      },
+      {
+        "kind": "skills",
+        "count": 12,
+        "chars": 1103
+      }
+    ],
+    "unrecorded": []
+  }
+}

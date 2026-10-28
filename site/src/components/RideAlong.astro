@@ -1,0 +1,33 @@
+---
+import { inputTokens, kilo, percent, requests, startTokens } from "../context.ts";
+
+const resent = startTokens * requests;
+const rest = inputTokens - resent;
+---
+
+<figure class="ride">
+  <figcaption class="window-head">
+    <span class="fig-no">Fig. 2</span>
+    <span>Input tokens across one run of {requests} requests, to scale.</span>
+  </figcaption>
+  <div class="ride-bar" aria-hidden="true">
+    {
+      Array.from({ length: requests }, (_, i) => (
+        <span class="ride-load" style={`flex-basis:${percent(startTokens / inputTokens)}`}>
+          {i + 1}
+        </span>
+      ))
+    }
+    <span class="ride-rest" style={`flex-basis:${percent(rest / inputTokens)}`} />
+  </div>
+  <dl class="ride-key">
+    <div>
+      <dt><i class="swatch ride-load"></i>Starting load, sent with every request</dt>
+      <dd>{kilo(resent)} · {percent(resent / inputTokens)}</dd>
+    </div>
+    <div>
+      <dt><i class="swatch ride-rest"></i>Conversation and tool results</dt>
+      <dd>{kilo(rest)}</dd>
+    </div>
+  </dl>
+</figure>

@@ -1,0 +1,80 @@
+---
+import { kilo, model, percent, segments, startTokens, windowTokens } from "../context.ts";
+
+const cols = 50;
+const rows = 20;
+const cell = 20;
+const perCell = windowTokens / (cols * rows);
+const used = startTokens / perCell;
+
+let x = 0;
+const cells = segments.map((s) => {
+  const w = (s.tokens / perCell) * cell;
+  const seg = { ...s, x, w };
+  x += w;
+  return seg;
+});
+
+const tiers = segments.map((s) => (s.kind === "skills" ? 2 : s.kind === "prompt" ? 3 : 1));
+let start = 0;
+const labels = segments.map((s, i) => {
+  const label = { ...s, left: start, center: start + s.share / 2, tier: tiers[i] };
+  start += s.share;
+  return label;
+});
+---
+
+<figure class="window">
+  <figcaption class="window-head">
+    <span class="fig-no">Fig. 1</span>
+    <span>Context window, <code>{model}</code>: 1,000,000 tokens, to scale. One square is 1,000 tokens.</span>
+  </figcaption>
+
+  <div class="window-drawing">
+    <svg viewBox={`0 -40 ${cols * cell} ${rows * cell + 40}`} aria-hidden="true">
+      <defs>
+        <pattern id="grid-minor" width={cell} height={cell} patternUnits="userSpaceOnUse">
+          <path d={`M${cell} 0V${cell}H0`} class="grid-line" />
+        </pattern>
+      </defs>
+      <rect class="well" x="0" y="0" width={cols * cell} height={rows * cell} />
+      <rect class="grid" x="0" y="0" width={cols * cell} height={rows * cell} fill="url(#grid-minor)" />
+      {cells.map((c) => <rect class:list={["seg", `seg-${c.kind}`, { largest: c.largest }]} x={c.x} y="0" width={c.w} height={cell} />)}
+      <rect class="frame" x="0" y="0" width={cols * cell} height={rows * cell} />
+      <g class="dim">
+        <line x1="0" y1="-26" x2="0" y2="-6" />
+        <line x1={used * cell} y1="-26" x2={used * cell} y2="-6" />
+        <line x1="0" y1="-16" x2={used * cell} y2="-16" />
+      </g>
+    </svg>
+    <p class="free-label">{kilo(windowTokens - startTokens)} tokens left for the work</p>
+    <p class="used-label" style={`left:${percent(used / cols)}`}>
+      <b>{kilo(startTokens)}</b> tokens, {percent(startTokens / windowTokens)}, before the agent does anything
+    </p>
+  </div>
+
+  <div class="detail">
+    <p class="detail-head"><span class="fig-no">Detail A</span> Those {kilo(startTokens)} tokens, by layer</p>
+    <div class="detail-bar" aria-hidden="true">
+      {segments.map((s) => <span class:list={["seg", `seg-${s.kind}`, { largest: s.largest }]} style={`flex-basis:${percent(s.share)}`} />)}
+    </div>
+    <ol class="detail-labels">
+      {
+        labels.map((l) => (
+          <li
+            class:list={[`tier-${l.tier}`, { largest: l.largest }]}
+            style={l.tier === 1 ? `left:${percent(l.left)}` : undefined}
+          >
+            <i class:list={["swatch", "seg", `seg-${l.kind}`, { largest: l.largest }]} />
+            <b>{l.name}</b>
+            <span>{l.kind === "prompt" ? `${l.chars} chars` : kilo(l.tokens)}</span>
+          </li>
+        ))
+      }
+    </ol>
+    <p class="detail-note">
+      Measured by <code>quench runs --json</code> on one demo session; tokens are split across layers in proportion to
+      their characters.
+    </p>
+  </div>
+</figure>

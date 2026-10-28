@@ -4,19 +4,16 @@ import Terminal from "./Terminal.astro";
 ---
 
 <section class="install" id="install" aria-labelledby="install-title">
-  <SectionHead name="Install" />
-  <div class="install-grid">
-    <div>
-      <h2 id="install-title">One binary, no setup.</h2>
-      <p class="body">Linux and macOS, x64 and arm64. Quench only reads your history, and it stays on your machine.</p>
-    </div>
-    <div class="install-steps">
-      <Terminal title="install">
-        <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench</Terminal
-      >
-      <Terminal title="update">
-        <span class="prompt">$</span> quench update</Terminal
-      >
-    </div>
+  <SectionHead no="03" name="Install" />
+  <div class="install-copy">
+    <h2 id="install-title">One binary. <em>No setup.</em></h2>
+  </div>
+  <div class="install-steps">
+    <Terminal plate="6" title="install">
+      <span class="prompt">$</span> gh release download --repo JarenKempton/quench \{"\n"}    --pattern "quench-linux-x64" --output ~/.local/bin/quench{"\n"}<span class="prompt">$</span> chmod +x ~/.local/bin/quench{"\n"}<span class="prompt">$</span> quench --version</Terminal
+    >
+    <Terminal plate="7" title="update">
+      <span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
+    >
   </div>
 </section>

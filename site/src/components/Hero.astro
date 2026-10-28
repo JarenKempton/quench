@@ -1,19 +1,27 @@
 ---
 import Command from "./Command.astro";
-import Layers from "./Layers.astro";
+import Terminal from "./Terminal.astro";
+import Window from "./Window.astro";
+import summary from "../samples/summary.ansi?raw";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <h1 id="hero-title">Your agent's context is built in layers.</h1>
-    <p class="lede">
-      System prompt, built-in tools, MCP servers, instruction files, skills. Every turn carries all of them. Quench
-      shows each layer and what it costs, so you can trim what you don't need.
-    </p>
-    <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
-      <Command text="quench" />
+    <h1 id="hero-title">Every session starts <em>loaded.</em></h1>
+    <div class="hero-side">
+      <p class="lede">
+        Before your agent does anything, part of its context window is already spent, and it rides along on every turn.
+        Quench shows what fills it.
+      </p>
+      <div class="hero-actions">
+        <a class="btn" href="#install">Install</a>
+        <Command text="quench" />
+      </div>
     </div>
   </div>
-  <Layers />
+  <Window />
+</section>
+
+<section class="hero-plate" aria-label="Sample summary output">
+  <Terminal plate="1" title="~/code/acme-api" command="quench" output={summary} />
 </section>

@@ -2,16 +2,19 @@
 import { ansiToHtml } from "../ansi.ts";
 
 interface Props {
+  plate: string;
   title: string;
   command?: string;
   output?: string;
   truncated?: boolean;
+  class?: string;
 }
 
-const { title, command, output, truncated = false } = Astro.props;
+const { plate, title, command, output, truncated = false, class: extra } = Astro.props;
 ---
 
-<figure class="term" aria-label={`${title} output`}>
-  <figcaption>{title}</figcaption>
+<figure class:list={["plate", extra]} aria-label={`Plate ${plate}: ${title} output`}>
+  <i class="crop tl"></i><i class="crop br"></i>
+  <figcaption><span class="plate-no">{plate}</span>{title}</figcaption>
   <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot />{truncated && <>{"\n"}<span class="d">⋯</span></>}</pre>
 </figure>
