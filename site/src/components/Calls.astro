@@ -1,0 +1,56 @@
+---
+import { box } from "../iso.ts";
+import { calls, layers, prompt, startChars, startTokens, windowTokens } from "../samples/context.ts";
+
+const size = 40;
+const tankHeight = 170;
+const step = 92;
+const fill = (startTokens / windowTokens) * tankHeight;
+
+let z = 0;
+const band = [...layers, { key: "prompt", chars: prompt.chars }].map((l) => {
+  const h = (l.chars / startChars) * fill;
+  const slab = { key: l.key, faces: box(0, 0, z, size, size, h) };
+  z += h;
+  return slab;
+});
+const loadTop = box(0, 0, 0, size, size, fill).top;
+const tank = box(0, 0, 0, size, size, tankHeight);
+const ground = box(-4, -4, 0, size + 14, size + 14, 0).top;
+const list = Array.from({ length: calls }, (_, i) => i + 1);
+---
+
+<svg
+  class="calls"
+  viewBox={`-50 -185 ${step * (calls - 1) + 100} 260`}
+  role="img"
+  aria-label={`${calls} model calls in one run, each a full context window carrying the same starting layers`}
+>
+  {
+    list.map((n, i) => (
+      <g transform={`translate(${i * step} 0)`}>
+        <g class="call" style={`--i:${i}`}>
+        <polygon class="ground" points={ground} />
+        <g class="glass back">
+          <polygon points={tank.top} />
+        </g>
+        {band.map((l) => (
+          <g class:list={["block", l.key]}>
+            <polygon class="f-left" points={l.faces.left} />
+            <polygon class="f-right" points={l.faces.right} />
+          </g>
+        ))}
+        <polygon class="load-top" points={loadTop} />
+        <g class="glass">
+          <polygon points={tank.left} />
+          <polygon points={tank.right} />
+          <polygon points={tank.top} />
+        </g>
+        <text class="call-label" x="0" y="72">
+          {n}
+        </text>
+        </g>
+      </g>
+    ))
+  }
+</svg>

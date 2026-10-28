@@ -1,6 +1,6 @@
 ---
 import Command from "./Command.astro";
-import Layers from "./Layers.astro";
+import Window from "./Window.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
@@ -8,25 +8,31 @@ import summary from "../samples/summary.ansi?raw";
 <section class="hero">
   <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts in layers.</h1>
+    <h1>Every session starts <em>pre-loaded.</em></h1>
     <p class="lede">
-      System prompt, built-in tools, MCP servers, instruction files, skills. Your coding agent sends
-      the same stack on every turn. Quench reads the session history Claude Code, Codex and Pi already
-      keep on your machine, and shows what each layer costs.
+      Before you type, the harness fills the context window with layers: system prompt, built-in
+      tools, MCP servers, instruction files, skills. Quench reads the session history Claude Code,
+      Codex and Pi already keep, and shows what each layer takes.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
-    <p class="facts">Read-only · Zero setup · Stays on your machine</p>
+    <ul class="facts">
+      <li class="mcp">Read-only</li>
+      <li class="tools">Zero setup</li>
+      <li class="system">Stays on your machine</li>
+    </ul>
   </div>
-  <figure class="hero-figure">
-    <Layers labelled />
+  <figure class="diagram">
+    <Window />
     <figcaption>
-      The first request of one demo session: 26.0k tokens, split by <code>quench runs --json</code>.
+      Fig. 1 — One demo session's first request, measured by <code>quench runs --json</code>. Layers
+      sized by characters.
     </figcaption>
   </figure>
   <div class="hero-term">
-    <Terminal title="~/code/acme-api" command="quench" output={summary} />
+    <p class="callout">Run it with no arguments</p>
+    <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
   </div>
 </section>
