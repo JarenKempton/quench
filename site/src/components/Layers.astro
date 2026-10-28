@@ -1,0 +1,52 @@
+---
+const measured = [
+  { name: "Skills", value: "1.1k chars", chars: 1100, skills: true },
+  { name: "Project instructions", value: "13.0k chars", chars: 13000, oversized: true, note: "3.6× your next project" },
+  { name: "Global instructions", value: "1.6 KB", chars: 1600 },
+];
+
+const harness = ["MCP servers", "Built-in tools", "System prompt"];
+const ruler = [0, 5, 10, 15];
+---
+
+<figure class="section-view">
+  <div class="section-grid">
+    <div class="ruler" aria-hidden="true">
+      {ruler.map((k) => <span style={`--at:${k * 1000}`}>{k === 0 ? "0" : `${k}k`}</span>)}
+    </div>
+
+    {
+      measured.map((layer) => (
+        <div class="row" style={`--chars:${layer.chars}`}>
+          <div class:list={["band", { oversized: layer.oversized, skills: layer.skills }]}>
+            {layer.oversized && (
+              <span class="ghost" style="--chars:3600">
+                <small>storefront 3.6k</small>
+              </span>
+            )}
+            {layer.skills && Array.from({ length: 12 }, (_, k) => <i class:list={{ used: k < 3 }} />)}
+          </div>
+          <span class="name">
+            {layer.name}
+            {layer.note && <small>{layer.note}</small>}
+          </span>
+          <span class="value">{layer.value}</span>
+        </div>
+      ))
+    }
+
+    {
+      harness.map((name, i) => (
+        <div class="row harness">
+          <div class:list={["band", "broken", { end: i === harness.length - 1 }]} />
+          <span class="name">{name}</span>
+        </div>
+      ))
+    }
+  </div>
+
+  <figcaption>
+    Section through one session's starting context in <code>acme-api</code>. Your layers are drawn to scale in
+    characters. Harness layers are not to scale.
+  </figcaption>
+</figure>

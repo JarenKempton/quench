@@ -1,10 +1,9 @@
 ---
 interface Props {
-  no: string;
   name: string;
 }
 
-const { no, name } = Astro.props;
+const { name } = Astro.props;
 ---
 
-<p class="section-head"><span class="sec-no">{no}</span>{name}</p>
+<p class="section-head">{name}</p>

@@ -1,28 +1,37 @@
 ---
 import SectionHead from "./SectionHead.astro";
+import Turns from "./Turns.astro";
 
 const stats = [
-  { num: "26.0k", unit: "tok", label: "before you type" },
-  { num: "70", unit: "%", label: "of all tokens" },
-  { num: "9", unit: "/12", label: "skills never used" },
+  { num: "26.0k", unit: "tokens", label: "in context before you type, median" },
+  { num: "70%", unit: "", label: "of all tokens processed went to that load" },
+  { num: "9 of 12", unit: "", label: "skills listed in every session, never used" },
 ];
 ---
 
 <section class="problem" id="problem" aria-labelledby="problem-title">
-  <SectionHead no="01" name="Problem" />
-  <h2 id="problem-title">A load before you <em>type a word.</em></h2>
-  <div class="stats">
+  <SectionHead name="The problem" />
+  <div class="problem-grid">
+    <div>
+      <h2 id="problem-title">The layers pile up, out of sight.</h2>
+      <p class="body">
+        Each one is sent again on every turn, so a heavy layer costs you over and over. A bloated context is one reason
+        agents go off the rails, and nothing in the harness shows you it happened.
+      </p>
+    </div>
+    <Turns />
+  </div>
+  <dl class="stats">
     {
       stats.map((s) => (
         <div class="stat">
-          <span class="dim-line" aria-hidden="true" />
-          <span class="num">
+          <dt>
             {s.num}
-            <small>{s.unit}</small>
-          </span>
-          <span class="stat-label">{s.label}</span>
+            {s.unit && <small>{s.unit}</small>}
+          </dt>
+          <dd>{s.label}</dd>
         </div>
       ))
     }
-  </div>
+  </dl>
 </section>

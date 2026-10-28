@@ -1,0 +1,21 @@
+---
+const turns = Array.from({ length: 8 }, (_, k) => k);
+---
+
+<figure class="turns">
+  <div class="turn-row" aria-hidden="true">
+    {
+      turns.map((k) => (
+        <div class="turn" style={`--k:${k}`}>
+          <span class="conv" />
+          <span class="load" />
+          <small>{k + 1}</small>
+        </div>
+      ))
+    }
+  </div>
+  <figcaption>
+    <span class="key key-load">Starting load, sent again each turn</span>
+    <span class="key key-conv">Conversation so far</span>
+  </figcaption>
+</figure>

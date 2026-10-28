@@ -1,6 +1,7 @@
 ---
 import Feature from "./Feature.astro";
 import SectionHead from "./SectionHead.astro";
+import summary from "../samples/summary.ansi?raw";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
 import failures from "../samples/failures.ansi?raw";
@@ -8,14 +9,14 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <SectionHead no="02" name="Readings" />
-  <h2 id="features-title">Four <em>readings.</em></h2>
-  <Feature index={1} title="Starting load" command="quench report" output={report} truncated />
-  <Feature index={2} title="Unused skills" command="quench profile skills" output={skills} />
-  <Feature index={3} title="Repeat failures" command="quench profile failures" output={failures} />
+  <SectionHead name="What Quench shows" />
+  <h2 id="features-title">Every layer, measured from history you already have.</h2>
+  <Feature title="One summary of every layer" command="quench" caption="~/code/acme-api" output={summary} />
+  <Feature title="What each session starts with" command="quench report" output={report} truncated />
+  <Feature title="Skills you load and never use" command="quench profile skills" output={skills} />
+  <Feature title="Failures that repeat" command="quench profile failures" output={failures} />
   <Feature
-    index={4}
-    title="Context sources"
+    title="Where one session's context came from"
     command="quench sources"
     shown="quench sources ~/.claude/projects/…/orders.jsonl"
     output={sources}
