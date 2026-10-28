@@ -1,0 +1,50 @@
+---
+import { layers, servers, skillUse } from "../context.ts";
+
+const size = (kind: string, server?: string) =>
+  layers.find((l) => l.kind === kind && (!server || l.name.endsWith(server)))?.chars ?? 0;
+
+const rows = [
+  ...servers.map((s) => ({
+    used: s.called,
+    of: s.tools,
+    what: `${s.server} MCP tools called`,
+    loaded: `${size("mcp_tools", s.server).toLocaleString("en-US")} chars loaded on every call`,
+    scope: "this run",
+  })),
+  {
+    used: skillUse.used,
+    of: skillUse.listed,
+    what: "listed skills used",
+    loaded: `${size("skills").toLocaleString("en-US")} chars of skill list on every call`,
+    scope: "30 days",
+  },
+];
+---
+
+<figure class="unused">
+  <div class="unused-grid">
+    {
+      rows.map((r) => (
+        <div class="card unused-card">
+          <p class="big">
+            {r.used}
+            <small>of {r.of}</small>
+          </p>
+          <p class="big-label">{r.what}</p>
+          <div class="use-bar" aria-hidden="true">
+            <span class="used" style={`flex-basis:${(r.used / r.of) * 100}%`} />
+            <span class="idle" style={`flex-basis:${(1 - r.used / r.of) * 100}%`} />
+          </div>
+          <p class="card-note">
+            {r.loaded} · {r.scope}
+          </p>
+        </div>
+      ))
+    }
+  </div>
+  <figcaption class="fig-note">
+    Fig. 4 · MCP counts from one run's <code>quench runs --json</code>; skills from <code>quench profile skills</code>,
+    last 30 days. Red hatch: loaded, never called.
+  </figcaption>
+</figure>

@@ -2,7 +2,7 @@
 import { inputTokens, kilo, model, peakTokens, percent, requests, startTokens, windowTokens } from "../context.ts";
 
 const width = 1000;
-const height = 250;
+const height = 200;
 const x0 = 60;
 const perK = 14;
 const x = (tokens: number) => x0 + (tokens / 1000) * perK;
@@ -15,7 +15,12 @@ const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
 const resent = startTokens * requests;
 ---
 
-<figure class="datum">
+<figure class="card figure-card datum">
+  <p class="big">{percent(resent / inputTokens)}*</p>
+  <p class="big-label">
+    of this run's {kilo(inputTokens)} input tokens were the same {kilo(startTokens)} starting load, sent again with each of
+    its {requests} model calls
+  </p>
   <div class="datum-drawing" style={`aspect-ratio:${width}/${height}`}>
     <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
       <defs>
@@ -43,8 +48,6 @@ const resent = startTokens * requests;
         <line x1={end} y1={barBottom} x2={end} y2={barBottom + 6} />
       </g>
 
-      <polyline class="leader" points={`${(x0 + x(startTokens)) / 2},${barBottom - 20} ${(x0 + x(startTokens)) / 2},212 ${x0 + 260},212`} />
-      <circle class="leader-dot" cx={(x0 + x(startTokens)) / 2} cy={barBottom - 20} r="2.4" />
     </svg>
 
     <ol class="tick-labels" aria-hidden="true">
@@ -62,15 +65,11 @@ const resent = startTokens * requests;
       <li style={`left:${pct(x(startTokens), width)};top:${pct(100, height)}`}>
         <b>{kilo(startTokens)}</b> before you type: {percent(startTokens / windowTokens, 1)} of the window, {percent(startTokens / peakTokens)} of the peak*
       </li>
-      <li class="resent" style={`left:${pct(x0 + 268, width)};top:${pct(212, height)}`}>
-        The same {kilo(startTokens)} went out again with each of the run's {requests} requests:{" "}
-        <b>{kilo(resent)}</b> of {kilo(inputTokens)} input tokens, {percent(resent / inputTokens)}*
-      </li>
     </ul>
   </div>
 
   <p class="fig-note">
-    Fig. 2 · One run, drawn to scale up to 50k with the rest of the window broken off. *Derived from the run's measured
-    start, peak and input tokens.
+    Fig. 2 · One run, to scale up to 50k with the rest of the window broken off. From <code>quench runs --json</code>.
+    *Derived from the run's start, model calls and input tokens.
   </p>
 </figure>

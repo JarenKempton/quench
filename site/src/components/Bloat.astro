@@ -1,0 +1,27 @@
+---
+import Drift from "./Drift.astro";
+import SectionHead from "./SectionHead.astro";
+import Unused from "./Unused.astro";
+---
+
+<section class="bloat" id="bloat" aria-labelledby="bloat-title">
+  <SectionHead no="02" name="Bloat" />
+  <div class="card text-card">
+    <h2 id="bloat-title">Most of what loads is never used.</h2>
+    <p>
+      This run loaded 26 MCP tools and called 2. The skill list offers 12 skills, and 3 were used in a month. Every
+      unused tool and skill still takes its place in context on every call.
+    </p>
+  </div>
+  <Unused />
+
+  <div class="card text-card">
+    <h2>A bloated context is one reason agents drift off task.</h2>
+    <p>
+      Here are the same run's tool calls, in order. It started well, then failed five times in a row, four of them the
+      same blocked command. The history can't prove the load caused this. It does show what drift looks like, and
+      Quench finds it.
+    </p>
+  </div>
+  <Drift />
+</section>

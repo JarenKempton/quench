@@ -288,29 +288,132 @@ h2 em {
   background: var(--ink);
 }
 
+/* Cards */
+
+.card {
+  position: relative;
+  background: rgb(7 34 58 / 0.94);
+  border: 1px solid var(--hair);
+  box-shadow: 0 0 0 6px rgb(12 50 83 / 0.55);
+}
+
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 0 solid var(--cyan-2);
+  pointer-events: none;
+}
+
+.card::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.card::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+}
+
+.text-card {
+  max-width: 46em;
+  margin-bottom: 32px;
+  padding: 28px 32px 30px;
+}
+
+.text-card h2 {
+  margin-bottom: 14px;
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.text-card p {
+  margin: 0;
+  max-width: 40em;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.figure-card {
+  margin: 0;
+  padding: 28px 32px 22px;
+}
+
+.eyebrow {
+  margin: 0 0 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.big {
+  margin: 0;
+  font-size: clamp(48px, 5.6vw, 72px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.big small {
+  margin-left: 10px;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--mute);
+}
+
+.big-label {
+  max-width: 30em;
+  margin: 8px 0 24px;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.card-note {
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mute);
+}
+
 /* Hero */
 
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(32px, 5vw, 72px);
-  align-items: center;
-  padding: clamp(56px, 8vw, 104px) 0 48px;
+  gap: 32px;
+  align-items: stretch;
+  padding: clamp(48px, 7vw, 88px) 0 48px;
+}
+
+.hero-copy {
+  padding: clamp(28px, 4vw, 48px);
 }
 
 .hero h1 {
-  font-size: clamp(54px, 7.4vw, 96px);
-  margin-bottom: 28px;
-}
-
-.hero h1 em {
-  display: block;
+  font-size: clamp(42px, 5.2vw, 66px);
+  line-height: 1.04;
+  margin-bottom: 24px;
+  text-wrap: balance;
 }
 
 .lede {
-  max-width: 26em;
-  margin: 0 0 40px;
-  font-size: 19px;
+  max-width: 30em;
+  margin: 0 0 36px;
+  font-size: 18px;
+  line-height: 1.6;
   color: var(--ink-2);
 }
 
@@ -319,7 +422,12 @@ h2 em {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  margin-bottom: 28px;
+}
+
+.hero-figure {
+  display: flex;
+  align-items: center;
+  padding: 20px 20px 16px;
 }
 
 /* Exploded view */
@@ -656,32 +764,37 @@ h2 em {
 /* Sections */
 
 .problem,
+.bloat,
 .features,
 .install {
-  padding: 72px 0 112px;
+  padding: 64px 0 96px;
 }
 
-.problem h2,
-.features h2,
-.install h2 {
-  max-width: 14em;
-  text-wrap: balance;
-  margin-bottom: 24px;
-  font-size: clamp(36px, 4.6vw, 58px);
+.figure-pair {
+  display: grid;
+  gap: 24px;
 }
 
-.section-lede {
-  max-width: 34em;
-  margin: -32px 0 48px;
-  font-size: 19px;
-  color: var(--ink-2);
+.month {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 32px;
+  align-items: center;
+}
+
+.month .big-label {
+  margin-bottom: 0;
+}
+
+.plate-lead,
+.unused > .fig-note {
+  display: inline-block;
+  padding: 6px 12px;
+  background: rgb(7 34 58 / 0.94);
+  border: 1px solid var(--hair);
 }
 
 /* Fig. 2: the window datum */
-
-.datum {
-  margin: 0;
-}
 
 .datum-drawing {
   position: relative;
@@ -730,16 +843,6 @@ h2 em {
   stroke-width: 1;
 }
 
-.datum .leader {
-  fill: none;
-  stroke: var(--cyan);
-  stroke-width: 0.8;
-}
-
-.datum .leader-dot {
-  fill: var(--cyan);
-}
-
 .tick-labels,
 .datum-labels {
   margin: 0;
@@ -749,7 +852,7 @@ h2 em {
 
 .tick-labels li {
   position: absolute;
-  top: 70%;
+  top: 87%;
   transform: translateX(-50%);
   font-family: var(--mono);
   font-size: 10px;
@@ -769,131 +872,177 @@ h2 em {
   transform: translate(0, -150%);
 }
 
-.datum-labels .resent {
-  transform: translate(0, -50%);
-  white-space: normal;
-  max-width: 34em;
-  font-family: var(--sans);
-  font-size: 16px;
-  color: var(--ink);
-}
-
 .datum-labels b {
   font-weight: 500;
   color: var(--yellow);
 }
 
-/* Fig. 3: parts list */
+/* Fig. 3: thirty days */
 
-.parts {
-  margin: 0 0 72px;
-}
-
-.parts table {
-  width: 100%;
-  border-collapse: collapse;
+.month-bar {
+  display: flex;
+  height: 44px;
   border: 1px solid var(--cyan-2);
   font-family: var(--mono);
-  font-size: 13px;
-  background: rgb(6 30 52 / 0.55);
+  font-size: 12px;
 }
 
-.parts caption {
-  caption-side: top;
-  padding: 0 0 10px;
-  text-align: left;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--cyan);
+.month-bar span {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
 }
 
-.parts th,
-.parts td {
-  padding: 10px 14px;
-  text-align: left;
-  border: 1px solid var(--hair);
-}
-
-.parts thead th {
-  font-size: 10px;
+.month-bar .resent {
+  color: var(--prussian-deep);
   font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  background: repeating-linear-gradient(45deg, rgb(159 220 250 / 0.9) 0 2px, rgb(159 220 250 / 0.65) 2px 6px);
+}
+
+.month-bar .rest {
+  flex: 1;
+  color: var(--ink-2);
+  border-left: 1px solid var(--cyan-2);
+}
+
+/* Fig. 4: unused */
+
+.unused {
+  margin: 0 0 56px;
+}
+
+.unused-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.unused-card {
+  padding: 26px 28px 22px;
+}
+
+.use-bar {
+  display: flex;
+  height: 14px;
+  border: 1px solid var(--cyan-2);
+}
+
+.use-bar .used {
+  background: var(--cyan);
+}
+
+.use-bar .idle {
+  background: repeating-linear-gradient(45deg, rgb(255 148 121 / 0.85) 0 1.5px, transparent 1.5px 6px);
+}
+
+/* Fig. 5: drift */
+
+.sequence {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  counter-reset: none;
+}
+
+.sequence li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(140px, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 0 7px 26px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.sequence li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--cyan-2);
+}
+
+.sequence li::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--cyan);
+  border-radius: 50%;
+  background: var(--prussian-deep);
+  transform: translateY(-50%);
+}
+
+.sequence .step {
   color: var(--mute);
 }
 
-.parts tbody th {
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 400;
+.sequence .tool {
   color: var(--ink);
 }
 
-.parts tbody td {
+.sequence .why {
   color: var(--ink-2);
 }
 
-.parts tbody td:first-child {
-  width: 1%;
-  text-align: center;
-  color: var(--cyan);
+.sequence .fail::after {
+  border-color: var(--red);
+  background: var(--red);
 }
 
-.parts tr.uncalled td:last-child {
+.sequence .fail .tool,
+.sequence .fail .why {
   color: var(--red);
 }
 
-.parts tr.uncalled th {
-  text-decoration: line-through;
-  text-decoration-color: var(--red);
-  text-decoration-thickness: 1px;
-}
-
-.parts tfoot td {
-  font-family: var(--sans);
-  font-size: 16px;
-  color: var(--ink);
-}
-
-.parts tfoot b {
-  font-weight: 500;
-  color: var(--red);
+.sequence .fail {
+  background: linear-gradient(90deg, rgb(255 148 121 / 0.08), transparent 70%);
 }
 
 /* Features */
 
-.features h2,
-.problem h2 {
-  margin-bottom: 56px;
-}
-
 .feature {
   display: grid;
-  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
-  gap: 64px;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 40px;
   align-items: start;
-  padding: 32px 0;
+  padding: 20px 0;
 }
 
-.feature h3 {
+.feature-copy {
   position: sticky;
   top: 32px;
+  margin: 0;
 }
 
 .feature h3 {
   margin-bottom: 10px;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 400;
-  line-height: 1.15;
+  line-height: 1.2;
+}
+
+.feature-copy p {
+  margin-bottom: 20px;
+  font-size: 16px;
+}
+
+.plate-lead {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--ink-2);
 }
 
 /* Install */
 
 .install {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 64px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 40px;
   align-items: start;
 }
 
@@ -902,14 +1051,13 @@ h2 em {
   margin-bottom: 0;
 }
 
-.install h2 em {
-  white-space: nowrap;
+.install-copy {
+  margin: 0;
 }
 
 .install-steps {
   display: grid;
   gap: 32px;
-  padding-top: 8px;
 }
 
 /* Footer title block */
@@ -1036,7 +1184,9 @@ h2 em {
 @media (max-width: 960px) {
   .hero,
   .feature,
-  .install {
+  .install,
+  .month,
+  .unused-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 32px;
   }
@@ -1046,7 +1196,7 @@ h2 em {
     margin: 0 auto;
   }
 
-  .feature h3 {
+  .feature-copy {
     position: static;
   }
 
@@ -1139,14 +1289,25 @@ h2 em {
     position: static;
   }
 
-  .section-lede {
-    margin-top: -16px;
-    font-size: 17px;
+  .text-card,
+  .figure-card,
+  .unused-card,
+  .hero-copy {
+    padding: 22px 20px;
+  }
+
+  .text-card p,
+  .lede {
+    font-size: 16px;
+  }
+
+  .hero-figure {
+    padding: 16px 14px;
   }
 
   .datum-drawing {
     aspect-ratio: auto !important;
-    padding-top: 30%;
+    padding-top: 22%;
   }
 
   .datum svg {
@@ -1160,34 +1321,31 @@ h2 em {
 
   .datum-labels {
     display: grid;
-    gap: 10px;
-    padding-top: 16px;
+    gap: 8px;
+    padding-top: 14px;
   }
 
   .datum-labels li,
-  .datum-labels .window-label,
-  .datum-labels .resent {
+  .datum-labels .window-label {
     position: static;
     transform: none;
     white-space: normal;
-  }
-
-  .parts table {
     font-size: 11px;
   }
 
-  .parts th,
-  .parts td {
-    padding: 8px 6px;
+  .sequence li {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 2px 10px;
+    font-size: 12px;
   }
 
-  .parts tbody th,
-  .parts tfoot td {
-    font-size: 14px;
+  .sequence .why {
+    grid-column: 2;
   }
 
-  .parts thead th {
-    letter-spacing: 0.06em;
+  .month-bar span {
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   .callouts b {
@@ -1222,4 +1380,8 @@ h2 em {
   .tb-cell:nth-child(4) {
     padding: 14px 14px;
   }
+}
+
+.fig-note code {
+  white-space: nowrap;
 }

@@ -1,4 +1,5 @@
 ---
+import Command from "./Command.astro";
 import Terminal from "./Terminal.astro";
 
 interface Props {
@@ -14,6 +15,10 @@ const { index, title, command, shown = command, output, truncated } = Astro.prop
 ---
 
 <article class="feature">
-  <h3>{title}</h3>
+  <div class="card text-card feature-copy">
+    <h3>{title}</h3>
+    <p><slot /></p>
+    <Command text={command} />
+  </div>
   <Terminal plate={String(index + 1)} title={command} command={shown} output={output} truncated={truncated} />
 </article>

@@ -2,24 +2,29 @@
 import Assembly from "./Assembly.astro";
 import Command from "./Command.astro";
 import Terminal from "./Terminal.astro";
+import { kilo, startTokens } from "../context.ts";
 import summary from "../samples/summary.ansi?raw";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-copy">
-    <h1 id="hero-title">Loaded before <em>you type.</em></h1>
+  <div class="card hero-copy">
+    <p class="eyebrow">A context profiler for coding agents</p>
+    <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
     <p class="lede">
-      System prompt, tools, MCP servers, instruction files and skills are already in your agent's context. Quench shows
-      each layer and what it costs.
+      System prompt, built-in tools, MCP servers, instruction files and skills are all in context before your first
+      word. Quench reads the history Claude Code, Codex and Pi already keep, and shows what each layer costs.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
   </div>
-  <Assembly />
+  <div class="card figure-card hero-figure">
+    <Assembly />
+  </div>
 </section>
 
 <section class="hero-plate" aria-label="Sample summary output">
+  <p class="plate-lead">Run it with no arguments for a summary of every layer.</p>
   <Terminal plate="1" title="~/code/acme-api" command="quench" output={summary} />
 </section>

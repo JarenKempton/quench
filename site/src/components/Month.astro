@@ -1,0 +1,22 @@
+---
+import { month, percent } from "../context.ts";
+
+const resent = month.processed * month.startShare;
+---
+
+<figure class="card figure-card month">
+  <div>
+    <p class="big">{percent(month.startShare)}</p>
+    <p class="big-label">
+      of the {(month.processed / 1e6).toFixed(1)}M tokens Claude Code processed in {month.days} days was the starting
+      load, sent again
+    </p>
+  </div>
+  <div>
+    <div class="month-bar" aria-hidden="true">
+      <span class="resent" style={`flex-basis:${percent(month.startShare)}`}>{(resent / 1e6).toFixed(1)}M</span>
+      <span class="rest">{((month.processed - resent) / 1e6).toFixed(1)}M</span>
+    </div>
+    <p class="fig-note">Fig. 3 · From <code>quench report</code>, last 30 days of the demo history.</p>
+  </div>
+</figure>

@@ -1,5 +1,5 @@
 ---
-import { kilo, largestKind, layers, promptChars, startTokens } from "../context.ts";
+import { kilo, layerChars, layers, percent, promptChars } from "../context.ts";
 
 const width = 600;
 const height = 480;
@@ -19,14 +19,14 @@ const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
 let z = 0;
 const solid = layers.map((l) => {
   const z0 = z;
-  z += (l.tokens / startTokens) * stackHeight;
-  return { ...l, z0, z1: z, largest: l.name === largestKind };
+  z += l.share * stackHeight;
+  return { name: l.name, value: `${l.chars.toLocaleString("en-US")} chars · ${percent(l.share)}`, z0, z1: z, largest: l.mcp };
 });
 const top = z;
 const plates = [
   ...solid,
   { name: "Your prompt", value: `${promptChars} chars`, z0: top, z1: top + sliver, prompt: true, largest: false },
-].map((p) => ({ ...p, value: "value" in p ? p.value : `${kilo((p as { tokens: number }).tokens)} tokens` }));
+];
 
 const rightX = cx + half * 2 * 0.82;
 const leftX = cx - half * 2 * 0.82;
@@ -93,16 +93,16 @@ for (const i of order) {
     }
     <li class="total">
       <b>Total</b>
-      <span>{kilo(startTokens)} tokens before you type</span>
+      <span>{kilo(layerChars)} chars before you type</span>
     </li>
   </ol>
 
   <p class="dim-label" style={`top:${pct(base - top / 2, height)};left:${pct(dimX - 22, width)}`}>
-    {kilo(startTokens)} tokens before you type
+    {kilo(layerChars)} chars before you type
   </p>
 
   <p class="fig-note">
-    Fig. 1 · Section through one session's first request. Thickness to scale; tokens per layer split by characters
-    (derived).
+    Fig. 1 · Section through one demo session's first request, thickness to scale by characters. From{" "}
+    <code>quench runs --json</code>.
   </p>
 </figure>

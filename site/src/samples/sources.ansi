@@ -4,11 +4,11 @@ Native file-read tracing: supported · 3 attempts · 1 other tool calls without 
 
 returned · ~/code/acme-api/src/orders/router.ts · call t1
   ~/code/acme-api/src/orders/router.ts · reported lines 1–84 of 84
-  recorded tool text: 1000 characters · sha256 16c537b87d886699280cbac33b3169c1bcd4f435ec1c949ed43108fe81471fd0
+  recorded tool text: 1000 characters
 
 returned · ~/code/acme-api/src/middleware/limit.ts · call t2
   ~/code/acme-api/src/middleware/limit.ts · reported lines 1–31 of 31
-  recorded tool text: 780 characters · sha256 86716baadf245eee1d1da6dd9a0e63924dde44e865ad5363b86707830ae93a2d
+  recorded tool text: 780 characters
 
 failed · ~/code/acme-api/docs/runbook.md · call t8
   The tool reported an error.

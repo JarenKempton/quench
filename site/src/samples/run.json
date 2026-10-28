@@ -1,16 +1,65 @@
 {
   "prompt": "Add rate limiting to the orders endpoint",
   "model": "claude-opus-5-5",
-  "inferences": 4,
+  "inferences": 13,
   "contextStart": 26004,
-  "contextPeak": 40503,
+  "contextPeak": 34203,
   "usage": {
-    "input": 13,
-    "cacheRead": 141600,
-    "cacheWrite": 3200,
-    "output": 660
+    "input": 40,
+    "cacheRead": 370200,
+    "cacheWrite": 6800,
+    "output": 1740
   },
   "calls": [
+    {
+      "tool": "Read",
+      "server": null,
+      "ok": true,
+      "resultChars": 1000,
+      "inScript": false
+    },
+    {
+      "tool": "Read",
+      "server": null,
+      "ok": true,
+      "resultChars": 780,
+      "inScript": false
+    },
+    {
+      "tool": "Bash",
+      "server": null,
+      "ok": true,
+      "resultChars": 400,
+      "inScript": false
+    },
+    {
+      "tool": "Bash",
+      "server": null,
+      "ok": true,
+      "resultChars": 21,
+      "inScript": false
+    },
+    {
+      "tool": "Skill",
+      "server": null,
+      "ok": true,
+      "resultChars": 23,
+      "inScript": false
+    },
+    {
+      "tool": "get_issue",
+      "server": "tracker",
+      "ok": true,
+      "resultChars": 240,
+      "inScript": false
+    },
+    {
+      "tool": "add_comment",
+      "server": "tracker",
+      "ok": true,
+      "resultChars": 2,
+      "inScript": false
+    },
     {
       "tool": "Read",
       "server": null,
@@ -26,10 +75,24 @@
       "inScript": false
     },
     {
-      "tool": "Skill",
+      "tool": "Bash",
       "server": null,
-      "ok": true,
-      "resultChars": 15,
+      "ok": false,
+      "resultChars": 75,
+      "inScript": false
+    },
+    {
+      "tool": "Bash",
+      "server": null,
+      "ok": false,
+      "resultChars": 75,
+      "inScript": false
+    },
+    {
+      "tool": "Bash",
+      "server": null,
+      "ok": false,
+      "resultChars": 75,
       "inScript": false
     }
   ],

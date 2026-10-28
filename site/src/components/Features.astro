@@ -1,6 +1,5 @@
 ---
 import Feature from "./Feature.astro";
-import Parts from "./Parts.astro";
 import SectionHead from "./SectionHead.astro";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
@@ -9,19 +8,32 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <SectionHead no="02" name="Readings" />
-  <h2 id="features-title">Every layer, <em>measured.</em></h2>
-  <p class="section-lede">Quench reads the history your harness already keeps, and shows what loaded, what it cost and what was never used, so you know what to trim.</p>
-  <Parts />
-  <Feature index={1} title="Starting load" command="quench report" output={report} truncated />
-  <Feature index={2} title="Unused skills" command="quench profile skills" output={skills} />
-  <Feature index={3} title="Repeat failures" command="quench profile failures" output={failures} />
+  <SectionHead no="03" name="What Quench shows" />
+  <div class="card text-card">
+    <h2 id="features-title">Each layer and what it costs, so you can trim it.</h2>
+    <p>Every number on this page came from these commands, run on a synthetic demo history.</p>
+  </div>
+  <Feature index={1} title="What each session starts with" command="quench report" output={report} truncated>
+    Per harness: the starting load, how much of everything processed it was, peak context, compactions, tool errors,
+    and which models and effort levels you actually use.
+  </Feature>
+  <Feature index={2} title="What loads and goes unused" command="quench profile skills" output={skills}>
+    Skills, MCP servers and instruction files, per agent and per project. Quench compares what sessions were offered
+    with what they called, so dead weight stands out.
+  </Feature>
+  <Feature index={3} title="Failures that repeat" command="quench profile failures" output={failures}>
+    Missing files, missing commands, hook rejections, bad tool input. Grouped by what failed, with streaks and how
+    much output each one fed back into context.
+  </Feature>
   <Feature
     index={4}
-    title="Context sources"
+    title="Where one session's context came from"
     command="quench sources"
     shown="quench sources ~/.claude/projects/…/orders.jsonl"
     output={sources}
     truncated
-  />
+  >
+    File reads, shell reads and searches, MCP calls, skill loads and the instruction files the harness injected.
+    Uncertain evidence is labelled, not guessed.
+  </Feature>
 </section>
