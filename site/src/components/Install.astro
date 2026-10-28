@@ -24,8 +24,7 @@ import Terminal from "./Terminal.astro";
       <span class="d"># update in place; uses the GitHub CLI</span>{"\n"}<span class="prompt">$</span> quench update{"\n"}<span class="prompt">$</span> quench update --channel nightly</Terminal
     >
     <p class="note">
-      <code>SHA256SUMS</code> in each release lists every binary's checksum. The macOS binaries are
-      not signed; a copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code>{" "}
+      The macOS binaries are not signed; a copy downloaded with a browser needs <code>xattr -d com.apple.quarantine quench</code>{" "}
       before it runs.
     </p>
   </div>
