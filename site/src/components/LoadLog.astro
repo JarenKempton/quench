@@ -1,0 +1,24 @@
+---
+import { k, parts, startTokens } from "../start.ts";
+
+const label: Record<string, (p: { count?: number; files?: number; server?: string }) => string> = {
+  system: () => "system prompt",
+  tools: (p) => `built-in tools (${p.count})`,
+  mcp_tools: (p) => `MCP ${p.server} (${p.count} tools)`,
+  instructions: (p) => `instruction files (${p.files})`,
+  skills: (p) => `skill list (${p.count})`,
+};
+const rows = parts.filter((p) => label[p.kind]).map((p) => ({ name: label[p.kind](p), chars: p.chars }));
+const largest = Math.max(...rows.map((r) => r.chars));
+const width = 16;
+---
+
+<figure class="term term-hero load-log" aria-label="What the demo session held before the first reply">
+  <figcaption>[ quench runs --json · acme-api ]</figcaption>
+  <pre>{
+    rows.map((r, i) => (
+      <span class="log-line" style={`--i:${i}`}><span class="d ld">LOADING </span>{r.name.padEnd(24, ".")} <span class="b">{k(r.chars).padStart(5)}</span> chars  {Array.from({ length: Math.max(1, Math.round((r.chars / largest) * width)) }, () => <i class="cell full" />)}{"\n"}</span>
+    ))
+  }<span class="log-line" style={`--i:${rows.length}`}>{"\n"}<span class="b">READY.</span></span></pre>
+  <p class="ready"><strong>{k(startTokens)}</strong> tokens in context at the first model call</p>
+</figure>

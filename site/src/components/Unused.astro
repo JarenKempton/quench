@@ -1,0 +1,34 @@
+---
+import { callsTo, k, parts, skillsListed, skillsNeverUsed } from "../start.ts";
+
+const servers = parts
+  .filter((p) => p.kind === "mcp_tools")
+  .map((p) => ({ name: `MCP ${p.server}`, size: `${p.count} tools · ${k(p.chars)} chars`, calls: callsTo(p.server!) }));
+const skillList = parts.find((p) => p.kind === "skills")!;
+---
+
+<section class="unused" id="unused">
+  <h2>Loaded. <em>Not used.</em></h2>
+  <p class="section-lede">A crowded context is one reason agents drift off task. Much of it is never called.</p>
+  <figure class="term checklist" aria-label="Loaded layers and whether the agent used them">
+    <figcaption>[ loaded vs. called ]</figcaption>
+    <ul>
+      {
+        servers.map((s) => (
+          <li class:list={{ idle: s.calls === 0 }}>
+            <span class="box">[{s.calls ? "X" : " "}]</span>
+            <span class="what">{s.name}</span>
+            <span class="size">{s.size}</span>
+            <span class="verdict">{s.calls} calls this run</span>
+          </li>
+        ))
+      }
+      <li class="idle">
+        <span class="box">[ ]</span>
+        <span class="what">Skills</span>
+        <span class="size">{skillsListed} listed · {k(skillList.chars)} chars</span>
+        <span class="verdict">{skillsNeverUsed} of {skillsListed} never used in 30 days</span>
+      </li>
+    </ul>
+  </figure>
+</section>

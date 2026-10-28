@@ -1,0 +1,40 @@
+---
+import { k, run, startTokens } from "../start.ts";
+
+const peak = run.contextPeak;
+const width = 40;
+const startCells = Math.round((startTokens / peak) * width);
+const calls = [
+  { label: "CALL 1", tokens: startTokens, cells: startCells },
+  { label: `CALL ${run.inferences}`, tokens: peak, cells: width },
+];
+const input = run.usage.input + run.usage.cacheRead + run.usage.cacheWrite;
+const resent = run.inferences * startTokens;
+const share = (n: number) => Math.round(n * 100);
+---
+
+<figure class="resend" aria-label="How much of each model call is the resent start">
+  <div class="resend-big">
+    <span class="num">{share(resent / input)}<small>%</small></span>
+    <span class="label">of this run's input tokens were the same start, resent</span>
+  </div>
+  <div class="resend-bars">
+    {
+      calls.map((c) => (
+        <div class="call">
+          <span class="call-label">{c.label}</span>
+          <span class="gauge" aria-hidden="true">
+            [{Array.from({ length: width }, (_, i) => <i class:list={{ on: i < startCells, grown: i >= startCells && i < c.cells }} />)}]
+          </span>
+          <span class="call-size">{k(c.tokens)}</span>
+        </div>
+      ))
+    }
+    <p class="resend-key"><i class="on" /> start, {k(startTokens)} measured &nbsp; <i class="grown" /> added during the run</p>
+  </div>
+  <ul class="resend-notes">
+    <li>{run.inferences} calls × {k(startTokens)} = {k(resent)} of {k(input)} input tokens <span class="tag">derived</span></li>
+    <li>At call {run.inferences} the start is still {share(startTokens / peak)}% of the context <span class="tag">derived</span></li>
+    <li>{k(startTokens)} is {((startTokens / 1_000_000) * 100).toFixed(1)}% of {run.model}'s 1M-token window, on every call</li>
+  </ul>
+</figure>

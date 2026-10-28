@@ -1,13 +1,15 @@
 ---
 import Command from "./Command.astro";
-import Terminal from "./Terminal.astro";
-import summary from "../samples/summary.ansi?raw";
+import LoadLog from "./LoadLog.astro";
 ---
 
 <section class="hero">
   <div class="hero-copy">
-    <h1>Every session starts <span class="nowrap"><em>hot</em><span class="cursor" aria-hidden="true"></span></span></h1>
-    <p class="lede">What your coding agents load, what it costs, where they go wrong.</p>
+    <h1>Loaded before <span class="nowrap"><em>you type.</em><span class="cursor" aria-hidden="true"></span></span></h1>
+    <p class="lede">
+      System prompt, tools, MCP servers, instruction files, skills. Your agent's context holds all of
+      them before your first word.
+    </p>
     <div class="hero-actions">
       <a class="btn" href="#install">[ INSTALL ]</a>
       <Command text="quench" />
@@ -19,5 +21,5 @@ import summary from "../samples/summary.ansi?raw";
     </ul>
     <p class="works">Claude Code · Codex · Pi</p>
   </div>
-  <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+  <LoadLog />
 </section>

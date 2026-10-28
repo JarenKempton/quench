@@ -1,28 +1,11 @@
 ---
-const stats = [
-  { num: "26.0k", unit: "", label: "median tokens before the first reply", lit: 26, of: 64 },
-  { num: "70", unit: "%", label: "of all tokens spent on that load", lit: 14, of: 20 },
-  { num: "9", unit: "/12", label: "skills listed, never used", lit: 9, of: 12 },
-];
+import Resend from "./Resend.astro";
 ---
 
 <section class="problem" id="problem">
-  <h2>Your agent carries a load <em>before you type a word.</em></h2>
-  <div class="stats">
-    {
-      stats.map((s) => (
-        <div class="stat">
-          <span class="num">
-            {s.num}
-            <small>{s.unit}</small>
-          </span>
-          <span class="gauge" aria-hidden="true">
-            [{Array.from({ length: s.of }, (_, i) => <i class:list={{ on: i < s.lit }} />)}]
-          </span>
-          <span class="label">{s.label}</span>
-        </div>
-      ))
-    }
-  </div>
-  <p class="footnote">* demo history</p>
+  <h2>Resent every turn. <em>Never shown.</em></h2>
+  <p class="section-lede">
+    Each model call sends the whole start again. The harness doesn't show you how much that is.
+  </p>
+  <Resend />
 </section>
