@@ -3,16 +3,17 @@ import Terminal from "./Terminal.astro";
 
 interface Props {
   index: number;
+  title: string;
   command: string;
   shown?: string;
   output: string;
   truncated?: boolean;
 }
 
-const { index, command, shown = command, output, truncated } = Astro.props;
+const { index, title, command, shown = command, output, truncated } = Astro.props;
 ---
 
-<article class="feature" id={`feature-${index}`} role="tabpanel">
-  <p class="feature-copy"><slot /></p>
+<article class="feature" id={`feature-${index}`} role="tabpanel" aria-label={title}>
+  <p class="feature-copy"><strong>{title}</strong> <slot /></p>
   <Terminal title={command} command={shown} output={output} truncated={truncated} />
 </article>

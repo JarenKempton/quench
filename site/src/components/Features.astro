@@ -1,40 +1,42 @@
 ---
 import Feature from "./Feature.astro";
-import summary from "../samples/summary.ansi?raw";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
 import failures from "../samples/failures.ansi?raw";
 import sources from "../samples/sources.ansi?raw";
 
-const tabs = ["quench", "report", "skills", "failures", "sources"];
+const tabs = ["REPORT", "SKILLS", "FAILURES", "SOURCES"];
 ---
 
 <section class="features" id="features">
-  <h2>See each layer, <em>then trim it.</em></h2>
+  <h2>Four questions. <em>Four commands.</em></h2>
   <div class="tabs">
     {tabs.map((_, i) => <input class="tab-pick" type="radio" name="feature" id={`tab-${i + 1}`} checked={i === 0} />)}
     <div class="tab-bar" role="tablist">
-      {tabs.map((tab, i) => <label for={`tab-${i + 1}`}>{tab}</label>)}
+      {tabs.map((tab, i) => <label for={`tab-${i + 1}`}><kbd>F{i + 1}</kbd>{tab}</label>)}
     </div>
 
-    <Feature index={1} command="quench" output={summary}>
-      One screen: what sessions start with, and what is worth a look.
+    <Feature index={1} title="What does a session start with?" command="quench report" output={report} truncated>
+      Starting load, peak context, compactions, models, effort.
     </Feature>
 
-    <Feature index={2} command="quench report" output={report} truncated>
-      Starting load, peak context and compactions, per harness.
+    <Feature index={2} title="What loads and never gets used?" command="quench profile skills" output={skills}>
+      Skills, MCP servers and instruction files: offered vs. called.
     </Feature>
 
-    <Feature index={3} command="quench profile skills" output={skills}>
-      Skills listed in every session, and the ones never used.
+    <Feature index={3} title="Which failures repeat?" command="quench profile failures" output={failures}>
+      Grouped by cause, with streaks and the output they cost.
     </Feature>
 
-    <Feature index={4} command="quench profile failures" output={failures}>
-      Tool calls that fail the same way, and the output they feed back.
-    </Feature>
-
-    <Feature index={5} command="quench sources" shown="quench sources ~/.claude/projects/…/orders.jsonl" output={sources} truncated>
-      What one session read, and where each piece of context came from.
+    <Feature
+      index={4}
+      title="What did one session read?"
+      command="quench sources"
+      shown="quench sources ~/.claude/projects/…/orders.jsonl"
+      output={sources}
+      truncated
+    >
+      Every read, search, MCP call and injected file, by source.
     </Feature>
   </div>
 </section>
