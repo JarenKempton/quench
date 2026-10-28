@@ -5,7 +5,8 @@ const platforms = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
 ---
 
 <section class="install" id="install">
-  <h2>One binary. <em>No setup.</em></h2>
+  <h2>Install</h2>
+  <p class="section-lede">One binary for Linux or macOS. Nothing to configure.</p>
   <div class="install-body">
     {platforms.map((p, i) => <input class="os-pick" type="radio" name="os" id={`os-${p}`} checked={i === 0} />)}
     <div class="os-menu" role="radiogroup" aria-label="Platform">
@@ -14,7 +15,7 @@ const platforms = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
     </div>
     <div class="install-main">
       <Terminal title="install" class="term-plain">
-        <span class="d"># 1  download</span>{"\n"}<span class="prompt">$</span> <span class="cmd">gh release download \{"\n"}    --repo JarenKempton/quench \{"\n"}    --pattern quench-{platforms.map((p) => <span class={`os os-${p}`}>{p}</span>)} \{"\n"}    --output ~/.local/bin/quench</span>{"\n"}{"\n"}<span class="d"># 2  make it executable</span>{"\n"}<span class="prompt">$</span> <span class="cmd">chmod +x ~/.local/bin/quench</span>{"\n"}{"\n"}<span class="d"># 3  run</span>{"\n"}<span class="prompt">$</span> <span class="cmd">quench</span><span class="cursor" aria-hidden="true"></span></Terminal
+        <span class="d"># 1  download</span>{"\n"}<span class="prompt">$</span> <span class="cmd">gh release download \{"\n"}    --repo JarenKempton/quench \{"\n"}    --pattern quench-{platforms.map((p) => <span class={`os os-${p}`}>{p}</span>)} \{"\n"}    --output ~/.local/bin/quench</span>{"\n"}{"\n"}<span class="d"># 2  make it executable</span>{"\n"}<span class="prompt">$</span> <span class="cmd">chmod +x ~/.local/bin/quench</span>{"\n"}{"\n"}<span class="d"># 3  run</span>{"\n"}<span class="prompt">$</span> <span class="cmd">quench</span></Terminal
       >
       <dl class="after">
         <dt>Update</dt>

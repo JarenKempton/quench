@@ -13,6 +13,6 @@ const { title, command, output, truncated = false, class: extra } = Astro.props;
 ---
 
 <figure class:list={["term", extra]} aria-label={`${title} output`}>
-  <figcaption>[ {title} ]</figcaption>
-  <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot />{truncated && <>{"\n"}<span class="more">-- MORE --</span></>}</pre>
+  <figcaption>{title}</figcaption>
+  <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot />{truncated && <>{"\n"}<span class="d">…</span></>}</pre>
 </figure>

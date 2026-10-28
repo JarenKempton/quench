@@ -1,23 +1,20 @@
 ---
 import Command from "./Command.astro";
-import Terminal from "./Terminal.astro";
-import summary from "../samples/summary.ansi?raw";
+import Layers from "./Layers.astro";
 ---
 
 <section class="hero">
   <div class="hero-copy">
-    <h1>Every session starts <span class="nowrap"><em>hot</em><span class="cursor" aria-hidden="true"></span></span></h1>
-    <p class="lede">What your coding agents load, what it costs, where they go wrong.</p>
+    <h1>Your agent's context comes in layers.</h1>
+    <p class="lede">
+      System prompt, built-in tools, MCP servers, instruction files, skills. Every turn carries all of
+      them. Quench shows what is in each layer and what you can remove.
+    </p>
     <div class="hero-actions">
-      <a class="btn" href="#install">[ INSTALL ]</a>
+      <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
-    <ul class="facts">
-      <li>[X] READ-ONLY</li>
-      <li>[X] LOCAL</li>
-      <li>[X] ZERO SETUP</li>
-    </ul>
-    <p class="works">Claude Code · Codex · Pi</p>
+    <p class="facts">Read-only · Runs locally · Claude Code, Codex, Pi</p>
   </div>
-  <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+  <Layers />
 </section>

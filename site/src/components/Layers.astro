@@ -1,0 +1,39 @@
+---
+const total = 26.0;
+const layers = [
+  { name: "System prompt", tokens: 3.4, note: "harness" },
+  { name: "Built-in tools", tokens: 12.6, note: "24 definitions" },
+  { name: "MCP servers", tokens: 5.9, note: "tracker" },
+  { name: "Instruction files", tokens: 3.8, note: "CLAUDE.md, AGENTS.md" },
+  { name: "Skills", tokens: 0.3, note: "12 listed, 3 used" },
+];
+let start = 0;
+const rows = layers.map((layer) => {
+  const row = { ...layer, start: (start / total) * 100, size: (layer.tokens / total) * 100 };
+  start += layer.tokens;
+  return row;
+});
+---
+
+<figure class="layers" aria-label="Starting context of one demo session, by layer">
+  <figcaption>acme-api · Claude Code · turn 1, before the first reply</figcaption>
+  <ol>
+    {
+      rows.map((row) => (
+        <li>
+          <span class="layer-name">{row.name}</span>
+          <span class="layer-bar" aria-hidden="true">
+            <i class="below" style={`width:${row.start}%`} />
+            <i class="this" style={`width:${row.size}%`} />
+          </span>
+          <span class="layer-size">{row.tokens.toFixed(1)}k</span>
+          <span class="layer-note">{row.note}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <p class="layers-total">
+    <span>Starting context</span><span class="layer-size">{total.toFixed(1)}k tokens</span>
+  </p>
+  <p class="layers-foot">Sent again on turn 2, and on every turn after it.</p>
+</figure>
