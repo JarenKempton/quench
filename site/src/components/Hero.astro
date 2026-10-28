@@ -1,20 +1,23 @@
 ---
+import Assembly from "./Assembly.astro";
 import Command from "./Command.astro";
-import Exploded from "./Exploded.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <h1 id="hero-title">Every session starts <em>loaded.</em></h1>
-    <p class="lede">See what your coding agents load, and what it costs.</p>
+    <h1 id="hero-title">Loaded before <em>you type.</em></h1>
+    <p class="lede">
+      System prompt, tools, MCP servers, instruction files and skills are already in your agent's context. Quench shows
+      each layer and what it costs.
+    </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
   </div>
-  <Exploded />
+  <Assembly />
 </section>
 
 <section class="hero-plate" aria-label="Sample summary output">

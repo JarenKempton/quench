@@ -387,6 +387,7 @@ h2 em {
 }
 
 .exploded .leader {
+  fill: none;
   stroke: var(--cyan-2);
   stroke-width: 0.8;
 }
@@ -441,6 +442,38 @@ h2 em {
   fill: rgb(159 220 250 / 0.22);
 }
 
+.exploded:has(.callout-6:hover) .layer-6 :is(.face, .side) {
+  stroke-opacity: 1;
+  fill: rgb(159 220 250 / 0.22);
+}
+
+.exploded .largest .side {
+  fill: url(#hatch);
+}
+
+.exploded .largest .side-l {
+  stroke: var(--red);
+}
+
+.exploded .largest .side-r {
+  stroke: var(--red);
+}
+
+.exploded .fig-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.fig-note {
+  margin: 14px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--mute);
+}
+
 .callouts {
   margin: 0;
   padding: 0;
@@ -468,6 +501,10 @@ h2 em {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--mute);
+}
+
+.callouts .total {
+  display: none;
 }
 
 .callouts li:hover b {
@@ -633,63 +670,195 @@ h2 em {
   font-size: clamp(36px, 4.6vw, 58px);
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 40px;
+.section-lede {
+  max-width: 34em;
+  margin: -32px 0 48px;
+  font-size: 19px;
+  color: var(--ink-2);
 }
 
-.stat {
+/* Fig. 2: the window datum */
+
+.datum {
+  margin: 0;
+}
+
+.datum-drawing {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 30px;
 }
 
-.dim-line {
+.datum svg {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 9px;
-  border-left: 1px solid var(--yellow);
-  border-right: 1px solid var(--yellow);
-  transform-origin: left;
-  animation: draw-x 0.9s cubic-bezier(0.6, 0, 0.2, 1) both;
-  animation-timeline: view();
-  animation-range: entry 10% cover 30%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.dim-line::before {
-  content: "";
+.datum .start {
+  fill: url(#datum-hatch);
+  stroke: var(--cyan);
+  stroke-width: 1;
+}
+
+.datum .datum-hatch {
+  stroke: var(--cyan);
+  stroke-width: 1.2;
+  opacity: 0.7;
+}
+
+.datum .grown {
+  fill: rgb(159 220 250 / 0.08);
+  stroke: var(--cyan-2);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.datum .frame,
+.datum .break {
+  fill: none;
+  stroke: var(--cyan-2);
+  stroke-width: 1;
+}
+
+.datum .dims line {
+  stroke: var(--yellow);
+  stroke-width: 1;
+}
+
+.datum .ticks line {
+  stroke: var(--cyan-2);
+  stroke-width: 1;
+}
+
+.datum .leader {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 0.8;
+}
+
+.datum .leader-dot {
+  fill: var(--cyan);
+}
+
+.tick-labels,
+.datum-labels {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tick-labels li {
   position: absolute;
-  top: 4px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--yellow);
-  opacity: 0.8;
+  top: 70%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mute);
 }
 
-.num {
-  font-size: clamp(56px, 6.4vw, 84px);
-  font-weight: 300;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
+.datum-labels li {
+  position: absolute;
+  transform: translate(10px, -50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
-.num small {
-  margin-left: 6px;
+.datum-labels .window-label {
+  transform: translate(0, -150%);
+}
+
+.datum-labels .resent {
+  transform: translate(0, -50%);
+  white-space: normal;
+  max-width: 34em;
+  font-family: var(--sans);
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.datum-labels b {
+  font-weight: 500;
+  color: var(--yellow);
+}
+
+/* Fig. 3: parts list */
+
+.parts {
+  margin: 0 0 72px;
+}
+
+.parts table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--cyan-2);
   font-family: var(--mono);
   font-size: 13px;
-  letter-spacing: 0.06em;
+  background: rgb(6 30 52 / 0.55);
+}
+
+.parts caption {
+  caption-side: top;
+  padding: 0 0 10px;
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--cyan);
 }
 
-.stat-label {
+.parts th,
+.parts td {
+  padding: 10px 14px;
+  text-align: left;
+  border: 1px solid var(--hair);
+}
+
+.parts thead th {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.parts tbody th {
+  font-family: var(--sans);
   font-size: 16px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.parts tbody td {
   color: var(--ink-2);
+}
+
+.parts tbody td:first-child {
+  width: 1%;
+  text-align: center;
+  color: var(--cyan);
+}
+
+.parts tr.uncalled td:last-child {
+  color: var(--red);
+}
+
+.parts tr.uncalled th {
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 1px;
+}
+
+.parts tfoot td {
+  font-family: var(--sans);
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.parts tfoot b {
+  font-weight: 500;
+  color: var(--red);
 }
 
 /* Features */
@@ -888,11 +1057,6 @@ h2 em {
 }
 
 @media (max-width: 720px) {
-  .stats {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 36px;
-  }
-
   .title-block {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
@@ -927,6 +1091,103 @@ h2 em {
 
   .lede {
     font-size: 17px;
+  }
+
+  .exploded {
+    aspect-ratio: auto !important;
+  }
+
+  .exploded svg {
+    position: static;
+    height: auto;
+  }
+
+  .exploded .leader,
+  .dim-label {
+    display: none;
+  }
+
+  .exploded .callouts {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .exploded .callouts li {
+    position: static;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    transform: none;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .exploded .callouts .total {
+    display: flex;
+  }
+
+  .exploded .callouts .total span {
+    color: var(--yellow);
+  }
+
+  .callouts b {
+    font-size: 14px;
+  }
+
+  .exploded .fig-note {
+    position: static;
+  }
+
+  .section-lede {
+    margin-top: -16px;
+    font-size: 17px;
+  }
+
+  .datum-drawing {
+    aspect-ratio: auto !important;
+    padding-top: 30%;
+  }
+
+  .datum svg {
+    height: auto;
+    bottom: auto;
+  }
+
+  .tick-labels {
+    display: none;
+  }
+
+  .datum-labels {
+    display: grid;
+    gap: 10px;
+    padding-top: 16px;
+  }
+
+  .datum-labels li,
+  .datum-labels .window-label,
+  .datum-labels .resent {
+    position: static;
+    transform: none;
+    white-space: normal;
+  }
+
+  .parts table {
+    font-size: 11px;
+  }
+
+  .parts th,
+  .parts td {
+    padding: 8px 6px;
+  }
+
+  .parts tbody th,
+  .parts tfoot td {
+    font-size: 14px;
+  }
+
+  .parts thead th {
+    letter-spacing: 0.06em;
   }
 
   .callouts b {

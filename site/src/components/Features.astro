@@ -1,5 +1,6 @@
 ---
 import Feature from "./Feature.astro";
+import Parts from "./Parts.astro";
 import SectionHead from "./SectionHead.astro";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
@@ -9,7 +10,9 @@ import sources from "../samples/sources.ansi?raw";
 
 <section class="features" id="features" aria-labelledby="features-title">
   <SectionHead no="02" name="Readings" />
-  <h2 id="features-title">Four <em>readings.</em></h2>
+  <h2 id="features-title">Every layer, <em>measured.</em></h2>
+  <p class="section-lede">Quench reads the history your harness already keeps, and shows what loaded, what it cost and what was never used, so you know what to trim.</p>
+  <Parts />
   <Feature index={1} title="Starting load" command="quench report" output={report} truncated />
   <Feature index={2} title="Unused skills" command="quench profile skills" output={skills} />
   <Feature index={3} title="Repeat failures" command="quench profile failures" output={failures} />
