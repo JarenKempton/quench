@@ -1,25 +1,20 @@
 ---
 import Command from "./Command.astro";
+import Exploded from "./Exploded.astro";
 import Terminal from "./Terminal.astro";
-import Window from "./Window.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
     <h1 id="hero-title">Every session starts <em>loaded.</em></h1>
-    <div class="hero-side">
-      <p class="lede">
-        Before your agent does anything, part of its context window is already spent, and it rides along on every turn.
-        Quench shows what fills it.
-      </p>
-      <div class="hero-actions">
-        <a class="btn" href="#install">Install</a>
-        <Command text="quench" />
-      </div>
+    <p class="lede">See what your coding agents load, and what it costs.</p>
+    <div class="hero-actions">
+      <a class="btn" href="#install">Install</a>
+      <Command text="quench" />
     </div>
   </div>
-  <Window />
+  <Exploded />
 </section>
 
 <section class="hero-plate" aria-label="Sample summary output">

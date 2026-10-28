@@ -1,0 +1,99 @@
+---
+const layers = [
+  { part: "System prompt", spec: "built in" },
+  { part: "Global instructions", spec: "1.6 KB" },
+  { part: "Project instructions", spec: "13.0k chars" },
+  { part: "Skill list", spec: "9 of 12 unused", skills: true },
+  { part: "MCP tools", spec: "per server" },
+  { part: "Your prompt", spec: "what you typed", prompt: true },
+];
+
+const width = 600;
+const height = 490;
+const half = 92;
+const cx = 215;
+const base = 400;
+const gap = 62;
+const thick = 6;
+const settle = 10;
+const labelX = 392;
+
+const pt = (x: number, y: number, z: number) =>
+  `${(cx + (x - y) * 0.82).toFixed(1)},${(base - z + (x + y) * 0.36).toFixed(1)}`;
+const poly = (...points: string[]) => points.join(" ");
+const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
+
+const strips = Array.from({ length: 12 }, (_, k) => {
+  const x0 = -half + (k * 2 * half) / 12;
+  return { used: k < 3, x0, x1: x0 + (2 * half) / 12 };
+});
+
+const topZ = (layers.length - 1) * gap;
+const rightX = cx + half * 2 * 0.82;
+const leftX = cx - half * 2 * 0.82;
+const dimX = 40;
+---
+
+<figure class="exploded" style={`aspect-ratio:${width}/${height}`}>
+  <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <defs>
+      <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="5" class="hatch-line"></line>
+      </pattern>
+    </defs>
+
+    <g class="axis">
+      <line x1={cx} y1={base + half * 0.72 + 24} x2={cx} y2={base - topZ - half * 0.72 - 18}></line>
+    </g>
+
+    {
+      layers.map((layer, i) => {
+        const z = i * gap;
+        return (
+          <g class:list={["layer", `layer-${i}`, { prompt: layer.prompt }]} style={`--from:${i * (gap - settle)}px;--i:${i}`}>
+            <polygon class="side side-l" points={poly(pt(-half, half, z), pt(half, half, z), pt(half, half, z - thick), pt(-half, half, z - thick))} />
+            <polygon class="side side-r" points={poly(pt(half, half, z), pt(half, -half, z), pt(half, -half, z - thick), pt(half, half, z - thick))} />
+            <polygon class="face" points={poly(pt(-half, -half, z), pt(half, -half, z), pt(half, half, z), pt(-half, half, z))} />
+            {layer.skills &&
+              strips.map((s) => (
+                <polygon
+                  class:list={["strip", { used: s.used }]}
+                  points={poly(pt(s.x0, -half, z), pt(s.x1, -half, z), pt(s.x1, half, z), pt(s.x0, half, z))}
+                />
+              ))}
+            <line class="leader" x1={rightX + 4} y1={base - z} x2={labelX - 10} y2={base - z} />
+            <circle class="leader-dot" cx={rightX} cy={base - z} r="2.2" />
+          </g>
+        );
+      })
+    }
+
+    <g class="dimension">
+      <line class="ext" x1={leftX - 6} y1={base + thick} x2={dimX - 8} y2={base + thick}></line>
+      <line class="ext" x1={leftX - 6} y1={base - topZ} x2={dimX - 8} y2={base - topZ}></line>
+      <line class="dim" x1={dimX} y1={base + thick} x2={dimX} y2={base - topZ}></line>
+      <path class="tick" d={`M${dimX - 5},${base + thick + 5} l10,-10 M${dimX - 5},${base - topZ + 5} l10,-10`}></path>
+    </g>
+  </svg>
+
+  <ol class="callouts" aria-label="What a session starts with, top to bottom">
+    {
+      [...layers].reverse().map((layer, r) => {
+        const i = layers.length - 1 - r;
+        return (
+          <li
+            class:list={[`callout-${i}`, { flag: layer.skills }]}
+            style={`top:${pct(base - i * gap, height)};left:${pct(labelX, width)};--i:${i}`}
+          >
+            <b>{layer.part}</b>
+            <span>{layer.spec}</span>
+          </li>
+        );
+      })
+    }
+  </ol>
+
+  <p class="dim-label" style={`top:${pct(base - topZ / 2, height)};left:${pct(dimX - 22, width)}`}>
+    26.0k tokens, median
+  </p>
+</figure>
