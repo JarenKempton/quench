@@ -33,13 +33,3 @@ export function box(x: number, y: number, z: number, w: number, d: number, h: nu
     ]),
   };
 }
-
-export const leftFace = ([x, y, z]: Point) => {
-  const [e, f] = project([x, y, z]);
-  return `matrix(${COS.toFixed(3)} 0.5 0 1 ${e.toFixed(1)} ${f.toFixed(1)})`;
-};
-
-export const rightFace = ([x, y, z]: Point) => {
-  const [e, f] = project([x, y, z]);
-  return `matrix(${COS.toFixed(3)} -0.5 0 1 ${e.toFixed(1)} ${f.toFixed(1)})`;
-};

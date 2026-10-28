@@ -7,12 +7,12 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features">
-  <p class="eyebrow">Fig. 3 — What it shows</p>
-  <h2>Four questions, answered from history you already have.</h2>
+  <p class="eyebrow">What it shows</p>
+  <h2>Quench shows the layers, and helps you clean them up.</h2>
+  <p class="section-lede">Four questions, answered from history you already have.</p>
 
   <Feature
     index={1}
-    tone="system"
     title="What each session starts with, and what it costs"
     command="quench report"
     output={report}
@@ -24,7 +24,6 @@ import sources from "../samples/sources.ansi?raw";
 
   <Feature
     index={2}
-    tone="tools"
     title="What loads, and what goes unused"
     command="quench profile skills"
     output={skills}
@@ -36,7 +35,6 @@ import sources from "../samples/sources.ansi?raw";
 
   <Feature
     index={3}
-    tone="mcp"
     title="Failures that repeat"
     command="quench profile failures"
     output={failures}
@@ -48,7 +46,6 @@ import sources from "../samples/sources.ansi?raw";
 
   <Feature
     index={4}
-    tone="instructions"
     title="What an agent read, and where its context came from"
     command="quench sources"
     shown="quench sources ~/.claude/projects/…/orders.jsonl"

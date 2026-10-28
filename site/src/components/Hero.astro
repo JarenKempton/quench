@@ -1,6 +1,6 @@
 ---
 import Command from "./Command.astro";
-import Stack from "./Stack.astro";
+import Layers from "./Layers.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
@@ -8,27 +8,22 @@ import summary from "../samples/summary.ansi?raw";
 <section class="hero">
   <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts <em>hot.</em></h1>
+    <h1>Every session starts in layers.</h1>
     <p class="lede">
-      See what your coding agents load, what it costs, and where they go wrong. Quench reads the
-      session history Claude Code, Codex and Pi already keep on your machine.
+      System prompt, built-in tools, MCP servers, instruction files, skills. Your coding agent sends
+      the same stack on every turn. Quench reads the session history Claude Code, Codex and Pi already
+      keep on your machine, and shows what each layer costs.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
-    <ul class="facts">
-      <li class="mcp">Read-only</li>
-      <li class="tools">Zero setup</li>
-      <li class="system">Stays on your machine</li>
-    </ul>
+    <p class="facts">Read-only · Zero setup · Stays on your machine</p>
   </div>
-  <figure class="diagram">
-    <Stack />
-    <figcaption>Fig. 1 — What the harness sends before your first word, on every turn.</figcaption>
+  <figure class="hero-figure">
+    <Layers labelled />
   </figure>
   <div class="hero-term">
-    <p class="callout">Run it with no arguments</p>
-    <Terminal title="~/code/acme-api" command="quench" output={summary} class="term-hero" />
+    <Terminal title="~/code/acme-api" command="quench" output={summary} />
   </div>
 </section>

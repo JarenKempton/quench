@@ -1,0 +1,69 @@
+---
+import { box, project } from "../iso.ts";
+
+interface Props {
+  labelled?: boolean;
+  class?: string;
+}
+
+const { labelled = false, class: extra } = Astro.props;
+const size = 120;
+const labelX = 128;
+
+const spec = [
+  { key: "system", name: "System prompt", height: 30 },
+  { key: "tools", name: "Built-in tools", height: 38 },
+  { key: "mcp", name: "MCP servers", height: 32 },
+  { key: "instructions", name: "Instruction files", height: 150, note: "13.0k chars in acme-api" },
+  { key: "skills", name: "Skills", height: 32, note: "9 of 12 never used" },
+];
+
+let z = 0;
+const layers = spec.map((layer) => {
+  const faces = box(0, 0, z, size, size, layer.height);
+  const [, y] = project([size, 0, z + layer.height / 2]);
+  z += layer.height;
+  return { ...layer, faces, y };
+});
+
+const message = box(0, 0, z, size, size, 8);
+const [, messageY] = project([size, 0, z + 18]);
+const viewBox = labelled ? "-112 -310 520 440" : "-112 -310 224 440";
+---
+
+<svg
+  class:list={["layers", extra]}
+  viewBox={viewBox}
+  role="img"
+  aria-label="One context stack: system prompt, built-in tools, MCP servers, a much thicker layer of instruction files, skills, and a thin slice for your message on top"
+>
+  {
+    layers.map((l) => (
+      <g class:list={["layer", l.key]}>
+        <polygon class="f-top" points={l.faces.top} />
+        <polygon class="f-left" points={l.faces.left} />
+        <polygon class="f-right" points={l.faces.right} />
+      </g>
+    ))
+  }
+  <g class="layer message">
+    <polygon class="f-top" points={message.top}></polygon>
+    <polygon class="f-left" points={message.left}></polygon>
+    <polygon class="f-right" points={message.right}></polygon>
+  </g>
+  {
+    labelled && (
+      <g class="labels">
+        {layers.map((l) => (
+          <text class:list={["label", l.key]} x={labelX} y={l.y + 4}>
+            {l.name}
+            {l.note && <tspan class="note" dx="10">{l.note}</tspan>}
+          </text>
+        ))}
+        <text class="label message" x={labelX} y={messageY + 4}>
+          Your message
+        </text>
+      </g>
+    )
+  }
+</svg>

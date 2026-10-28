@@ -1,14 +1,18 @@
 ---
 import { box } from "../iso.ts";
 
-const layers = ["system", "mcp", "skills"].map((key, i) => ({ key, faces: box(0, 0, i * 9, 22, 22, 6) }));
+const layers = [
+  { key: "system", faces: box(0, 0, 0, 22, 22, 5) },
+  { key: "instructions", faces: box(0, 0, 5, 22, 22, 12) },
+  { key: "skills", faces: box(0, 0, 17, 22, 22, 5) },
+];
 ---
 
 <a class="mark" href="#">
-  <svg viewBox="-21 -27 42 52" aria-hidden="true">
+  <svg viewBox="-21 -24 42 48" aria-hidden="true">
     {
       layers.map((l) => (
-        <g class:list={["block", l.key]}>
+        <g class:list={["layer", l.key]}>
           <polygon class="f-top" points={l.faces.top} />
           <polygon class="f-left" points={l.faces.left} />
           <polygon class="f-right" points={l.faces.right} />

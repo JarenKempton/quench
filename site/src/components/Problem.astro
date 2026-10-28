@@ -1,34 +1,44 @@
 ---
-import Gauge from "./Gauge.astro";
+import Layers from "./Layers.astro";
 
 const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", ratio: 0.52, tone: "system" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", ratio: 0.7, tone: "mcp" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used", ratio: 0.75, tone: "skills" },
+  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply" },
+  { num: "70", unit: "%", label: "of all tokens processed went to that starting load" },
+  { num: "9", unit: "/12", label: "skills listed in every session and never once used" },
 ];
 ---
 
 <section class="problem" id="problem">
-  <p class="eyebrow">Fig. 2 — The problem</p>
-  <h2>Your agent carries a load <em>before you type a word.</em></h2>
+  <p class="eyebrow">The problem</p>
+  <h2>The layers pile up, and you never see them.</h2>
   <p class="section-lede">
-    Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every
-    turn, and none of it shows up anywhere you can see. When an agent drifts, you can't tell whether
-    it was missing something or buried under it.
+    Each layer is added by a different tool, plugin or file, and the harness resends all of it on
+    every turn. None of it shows up anywhere you can see. A bloated context is one reason agents go
+    off the rails: when one drifts, you can't tell whether it was missing something or buried under
+    it.
   </p>
-  <div class="stats">
+  <ol class="turns" aria-label="The same stack, resent on every turn">
+    {
+      ["Turn 1", "Turn 2", "Turn 3"].map((turn) => (
+        <li>
+          <Layers />
+          <span>{turn}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <dl class="stats">
     {
       stats.map((s) => (
         <div class="stat">
-          <Gauge ratio={s.ratio} tone={s.tone} />
-          <span class="num">
+          <dt>
             {s.num}
             <small>{s.unit}</small>
-          </span>
-          <span class="label">{s.label}</span>
+          </dt>
+          <dd>{s.label}</dd>
         </div>
       ))
     }
-  </div>
+  </dl>
   <p class="footnote">Figures from the demo history behind every sample on this page.</p>
 </section>

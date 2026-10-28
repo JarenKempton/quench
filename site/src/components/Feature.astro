@@ -1,6 +1,5 @@
 ---
 import Command from "./Command.astro";
-import Cube from "./Cube.astro";
 import Terminal from "./Terminal.astro";
 
 interface Props {
@@ -11,16 +10,15 @@ interface Props {
   output: string;
   truncated?: boolean;
   flip?: boolean;
-  tone: string;
   wide?: boolean;
 }
 
-const { index, title, command, shown = command, output, truncated, flip = false, wide = false, tone } = Astro.props;
+const { index, title, command, shown = command, output, truncated, flip = false, wide = false } = Astro.props;
 ---
 
-<article class:list={["feature", tone, { flip, wide }]}>
+<article class:list={["feature", { flip, wide }]}>
   <div class="feature-copy">
-    <Cube label={String(index).padStart(2, "0")} tone={tone} />
+    <span class="index">{String(index).padStart(2, "0")}</span>
     <h3>{title}</h3>
     <p><slot /></p>
     <Command text={command} />
