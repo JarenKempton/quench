@@ -1,21 +1,27 @@
 ---
 import Datum from "./Datum.astro";
-import Month from "./Month.astro";
 import SectionHead from "./SectionHead.astro";
+import { month, percent } from "../context.ts";
 ---
 
 <section class="problem" id="problem" aria-labelledby="problem-title">
   <SectionHead no="01" name="Every turn" />
-  <div class="card text-card">
-    <h2 id="problem-title">The same layers are sent again on every turn.</h2>
-    <p>
-      The model keeps no memory between calls, so the harness sends every layer each time. Against a 1M window the
-      starting load looks small. Across a run, and across a month, it is most of what the model reads, and nothing in
-      the harness shows it to you.
+  <div class="section-intro">
+    <div class="section-copy">
+      <h2 id="problem-title">The same layers are sent again on every turn.</h2>
+      <p>
+        The model keeps no memory between calls, so the harness sends every layer each time. Against a 1M window the
+        starting load looks small. Across a month it is most of what the model reads, and nothing in the harness shows
+        it to you.
+      </p>
+    </div>
+    <p class="stat">
+      <b>{percent(month.startShare)}</b>
+      <span>
+        of the {(month.processed / 1e6).toFixed(1)}M tokens Claude Code processed in {month.days} days was the starting
+        load, sent again. From <code>quench report</code>.
+      </span>
     </p>
   </div>
-  <div class="figure-pair">
-    <Datum />
-    <Month />
-  </div>
+  <Datum />
 </section>

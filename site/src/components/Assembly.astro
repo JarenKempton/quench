@@ -1,14 +1,14 @@
 ---
-import { kilo, layerChars, layers, percent, promptChars } from "../context.ts";
+import { kilo, layerChars, layers, percent, startTokens } from "../context.ts";
 
-const width = 600;
-const height = 480;
+const width = 660;
+const height = 444;
 const half = 92;
-const cx = 215;
+const cx = 190;
 const base = 350;
 const stackHeight = 260;
 const sliver = 4;
-const labelX = 400;
+const labelX = 380;
 const gapMin = 44;
 
 const pt = (x: number, y: number, z: number) =>
@@ -20,12 +20,12 @@ let z = 0;
 const solid = layers.map((l) => {
   const z0 = z;
   z += l.share * stackHeight;
-  return { name: l.name, value: `${l.chars.toLocaleString("en-US")} chars · ${percent(l.share)}`, z0, z1: z, largest: l.mcp };
+  return { name: l.name, value: percent(l.share), z0, z1: z, largest: l.mcp };
 });
 const top = z;
 const plates = [
   ...solid,
-  { name: "Your prompt", value: `${promptChars} chars`, z0: top, z1: top + sliver, prompt: true, largest: false },
+  { name: "Your prompt", value: "<1%", z0: top, z1: top + sliver, prompt: true, largest: false },
 ];
 
 const rightX = cx + half * 2 * 0.82;
@@ -42,67 +42,58 @@ for (const i of order) {
 }
 ---
 
-<figure class="exploded" style={`aspect-ratio:${width}/${height}`}>
-  <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-    <defs>
-      <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-        <line x1="0" y1="0" x2="0" y2="5" class="hatch-line"></line>
-      </pattern>
-    </defs>
+<figure class="exploded-wrap">
+  <div class="exploded" style={`aspect-ratio:${width}/${height}`}>
+    <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <defs>
+        <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="5" class="hatch-line"></line>
+        </pattern>
+      </defs>
 
-    <g class="axis">
-      <line x1={cx} y1={base + half * 0.72 + 22} x2={cx} y2={base - top - half * 0.72 - 18}></line>
-    </g>
+      <g class="axis">
+        <line x1={cx} y1={base + half * 0.72 + 22} x2={cx} y2={base - top - half * 0.72 - 18}></line>
+      </g>
 
-    {
-      plates.map((p, i) => (
-        <g class:list={["layer", `layer-${i}`, { prompt: "prompt" in p, largest: p.largest }]} style={`--from:${-(i + 1) * 10}px;--i:${i}`}>
-          <polygon class="side side-l" points={poly(pt(-half, half, p.z1), pt(half, half, p.z1), pt(half, half, p.z0), pt(-half, half, p.z0))} />
-          <polygon class="side side-r" points={poly(pt(half, half, p.z1), pt(half, -half, p.z1), pt(half, -half, p.z0), pt(half, half, p.z0))} />
-          {i >= plates.length - 2 && (
-            <polygon class="face" points={poly(pt(-half, -half, p.z1), pt(half, -half, p.z1), pt(half, half, p.z1), pt(-half, half, p.z1))} />
-          )}
-          <polyline
-            class="leader"
-            points={`${rightX + 4},${base - (p.z0 + p.z1) / 2} ${labelX - 24},${labelY.get(i)} ${labelX - 10},${labelY.get(i)}`}
-          />
-          <circle class="leader-dot" cx={rightX} cy={base - (p.z0 + p.z1) / 2} r="2.2" />
-        </g>
-      ))
-    }
+      {
+        plates.map((p, i) => (
+          <g class:list={["layer", `layer-${i}`, { prompt: "prompt" in p, largest: p.largest }]} style={`--from:${-(i + 1) * 10}px;--i:${i}`}>
+            <polygon class="side side-l" points={poly(pt(-half, half, p.z1), pt(half, half, p.z1), pt(half, half, p.z0), pt(-half, half, p.z0))} />
+            <polygon class="side side-r" points={poly(pt(half, half, p.z1), pt(half, -half, p.z1), pt(half, -half, p.z0), pt(half, half, p.z0))} />
+            {i >= plates.length - 2 && (
+              <polygon class="face" points={poly(pt(-half, -half, p.z1), pt(half, -half, p.z1), pt(half, half, p.z1), pt(-half, half, p.z1))} />
+            )}
+            <polyline
+              class="leader"
+              points={`${rightX + 4},${base - (p.z0 + p.z1) / 2} ${labelX - 24},${labelY.get(i)} ${labelX - 10},${labelY.get(i)}`}
+            />
+            <circle class="leader-dot" cx={rightX} cy={base - (p.z0 + p.z1) / 2} r="2.2" />
+          </g>
+        ))
+      }
 
-    <g class="dimension">
-      <line class="ext" x1={leftX - 6} y1={base} x2={dimX - 8} y2={base}></line>
-      <line class="ext" x1={leftX - 6} y1={base - top} x2={dimX - 8} y2={base - top}></line>
-      <line class="dim" x1={dimX} y1={base} x2={dimX} y2={base - top}></line>
-      <path class="tick" d={`M${dimX - 5},${base + 5} l10,-10 M${dimX - 5},${base - top + 5} l10,-10`}></path>
-    </g>
-  </svg>
+      <g class="dimension">
+        <line class="ext" x1={leftX - 6} y1={base} x2={dimX - 8} y2={base}></line>
+        <line class="ext" x1={leftX - 6} y1={base - top} x2={dimX - 8} y2={base - top}></line>
+        <line class="dim" x1={dimX} y1={base} x2={dimX} y2={base - top}></line>
+        <path class="tick" d={`M${dimX - 5},${base + 5} l10,-10 M${dimX - 5},${base - top + 5} l10,-10`}></path>
+      </g>
+    </svg>
 
-  <ol class="callouts" aria-label="What a session holds before you type, top to bottom">
-    {
-      order.map((i) => (
-        <li
-          class:list={[`callout-${i}`, { flag: plates[i].largest }]}
-          style={`top:${pct(labelY.get(i)!, height)};left:${pct(labelX, width)};--i:${i}`}
-        >
-          <b>{plates[i].name}</b>
-          <span>{plates[i].value}</span>
-        </li>
-      ))
-    }
-    <li class="total">
-      <b>Total</b>
-      <span>{kilo(layerChars)} chars before you type</span>
-    </li>
-  </ol>
-
-  <p class="dim-label" style={`top:${pct(base - top / 2, height)};left:${pct(dimX - 22, width)}`}>
-    {kilo(layerChars)} chars before you type
-  </p>
-
-  <p class="fig-note">
-    Fig. 1 · Section through one demo session's first request, thickness to scale by characters. From{" "}
-    <code>quench runs --json</code>.
-  </p>
+    <ol class="callouts" aria-label="What a session holds before you type, top to bottom">
+      {
+        order.map((i) => (
+          <li
+            class:list={[`callout-${i}`, { flag: plates[i].largest }]}
+            style={`top:${pct(labelY.get(i)!, height)};left:${pct(labelX, width)};--i:${i}`}
+          >
+            <b>{plates[i].name}</b>
+            <span>{plates[i].value}</span>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+  <p class="fig-total"><b>{kilo(layerChars)}</b> characters, <b>{kilo(startTokens)}</b> tokens, before you type</p>
+  <figcaption class="fig-note">Fig. 1 · One demo session's first request, layers to scale.</figcaption>
 </figure>

@@ -6,19 +6,20 @@ interface Props {
   index: number;
   title: string;
   command: string;
+  caption?: string;
   shown?: string;
   output: string;
   truncated?: boolean;
 }
 
-const { index, title, command, shown = command, output, truncated } = Astro.props;
+const { index, title, command, caption = command, shown = command, output, truncated } = Astro.props;
 ---
 
 <article class="feature">
-  <div class="card text-card feature-copy">
+  <div class="feature-copy">
     <h3>{title}</h3>
     <p><slot /></p>
     <Command text={command} />
   </div>
-  <Terminal plate={String(index + 1)} title={command} command={shown} output={output} truncated={truncated} />
+  <Terminal plate={String(index + 1)} title={caption} command={shown} output={output} truncated={truncated} />
 </article>

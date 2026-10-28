@@ -1,6 +1,7 @@
 ---
 import Feature from "./Feature.astro";
 import SectionHead from "./SectionHead.astro";
+import summary from "../samples/summary.ansi?raw";
 import report from "../samples/report.ansi?raw";
 import skills from "../samples/skills.ansi?raw";
 import failures from "../samples/failures.ansi?raw";
@@ -8,11 +9,15 @@ import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <SectionHead no="03" name="What Quench shows" />
-  <div class="card text-card">
-    <h2 id="features-title">Each layer and what it costs, so you can trim it.</h2>
+  <SectionHead no="04" name="What Quench shows" />
+  <div class="section-copy">
+    <h2 id="features-title">Quench shows each layer and what it costs, so you can trim it.</h2>
     <p>Every number on this page came from these commands, run on a synthetic demo history.</p>
   </div>
+  <Feature index={0} title="A summary of every layer" command="quench" caption="~/code/acme-api" output={summary}>
+    Run it with no arguments. It finds each harness home on its own, shows what every session starts with, and points
+    at what is worth a look.
+  </Feature>
   <Feature index={1} title="What each session starts with" command="quench report" output={report} truncated>
     Per harness: the starting load, how much of everything processed it was, peak context, compactions, tool errors,
     and which models and effort levels you actually use.

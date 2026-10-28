@@ -1,13 +1,11 @@
 ---
 import Assembly from "./Assembly.astro";
 import Command from "./Command.astro";
-import Terminal from "./Terminal.astro";
 import { kilo, startTokens } from "../context.ts";
-import summary from "../samples/summary.ansi?raw";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="card hero-copy">
+  <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
     <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
     <p class="lede">
@@ -22,9 +20,4 @@ import summary from "../samples/summary.ansi?raw";
   <div class="card figure-card hero-figure">
     <Assembly />
   </div>
-</section>
-
-<section class="hero-plate" aria-label="Sample summary output">
-  <p class="plate-lead">Run it with no arguments for a summary of every layer.</p>
-  <Terminal plate="1" title="~/code/acme-api" command="quench" output={summary} />
 </section>

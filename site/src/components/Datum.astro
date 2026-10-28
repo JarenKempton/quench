@@ -16,8 +16,8 @@ const resent = startTokens * requests;
 ---
 
 <figure class="card figure-card datum">
-  <p class="big">{percent(resent / inputTokens)}*</p>
-  <p class="big-label">
+  <p class="fig-head">
+    <b>{percent(resent / inputTokens)}*</b>
     of this run's {kilo(inputTokens)} input tokens were the same {kilo(startTokens)} starting load, sent again with each of
     its {requests} model calls
   </p>
