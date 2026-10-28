@@ -1,0 +1,101 @@
+---
+import { box, project } from "../iso.ts";
+import { k, model, report, startTokens, windowTokens } from "../samples/context.ts";
+
+const cell = 22;
+const pitch = 25;
+const cellTokens = windowTokens / 100;
+const filled = startTokens / cellTokens;
+
+const cells = Array.from({ length: 100 }, (_, i) => {
+  const x = (i % 10) * pitch;
+  const y = Math.floor(i / 10) * pitch;
+  const fill = Math.max(0, Math.min(1, filled - i));
+  return {
+    empty: box(x, y, 0, cell, cell, 2).top,
+    load: fill > 0 ? box(x, y, 0, cell * fill, cell, 10) : null,
+  };
+});
+const tray = box(-8, -8, -10, 10 * pitch + 13, 10 * pitch + 13, 10);
+const trayShadow = box(-14, -14, -10, 10 * pitch + 40, 10 * pitch + 40, 0).top;
+
+const colSize = 90;
+const colHeight = 300;
+const resent = colHeight * report.startShare;
+const lower = box(0, 0, 0, colSize, colSize, resent);
+const upper = box(0, 0, resent, colSize, colSize, colHeight - resent);
+const colShadow = box(-8, -8, 0, colSize + 34, colSize + 34, 0).top;
+const [, resentY] = project([colSize, 0, resent / 2]);
+const [, restY] = project([colSize, 0, resent + (colHeight - resent) / 2]);
+const [rightX] = project([colSize, 0, 0]);
+const [, colBase] = project([colSize, colSize, 0]);
+const share = ((startTokens / windowTokens) * 100).toFixed(1);
+const [, trayFront] = project([10 * pitch + 5, 10 * pitch + 5, -10]);
+---
+
+<div class="reach">
+  <svg
+    viewBox="-250 -90 510 400"
+    role="img"
+    aria-label={`A 1M-token ${model} context window as 100 cells of 10k tokens; the ${k(startTokens)} starting load fills ${share}% of it.`}
+  >
+    <defs>
+      <filter id="reach-soft" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="12"></feGaussianBlur>
+      </filter>
+    </defs>
+    <polygon class="ground" points={trayShadow} filter="url(#reach-soft)"></polygon>
+    <g class="block tray">
+      <polygon class="f-top" points={tray.top}></polygon>
+      <polygon class="f-left" points={tray.left}></polygon>
+      <polygon class="f-right" points={tray.right}></polygon>
+    </g>
+    {cells.map((c) => <polygon class="cell" points={c.empty} />)}
+    {
+      cells.map(
+        (c) =>
+          c.load && (
+            <g class="block mcp">
+              <polygon class="f-left" points={c.load.left} />
+              <polygon class="f-right" points={c.load.right} />
+              <polygon class="f-top" points={c.load.top} />
+            </g>
+          ),
+      )
+    }
+    <text class="fig-num" x="-230" y="-30">{share}%</text>
+    <text class="fig-label" x="-230" y="-6">of the window holds the</text>
+    <text class="fig-label" x="-230" y="12">{k(startTokens)}-token starting load</text>
+    <text class="fig-note" x="-230" y="34">derived: {k(startTokens)} ÷ 1M</text>
+    <text class="fig-caption" x="0" y={trayFront + 34} text-anchor="middle">
+      One {model} window: 1M tokens, each cell 10k
+    </text>
+  </svg>
+
+  <svg
+    viewBox="-200 -320 520 480"
+    role="img"
+    aria-label={`${report.days} days of Claude Code: ${(report.processed / 1e6).toFixed(1)}M tokens processed, ${report.startShare * 100}% of them the starting load sent again.`}
+  >
+    <polygon class="ground" points={colShadow} filter="url(#reach-soft)"></polygon>
+    <g class="block mcp">
+      <polygon class="f-top" points={lower.top}></polygon>
+      <polygon class="f-left" points={lower.left}></polygon>
+      <polygon class="f-right" points={lower.right}></polygon>
+    </g>
+    <g class="block rest">
+      <polygon class="f-top" points={upper.top}></polygon>
+      <polygon class="f-left" points={upper.left}></polygon>
+      <polygon class="f-right" points={upper.right}></polygon>
+    </g>
+    <text class="fig-num" x={rightX + 26} y={resentY}>{report.startShare * 100}%</text>
+    <text class="fig-label" x={rightX + 26} y={resentY + 22}>starting load, sent again</text>
+    <text class="fig-label" x={rightX + 26} y={resentY + 40}>on every model call</text>
+    <text class="fig-num small" x={rightX + 26} y={restY}>{100 - report.startShare * 100}%</text>
+    <text class="fig-label" x={rightX + 26} y={restY + 20}>everything else</text>
+    <text class="fig-caption" x="60" y={colBase + 34} text-anchor="middle">
+      {(report.processed / 1e6).toFixed(1)}M tokens processed, Claude Code, last {report.days} days
+    </text>
+    <text class="fig-source" x="60" y={colBase + 54} text-anchor="middle">source: quench report</text>
+  </svg>
+</div>

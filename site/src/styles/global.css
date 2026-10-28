@@ -213,7 +213,7 @@ nav a {
 }
 
 .hero h1 {
-  font-size: clamp(52px, 7vw, 92px);
+  font-size: clamp(44px, 5.4vw, 74px);
 }
 
 .lede {
@@ -520,12 +520,14 @@ nav a {
 }
 
 .problem,
+.drift,
 .features,
 .install {
   padding: 96px 0;
 }
 
 .problem h2,
+.drift h2,
 .features h2,
 .install h2 {
   max-width: 17em;
@@ -749,6 +751,160 @@ footer .mark {
   margin-left: 6px;
 }
 
+.figure {
+  overflow-x: auto;
+  margin: 48px 0 0;
+  padding: 36px 32px 26px;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 0.6);
+  box-shadow: var(--lift);
+}
+
+.figure figcaption {
+  margin-top: 18px;
+  color: var(--mute);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.reach {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: end;
+}
+
+.reach svg,
+.shelf,
+.path {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.drift-title {
+  margin-top: 96px;
+}
+
+.layer-share {
+  fill: var(--coral);
+  font-size: 15px;
+}
+
+.tray {
+  --top: #f7f3ea;
+  --left: #e2dbcc;
+  --right: #cfc7b6;
+}
+
+.rest {
+  --top: #f9f7f2;
+  --left: #e2dccf;
+  --right: #cbc4b5;
+}
+
+.ok {
+  --top: #7fd3c3;
+  --left: #2aa996;
+  --right: #1d8475;
+}
+
+.failed {
+  --top: #f6a28d;
+  --left: #3a3d57;
+  --right: #232539;
+}
+
+.cell {
+  fill: #ebe5d8;
+  stroke: rgb(35 37 57 / 0.08);
+  stroke-width: 0.6;
+}
+
+.ghost polygon {
+  fill: rgb(255 255 255 / 0.35);
+  stroke: var(--ink);
+  stroke-opacity: 0.28;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  stroke-linejoin: round;
+}
+
+.fig-num {
+  fill: var(--coral);
+  font-family: var(--display);
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.fig-num.small {
+  fill: var(--ink-2);
+  font-size: 32px;
+}
+
+.fig-of {
+  fill: var(--mute);
+  font-size: 24px;
+}
+
+.fig-label {
+  fill: var(--ink);
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fig-label.bad {
+  fill: #c9513a;
+}
+
+.fig-note,
+.fig-caption,
+.fig-source {
+  fill: var(--mute);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.fig-caption {
+  fill: var(--ink-2);
+  font-size: 13px;
+}
+
+.fig-source {
+  fill: var(--teal);
+}
+
+.path-line {
+  stroke: rgb(35 37 57 / 0.2);
+  stroke-width: 2;
+  stroke-dasharray: 2 6;
+}
+
+.path-tool {
+  fill: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.path-index {
+  fill: var(--mute);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.bracket {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 1.5;
+}
+
+.bracket.bad {
+  stroke: #c9513a;
+}
+
 @media (max-width: 960px) {
   .hero,
   .feature,
@@ -779,6 +935,19 @@ footer .mark {
 }
 
 @media (max-width: 560px) {
+  .figure {
+    padding: 24px 18px 20px;
+  }
+
+  .reach {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shelf,
+  .path {
+    min-width: 760px;
+  }
+
   body {
     font-size: 16px;
   }

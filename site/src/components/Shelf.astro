@@ -1,0 +1,84 @@
+---
+import { box } from "../iso.ts";
+import { servers, skills } from "../samples/context.ts";
+
+const cube = 18;
+const pitch = 24;
+
+const group = (count: number, used: number, cols: number) =>
+  Array.from({ length: count }, (_, i) => {
+    const x = (i % cols) * pitch;
+    const y = Math.floor(i / cols) * pitch;
+    return { used: i >= count - used, depth: x + y, faces: box(x, y, 0, cube, cube, cube) };
+  }).sort((a, b) => Number(a.used) - Number(b.used) || a.depth - b.depth);
+
+const groups = [
+  ...servers.map((s) => ({
+    key: "mcp",
+    title: `${s.name} MCP server`,
+    count: s.called,
+    total: s.tools,
+    unit: "tools called",
+    cubes: group(s.tools, s.called, s.tools > 8 ? 6 : 2),
+    cols: s.tools > 8 ? 6 : 2,
+  })),
+  {
+    key: "skills",
+    title: "skill list",
+    count: skills.used,
+    total: skills.listed,
+    unit: "skills used, 30 days",
+    cubes: group(skills.listed, skills.used, 4),
+    cols: 4,
+  },
+].map((g, i) => {
+  const rows = Math.ceil(g.total / g.cols);
+  const plate = box(-8, -8, -8, g.cols * pitch + 10, rows * pitch + 10, 8);
+  const cx = ((g.cols - rows) * pitch * Math.cos(Math.PI / 6)) / 2;
+  return { ...g, plate, cx, x: [0, 300, 540][i] ?? i * 260 };
+});
+---
+
+<svg
+  class="shelf"
+  viewBox="-120 -60 860 330"
+  role="img"
+  aria-label={groups.map((g) => `${g.title}: ${g.count} of ${g.total} ${g.unit}`).join("; ")}
+>
+  {
+    groups.map((g) => (
+      <g transform={`translate(${g.x} 0)`}>
+        <g class="block tray">
+          <polygon class="f-top" points={g.plate.top} />
+          <polygon class="f-left" points={g.plate.left} />
+          <polygon class="f-right" points={g.plate.right} />
+        </g>
+        {g.cubes.map((c) =>
+          c.used ? (
+            <g class:list={["block", g.key]}>
+              <polygon class="f-top" points={c.faces.top} />
+              <polygon class="f-left" points={c.faces.left} />
+              <polygon class="f-right" points={c.faces.right} />
+            </g>
+          ) : (
+            <g class="ghost">
+              <polygon points={c.faces.top} />
+              <polygon points={c.faces.left} />
+              <polygon points={c.faces.right} />
+            </g>
+          ),
+        )}
+        <text class="fig-num" x={g.cx} y="196" text-anchor="middle">
+          {g.count}
+          <tspan class="fig-of">/{g.total}</tspan>
+        </text>
+        <text class="fig-label" x={g.cx} y="220" text-anchor="middle">
+          {g.unit}
+        </text>
+        <text class="fig-note" x={g.cx} y="240" text-anchor="middle">
+          {g.title}
+        </text>
+      </g>
+    ))
+  }
+</svg>

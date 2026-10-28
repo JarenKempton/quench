@@ -1,34 +1,16 @@
 ---
-import Gauge from "./Gauge.astro";
-
-const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", ratio: 0.52, tone: "system" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", ratio: 0.7, tone: "mcp" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used", ratio: 0.75, tone: "skills" },
-];
+import Reach from "./Reach.astro";
 ---
 
 <section class="problem" id="problem">
   <p class="eyebrow">Fig. 2 — The problem</p>
-  <h2>Your agent carries a load <em>before you type a word.</em></h2>
+  <h2>The same layers are sent again on every call.</h2>
   <p class="section-lede">
-    Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every
-    turn, and none of it shows up anywhere you can see. When an agent drifts, you can't tell whether
-    it was missing something or buried under it.
+    The model keeps no memory between calls, so the harness resends every layer each time. Against a
+    1M window the starting load looks small. Over a month of sessions it is most of what the model
+    reads, and nothing in the harness shows it to you.
   </p>
-  <div class="stats">
-    {
-      stats.map((s) => (
-        <div class="stat">
-          <Gauge ratio={s.ratio} tone={s.tone} />
-          <span class="num">
-            {s.num}
-            <small>{s.unit}</small>
-          </span>
-          <span class="label">{s.label}</span>
-        </div>
-      ))
-    }
-  </div>
-  <p class="footnote">Figures from the demo history behind every sample on this page.</p>
+  <figure class="figure">
+    <Reach />
+  </figure>
 </section>

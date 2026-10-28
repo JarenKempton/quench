@@ -1,0 +1,61 @@
+---
+import { box } from "../iso.ts";
+import { toolCalls } from "../samples/context.ts";
+
+const size = 30;
+const step = 62;
+const faces = box(0, 0, 0, size, size, size);
+const tile = box(-4, -4, 0, size + 8, size + 8, 0).top;
+const x = (i: number) => i * step;
+const firstFail = toolCalls.findIndex((c) => !c.ok);
+const pushes = toolCalls.map((c, i) => ({ ...c, i })).filter((c) => c.why?.startsWith("git push"));
+const missing = toolCalls.map((c, i) => ({ ...c, i })).find((c) => c.why && !c.why.startsWith("git push"))!;
+const span = (from: number, to: number) => ({ x1: x(from) - 26, x2: x(to) + 26 });
+const okSpan = span(0, firstFail - 1);
+const pushSpan = span(pushes[0].i, pushes.at(-1)!.i);
+---
+
+<svg
+  class="path"
+  viewBox={`-60 -120 ${x(toolCalls.length - 1) + 120} 300`}
+  role="img"
+  aria-label={`One run's ${toolCalls.length} tool calls in order: ${firstFail} succeeded, then ${toolCalls.length - firstFail} failed in a row, ${pushes.length} of them git push --force blocked by a hook.`}
+>
+  <line class="path-line" x1="0" y1="40" x2={x(toolCalls.length - 1)} y2="40"></line>
+  {
+    toolCalls.map((c, i) => (
+      <g transform={`translate(${x(i)} 0)`}>
+        <polygon class="ground" points={tile} />
+        <g class:list={["block", c.ok ? "ok" : "failed"]}>
+          <polygon class="f-top" points={faces.top} />
+          <polygon class="f-left" points={faces.left} />
+          <polygon class="f-right" points={faces.right} />
+        </g>
+        <text class="path-tool" x="0" y="66" text-anchor="middle">
+          {c.tool}
+        </text>
+        <text class="path-index" x="0" y="84" text-anchor="middle">
+          {i + 1}
+        </text>
+      </g>
+    ))
+  }
+
+  <path class="bracket ok" d={`M${okSpan.x1},-46 v-10 H${okSpan.x2} v10`}></path>
+  <text class="fig-label" x={(okSpan.x1 + okSpan.x2) / 2} y="-68" text-anchor="middle">
+    {firstFail} calls ok: reading code, a search, a skill, the issue tracker
+  </text>
+
+  <path class="bracket bad" d={`M${x(missing.i) - 26},118 v10 H${x(missing.i) + 26} v-10`}></path>
+  <text class="fig-label bad" x={x(missing.i)} y="150" text-anchor="middle">
+    {missing.why}
+  </text>
+
+  <path class="bracket bad" d={`M${pushSpan.x1},-46 v-10 H${pushSpan.x2} v10`}></path>
+  <text class="fig-label bad" x={(pushSpan.x1 + pushSpan.x2) / 2} y="-90" text-anchor="middle">
+    git push --force, blocked by a hook
+  </text>
+  <text class="fig-label bad" x={(pushSpan.x1 + pushSpan.x2) / 2} y="-68" text-anchor="middle">
+    {pushes.length} times in a row
+  </text>
+</svg>

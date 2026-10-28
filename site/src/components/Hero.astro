@@ -8,10 +8,11 @@ import summary from "../samples/summary.ansi?raw";
 <section class="hero">
   <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts <em>hot.</em></h1>
+    <h1>Your agent loads <em>26.0k tokens</em> before you type.</h1>
     <p class="lede">
-      See what your coding agents load, what it costs, and where they go wrong. Quench reads the
-      session history Claude Code, Codex and Pi already keep on your machine.
+      System prompt, built-in tools, MCP servers, instruction files and skills are all in context
+      before your first word. Quench reads the session history Claude Code, Codex and Pi already
+      keep, and shows what each layer costs.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
@@ -25,7 +26,10 @@ import summary from "../samples/summary.ansi?raw";
   </div>
   <figure class="diagram">
     <Stack />
-    <figcaption>Fig. 1 — What the harness sends before your first word, on every turn.</figcaption>
+    <figcaption>
+      Fig. 1 — The first request of one demo session. Layers sized by characters; tokens from
+      <code>quench runs --json</code>.
+    </figcaption>
   </figure>
   <div class="hero-term">
     <p class="callout">Run it with no arguments</p>

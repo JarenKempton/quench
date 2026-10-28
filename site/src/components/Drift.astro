@@ -1,0 +1,28 @@
+---
+import Path from "./Path.astro";
+import Shelf from "./Shelf.astro";
+---
+
+<section class="drift" id="drift">
+  <p class="eyebrow">Fig. 3 — Bloat and drift</p>
+  <h2>Most of what loads is never used.</h2>
+  <p class="section-lede">
+    The demo run below loaded 26 MCP tools and called 2. The skill list offers 12 skills; 3 were used
+    in a month. Every unused tool and skill still takes its place in context on every call.
+  </p>
+  <figure class="figure">
+    <Shelf />
+    <figcaption>Ghosted blocks were loaded and never called. MCP counts from one run; skills over 30 days.</figcaption>
+  </figure>
+
+  <h2 class="drift-title">A bloated context is one reason agents drift off task.</h2>
+  <p class="section-lede">
+    This is the same run's tool calls, in order. It started well, then failed five times in a row,
+    four of them the same blocked command. The history can't prove the load caused this. It does show
+    what drift looks like, and Quench finds it.
+  </p>
+  <figure class="figure">
+    <Path />
+    <figcaption>Fig. 4 — One run's 12 tool calls, from <code>quench runs --json</code>.</figcaption>
+  </figure>
+</section>
