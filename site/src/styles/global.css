@@ -175,6 +175,13 @@ nav .nav-cta:hover {
   margin: 0;
 }
 
+.hero-figure figcaption {
+  margin-top: 8px;
+  color: var(--mute);
+  font-size: 13px;
+  text-align: center;
+}
+
 .layers {
   display: block;
   width: 100%;
@@ -212,13 +219,13 @@ nav .nav-cta:hover {
   --right: #b4b1a8;
 }
 
-.layer.mcp {
+.layer.instructions {
   --top: #dcd9d1;
   --left: #c1beb5;
   --right: #aca9a0;
 }
 
-.layer.instructions {
+.layer.mcp {
   --top: #e9b8a2;
   --left: #c66a46;
   --right: #a4502f;
@@ -242,7 +249,7 @@ nav .nav-cta:hover {
   font-size: 13px;
 }
 
-.label.instructions {
+.label.mcp {
   fill: var(--accent);
   font-weight: 500;
 }

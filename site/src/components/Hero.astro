@@ -22,6 +22,9 @@ import summary from "../samples/summary.ansi?raw";
   </div>
   <figure class="hero-figure">
     <Layers labelled />
+    <figcaption>
+      The first request of one demo session: 26.0k tokens, split by <code>quench runs --json</code>.
+    </figcaption>
   </figure>
   <div class="hero-term">
     <Terminal title="~/code/acme-api" command="quench" output={summary} />
