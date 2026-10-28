@@ -1,52 +1,105 @@
 ---
-const measured = [
-  { name: "Skills", value: "1.1k chars", chars: 1100, skills: true },
-  { name: "Project instructions", value: "13.0k chars", chars: 13000, oversized: true, note: "3.6× your next project" },
-  { name: "Global instructions", value: "1.6 KB", chars: 1600 },
-];
+import start from "../samples/starting-context.json";
 
-const harness = ["MCP servers", "Built-in tools", "System prompt"];
-const ruler = [0, 5, 10, 15];
+type Part = (typeof start.parts)[number];
+
+const order = ["skills", "instructions", "mcp_tools", "tools", "system"];
+const names: Record<string, (p: Part) => string> = {
+  skills: () => "Skills",
+  instructions: () => "Instruction files",
+  mcp_tools: (p) => `MCP server: ${"server" in p ? p.server : ""}`,
+  tools: () => "Built-in tools",
+  system: () => "System prompt",
+};
+
+const total = start.parts.reduce((n, p) => n + p.chars, 0);
+const largest = Math.max(...start.parts.map((p) => p.chars));
+const parts = [...start.parts].sort(
+  (a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.chars - b.chars,
+);
+
+const width = 560;
+const height = 480;
+const top = 20;
+const bottom = 460;
+const scale = (bottom - top) / total;
+const stackX = 56;
+const stackW = 170;
+const labelX = 296;
+const gapMin = 42;
+
+const kilo = (n: number) => `${(n / 1000).toFixed(1)}k`;
+const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
+
+let y = top;
+const bands = parts.map((p) => {
+  const h = p.chars * scale;
+  const band = { ...p, y, h, mid: y + h / 2, oversized: p.chars === largest };
+  y += h;
+  return band;
+});
+
+const labels = bands.map((b) => b.mid);
+for (let i = 1; i < labels.length; i++) labels[i] = Math.max(labels[i], labels[i - 1] + gapMin);
+for (let i = labels.length - 2; i >= 0; i--) labels[i] = Math.min(labels[i], labels[i + 1] - gapMin);
+
+const ticks = Array.from({ length: Math.floor(total / 10000) + 1 }, (_, k) => k * 10000);
 ---
 
 <figure class="section-view">
-  <div class="section-grid">
-    <div class="ruler" aria-hidden="true">
-      {ruler.map((k) => <span style={`--at:${k * 1000}`}>{k === 0 ? "0" : `${k}k`}</span>)}
-    </div>
+  <div class="drawing" style={`aspect-ratio:${width}/${height}`}>
+    <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <defs>
+        <pattern id="hatch-accent" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+          <line x1="0" y1="0" x2="0" y2="6" class="hatch-accent"></line>
+        </pattern>
+      </defs>
 
-    {
-      measured.map((layer) => (
-        <div class="row" style={`--chars:${layer.chars}`}>
-          <div class:list={["band", { oversized: layer.oversized, skills: layer.skills }]}>
-            {layer.oversized && (
-              <span class="ghost" style="--chars:3600">
-                <small>storefront 3.6k</small>
-              </span>
+      <g class="ruler">
+        <line x1="40" y1={top} x2="40" y2={bottom}></line>
+        {ticks.map((t) => <line x1={t % 30000 ? 36 : 32} y1={bottom - t * scale} x2="40" y2={bottom - t * scale} />)}
+      </g>
+
+      {
+        bands.map((b, i) => (
+          <g class:list={["band", { oversized: b.oversized }]}>
+            <rect x={stackX} y={b.y} width={stackW} height={b.h} />
+            <polyline
+              class="leader"
+              points={`${stackX + stackW},${b.mid} ${stackX + stackW + 14},${b.mid} ${labelX - 22},${labels[i]} ${labelX - 8},${labels[i]}`}
+            />
+          </g>
+        ))
+      }
+    </svg>
+
+    <ol class="ruler-labels" aria-hidden="true">
+      {
+        ticks
+          .filter((t) => t % 30000 === 0)
+          .map((t) => <li style={`top:${pct(bottom - t * scale, height)}`}>{t ? `${t / 1000}k` : "0"}</li>)
+      }
+    </ol>
+
+    <ol class="callouts" aria-label="First request, by layer, top to bottom">
+      {
+        bands.map((b, i) => (
+          <li class:list={{ oversized: b.oversized }} style={`top:${pct(labels[i], height)};left:${pct(labelX, width)}`}>
+            <b>{names[b.kind](b)}</b>
+            <span>{kilo(b.chars)}</span>
+            {b.oversized && "count" in b && (
+              <small>
+                {b.count} tools, {Math.round((b.chars / total) * 100)}% of the request
+              </small>
             )}
-            {layer.skills && Array.from({ length: 12 }, (_, k) => <i class:list={{ used: k < 3 }} />)}
-          </div>
-          <span class="name">
-            {layer.name}
-            {layer.note && <small>{layer.note}</small>}
-          </span>
-          <span class="value">{layer.value}</span>
-        </div>
-      ))
-    }
-
-    {
-      harness.map((name, i) => (
-        <div class="row harness">
-          <div class:list={["band", "broken", { end: i === harness.length - 1 }]} />
-          <span class="name">{name}</span>
-        </div>
-      ))
-    }
+          </li>
+        ))
+      }
+    </ol>
   </div>
 
   <figcaption>
-    Section through one session's starting context in <code>acme-api</code>. Your layers are drawn to scale in
-    characters. Harness layers are not to scale.
+    The first request of one <code>acme-api</code> session, in characters, to scale: {kilo(total)} characters,{" "}
+    {kilo(start.tokens)} tokens. Measured by <code>quench runs --json</code>.
   </figcaption>
 </figure>
