@@ -5,8 +5,8 @@ const platforms = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
 ---
 
 <section class="install" id="install">
-  <h2>Install</h2>
-  <p class="section-lede">One binary for Linux or macOS. Nothing to configure.</p>
+  <h2>One binary. <em>No setup.</em></h2>
+  <p class="section-lede">Linux or macOS, x64 or arm64.</p>
   <div class="install-body">
     {platforms.map((p, i) => <input class="os-pick" type="radio" name="os" id={`os-${p}`} checked={i === 0} />)}
     <div class="os-menu" role="radiogroup" aria-label="Platform">

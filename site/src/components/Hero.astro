@@ -1,20 +1,20 @@
 ---
 import Command from "./Command.astro";
-import Layers from "./Layers.astro";
+import Window from "./Window.astro";
 ---
 
 <section class="hero">
   <div class="hero-copy">
-    <h1>Your agent's context comes in layers.</h1>
+    <h1>Your agent's context comes in <span class="nowrap"><em>layers</em><span class="cursor" aria-hidden="true"></span></span></h1>
     <p class="lede">
       System prompt, built-in tools, MCP servers, instruction files, skills. Every turn carries all of
       them. Quench shows what is in each layer and what you can remove.
     </p>
     <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
+      <a class="btn" href="#install">[ Install ]</a>
       <Command text="quench" />
     </div>
-    <p class="facts">Read-only · Runs locally · Claude Code, Codex, Pi</p>
+    <p class="facts">[X] Read-only &nbsp; [X] Local &nbsp; [X] Claude Code, Codex, Pi</p>
   </div>
-  <Layers />
+  <Window />
 </section>

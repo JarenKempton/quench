@@ -1,29 +1,34 @@
 ---
 const points = [
-  "Each server, file and skill you add stays in every turn.",
+  "Each server, file and skill you add rides along on every turn.",
   "In the demo session, one MCP server is almost half of what is sent.",
   "The harness never shows you the total.",
   "A bloated context is one reason agents drift.",
 ];
 const stats = [
-  { num: "26.0k", label: "median tokens before the first reply" },
-  { num: "70%", label: "of all tokens went to that starting load" },
-  { num: "9 of 12", label: "skills listed in every session, never used" },
+  { num: "70", unit: "%", label: "of all tokens processed went to starting context", lit: 14, of: 20 },
+  { num: "9", unit: "/12", label: "skills listed in every session, never used", lit: 9, of: 12 },
 ];
 ---
 
 <section class="problem" id="problem">
-  <h2>Layers pile up quietly.</h2>
+  <h2>Layers pile up <em>quietly.</em></h2>
   <ul class="points">{points.map((p) => <li>{p}</li>)}</ul>
-  <dl class="stats">
+  <div class="stats">
     {
       stats.map((s) => (
         <div class="stat">
-          <dt>{s.num}</dt>
-          <dd>{s.label}</dd>
+          <span class="num">
+            {s.num}
+            <small>{s.unit}</small>
+          </span>
+          <span class="gauge" aria-hidden="true">
+            [{Array.from({ length: s.of }, (_, i) => <i class:list={{ on: i < s.lit }} />)}]
+          </span>
+          <span class="label">{s.label}</span>
         </div>
       ))
     }
-  </dl>
-  <p class="footnote">Figures from the demo history used for every sample on this page.</p>
+  </div>
+  <p class="footnote">* demo history, last 30 days</p>
 </section>
