@@ -1,6 +1,6 @@
 ---
 import Command from "./Command.astro";
-import Window from "./Window.astro";
+import Stack from "./Stack.astro";
 import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
 ---
@@ -8,11 +8,10 @@ import summary from "../samples/summary.ansi?raw";
 <section class="hero">
   <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
-    <h1>Every session starts <em>pre-loaded.</em></h1>
+    <h1>Every session starts <em>hot.</em></h1>
     <p class="lede">
-      Before you type, the harness fills the context window with layers: system prompt, built-in
-      tools, MCP servers, instruction files, skills. Quench reads the session history Claude Code,
-      Codex and Pi already keep, and shows what each layer takes.
+      See what your coding agents load, what it costs, and where they go wrong. Quench reads the
+      session history Claude Code, Codex and Pi already keep on your machine.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
@@ -25,11 +24,8 @@ import summary from "../samples/summary.ansi?raw";
     </ul>
   </div>
   <figure class="diagram">
-    <Window />
-    <figcaption>
-      Fig. 1 — One demo session's first request, measured by <code>quench runs --json</code>. Layers
-      sized by characters.
-    </figcaption>
+    <Stack />
+    <figcaption>Fig. 1 — What the harness sends before your first word, on every turn.</figcaption>
   </figure>
   <div class="hero-term">
     <p class="callout">Run it with no arguments</p>

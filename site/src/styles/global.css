@@ -21,10 +21,10 @@
 }
 
 .system {
-  --tone: var(--teal);
-  --top: #7fd3c3;
-  --left: #2aa996;
-  --right: #1d8475;
+  --tone: var(--coral);
+  --top: #f6a28d;
+  --left: #ef6f53;
+  --right: #c9513a;
 }
 
 .tools {
@@ -35,10 +35,10 @@
 }
 
 .mcp {
-  --tone: var(--coral);
-  --top: #f6a28d;
-  --left: #ef6f53;
-  --right: #c9513a;
+  --tone: var(--teal);
+  --top: #7fd3c3;
+  --left: #2aa996;
+  --right: #1d8475;
 }
 
 .instructions {
@@ -213,11 +213,7 @@ nav a {
 }
 
 .hero h1 {
-  font-size: clamp(48px, 6vw, 80px);
-}
-
-.hero h1 em {
-  white-space: nowrap;
+  font-size: clamp(52px, 7vw, 92px);
 }
 
 .lede {
@@ -294,6 +290,13 @@ nav a {
   text-align: center;
 }
 
+.stack {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
 .f-top {
   fill: var(--top);
 }
@@ -312,113 +315,62 @@ nav a {
   stroke-linejoin: round;
 }
 
+.model {
+  --top: #f9f7f2;
+  --left: #3a3d57;
+  --right: #232539;
+}
+
+.model .slot {
+  fill: #e7e2d6;
+  stroke: rgb(35 37 57 / 0.2);
+}
+
 .prompt.block {
   --top: #ffffff;
   --left: #e6e1d6;
   --right: #cfc8b9;
 }
 
-.window,
-.calls {
-  display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-
-.glass.back polygon {
-  fill: rgb(35 37 57 / 0.04);
-  stroke: none;
-}
-
-.cone {
-  fill: rgb(239 111 83 / 0.08);
-}
-
-.cone-edge {
-  stroke: var(--coral);
-  stroke-width: 1;
-  stroke-dasharray: 4 5;
-  opacity: 0.7;
-}
-
-.tank-title {
-  fill: var(--ink);
-  font-family: var(--display);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.tank-title.used {
-  fill: var(--coral);
-}
-
-.tank-note {
-  fill: var(--mute);
-  font-family: var(--mono);
-  font-size: 12.5px;
-}
-
-.layer-name.mcp {
-  fill: var(--coral);
-}
-
-.layer-name.prompt {
-  font-weight: 600;
-  fill: var(--ink-2);
-}
-
-.calls-figure {
-  margin: 64px 0 0;
-  padding: 36px 32px 26px;
-  border-radius: 20px;
-  background: rgb(255 255 255 / 0.55);
-  box-shadow: var(--lift);
-}
-
-.calls-scroll {
-  overflow-x: auto;
-}
-
-.calls-figure figcaption {
-  margin-top: 18px;
-  color: var(--mute);
-  font-family: var(--mono);
-  font-size: 12.5px;
-}
-
-.calls .ground {
-  fill: rgb(35 37 57 / 0.12);
-}
-
-.load-top {
-  fill: #f6a28d;
-  stroke: rgb(35 37 57 / 0.18);
-  stroke-width: 0.6;
-}
-
-.call-label {
-  fill: var(--mute);
-  font-family: var(--mono);
-  font-size: 13px;
-  text-anchor: middle;
-}
-
-.call {
-  animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  animation-delay: calc(var(--i) * 0.05s);
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-}
-
 .ground {
   fill: rgb(35 37 57 / 0.28);
+}
+
+.face-label {
+  fill: var(--paper);
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 0.3em;
+}
+
+.face-note {
+  fill: rgb(241 236 226 / 0.55);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.guide {
+  stroke: rgb(35 37 57 / 0.3);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.drip {
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-dasharray: 6 10;
+  animation: drip 1.2s linear infinite;
+}
+
+.leader {
+  stroke: var(--ink);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.pin {
+  fill: var(--ink);
 }
 
 .layer-name {
@@ -434,7 +386,8 @@ nav a {
   font-size: 12.5px;
 }
 
-.window .slab {
+.stack .slab,
+.stack .prompt {
   animation: settle 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   animation-delay: calc(0.25s + var(--i) * 0.12s);
 }
@@ -443,6 +396,12 @@ nav a {
   from {
     opacity: 0;
     transform: translateY(-38px);
+  }
+}
+
+@keyframes drip {
+  to {
+    stroke-dashoffset: -32;
   }
 }
 
@@ -589,12 +548,24 @@ nav a {
 
 .stat {
   display: grid;
-  gap: 10px;
-  align-content: start;
+  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  column-gap: 18px;
+  align-items: end;
   padding: 24px 24px 22px;
   border-radius: 18px;
   background: rgb(255 255 255 / 0.66);
   box-shadow: var(--lift);
+}
+
+.gauge {
+  grid-row: 1 / span 2;
+  width: 96px;
+  height: auto;
+}
+
+.gauge .ground {
+  fill: rgb(35 37 57 / 0.08);
 }
 
 .glass polygon {
@@ -808,30 +779,6 @@ footer .mark {
 }
 
 @media (max-width: 560px) {
-  .window .layer-name {
-    font-size: 30px;
-  }
-
-  .window .layer-note {
-    display: none;
-  }
-
-  .window .tank-title {
-    font-size: 32px;
-  }
-
-  .window .tank-note {
-    font-size: 16px;
-  }
-
-  .calls {
-    min-width: 720px;
-  }
-
-  .calls-figure {
-    padding: 24px 18px 20px;
-  }
-
   body {
     font-size: 16px;
   }

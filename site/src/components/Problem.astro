@@ -1,36 +1,26 @@
 ---
-import Calls from "./Calls.astro";
-import { calls, inputTokens, k } from "../samples/context.ts";
+import Gauge from "./Gauge.astro";
 
 const stats = [
-  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply" },
-  { num: "70", unit: "%", label: "of all tokens processed went to that starting load" },
-  { num: "9", unit: "/12", label: "skills listed in every session and never once used" },
+  { num: "26.0k", unit: "", label: "tokens, median, in context before the first reply", ratio: 0.52, tone: "system" },
+  { num: "70", unit: "%", label: "of all tokens processed went to that starting load", ratio: 0.7, tone: "mcp" },
+  { num: "9", unit: "/12", label: "skills listed in every session and never once used", ratio: 0.75, tone: "skills" },
 ];
 ---
 
 <section class="problem" id="problem">
   <p class="eyebrow">Fig. 2 — The problem</p>
-  <h2>The layers ride along on <em>every call.</em></h2>
+  <h2>Your agent carries a load <em>before you type a word.</em></h2>
   <p class="section-lede">
-    Each layer is added by a different tool, plugin or file, and they pile up without anyone
-    noticing. The model is stateless, so the harness resends all of it on every call, and none of it
-    shows up anywhere you can see. A bloated context is one reason agents go off the rails: when one
-    drifts, you can't tell whether it was missing something or buried under it.
+    Instruction files, skill lists, MCP servers, memory. The harness sends all of it again on every
+    turn, and none of it shows up anywhere you can see. When an agent drifts, you can't tell whether
+    it was missing something or buried under it.
   </p>
-  <figure class="calls-figure">
-    <div class="calls-scroll">
-      <Calls />
-    </div>
-    <figcaption>
-      One prompt, {calls} model calls, {calls} full windows. Each one carries the same starting
-      layers; the run processed {k(inputTokens)} input tokens in all.
-    </figcaption>
-  </figure>
   <div class="stats">
     {
       stats.map((s) => (
         <div class="stat">
+          <Gauge ratio={s.ratio} tone={s.tone} />
           <span class="num">
             {s.num}
             <small>{s.unit}</small>
