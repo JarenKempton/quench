@@ -1,12 +1,11 @@
 ---
 import Command from "./Command.astro";
 import Forge from "./Forge.astro";
-import { kilo, startTokens } from "../context.ts";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
+    <h1 id="hero-title">See what your coding agents load, what it costs, and where they go wrong.</h1>
   </div>
   <div class="hero-copy">
     <Command text="quench" />

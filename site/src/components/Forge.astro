@@ -2,12 +2,12 @@
 import { facts, segments, slabWidth } from "../forge.ts";
 
 const BELT = 300;
-const SH = 44;
+const SH = 48;
 const TH = 9;
 const dead = segments.find((s) => s.dead)!;
 const keptW = dead.x;
 const dc = dead.x + dead.w / 2;
-const at = { scan: 50, heat: 310, press: 640 - dc, tank: 824 - keptW / 2, cart: 1035 - keptW / 2 };
+const at = { scan: 50, heat: 308, press: 640 - dc, tank: 824 - keptW / 2, cart: 1035 - keptW / 2 };
 
 const box = (x: number, y: number, w: number, h: number, tone = "") => [
   { x, y, width: w, height: h, class: `f ${tone}` },
@@ -28,9 +28,9 @@ const shards = Array.from({ length: 6 }, (_, i) => {
   const h = SH / 2;
   const x0 = at.press + dead.x + (c + 0.5) * w;
   const y0 = BELT - SH + (r + 0.5) * h;
-  const restX = 606 + c * 30 + r * 12;
-  const restY = 382 - r * 7 - (c % 2) * 3;
-  const vy = -(240 + rand(i, 1) * 180);
+  const restX = 608 + c * 28 + r * 12;
+  const restY = 380 - r * 8 - (c % 2) * 3;
+  const vy = -(160 + rand(i, 1) * 120);
   const land = (-vy + Math.sqrt(vy * vy + 2 * G * (restY - y0))) / G;
   const j = (rand(i, 2) - 0.5) * 8;
   return {
@@ -40,50 +40,32 @@ const shards = Array.from({ length: 6 }, (_, i) => {
     vy,
     land,
     vx: (restX - x0) / land,
-    spin: (i % 2 ? 1 : -1) * (160 + rand(i, 3) * 200),
+    spin: (i % 2 ? 1 : -1) * (90 + rand(i, 3) * 120),
   };
 });
 
-const sparks = Array.from({ length: 14 }, (_, i) => ({
-  a: (-180 + (i / 13) * 180 + (rand(i, 4) - 0.5) * 14) * (Math.PI / 180),
-  v: 120 + rand(i, 5) * 150,
-  len: 8 + rand(i, 6) * 14,
+const puffs = Array.from({ length: 16 }, (_, i) => ({
+  x: 772 + rand(i, 7) * 104,
+  delay: Math.pow(i / 16, 1.4) * 1.6,
+  life: 1.5 + rand(i, 8) * 0.8,
+  rise: 140 + rand(i, 9) * 110,
+  drift: 10 + rand(i, 10) * 50,
+  r0: 10 + rand(i, 11) * 8,
+  r1: 30 + rand(i, 12) * 22,
 }));
 
-const puffs = Array.from({ length: 26 }, (_, i) => ({
-  x: 768 + rand(i, 7) * 112,
-  delay: Math.pow(i / 26, 1.4) * 1.9,
-  life: 1.5 + rand(i, 8) * 0.9,
-  rise: 150 + rand(i, 9) * 130,
-  drift: 10 + rand(i, 10) * 60,
-  r0: 9 + rand(i, 11) * 8,
-  r1: 26 + rand(i, 12) * 26 - i * 0.4,
-  tone: i % 3 === 0 ? "puff b" : "puff",
-}));
-
-const drops = Array.from({ length: 12 }, (_, i) => ({
+const drops = Array.from({ length: 10 }, (_, i) => ({
   x: 824 + (i % 2 ? 1 : -1) * (30 + rand(i, 13) * 40),
-  vx: (i % 2 ? 1 : -1) * (40 + rand(i, 14) * 110),
-  vy: -(220 + rand(i, 15) * 200),
+  vx: (i % 2 ? 1 : -1) * (40 + rand(i, 14) * 100),
+  vy: -(200 + rand(i, 15) * 180),
   r: 2.5 + rand(i, 16) * 2.5,
 }));
 
-const bubbles = Array.from({ length: 9 }, (_, i) => ({ x: at.tank + 8 + rand(i, 17) * (keptW - 16), phase: rand(i, 18) }));
+const bubbles = Array.from({ length: 8 }, (_, i) => ({ x: at.tank + 8 + rand(i, 17) * (keptW - 16), phase: rand(i, 18) }));
 const drips = [0.22, 0.5, 0.8].map((f, i) => ({ x: at.tank + keptW * f, delay: i * 0.17 }));
 
 const rollers = Array.from({ length: 16 }, (_, i) => 52 + i * 44).filter((x) => x < 720);
-const coils = Array.from({ length: 11 }, (_, i) => 316 + i * 20);
-const lamps = [
-  { id: "scan", x: 160 },
-  { id: "tank", x: 824 },
-  { id: "cart", x: 1035 },
-];
-
-const gauge = { cx: 1136, cy: 190, r: 30, max: 30000 };
-const angle = (v: number) => ((-130 + (260 * v) / gauge.max) * Math.PI) / 180;
-const onDial = (v: number, r: number) => ({ x: gauge.cx + r * Math.sin(angle(v)), y: gauge.cy - r * Math.cos(angle(v)) });
-const ticks = Array.from({ length: 7 }, (_, i) => i * 5000).map((v) => ({ a: onDial(v, gauge.r - 9), b: onDial(v, gauge.r - 4) }));
-const ghost = { a: onDial(facts.start, gauge.r - 11), b: onDial(facts.start, gauge.r - 2) };
+const coils = Array.from({ length: 12 }, (_, i) => 312 + i * 20);
 
 const sheets = Array.from({ length: 8 }, (_, i) => ({
   x: at.scan + (rand(i, 19) - 0.5) * 8,
@@ -91,7 +73,7 @@ const sheets = Array.from({ length: 8 }, (_, i) => ({
   w: slabWidth - 4 + (rand(i, 20) - 0.5) * 8,
 }));
 
-const geo = { at, keptW, slabWidth, dc, shards, sparks, puffs, drops, bubbles, drips, gauge, start: facts.start, after: facts.after, G };
+const geo = { at, keptW, slabWidth, SH, BELT, shards, puffs, drops, bubbles, drips, start: facts.start, G };
 const beats = ["Scan", "Spot", "Smash", "Quench"];
 ---
 
@@ -101,73 +83,54 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
       viewBox="0 0 1200 460"
       data-view
       role="img"
-      aria-label={`A forge line, run once. Saved session history is scanned into a block measuring ${facts.startText} tokens. Heat shows what gets used; the browser MCP server stays cold, 0 of 22 tools called. A press knocks it off and it drops in the scrap bin. The rest is quenched in water, clamped onto a cart, and its gauge reads lower. Then the line switches off and the trimmed piece stays on the cart.`}
+      aria-label={`A production line, run once. Saved session history is scanned into a block measuring ${facts.startText} tokens. Heat shows which parts get used. The ${facts.server} part stays cold: ${facts.unused}. You remove it, and it drops in the scrap bin. The rest is quenched in water and clamped onto a cart, where it stays.`}
     >
       <defs>
-        <pattern id="fg-hz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="14" height="14" class="hz-dark" />
-          <rect width="7" height="14" class="hz-light" />
-        </pattern>
         <clipPath id="fg-reveal"><rect data-reveal x="0" y="-80" width="0" height="140" /></clipPath>
         <clipPath id="fg-sheets"><rect data-sheet-clip x="0" y="200" width="1200" height="120" /></clipPath>
-        <clipPath id="fg-kept"><rect x="0" y="0" width={keptW} height={SH} /></clipPath>
       </defs>
 
       <rect x="-40" y="-40" width="1280" height="540" class="wall" />
-      <g data-dim>
-        {Array.from({ length: 7 }, (_, i) => <rect x={i * 180 - 10} y="0" width="172" height="400" class="panel" />)}
-        <rect x="-40" y="400" width="1280" height="100" class="floor" />
-        <rect x="-40" y="400" width="1280" height="3" class="floor-edge" />
-        {lamps.map((l) => <ellipse data-pool={l.id} cx={l.x} cy="410" rx="130" ry="9" class="pool" />)}
+      <rect x="-40" y="400" width="1280" height="100" class="floor" />
+      <rect x="-40" y="400" width="1280" height="3" class="floor-edge" />
+
+      <g class="crane">
+        {[470, 820, 1170].map((x) => <rect x={x - 3} y="0" width="6" height="30" class="rod" />)}
+        {box(420, 30, 770, 14, "k").map((r) => <rect {...r} />)}
       </g>
 
-      <g data-dim>
-        <g class="crane">
-          {[470, 820, 1170].map((x) => <rect x={x - 3} y="0" width="6" height="30" class="rod" />)}
-          {box(420, 30, 770, 14, "k").map((r) => <rect {...r} />)}
-        </g>
+      <g class="press-back">
+        {box(560, 60, 16, 340).map((r) => <rect {...r} />)}
+        {box(704, 60, 16, 340).map((r) => <rect {...r} />)}
+        {box(548, 388, 40, 12, "k").map((r) => <rect {...r} />)}
+        {box(692, 388, 40, 12, "k").map((r) => <rect {...r} />)}
+      </g>
 
-        <g class="press-back">
-          {box(560, 60, 16, 340).map((r) => <rect {...r} />)}
-          {box(704, 60, 16, 340).map((r) => <rect {...r} />)}
-          {box(548, 388, 40, 12, "k").map((r) => <rect {...r} />)}
-          {box(692, 388, 40, 12, "k").map((r) => <rect {...r} />)}
-        </g>
+      <g class="scanner-back">
+        {box(20, 96, 12, 204).map((r) => <rect {...r} />)}
+        {box(288, 96, 12, 204).map((r) => <rect {...r} />)}
+      </g>
 
-        <g class="scanner-back">
-          {box(20, 96, 12, 204).map((r) => <rect {...r} />)}
-          {box(288, 96, 12, 204).map((r) => <rect {...r} />)}
-        </g>
+      <g class="heater">
+        {[356, 500].map((x) => <rect x={x - 3} y="0" width="6" height="150" class="rod" />)}
+        {box(302, 146, 252, 52).map((r) => <rect {...r} />)}
+        {coils.map((x) => <rect data-coil x={x} y="198" width="14" height="8" rx="3" class="coil" />)}
+      </g>
 
-        <g class="heater">
-          {[350, 496].map((x) => <rect x={x - 3} y="0" width="6" height="150" class="rod" />)}
-          {box(304, 146, 232, 52).map((r) => <rect {...r} />)}
-          {[0, 1, 2, 3, 4, 5].map((i) => <rect x={336 + i * 30} y="162" width="18" height="5" rx="2.5" class="vent" />)}
-          <circle data-lamp="16.35" cx="516" cy="166" r="5" class="lamp" />
-          <polygon data-heat-pool points="314,206 526,206 540,300 300,300" class="heat-pool" />
-          {coils.map((x) => <rect data-coil x={x} y="198" width="14" height="8" rx="3" class="coil" />)}
+      <g data-hook-back>
+        <line data-cable x1="900" y1="58" x2="900" y2="110" class="cable" />
+        <g data-trolley>
+          {box(-24, 42, 48, 16, "k").map((r) => <rect {...r} />)}
+          <circle cx="-13" cy="44" r="5" class="wheel" />
+          <circle cx="13" cy="44" r="5" class="wheel" />
+        </g>
+        <g data-spreader>
+          {box(-keptW / 2 - 14, 0, keptW + 28, 10).map((r) => <rect {...r} />)}
+          <rect x="-9" y="-8" width="18" height="10" rx="3" class="t" />
         </g>
       </g>
 
-      <g data-dim>
-        <g data-hook-back>
-          <line data-cable x1="900" y1="58" x2="900" y2="110" class="cable" />
-          <g data-trolley>
-            {box(-24, 42, 48, 16, "k").map((r) => <rect {...r} />)}
-            <circle cx="-13" cy="44" r="5" class="wheel" />
-            <circle cx="13" cy="44" r="5" class="wheel" />
-            <circle data-lamp="16.65" cx="0" cy="51" r="3.5" class="lamp" />
-          </g>
-          <g data-spreader>
-            {box(-keptW / 2 - 14, 0, keptW + 28, 10).map((r) => <rect {...r} />)}
-            <rect x="-9" y="-8" width="18" height="10" rx="3" class="t" />
-          </g>
-        </g>
-
-        <g class="tank-back">
-          <rect x="756" y="286" width="138" height="106" class="tank-in" />
-        </g>
-      </g>
+      <rect x="756" y="286" width="138" height="106" class="tank-in" />
 
       <g class="cart">
         {box(940, 340, 200, 14).map((r) => <rect {...r} />)}
@@ -180,52 +143,34 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
         ))}
         {box(985, 332, 26, 8, "k").map((r) => <rect {...r} />)}
         {box(1059, 332, 26, 8, "k").map((r) => <rect {...r} />)}
-        {box(950, 270, 12, 70).map((r) => <rect {...r} />)}
-        {box(1108, 270, 12, 70).map((r) => <rect {...r} />)}
-        {box(1132, 214, 8, 126).map((r) => <rect {...r} />)}
-        <g class="gauge">
-          <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r} class="dial-ring" />
-          <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r - 5} class="dial" />
-          {ticks.map((t) => <line x1={t.a.x} y1={t.a.y} x2={t.b.x} y2={t.b.y} class="tick" />)}
-          <line x1={ghost.a.x} y1={ghost.a.y} x2={ghost.b.x} y2={ghost.b.y} class="ghost" />
-          <line data-needle x1={gauge.cx} y1={gauge.cy} x2={gauge.cx} y2={gauge.cy - 20} class="needle" />
-          <circle cx={gauge.cx} cy={gauge.cy} r="3.5" class="hub-dot" />
-        </g>
-        <circle data-ok cx="1122" cy="347" r="4.5" class="lamp" />
+        {box(950, 266, 12, 74).map((r) => <rect {...r} />)}
+        {box(1108, 266, 12, 74).map((r) => <rect {...r} />)}
       </g>
 
-      <g data-dim>
-        <g class="belt">
-          {[70, 370, 520].map((x) => box(x, 322, 14, 78).map((r) => <rect {...r} />))}
-          <rect x="30" y="300" width="700" height="22" rx="11" class="rubber" />
-          <line data-belt x1="40" y1="302" x2="720" y2="302" class="belt-top" />
-          {rollers.map((x) => (
-            <g data-roller data-x={x} transform={`translate(${x} 311)`}>
-              <circle cx="0" cy="0" r="7" class="roller" />
-              <line x1="-5" y1="0" x2="5" y2="0" class="roller-spoke" />
-            </g>
-          ))}
-        </g>
-
-        <g class="sheets" clip-path="url(#fg-sheets)">
-          {sheets.map((s, i) => <rect x={s.x} y={s.y} width={s.w} height={SH / 8 - 0.8} rx="1" class:list={["sheet", { alt: i % 2 }]} />)}
-        </g>
-
-        <g data-ram>
-          <rect x="632" y="20" width="16" height="112" class="rod-steel" />
-          {box(586, 130, 108, 42).map((r) => <rect {...r} />)}
-          <rect x="586" y="172" width="108" height="14" fill="url(#fg-hz)" />
-          <rect x="586" y="184" width="108" height="3" class="s k" />
-        </g>
-
-        <g class="press-top">
-          {box(548, 48, 184, 40, "k").map((r) => <rect {...r} />)}
-          <circle data-lamp="16.5" cx="716" cy="68" r="5" class="lamp" />
-        </g>
+      <g class="belt">
+        {[70, 370, 520].map((x) => box(x, 322, 14, 78).map((r) => <rect {...r} />))}
+        <rect x="30" y="300" width="700" height="22" rx="11" class="rubber" />
+        <line data-belt x1="40" y1="302" x2="720" y2="302" class="belt-top" />
+        {rollers.map((x) => (
+          <g data-roller data-x={x} transform={`translate(${x} 311)`}>
+            <circle cx="0" cy="0" r="7" class="roller" />
+            <line x1="-5" y1="0" x2="5" y2="0" class="roller-spoke" />
+          </g>
+        ))}
       </g>
 
-      <ellipse data-halo-out cx="0" cy="0" rx="0" ry="0" class="halo" />
-      <ellipse data-halo-in cx="0" cy="0" rx="0" ry="0" class="halo in" />
+      <g class="sheets" clip-path="url(#fg-sheets)">
+        {sheets.map((s, i) => <rect x={s.x} y={s.y} width={s.w} height={SH / 8 - 0.8} rx="1" class:list={["sheet", { alt: i % 2 }]} />)}
+      </g>
+
+      <g data-ram>
+        <rect x="632" y="20" width="16" height="112" class="rod-steel" />
+        {box(582, 130, 116, 56).map((r) => <rect {...r} />)}
+      </g>
+
+      <g class="press-top">
+        {box(548, 48, 184, 40, "k").map((r) => <rect {...r} />)}
+      </g>
 
       <g data-slab>
         <g clip-path="url(#fg-reveal)">
@@ -237,109 +182,71 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
               </g>
             ))}
             <rect x="0" y={SH - 4} width={keptW - 1.5} height="4" class="slab-shade" />
-            <g clip-path="url(#fg-kept)">
-              <polygon data-sheen points="0,0 18,0 -6,44 -24,44" class="sheen" />
-            </g>
           </g>
           <g data-dead>
-            <rect data-dead-front x={dead.x} y="0" width={dead.w} height={SH} class="cold" />
-            <rect data-dead-top x={dead.x} y="0" width={dead.w} height={TH} class="cold-top" />
+            <rect data-dead-front x={dead.x} y="0" width={dead.w} height={SH} />
+            <rect data-dead-top x={dead.x} y="0" width={dead.w} height={TH} />
             <rect data-dead-shade x={dead.x} y={SH - 4} width={dead.w} height="4" class="slab-shade" />
-          </g>
-        </g>
-        <g data-flag>
-          <line x1={dc} y1="2" x2={dc} y2="-58" class="flag-pole" />
-          <g data-flag-cloth>
-            <rect x={dc} y="-58" width="64" height="28" rx="2" class="flag" />
-            <text x={dc + 32} y="-38.5" text-anchor="middle" class="flag-t">{facts.unused}</text>
+            <g data-tag>
+              <text x={dc} y="25" text-anchor="middle" class="tag">{facts.server}</text>
+              <text data-unused opacity="0" x={dc} y="40" text-anchor="middle" class="tag used">{facts.unused}</text>
+            </g>
           </g>
         </g>
       </g>
 
-      <g data-dim>
-        <g data-hook-front>
-          {[-1, 1].map((side) => (
-            <g data-arm={side}>
-              <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 + 1} y="6" width="8" height="48" rx="2" class="t" />
-              <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 - 3} y="48" width="12" height="6" rx="2" class="t" />
-            </g>
-          ))}
-        </g>
+      <g data-hook-front>
+        {[-1, 1].map((side) => (
+          <g data-arm={side}>
+            <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 + 1} y="6" width="8" height="52" rx="2" class="t" />
+            <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 - 3} y="52" width="12" height="6" rx="2" class="t" />
+          </g>
+        ))}
       </g>
 
       <g class="clamps">
         <g data-jaw="-1">
-          {box(944, 276, 14, 18, "y").map((r) => <rect {...r} />)}
-          {box(944, 276, 40, 10, "y").map((r) => <rect {...r} />)}
+          {box(944, 272, 14, 18).map((r) => <rect {...r} />)}
+          {box(944, 272, 40, 10).map((r) => <rect {...r} />)}
         </g>
         <g data-jaw="1">
-          {box(1112, 276, 14, 18, "y").map((r) => <rect {...r} />)}
-          {box(1086, 276, 40, 10, "y").map((r) => <rect {...r} />)}
+          {box(1112, 272, 14, 18).map((r) => <rect {...r} />)}
+          {box(1086, 272, 40, 10).map((r) => <rect {...r} />)}
         </g>
       </g>
 
-      <g data-dim>
-        <path data-water d="" class="water" />
-        <path data-surface d="" class="surface" />
-        {bubbles.map(() => <circle data-bubble r="0" class="bubble" />)}
-        <g class="tank-front">
-          <rect x="750" y="282" width="6" height="118" class="f" />
-          <rect x="894" y="282" width="6" height="118" class="f" />
-          {box(744, 278, 18, 8, "k").map((r) => <rect {...r} />)}
-          {box(888, 278, 18, 8, "k").map((r) => <rect {...r} />)}
-          {box(744, 390, 162, 10, "k").map((r) => <rect {...r} />)}
-          <line x1="770" y1="384" x2="800" y2="320" class="glint" />
-          <line x1="782" y1="386" x2="800" y2="348" class="glint" />
-        </g>
+      <path data-water d="" class="water" />
+      <path data-surface d="" class="surface" />
+      {bubbles.map(() => <circle data-bubble r="0" class="bubble" />)}
+      <g class="tank-front">
+        <rect x="750" y="282" width="6" height="118" class="f" />
+        <rect x="894" y="282" width="6" height="118" class="f" />
+        {box(744, 278, 18, 8, "k").map((r) => <rect {...r} />)}
+        {box(888, 278, 18, 8, "k").map((r) => <rect {...r} />)}
+        {box(744, 390, 162, 10, "k").map((r) => <rect {...r} />)}
+      </g>
 
-        <g class="scrap">
-          <rect x="594" y="352" width="102" height="10" class="tank-in" />
-          {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
-          {box(588, 360, 114, 40, "k").map((r) => <rect {...r} />)}
-          <rect x="588" y="360" width="114" height="4" class="scrap-rim" />
-        </g>
+      <g class="scrap">
+        <rect x="594" y="352" width="102" height="10" class="tank-in" />
+        {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
+        {box(588, 360, 114, 40, "k").map((r) => <rect {...r} />)}
+        <text data-note opacity="0" x="645" y="434" text-anchor="middle" class="note">you remove it</text>
+      </g>
 
-        <g class="scanner">
-          {box(12, 84, 296, 28).map((r) => <rect {...r} />)}
-          <rect x="100" y="87" width="120" height="23" rx="3" class="lcd" />
-          <text data-readout x="160" y="105.5" text-anchor="middle" class="readout">0.0k</text>
-          <circle data-lamp="16.2" cx="290" cy="98" r="5" class="lamp" />
-          <polygon data-beam points="" class="beam" />
-          <line data-scanline x1="0" y1="252" x2="0" y2="300" class="scanline" />
-          <g data-head>
-            {box(-24, 112, 48, 30, "k").map((r) => <rect {...r} />)}
-            <rect x="-16" y="142" width="32" height="5" rx="2" class="lens" />
-          </g>
+      <g class="scanner">
+        {box(12, 84, 296, 30).map((r) => <rect {...r} />)}
+        <rect x="58" y="87" width="204" height="24" rx="3" class="lcd" />
+        <text data-readout x="160" y="105.5" text-anchor="middle" class="readout">0.0k tokens</text>
+        <line data-scanline x1="0" y1="252" x2="0" y2="300" class="scanline" />
+        <g data-head>
+          {box(-24, 114, 48, 30, "k").map((r) => <rect {...r} />)}
+          <rect x="-16" y="144" width="32" height="5" rx="2" class="lens" />
         </g>
       </g>
 
       {drops.map(() => <circle data-drop r="0" class="drop" />)}
       {drips.map(() => <circle data-drip r="0" class="drop" />)}
-      <g class="steam">
-        {puffs.map((p) => <circle data-puff r="0" class={p.tone} />)}
-      </g>
-
-      {sparks.map(() => <line data-spark x1="0" y1="0" x2="0" y2="0" class="spark" />)}
-      <polygon
-        data-flash
-        points={Array.from({ length: 16 }, (_, i) => {
-          const r = i % 2 ? 14 : 46;
-          const a = (i / 16) * Math.PI * 2;
-          return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a) * 0.6).toFixed(1)}`;
-        }).join(" ")}
-        class="flash"
-      />
-
-      <g class="ceiling">
-        {lamps.map((l) => (
-          <g>
-            <polygon data-cone={l.id} points={`${l.x - 14},70 ${l.x + 14},70 ${l.x + 130},405 ${l.x - 130},405`} class="cone" />
-            <line x1={l.x} y1="0" x2={l.x} y2="58" class="cord" />
-            <polygon points={`${l.x - 8},58 ${l.x + 8},58 ${l.x + 20},72 ${l.x - 20},72`} class="shade" />
-            <rect data-bulb={l.id} x={l.x - 9} y="71" width="18" height="4" rx="2" class="bulb" />
-          </g>
-        ))}
-      </g>
+      {puffs.map(() => <circle data-puff r="0" class="puff" />)}
     </svg>
   </div>
 
@@ -352,7 +259,6 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
       ))}
       <span class="progress" data-progress aria-hidden="true"></span>
     </ol>
-    <p class="credit">Quench measures. You cut.</p>
     <button type="button" class="replay" data-replay aria-label="Replay">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4" /></svg>
     </button>
@@ -365,26 +271,22 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     at: Record<"scan" | "heat" | "press" | "tank" | "cart", number>;
     keptW: number;
     slabWidth: number;
-    dc: number;
+    SH: number;
+    BELT: number;
     shards: { x0: number; y0: number; vx: number; vy: number; land: number; spin: number }[];
-    sparks: { a: number; v: number; len: number }[];
     puffs: { x: number; delay: number; life: number; rise: number; drift: number; r0: number; r1: number }[];
     drops: { x: number; vx: number; vy: number; r: number }[];
     bubbles: { x: number; phase: number }[];
     drips: { x: number; delay: number }[];
-    gauge: { cx: number; cy: number; r: number; max: number };
     start: number;
-    after: number;
     G: number;
   };
 
-  const END = 17.6;
+  const END = 15.4;
   const BEATS = [0, 3.0, 6.0, 10.8];
-  const STILLS = [2.85, 5.9, 7.72, END];
+  const STILLS = [2.85, 5.9, 8.45, END];
   const IMPACT = 7.655;
   const SPLASH = 11.04;
-  const CLUNK = 14.8;
-  const SH = 44;
 
   const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -424,11 +326,10 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     const i = Math.min(n - 1, Math.floor(clamp(x) * n));
     return mix(stops[i], stops[i + 1], clamp(x) * n - i);
   };
-  const kilo = (n: number) => `${(n / 1000).toFixed(1)}k`;
+  const kilo = (n: number) => `${(n / 1000).toFixed(1)}k tokens`;
 
-  const FRONT = { raw: "#3b5e7e", hot: ["#3b5e7e", "#9b3420", "#e8642a", "#ff8f3a"], cool: "#7fb0d2" };
-  const TOP = { raw: "#5d84a6", hot: ["#5d84a6", "#c9502c", "#ff9a52", "#ffc77a"], cool: "#d6effc" };
-  const LAMP = { off: "#163a5a", on: "#a9e8c4" };
+  const FRONT = { raw: "#3b5e7e", cold: "#2a4560", hot: ["#3b5e7e", "#9b3420", "#e8642a", "#ff8f3a"], cool: "#7fb0d2" };
+  const TOP = { raw: "#5d84a6", cold: "#3c5c7b", hot: ["#5d84a6", "#c9502c", "#ff9a52", "#ffc77a"], cool: "#d6effc" };
   const COIL = { off: "#24496b", on: "#ff9447" };
 
   function mount(root: HTMLElement) {
@@ -438,7 +339,8 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     const set = (el: Element, attrs: Record<string, string | number>) => {
       for (const k in attrs) el.setAttribute(k, String(attrs[k]));
     };
-    const { at, keptW, slabWidth, dc, gauge } = geo;
+    const { at, keptW, slabWidth, SH, BELT } = geo;
+    const rest = BELT - SH;
 
     const view = $("[data-view]");
     const slab = $("[data-slab]");
@@ -447,26 +349,19 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     const tops = $$("[data-kept] [data-face='top']");
     const deadFront = $("[data-dead-front]");
     const deadTop = $("[data-dead-top]");
-    const deadShade = $("[data-dead-shade]");
-    const sheen = $("[data-sheen]");
+    const tag = $("[data-tag]");
+    const unused = $("[data-unused]");
     const reveal = $("[data-reveal]");
     const sheetClip = $("[data-sheet-clip]");
-    const beam = $("[data-beam]");
     const scanline = $("[data-scanline]");
     const head = $("[data-head]");
     const readout = $("[data-readout]");
-    const flag = $("[data-flag]");
-    const cloth = $("[data-flag-cloth]");
     const coils = $$("[data-coil]");
-    const heatPool = $("[data-heat-pool]");
-    const haloOut = $("[data-halo-out]");
-    const haloIn = $("[data-halo-in]");
     const ram = $("[data-ram]");
     const belt = $("[data-belt]");
     const rollers = $$("[data-roller]");
     const shards = $$("[data-shard]");
-    const sparks = $$("[data-spark]");
-    const flash = $("[data-flash]");
+    const note = $("[data-note]");
     const trolley = $("[data-trolley]");
     const cable = $("[data-cable]");
     const spreader = $("[data-spreader]");
@@ -479,25 +374,13 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     const drips = $$("[data-drip]");
     const puffs = $$("[data-puff]");
     const jaws = $$("[data-jaw]");
-    const needle = $("[data-needle]");
-    const ok = $("[data-ok]");
-    const lamps = $$("[data-lamp]");
-    const cones = $$("[data-cone]");
-    const bulbs = $$("[data-bulb]");
-    const pools = $$("[data-pool]");
-    const dims = $$("[data-dim]");
     const progress = $<HTMLElement>("[data-progress]");
     const beatButtons = $$<HTMLButtonElement>("[data-beat]");
     const narrow = matchMedia("(max-width: 640px)");
 
-    const lit = (t: number, off: number) => {
-      const on = t < 0.5 ? (t < 0.08 || (t > 0.16 && t < 0.22) || t > 0.3 ? span(t, 0, 0.06) : 0.15) : 1;
-      return on * (1 - span(t, off, off + 0.2));
-    };
-
     function render(t: number) {
       const scanX = track(t, [[0.5, at.scan - 6], [2.8, at.scan + slabWidth + 6, lin]]);
-      const beamOn = span(t, 0.35, 0.55) * (1 - span(t, 2.8, 3.05));
+      const scanning = span(t, 0.35, 0.55) * (1 - span(t, 2.8, 3.05));
 
       const carried = t >= 9.35 && t < 14.15;
       const sx = track(t, [
@@ -505,10 +388,10 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
         [9.95, at.press], [10.75, at.tank], [12.8, at.tank], [13.6, at.cart],
       ]);
       const sy = track(t, [
-        [9.35, 256], [9.45, 259], [9.95, 196], [10.85, 196], [11.15, 340, quadIn], [12.2, 340], [12.7, 196],
-        [13.7, 196], [14.1, 288, back(1.6)],
+        [9.35, rest], [9.45, rest + 3], [9.95, 196], [10.85, 196], [11.15, 340, quadIn], [12.2, 340], [12.7, 196],
+        [13.7, 196], [14.1, 284, back(1.6)],
       ]);
-      const hop = t > IMPACT && t < IMPACT + 0.34 ? -Math.abs(Math.sin(((t - IMPACT) / 0.34) * Math.PI * 1.5)) * 7 * (1 - span(t, IMPACT, IMPACT + 0.34)) : 0;
+      const hop = t > IMPACT && t < IMPACT + 0.3 ? -Math.abs(Math.sin(((t - IMPACT) / 0.3) * Math.PI)) * 4 : 0;
 
       const tx = track(t, [[8.0, 900], [8.8, at.press + keptW / 2], [9.95, at.press + keptW / 2], [10.75, at.tank + keptW / 2], [12.8, at.tank + keptW / 2], [13.6, at.cart + keptW / 2]]);
       const travelA = t >= 9.95 && t < 10.75 ? 3 * Math.sin(span(t, 9.95, 10.75) * Math.PI * 2) : -2.5 * decay(t, 10.75, 3.2, 9);
@@ -517,8 +400,8 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
       const hy = carried
         ? sy - 26
         : t < 9.35
-          ? track(t, [[8.8, 84], [9.2, 230, back(1.2)]])
-          : track(t, [[14.3, 262], [14.9, 84]]);
+          ? track(t, [[8.8, 84], [9.2, rest - 26, back(1.2)]])
+          : track(t, [[14.3, 258], [14.9, 84]]);
       const grip = carried ? 1 : t < 9.35 ? span(t, 9.2, 9.35) : 1 - span(t, 14.15, 14.3);
       const pivot = `rotate(${sway.toFixed(2)} ${tx.toFixed(1)} 58)`;
 
@@ -526,52 +409,35 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
       set(reveal, { width: Math.max(0, scanX - at.scan) });
       set(sheetClip, { x: scanX });
       set(head, { transform: `translate(${scanX.toFixed(1)} 0)` });
-      set(beam, { points: `${scanX - 14},147 ${scanX + 14},147 ${scanX + 26},300 ${scanX - 26},300`, opacity: (beamOn * 0.28).toFixed(2) });
-      set(scanline, { x1: scanX, x2: scanX, opacity: beamOn.toFixed(2) });
-      const measured = geo.start * span(t, 0.5, 2.8);
-      readout.textContent = kilo(measured);
+      set(scanline, { x1: scanX, x2: scanX, opacity: scanning.toFixed(2) });
+      readout.textContent = kilo(geo.start * span(t, 0.5, 2.8));
       root.classList.toggle("is-measured", t >= 2.8);
 
       const coilOn = span(t, 3.95, 4.35) * (1 - span(t, 6.0, 6.6));
       coils.forEach((el, i) => set(el, { fill: mix(COIL.off, COIL.on, clamp(coilOn * 1.4 - i * 0.03)) }));
-      set(heatPool, { opacity: (coilOn * 0.13).toFixed(3) });
       const heat = span(t, 4.1, 5.5);
       const cool = span(t, 11.1, 12.3);
       const front = cool > 0 ? mix(FRONT.hot[3], FRONT.cool, out(cool)) : ramp(FRONT.hot, heat);
       const top = cool > 0 ? mix(TOP.hot[3], TOP.cool, out(cool)) : ramp(TOP.hot, heat);
       fronts.forEach((el) => set(el, { fill: front }));
       tops.forEach((el) => set(el, { fill: top }));
-      const glow = heat * (1 - cool) * (t < SPLASH ? 1 : 1 - span(t, SPLASH, SPLASH + 0.4));
-      const cxs = sx + keptW / 2;
-      const cys = sy + SH / 2;
-      set(haloOut, { cx: cxs, cy: cys, rx: keptW * 0.85, ry: 46, opacity: (glow * 0.07).toFixed(3) });
-      set(haloIn, { cx: cxs, cy: cys, rx: keptW * 0.68, ry: 34, opacity: (glow * 0.09).toFixed(3) });
-      set(sheen, { transform: `translate(${lerp(-30, keptW + 40, inOut(span(t, 16.5, 17.3))).toFixed(1)} 0)`, opacity: t > 16.5 && t < 17.3 ? 1 : 0 });
 
-      const flagIn = span(t, 4.9, 5.4);
-      const flagOut = span(t, IMPACT, IMPACT + 0.45);
-      const flagSwing = 14 * decay(t, 5.25, 2.6, 7);
-      set(flag, {
-        opacity: (Math.min(1, flagIn * 3) * (1 - flagOut)).toFixed(2),
-        transform: `translate(${(flagOut * 60).toFixed(1)} ${(lerp(-34, 0, back(2.2)(flagIn)) - 120 * out(flagOut)).toFixed(1)}) rotate(${(flagOut * 70).toFixed(1)} ${dc} 0)`,
-      });
-      set(cloth, { transform: `skewY(${flagSwing.toFixed(2)})`, "transform-origin": `${dc}px -44px` });
+      const cold = span(t, 4.9, 5.2);
+      set(deadFront, { fill: mix(FRONT.raw, FRONT.cold, cold) });
+      set(deadTop, { fill: mix(TOP.raw, TOP.cold, cold) });
+      set(unused, { opacity: span(t, 5.0, 5.35).toFixed(2) });
 
       const ramY = track(t, [
-        [6.8, 0], [7.4, -30, out], [7.55, -30], [IMPACT + 0.005, 94, cubicIn], [7.76, 86, out], [7.86, 92, quadIn], [8.1, 92], [8.9, 0],
+        [6.8, 0], [7.4, -30, out], [7.55, -30], [IMPACT + 0.005, 88, cubicIn], [7.76, 82, out], [7.86, 86, quadIn], [8.1, 86], [8.9, 0],
       ]);
-      const tremble = t > 7.4 && t < 7.55 ? Math.sin(t * 260) * 1.3 : 0;
-      set(ram, { transform: `translate(${tremble.toFixed(2)} ${ramY.toFixed(2)})` });
+      set(ram, { transform: `translate(0 ${ramY.toFixed(2)})` });
       const gone = t >= IMPACT;
-      const squash = clamp((ramY - 70) / 14) * (t < IMPACT ? 1 : 0);
+      const squash = t < IMPACT ? clamp((ramY - 66) / 16) : 0;
       const dh = SH * (1 - 0.45 * squash);
       set(deadG, { visibility: gone ? "hidden" : "visible" });
       set(deadFront, { y: SH - dh, height: dh });
       set(deadTop, { y: SH - dh });
-      set(deadShade, { y: SH - 4 });
-      const cold = span(t, 4.9, 5.2);
-      set(deadFront, { fill: mix(FRONT.raw, "#2d4b68", cold) });
-      set(deadTop, { fill: mix(TOP.raw, "#45698b", cold) });
+      set(tag, { opacity: (1 - squash).toFixed(2) });
 
       shards.forEach((el, i) => {
         const s = geo.shards[i];
@@ -581,24 +447,7 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
         const y = s.y0 + s.vy * d + 0.5 * geo.G * d * d;
         set(el, { visibility: "visible", transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((s.spin * d) / s.land).toFixed(1)})` });
       });
-      const sp = t - IMPACT;
-      sparks.forEach((el, i) => {
-        const s = geo.sparks[i];
-        const on = sp > 0 && sp < 0.42;
-        const r0 = s.v * sp;
-        const g = 900 * sp * sp;
-        const ca = Math.cos(s.a);
-        const sa = Math.sin(s.a);
-        set(el, {
-          x1: 640 + ca * r0, y1: 262 + sa * r0 + g, x2: 640 + ca * (r0 + s.len), y2: 262 + sa * (r0 + s.len) + g,
-          opacity: on ? (1 - sp / 0.42).toFixed(2) : 0,
-        });
-      });
-      const fl = span(t, IMPACT, IMPACT + 0.16);
-      set(flash, {
-        transform: `translate(640 262) scale(${(0.4 + 0.9 * out(fl)).toFixed(2)})`,
-        opacity: fl > 0 && fl < 1 ? (1 - fl).toFixed(2) : 0,
-      });
+      set(note, { opacity: (span(t, 8.1, 8.45) * (narrow.matches ? 1 - span(t, 9.9, 10.3) : 1)).toFixed(2) });
 
       const travel = Math.min(sx, at.press) - at.scan;
       set(belt, { "stroke-dashoffset": (-travel).toFixed(1) });
@@ -648,39 +497,20 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
           cx: (p.x + p.drift * out(life)).toFixed(1),
           cy: (296 - p.rise * out(life)).toFixed(1),
           r: on ? lerp(p.r0, p.r1, out(life)).toFixed(1) : 0,
-          opacity: on ? (0.92 * Math.min(1, life * 6) * Math.pow(1 - life, 1.3)).toFixed(2) : 0,
+          opacity: on ? (0.85 * Math.min(1, life * 6) * Math.pow(1 - life, 1.3)).toFixed(2) : 0,
         });
       });
 
-      const jaw = back(1.8)(span(t, 14.5, CLUNK));
+      const jaw = back(1.8)(span(t, 14.5, 14.8));
       jaws.forEach((el) => {
         const side = Number(el.dataset.jaw);
         set(el, { transform: `translate(${(side * 22 * (1 - jaw)).toFixed(2)} ${(-16 * (1 - jaw)).toFixed(2)})` });
       });
 
-      const value = t < 15.0 ? measured : lerp(geo.start, geo.after, inOutBack(0.8)(span(t, 15.0, 15.9)));
-      const a = ((-130 + (260 * value) / gauge.max) * Math.PI) / 180;
-      set(needle, { x2: (gauge.cx + 21 * Math.sin(a)).toFixed(1), y2: (gauge.cy - 21 * Math.cos(a)).toFixed(1) });
-      set(ok, { fill: mix(LAMP.off, LAMP.on, span(t, 15.9, 16.05)) });
-
-      lamps.forEach((el) => set(el, { fill: mix(LAMP.off, LAMP.on, lit(t, Number(el.dataset.lamp))) }));
-      cones.forEach((el, i) => {
-        const id = el.dataset.cone;
-        const v = id === "cart" ? lit(t, 99) : lit(t, id === "scan" ? 16.25 : 16.8);
-        set(el, { opacity: (v * (id === "cart" ? 0.05 : 0.032)).toFixed(3) });
-        set(bulbs[i], { opacity: (0.25 + 0.75 * v).toFixed(2) });
-        set(pools[i], { opacity: (v * 0.08).toFixed(3) });
-      });
-      const dim = span(t, 16.3, 17.2);
-      dims.forEach((el) => (el.style.filter = dim > 0 ? `brightness(${(1 - 0.42 * dim).toFixed(3)})` : ""));
-
-      const shakeA = 7 * Math.exp(-sp * 12) * (sp > 0 && sp < 0.5 ? 1 : 0) + 1.6 * Math.exp(-(t - CLUNK) * 20) * (t > CLUNK && t < CLUNK + 0.2 ? 1 : 0);
-      const shx = Math.sin(t * 97) * shakeA;
-      const shy = Math.cos(t * 83) * shakeA * 0.7;
-      const vw = narrow.matches ? 560 : 1200;
-      const focus = track(t, [[0, 160], [3.0, 160], [3.9, 420], [6.0, 420], [6.75, 600], [9.95, 600], [10.75, 824], [12.8, 824], [13.6, 1035]]);
+      const vw = narrow.matches ? 420 : 1200;
+      const focus = track(t, [[0, 160], [3.0, 160], [3.9, 480], [6.0, 480], [6.75, 600], [9.95, 600], [10.75, 824], [12.8, 824], [13.6, 1035]]);
       const camX = clamp(focus - vw / 2, 0, 1200 - vw);
-      set(view, { viewBox: `${(camX + shx).toFixed(2)} ${shy.toFixed(2)} ${vw} 460` });
+      set(view, { viewBox: `${camX.toFixed(2)} 0 ${vw} 460` });
 
       const beat = BEATS.filter((b) => t >= b).length - 1;
       progress.style.transform = `scaleX(${((beat + span(t, BEATS[beat], BEATS[beat + 1] ?? END)) / BEATS.length).toFixed(4)})`;
@@ -757,21 +587,12 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: #072039;
   }
 
-  .panel {
-    fill: #09263f;
-  }
-
   .floor {
     fill: #051829;
   }
 
   .floor-edge {
     fill: #10324f;
-  }
-
-  .pool,
-  .cone {
-    fill: #eaf6ff;
   }
 
   .f {
@@ -798,18 +619,6 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: #0a2540;
   }
 
-  .f.y {
-    fill: #e2bd5c;
-  }
-
-  .t.y {
-    fill: #f7e3a6;
-  }
-
-  .s.y {
-    fill: #a8852f;
-  }
-
   .rod {
     fill: #0f3252;
   }
@@ -818,33 +627,8 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: #3f6f97;
   }
 
-  .hz-dark {
-    fill: #0c2e4d;
-  }
-
-  .hz-light {
-    fill: #f3d98b;
-  }
-
-  .vent {
-    fill: #0a2540;
-  }
-
   .coil {
     fill: #24496b;
-  }
-
-  .heat-pool,
-  .halo {
-    fill: #ff9447;
-  }
-
-  .halo.in {
-    fill: #ffb067;
-  }
-
-  .lamp {
-    fill: #163a5a;
   }
 
   .cable {
@@ -888,25 +672,17 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: rgb(4 18 32 / 0.28);
   }
 
-  .sheen {
-    fill: rgb(255 255 255 / 0.55);
-  }
-
-  .flag-pole {
-    stroke: #d7e9f5;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-  }
-
-  .flag {
-    fill: #ff8a6b;
-  }
-
-  .flag-t {
+  .tag {
     font-family: var(--mono);
-    font-size: 17px;
-    font-weight: 600;
-    fill: #2a0d06;
+    font-size: 13.5px;
+    font-weight: 500;
+    fill: #eef8ff;
+  }
+
+  .note {
+    font-family: var(--mono);
+    font-size: 14px;
+    fill: var(--ink-2);
   }
 
   .tank-in {
@@ -930,21 +706,11 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     stroke-width: 1.4;
   }
 
-  .glint {
-    stroke: rgb(255 255 255 / 0.12);
-    stroke-width: 3;
-    stroke-linecap: round;
-  }
-
   .shard {
-    fill: #2d4b68;
-    stroke: #45698b;
+    fill: #2a4560;
+    stroke: #3c5c7b;
     stroke-width: 2;
     stroke-linejoin: round;
-  }
-
-  .scrap-rim {
-    fill: #ff8a6b;
   }
 
   .tyre {
@@ -955,52 +721,19 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: #2c6898;
   }
 
-  .dial-ring {
-    fill: #2c6898;
-  }
-
-  .dial {
-    fill: #061a2d;
-  }
-
-  .tick {
-    stroke: #6fa3c9;
-    stroke-width: 2;
-  }
-
-  .ghost {
-    stroke: #ff8a6b;
-    stroke-width: 3;
-  }
-
-  .needle {
-    stroke: #f2f9ff;
-    stroke-width: 3;
-    stroke-linecap: round;
-  }
-
-  .hub-dot {
-    fill: #f2f9ff;
-  }
-
   .lcd {
     fill: #051626;
   }
 
   .readout {
     font-family: var(--mono);
-    font-size: 19px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-size: 17px;
+    font-weight: 500;
     fill: #5f8fb4;
     transition: fill 0.3s;
   }
 
   .is-measured .readout {
-    fill: #9fdcfa;
-  }
-
-  .beam {
     fill: #9fdcfa;
   }
 
@@ -1021,36 +754,10 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
     fill: #e6f2fa;
   }
 
-  .puff.b {
-    fill: #bcd5e7;
-  }
-
-  .spark {
-    stroke: #ffd98a;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-  }
-
-  .flash {
-    fill: #fff6dc;
-  }
-
-  .cord {
-    stroke: #0f3252;
-    stroke-width: 2;
-  }
-
-  .shade {
-    fill: #1c4b74;
-  }
-
-  .bulb {
-    fill: #fff6dc;
-  }
-
   .rail {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 20px;
     padding: 0 12px 0 0;
     border-top: 1px solid var(--hair);
@@ -1065,12 +772,9 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
   }
 
   .beats button {
-    padding: 16px 22px 15px;
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    padding: 15px 22px 14px;
+    font-family: var(--sans);
+    font-size: 16px;
     color: var(--mute);
     background: none;
     border: 0;
@@ -1106,15 +810,6 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
 
   .is-still .progress {
     display: none;
-  }
-
-  .credit {
-    margin: 0 0 0 auto;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    color: var(--mute);
-    white-space: nowrap;
   }
 
   .replay {
@@ -1158,13 +853,12 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
 
   @media (max-width: 640px) {
     .rail {
-      flex-wrap: wrap;
+      padding: 0 8px 0 0;
       gap: 0;
-      padding: 0;
     }
 
     .beats {
-      flex: 1 0 100%;
+      flex: 1;
     }
 
     .beats li {
@@ -1173,19 +867,11 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
 
     .beats button {
       width: 100%;
-      padding: 14px 0 13px;
-      font-size: 11.5px;
-      letter-spacing: 0.1em;
-    }
-
-    .credit {
-      margin: 0;
-      padding: 0 14px 14px;
-      font-size: 11.5px;
+      padding: 13px 0 12px;
+      font-size: 15px;
     }
 
     .replay {
-      margin: 0 10px 10px auto;
       width: 30px;
       height: 30px;
     }

@@ -349,14 +349,10 @@ h2 em {
 }
 
 .hero h1 {
-  max-width: 13em;
-  font-size: clamp(40px, 5.6vw, 72px);
-  line-height: 1.02;
+  max-width: 17em;
+  font-size: clamp(34px, 4.4vw, 56px);
+  line-height: 1.06;
   text-wrap: balance;
-}
-
-.hero h1 em {
-  white-space: nowrap;
 }
 
 .hero .inline-cmd {
