@@ -1,30 +1,69 @@
 ---
 import Command from "./Command.astro";
-import { kilo, layers, percent, startTokens } from "../context.ts";
+import run from "../samples/run.json";
+import { inputTokens, kilo, layers, percent, requests, servers, skillUse, startTokens } from "../context.ts";
 
-const mcpTints = ["#ff9479", "#e2b0f5"];
-let mcpSeen = 0;
 const tints: Record<string, string> = {
   system: "#5aa9d2",
   tools: "#9fdcfa",
   instructions: "#f3d98b",
   skills: "#a9e8c4",
 };
-const line = layers.map((l) => ({
-  name: l.name,
-  share: l.share,
-  color: l.mcp ? mcpTints[mcpSeen++ % mcpTints.length] : (tints[l.kind] ?? "#9fdcfa"),
-}));
-const stations = ["Intake", "Press", "Lock + quench", "Measured"];
+const mcpTints = ["#e2b0f5", "#8fb4ff"];
+let mcpSeen = 0;
+const part = (kind: string) => run.startingContext.parts.find((p) => p.kind === kind);
+const count = (kind: string) => {
+  const p = part(kind);
+  return p && "count" in p ? p.count : 0;
+};
+const files = (() => {
+  const p = part("instructions");
+  return p && "files" in p ? p.files : 0;
+})();
+
+const usage = (l: (typeof layers)[number]) => {
+  if (l.mcp) {
+    const s = servers.find((x) => l.name.endsWith(x.server));
+    return { text: `${s?.called ?? 0} of ${s?.tools ?? 0} tools called`, idle: (s?.called ?? 0) === 0 };
+  }
+  if (l.kind === "skills") return { text: `${skillUse.used} of ${skillUse.listed} skills used`, idle: false };
+  if (l.kind === "tools") return { text: `${count("tools")} tool definitions`, idle: false };
+  if (l.kind === "instructions") return { text: `${files} files, sent whole`, idle: false };
+  return { text: "set by the harness", idle: false };
+};
+
+const line = layers.map((l) => {
+  const used = usage(l);
+  return {
+    name: l.name,
+    share: l.share,
+    color: l.mcp ? mcpTints[mcpSeen++ % mcpTints.length] : (tints[l.kind] ?? "#9fdcfa"),
+    tokens: `${kilo(l.share * startTokens)} tok`,
+    used: used.text,
+    idle: used.idle,
+  };
+});
+const widest = Math.max(...line.map((l) => l.share));
+const resent = percent((startTokens * requests) / inputTokens);
+
+const stations = [
+  ["Bloat", "everything loaded before you type"],
+  ["Press", "squeezed to its measured size"],
+  ["Quench", "cooled hard: loaded vs. used"],
+  ["Deliver", "stacked up, yours to cut"],
+];
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
     <p class="eyebrow">A context profiler for coding agents</p>
     <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
+  </div>
+  <div class="hero-side">
     <p class="lede">
-      System prompt, built-in tools, MCP servers, instruction files and skills are all in context before your first
-      word. Quench reads the history Claude Code, Codex and Pi already keep, and shows what each layer costs.
+      System prompt, built-in tools, MCP servers, instruction files and skills are in context before your first word,
+      and resent on every model call. Quench reads the history Claude Code, Codex and Pi already keep and measures each
+      layer, so you can decide what to cut.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
@@ -32,46 +71,73 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
     </div>
   </div>
 
-  <div class="line" data-layers={JSON.stringify(line)} data-start={startTokens}>
-    <canvas aria-hidden="true"></canvas>
-    <div class="line-tags" aria-hidden="true">
-      {
-        line.map((l) => (
-          <span class="line-tag" style={`--tint:${l.color}`}>
-            <b>{l.name}</b>
-            <i>
-              {kilo(l.share * startTokens)} tok · {percent(l.share)}
-            </i>
-          </span>
-        ))
-      }
-      <span class="line-total"><i>Σ</i> <b class="line-total-value">0.0k</b> <span>/ {kilo(startTokens)} tok</span></span>
-      {
-        stations.map((s, i) => (
-          <span class="line-station">
-            <i>{String(i + 1).padStart(2, "0")}</i> {s}
-          </span>
-        ))
-      }
+  <div class="plant">
+    <div class="line" data-layers={JSON.stringify(line)} data-start={startTokens}>
+      <canvas aria-hidden="true"></canvas>
+      <div class="line-tags" aria-hidden="true">
+        <span class="line-tag line-tag-press"><b></b><i></i></span>
+        <span class="line-tag line-tag-quench"><b></b><i></i></span>
+      </div>
+      <p class="visually-hidden">
+        An animated production line. Each layer of the starting context drops in as a swollen lump, is pressed flat
+        to its measured size and comes out hot, is quenched in a water bath that shows how much of it was used, then
+        stacks in a bin on a cart that rolls out with all {kilo(startTokens)} tokens.
+      </p>
     </div>
-    <p class="visually-hidden">
-      An animated conveyor line. Each context layer enters as a swollen lump, is pressed flat to its measured size,
-      clamped and cooled, then stacked into one {kilo(startTokens)}-token block.
-    </p>
+
+    <ol class="stations" aria-label="Stations">
+      {
+        stations.map(([word, note], i) => (
+          <li class={`station station-${word.toLowerCase()}`}>
+            <i>{String(i + 1).padStart(2, "0")}</i>
+            <b>{word}</b>
+            <span>{note}</span>
+          </li>
+        ))
+      }
+    </ol>
+
+    <aside class="ledger is-full" aria-label="Starting load in the sample run">
+      <p class="ledger-label">Tokens before you type</p>
+      <p class="ledger-count">{kilo(startTokens)}</p>
+      <p class="ledger-resent">
+        Resent on all {requests} model calls: <b>{resent}</b> of the run's {kilo(inputTokens)} input tokens.
+      </p>
+      <ul class="ledger-rows">
+        {
+          line.map((l) => (
+            <li class:list={["ledger-row", "is-in", { "is-idle": l.idle }]} style={`--tint:${l.color};--bar:${l.share / widest}`}>
+              <span class="ledger-bar" />
+              <b>{kilo(l.share * startTokens)}</b>
+              <span class="ledger-name">{l.name}</span>
+              <span class="ledger-used">{l.used}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="ledger-foot">
+        <span>Quench measures. <b>You decide what to cut.</b></span>
+        <code><span>$</span> quench profile mcp</code>
+      </p>
+    </aside>
   </div>
 </section>
 
 <script>
   const stage = document.querySelector<HTMLElement>(".hero .line");
   const canvas = stage?.querySelector("canvas");
-  if (stage && canvas) {
+  const ledger = document.querySelector<HTMLElement>(".hero .ledger");
+  if (stage && canvas && ledger) {
     const layers = JSON.parse(stage.dataset.layers ?? "[]");
     const startTokens = Number(stage.dataset.start);
+    const tag = (el: HTMLElement) => ({ el, name: el.querySelector("b")!, value: el.querySelector("i")! });
     const tags = {
-      items: [...stage.querySelectorAll<HTMLElement>(".line-tag")],
-      total: stage.querySelector<HTMLElement>(".line-total")!,
-      totalValue: stage.querySelector<HTMLElement>(".line-total-value")!,
-      stations: [...stage.querySelectorAll<HTMLElement>(".line-station")],
+      press: tag(stage.querySelector<HTMLElement>(".line-tag-press")!),
+      quench: tag(stage.querySelector<HTMLElement>(".line-tag-quench")!),
+      stations: [...document.querySelectorAll<HTMLElement>(".hero .station")],
+      rows: [...ledger.querySelectorAll<HTMLElement>(".ledger-row")],
+      counter: ledger.querySelector<HTMLElement>(".ledger-count")!,
+      panel: ledger,
     };
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -110,6 +176,7 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
         scene.fit();
         sync();
         stage.classList.add("is-live");
+        ledger.parentElement?.classList.add("is-live");
       })
       .catch(() => stage.classList.add("is-off"));
   }
@@ -117,40 +184,26 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
 
 <style>
   .hero {
-    position: relative;
-    display: block;
-    min-height: clamp(560px, 45vw, 660px);
-    margin: 0 calc(-1 * var(--pad));
-    padding: clamp(48px, 6vw, 80px) var(--pad) 0;
-    overflow: hidden;
-    isolation: isolate;
-  }
-
-  .hero-copy {
-    position: relative;
-    z-index: 2;
-    max-width: 500px;
-    pointer-events: none;
-  }
-
-  .hero-copy :is(a, code) {
-    pointer-events: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: end;
+    gap: 28px clamp(32px, 5vw, 72px);
+    padding: clamp(40px, 5vw, 64px) 0 0;
   }
 
   .hero h1 {
-    font-size: clamp(42px, 4.9vw, 64px);
-    line-height: 1.03;
-    margin-bottom: 22px;
+    font-size: clamp(42px, 5.4vw, 72px);
+    line-height: 1.02;
+    margin: 0;
     text-wrap: balance;
   }
 
   .lede {
-    max-width: 27em;
-    margin: 0 0 30px;
+    max-width: 30em;
+    margin: 0 0 24px;
     font-size: 17px;
     line-height: 1.6;
     color: var(--ink-2);
-    text-shadow: 0 0 18px var(--prussian);
   }
 
   .hero-actions {
@@ -160,19 +213,24 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
     gap: 14px;
   }
 
-  .hero-actions :global(.inline-cmd) {
-    background: rgb(6 30 52 / 0.7);
+  .plant {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 370px);
+    grid-template-rows: minmax(0, 1fr) auto;
+    margin: clamp(12px, 2vw, 24px) calc(-1 * var(--pad)) 0;
+    min-height: clamp(470px, 38vw, 540px);
+    background: rgb(6 30 52 / 0.55);
+    border-block: 1px solid var(--hair);
   }
 
   .line {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
     opacity: 0;
     transition: opacity 0.9s ease;
-    mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 92%, transparent 100%),
-      linear-gradient(180deg, transparent 0, #000 8%);
-    mask-composite: intersect;
+    mask-image: linear-gradient(90deg, transparent 0, #000 3%, #000 97%, transparent 100%);
   }
 
   .line.is-live {
@@ -185,6 +243,8 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
 
   .line canvas {
     display: block;
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
   }
@@ -194,39 +254,25 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
     inset: 0;
     pointer-events: none;
     font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-  }
-
-  .line-tags > * {
-    position: absolute;
-    top: 0;
-    left: 0;
-    opacity: 0;
-    white-space: nowrap;
-    will-change: transform;
+    font-size: 14px;
   }
 
   .line-tag {
-    display: grid;
-    gap: 1px;
-    padding: 5px 9px 6px;
-    translate: -50% -100%;
-    margin-top: -8px;
-    color: var(--ink);
-    background: rgb(6 30 52 / 0.86);
-    border: 1px solid var(--hair);
-    border-left: 2px solid var(--tint);
-  }
-
-  .line-tag::after {
-    content: "";
     position: absolute;
-    left: 50%;
-    top: 100%;
-    width: 1px;
-    height: 8px;
-    background: var(--hair);
+    top: 0;
+    left: 0;
+    display: grid;
+    gap: 2px;
+    padding: 7px 12px 8px;
+    translate: -50% -100%;
+    margin-top: -10px;
+    white-space: nowrap;
+    opacity: 0;
+    will-change: transform;
+    color: var(--ink);
+    background: rgb(6 30 52 / 0.9);
+    border: 1px solid var(--hair);
+    border-left: 3px solid var(--tint);
   }
 
   .line-tag b {
@@ -235,82 +281,231 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
 
   .line-tag i {
     font-style: normal;
-    color: var(--mute);
-  }
-
-  .line-tag:not(.is-measured) i {
-    visibility: hidden;
-    height: 0;
-  }
-
-  .line-tag.is-measured i {
     color: var(--tint);
   }
 
-  .line-total {
-    translate: -50% -100%;
-    padding: 6px 10px;
-    font-size: 12px;
-    color: var(--ink-2);
-    border: 1px dashed var(--cyan-2);
-    background: rgb(6 30 52 / 0.86);
+  .line-tag-press {
+    translate: -100% -100%;
   }
 
-  .line-total i {
-    font-style: normal;
+  .line-tag-quench {
+    translate: 0 -100%;
+  }
+
+  .line-tag-press:not(.is-measured) i {
+    display: none;
+  }
+
+  .line-tag-quench {
+    border-color: rgb(159 220 250 / 0.5);
+    border-left-color: var(--tint);
+  }
+
+  .line-tag-quench::before {
+    content: "quenched";
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .stations {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0 clamp(16px, 3vw, 40px) 22px;
+    list-style: none;
+  }
+
+  .station {
+    display: grid;
+    gap: 2px;
+    font-family: var(--mono);
     color: var(--mute);
   }
 
-  .line-total b {
-    font-weight: 600;
+  .station i {
+    font-style: normal;
+    font-size: 14px;
+    color: var(--cyan-2);
+  }
+
+  .station b {
+    font-family: var(--sans);
+    font-weight: 400;
+    font-size: clamp(26px, 2.6vw, 36px);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: rgb(169 203 226 / 0.45);
+    transition: color 0.3s ease, text-shadow 0.3s ease;
+  }
+
+  .station span {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .plant:not(.is-live) .station b,
+  .station.is-on b {
+    color: var(--ink);
+  }
+
+  .station-quench b {
+    color: rgb(159 220 250 / 0.6);
+  }
+
+  .station-quench.is-on b {
+    color: var(--cyan);
+    text-shadow: 0 0 22px rgb(159 220 250 / 0.55);
+  }
+
+  .station-quench span {
+    color: var(--ink-2);
+  }
+
+  .ledger {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 28px clamp(20px, 2.4vw, 32px) 24px;
+    border-left: 1px solid var(--hair);
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+
+  .ledger p {
+    margin: 0;
+  }
+
+  .ledger-label {
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .ledger-count {
+    margin-top: 4px;
+    font-family: var(--sans);
+    font-size: clamp(64px, 6vw, 88px);
+    font-weight: 400;
+    line-height: 1;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ledger-resent {
+    margin-top: 10px;
+    line-height: 1.45;
+  }
+
+  .ledger-resent b {
+    font-weight: 500;
     color: var(--yellow);
   }
 
-  .line-total.is-done {
-    color: var(--prussian-deep);
-    background: var(--cyan);
-    border-style: solid;
+  .ledger-rows {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    margin: auto 0 0;
+    padding: 20px 0 0;
+    list-style: none;
   }
 
-  .line-total.is-done :is(b, i) {
-    color: var(--prussian-deep);
+  .ledger-row {
+    display: grid;
+    grid-template-columns: 64px 46px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    align-items: baseline;
+    opacity: 0.4;
+    transition: opacity 0.35s ease;
   }
 
-  .line-station {
-    translate: -50% 14px;
-    font-size: 10px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--mute);
+  .ledger-row.is-in {
+    opacity: 1;
   }
 
-  .line-station i {
-    font-style: normal;
+  .ledger-bar {
+    grid-row: 1 / span 2;
+    align-self: center;
+    width: calc(4px + var(--bar) * 60px);
+    height: 14px;
+    background: var(--tint);
+  }
+
+  .ledger-row b {
+    grid-row: 1 / span 2;
+    font-weight: 500;
+    color: var(--ink);
+    text-align: right;
+  }
+
+  .ledger-name {
+    color: var(--ink);
+  }
+
+  .ledger-used {
+    grid-column: 3;
+    color: var(--ink-2);
+  }
+
+  .ledger-row.is-idle .ledger-used {
+    color: var(--red);
+  }
+
+  .ledger-foot {
+    display: grid;
+    gap: 6px;
+    margin-top: 20px !important;
+    padding-top: 16px;
+    border-top: 1px solid var(--hair);
+    line-height: 1.4;
+    opacity: 0.45;
+    transition: opacity 0.4s ease;
+  }
+
+  .ledger.is-full .ledger-foot {
+    opacity: 1;
+  }
+
+  .ledger-foot b {
+    display: block;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .ledger-foot code {
     color: var(--cyan);
+  }
+
+  .ledger-foot code span {
+    color: var(--mute);
   }
 
   @media (max-width: 899px) {
     .hero {
-      display: flex;
-      flex-direction: column;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 22px;
+    }
+
+    .plant {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: clamp(340px, 90vw, 480px) auto auto;
       min-height: 0;
-      padding-bottom: 0;
     }
 
-    .hero-copy {
-      max-width: 640px;
-    }
-
-    .line {
-      position: relative;
-      inset: auto;
-      height: clamp(300px, 80vw, 520px);
-      margin-top: -8px;
-      mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
-    }
-
-    .line.is-off {
-      display: none;
+    .ledger {
+      grid-column: 1;
+      grid-row: 3;
+      border-left: 0;
+      border-top: 1px solid var(--hair);
     }
   }
 
@@ -323,22 +518,30 @@ const stations = ["Intake", "Press", "Lock + quench", "Measured"];
       font-size: 16px;
     }
 
-    .line-tags {
-      font-size: 10px;
+    .stations {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px 12px;
+      padding-top: 4px;
     }
 
-    .line-tag {
-      display: none;
-    }
-
-    .line-station {
-      font-size: 9px;
-      letter-spacing: 0.1em;
+    .station b {
+      font-size: 24px;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .line {
+    .station b {
+      color: var(--ink);
+    }
+
+    .station-quench b {
+      color: var(--cyan);
+    }
+
+    .line,
+    .station b,
+    .ledger-row,
+    .ledger-foot {
       transition: none;
     }
   }

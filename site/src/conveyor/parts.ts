@@ -1,17 +1,20 @@
 import * as THREE from "three";
 
-export const BELT_Y = 1.25;
+export const BELT_Y = 1.35;
 export const PLINTH_Y = 0.24;
-export const SLOT = 3.1;
-export const slotX = (s: number) => -4.65 + s * SLOT;
-export const STACK_X = 7.7;
-export const TABLE_Y = BELT_Y - 0.42;
-export const SLAB = 1.5;
-export const PLATEN_REST = BELT_Y + 2.35;
-export const HOPPER_BOTTOM = BELT_Y + 2.2;
-export const HOPPER_TOP = BELT_Y + 3.25;
-export const HOPPER_HALF = { top: 1.16, bottom: 0.68 };
-export const BELT = { from: -6.5, to: 6.15 };
+export const SLOT = 2.75;
+export const slotX = (s: number) => -4.1 + s * SLOT;
+export const STACK_X = 6.75;
+export const TABLE_Y = BELT_Y - 0.55;
+export const SLAB = 1.4;
+export const BIN = { wall: 0.05, floor: 0.06, lip: 0.08 };
+export const PLATEN_REST = BELT_Y + 2.1;
+export const HOPPER_BOTTOM = BELT_Y + 2.0;
+export const HOPPER_TOP = BELT_Y + 3.0;
+export const HOPPER_HALF = { top: 1.1, bottom: 0.64 };
+export const BELT = { from: -5.4, to: slotX(3) + 0.8 };
+export const TANK = { half: 0.95, depth: 1.15, water: BELT_Y - 0.14, floor: PLINTH_Y + 0.04 };
+export const LIFT = { up: BELT_Y, down: PLINTH_Y + 0.1 };
 
 const edgeColor = new THREE.Color("#9fdcfa");
 
@@ -77,8 +80,8 @@ export const hazard = () =>
 export const puff = () =>
   canvasTexture(128, 128, (g) => {
     const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    r.addColorStop(0, "rgba(238,248,255,0.9)");
-    r.addColorStop(0.45, "rgba(214,238,252,0.35)");
+    r.addColorStop(0, "rgba(240,249,255,0.85)");
+    r.addColorStop(0.35, "rgba(222,241,253,0.4)");
     r.addColorStop(1, "rgba(214,238,252,0)");
     g.fillStyle = r;
     g.fillRect(0, 0, 128, 128);
@@ -148,4 +151,16 @@ export function lumpy(seed: number) {
     geometry.attributes.position.needsUpdate = true;
   };
   return { geometry, wobble };
+}
+
+export function bin(height: number, material: THREE.Material) {
+  const group = new THREE.Group();
+  const outer = SLAB + BIN.wall * 2;
+  const wall = BIN.floor + height * 0.35 + 0.02;
+  block(group, [outer, BIN.floor, outer], [0, BIN.floor / 2, 0], material, mats.faint);
+  for (const side of [-1, 1]) {
+    block(group, [outer, wall, BIN.wall], [0, wall / 2, side * (outer - BIN.wall) / 2], material, mats.faint);
+    block(group, [BIN.wall, wall, outer], [side * (outer - BIN.wall) / 2, wall / 2, 0], material, mats.faint);
+  }
+  return group;
 }
