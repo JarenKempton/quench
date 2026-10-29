@@ -1,0 +1,701 @@
+---
+import {
+  BELT,
+  CURTAIN,
+  END_ROLLER,
+  FLOOR,
+  H,
+  HEAD_UP,
+  LOCK_X,
+  PALLET_TOP,
+  PARTICLES,
+  PIVOT_Y,
+  PRESS_X,
+  RAM_UP,
+  ROLLERS,
+  SLAB_W,
+  STACK_X,
+  STILL,
+  STRIP,
+  W,
+  gear,
+  items,
+  scene,
+  stack,
+  stackTop,
+  station,
+} from "../conveyor.ts";
+import { kilo, startTokens } from "../context.ts";
+
+const { attrs: a, texts } = scene(STILL);
+const half = SLAB_W / 2;
+const legs = [14, 226, 850, 958];
+const tags = [
+  { x: station(0), text: "01 Intake" },
+  { x: PRESS_X, text: "02 Press" },
+  { x: LOCK_X, text: "03 Lock" },
+  { x: STACK_X, text: "04 Stack" },
+];
+const dial = [0, 1, 2, 3, 4, 5].map((i) => -120 + i * 48);
+---
+
+<figure class="conveyor" data-conveyor>
+  <figcaption class="conveyor-bar">
+    <span><b>Fig. 1</b> Context press<span class="conveyor-sub">, side elevation</span></span>
+    <button type="button" class="conveyor-toggle" data-toggle aria-pressed="false">Pause</button>
+  </figcaption>
+
+  <div class="conveyor-crop">
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby="conveyor-desc">
+      <desc id="conveyor-desc">
+        A conveyor pulls six swollen sacks, one per context layer, into a press. The press flattens each into a slab
+        whose thickness is that layer's share of the starting load, a clamp straps it, and the slabs stack into one
+        measured block of {kilo(startTokens)} tokens.
+      </desc>
+      <defs>
+        <pattern id="cv-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" class="cv-hatch-line"></line>
+        </pattern>
+        <pattern id="cv-hazard" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="7" height="14" class="cv-hazard"></rect>
+        </pattern>
+        <pattern id="cv-ground" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+          <line x1="0" y1="0" x2="0" y2="9" class="cv-ground-line"></line>
+        </pattern>
+      </defs>
+
+      <g class="cv-ground">
+        <rect x="0" y={FLOOR} width={W} height="14" fill="url(#cv-ground)"></rect>
+        <line x1="0" y1={FLOOR} x2={W} y2={FLOOR} class="cv-floor"></line>
+      </g>
+
+      <g class="cv-machine cv-hood">
+        <line x1="236" y1="168" x2="278" y2="210" class="cv-strut"></line>
+        <rect x="-20" y="144" width="310" height="24"></rect>
+        <rect x="46" y="168" width="44" height="18"></rect>
+      </g>
+
+      <g class="cv-machine cv-lock-frame">
+        <rect x="562" y="200" width="16" height={FLOOR - 200}></rect>
+        <rect x="762" y="200" width="16" height={FLOOR - 200}></rect>
+        <rect x="552" y="194" width="236" height="24" rx="2"></rect>
+        <rect x={LOCK_X - 22} y="218" width="44" height="20"></rect>
+        <rect x={LOCK_X - 8} y="190" width="16" height="4" class="cv-plain"></rect>
+        <circle cx={LOCK_X} cy="184" r="7" class="cv-lamp" data-k="lamp" {...a.lamp}></circle>
+        <rect x={LOCK_X - 6} y="238" width="12" data-k="headrod" {...a.headrod}></rect>
+      </g>
+
+      <g class="cv-machine" data-k="press" {...a.press}>
+        <line x1="240" y1="58" x2="278" y2="82" class="cv-strut"></line>
+        <rect x="196" y="22" width="58" height="38" rx="8"></rect>
+        <path d="M254 36C300 36 330 26 378 34" class="cv-hose"></path>
+        <rect x="278" y="70" width="24" height={FLOOR - 70}></rect>
+        <rect x="518" y="70" width="24" height={FLOOR - 70}></rect>
+        <rect x={PRESS_X - 32} y="18" width="64" height="50" rx="3"></rect>
+        <line x1={PRESS_X - 32} y1="32" x2={PRESS_X + 32} y2="32" class="cv-detail"></line>
+        <line x1={PRESS_X - 32} y1="54" x2={PRESS_X + 32} y2="54" class="cv-detail"></line>
+        <rect x={PRESS_X - 10} y="124" width="20" class="cv-rod" data-k="rod" {...a.rod}></rect>
+        <rect x="262" y="66" width="296" height="58" rx="4"></rect>
+        <circle cx="318" cy="95" r="21" class="cv-dial"></circle>
+        {
+          dial.map((d) => (
+            <line x1="318" y1="77" x2="318" y2="81" transform={`rotate(${d} 318 95)`} class="cv-detail"></line>
+          ))
+        }
+        <line x1="318" y1="95" x2="318" y2="79" class="cv-needle" data-k="needle" {...a.needle}></line>
+        <circle cx="318" cy="95" r="2.5" class="cv-pin"></circle>
+        <rect x="352" y="78" width="192" height="34" class="cv-readout"></rect>
+        <text x="362" y="99" class="cv-pname" data-k="pname">{texts.pname}</text>
+        <text x="536" y="104" class="cv-pct" data-k="pct">{texts.pct}</text>
+        <g data-k="ram" {...a.ram}>
+          <rect x="274" y="140" width="32" height="32" rx="3"></rect>
+          <rect x="514" y="140" width="32" height="32" rx="3"></rect>
+          <rect x="304" y="142" width="212" height={RAM_UP - 142}></rect>
+          <rect x="304" y={RAM_UP - 9} width="212" height="9" class="cv-plain cv-stripes"></rect>
+        </g>
+      </g>
+
+      <g class="cv-machine">
+        <rect x={LOCK_X - half - 14} y={BELT - 40} width="14" height="36" data-k="jl" {...a.jl}></rect>
+        <rect x={LOCK_X + half} y={BELT - 40} width="14" height="36" data-k="jr" {...a.jr}></rect>
+        <rect x="578" y={BELT - 26} height="8" class="cv-rod" data-k="jlr" {...a.jlr}></rect>
+        <rect y={BELT - 26} height="8" class="cv-rod" data-k="jrr" {...a.jrr}></rect>
+        <g data-k="head" {...a.head}>
+          <rect x={LOCK_X - 55} y={HEAD_UP - 12} width="110" height="12" rx="2"></rect>
+          <line x1={LOCK_X - 30} y1={HEAD_UP} x2={LOCK_X - 30} y2={HEAD_UP + 4} class="cv-detail"></line>
+          <line x1={LOCK_X + 30} y1={HEAD_UP} x2={LOCK_X + 30} y2={HEAD_UP + 4} class="cv-detail"></line>
+        </g>
+      </g>
+
+      <g class="cv-machine cv-belt">
+        {legs.map((x) => <rect x={x} y={BELT + 32} width="10" height={FLOOR - BELT - 32}></rect>)}
+        <line x1="24" y1="470" x2="226" y2="420" class="cv-detail"></line>
+        <line x1="860" y1="420" x2="958" y2="470" class="cv-detail"></line>
+        <rect x="108" y="444" width="104" height="66" rx="4"></rect>
+        {[0, 1, 2, 3].map((i) => <line x1="186" y1={456 + i * 10} x2="204" y2={456 + i * 10} class="cv-detail"></line>)}
+        <path d="M150 356L142 470A18 18 0 0 0 178 470L170 356A10 10 0 0 0 150 356Z" class="cv-chain" data-k="chain" {...a.chain}></path>
+        <polygon points={gear(18, 12)} class="cv-gear" data-k="gear" {...a.gear}></polygon>
+        <path d={`M-60 ${BELT}H${END_ROLLER}A16 16 0 0 1 ${END_ROLLER} ${BELT + 32}H-60`} class="cv-band"></path>
+        <line x1="-60" y1={BELT + 4} x2={END_ROLLER} y2={BELT + 4} class="cv-tread" data-k="tread-top" {...a["tread-top"]}></line>
+        <line x1="-60" y1={BELT + 28} x2={END_ROLLER} y2={BELT + 28} class="cv-tread" data-k="tread-bot" {...a["tread-bot"]}></line>
+        {
+          ROLLERS.map((x, i) => (
+            <g data-k={`r${i}`} {...a[`r${i}`]}>
+              <circle cx={x} cy="356" r="11"></circle>
+              <line x1={x - 11} y1="356" x2={x + 11} y2="356" class="cv-detail"></line>
+              <line x1={x} y1="345" x2={x} y2="367" class="cv-detail"></line>
+            </g>
+          ))
+        }
+        <g data-k="rend" {...a.rend}>
+          <circle cx={END_ROLLER} cy="356" r="13"></circle>
+          <line x1={END_ROLLER - 13} y1="356" x2={END_ROLLER + 13} y2="356" class="cv-detail"></line>
+          <line x1={END_ROLLER} y1="343" x2={END_ROLLER} y2="369" class="cv-detail"></line>
+        </g>
+      </g>
+
+      <g class="cv-curtain">
+        {
+          CURTAIN.map((x, i) => (
+            <rect x={x - 3} y={PIVOT_Y} width="6" height={STRIP} rx="2" data-k={`c${i}`} {...a[`c${i}`]}></rect>
+          ))
+        }
+      </g>
+
+      <g class="cv-items">
+        {
+          items.map((it, j) => (
+            <g data-k={`b${j}`} {...a[`b${j}`]}>
+              <g data-k={`b${j}s`} {...a[`b${j}s`]}>
+                <g class="cv-sack" style={`animation-delay:${-j * 0.37}s`}>
+                  <path d={it.outline} class="cv-sack-body"></path>
+                  {it.creases.map((d) => <path d={d} class="cv-crease"></path>)}
+                  <path d={`M-4 ${-it.h - 3}L-13 ${-it.h - 15}L-2 ${-it.h - 9}L5 ${-it.h - 17}L4 ${-it.h - 3}`} class="cv-sack-body"></path>
+                  <text x="0" y={-it.h * 0.38} class="cv-sack-name">{it.name}</text>
+                </g>
+              </g>
+              <g data-k={`b${j}m`} {...a[`b${j}m`]}>
+                <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-measured"></rect>
+                <g data-k={`b${j}l`} {...a[`b${j}l`]}>
+                  <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
+                  <rect x={-38} y={-it.slab} width="6" height={it.slab} class="cv-strap"></rect>
+                  <rect x={32} y={-it.slab} width="6" height={it.slab} class="cv-strap"></rect>
+                  {it.slab >= 14 && <text x="0" y={-it.slab / 2 + 4} class="cv-stamp">{it.pct}</text>}
+                </g>
+              </g>
+            </g>
+          ))
+        }
+        {
+          Array.from({ length: PARTICLES }, (_, i) => (
+            <g data-k={`p${i}`} {...a[`p${i}`]} class="cv-bit">
+              <rect x="-7" y="-4.5" width="14" height="9" rx="1.5"></rect>
+              {i % 3 !== 2 && <line x1="-4" y1="0" x2="4" y2="0"></line>}
+            </g>
+          ))
+        }
+        <g data-k="impact" {...a.impact} class="cv-impact">
+          {[-1, 1].map((s) =>
+            [6, 16, 26].map((dy, i) => (
+              <line
+                x1={PRESS_X + s * (half + 16 + i * 6)}
+                y1={BELT - dy}
+                x2={PRESS_X + s * (half + 46 + i * 10)}
+                y2={BELT - dy}
+              ></line>
+            )),
+          )}
+        </g>
+      </g>
+
+
+      <g class="cv-out">
+        <g data-k="pallet" {...a.pallet} class="cv-machine">
+          <rect x={STACK_X - 70} y={PALLET_TOP} width="140" height="8"></rect>
+          {[-64, -10, 44].map((dx) => <rect x={STACK_X + dx} y={PALLET_TOP + 8} width="20" height="8"></rect>)}
+        </g>
+        {
+          items.map((it, j) => (
+            <g data-k={`s${j}`} {...a[`s${j}`]}>
+              <rect x={STACK_X - half} y={stack[j].top} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
+              <rect x={STACK_X - 38} y={stack[j].top} width="6" height={it.slab} class="cv-strap"></rect>
+              <rect x={STACK_X + 32} y={stack[j].top} width="6" height={it.slab} class="cv-strap"></rect>
+              {it.slab >= 14 && (
+                <text x={STACK_X} y={(stack[j].top + stack[j].bottom) / 2 + 4} class="cv-stamp">
+                  {it.pct}
+                </text>
+              )}
+              <g class="cv-stack-label">
+                <path
+                  d={`M${STACK_X + half + 4} ${(stack[j].top + stack[j].bottom) / 2}H${STACK_X + half + 12}L${STACK_X + half + 18} ${stack[j].label}H${STACK_X + half + 24}`}
+                ></path>
+                <text x={STACK_X + half + 28} y={stack[j].label + 4}>
+                  <tspan class="cv-label-pct">{it.pct}</tspan> {it.name}
+                </text>
+              </g>
+            </g>
+          ))
+        }
+        <g data-k="tag" {...a.tag} class="cv-tag">
+          <path d={`M${STACK_X} ${stackTop - 84}V${stackTop - 8}m-5 -6l5 6l5 -6`}></path>
+          <text x={STACK_X} y={stackTop - 96} class="cv-tag-num">{kilo(startTokens)} tokens</text>
+          <text x={STACK_X} y={stackTop - 120} class="cv-tag-note">resent every call</text>
+        </g>
+      </g>
+
+      <g class="cv-tags">
+        {
+          tags.map((t) => (
+            <g>
+              <line x1={t.x} y1={FLOOR + 16} x2={t.x} y2={FLOOR + 22}></line>
+              <text x={t.x} y={FLOOR + 36}>
+                {t.text}
+              </text>
+            </g>
+          ))
+        }
+      </g>
+    </svg>
+  </div>
+
+  <ol class="conveyor-legend">
+    {
+      items.map((it) => (
+        <li>
+          <b>{it.pct}</b> {it.name}
+        </li>
+      ))
+    }
+  </ol>
+</figure>
+
+<script>
+  import { scene, STILL } from "../conveyor.ts";
+
+  const root = document.querySelector<HTMLElement>("[data-conveyor]");
+  if (root) {
+    const els = new Map(
+      [...root.querySelectorAll<SVGElement>("[data-k]")].map((el) => [el.dataset.k as string, el] as const),
+    );
+    const button = root.querySelector<HTMLButtonElement>("[data-toggle]")!;
+    const still = matchMedia("(prefers-reduced-motion: reduce)");
+    let t = STILL;
+    let last = 0;
+    let frame = 0;
+    let onScreen = true;
+    let paused = still.matches;
+
+    const draw = () => {
+      const { attrs, texts } = scene(t);
+      for (const key in attrs) {
+        const el = els.get(key);
+        if (!el) continue;
+        for (const name in attrs[key]) el.setAttribute(name, attrs[key][name]);
+      }
+      for (const key in texts) {
+        const el = els.get(key);
+        if (el && el.textContent !== texts[key]) el.textContent = texts[key];
+      }
+    };
+
+    const tick = (now: number) => {
+      if (last) t += Math.min(0.05, (now - last) / 1000);
+      last = now;
+      draw();
+      frame = requestAnimationFrame(tick);
+    };
+
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      last = 0;
+      const running = onScreen && !paused;
+      if (running) frame = requestAnimationFrame(tick);
+      button.textContent = paused ? "Play" : "Pause";
+      button.setAttribute("aria-pressed", String(paused));
+    };
+
+    button.addEventListener("click", () => {
+      paused = !paused;
+      sync();
+    });
+    still.addEventListener("change", () => {
+      paused = still.matches;
+      if (paused) {
+        t = STILL;
+        draw();
+      }
+      sync();
+    });
+    new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting;
+      sync();
+    }).observe(root);
+    sync();
+  }
+</script>
+
+<style>
+  .conveyor {
+    position: relative;
+    margin: 0;
+    border: 1px solid var(--hair);
+    background: rgb(7 34 58 / 0.94);
+    box-shadow: 0 0 0 6px rgb(12 50 83 / 0.55);
+  }
+
+  .conveyor-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mute);
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .conveyor-bar b {
+    font-weight: 500;
+    color: var(--cyan);
+    margin-right: 10px;
+  }
+
+  .conveyor-toggle {
+    padding: 4px 10px;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--ink-2);
+    background: none;
+    border: 1px solid var(--hair);
+    cursor: pointer;
+  }
+
+  .conveyor-toggle:hover {
+    color: var(--cyan);
+    border-color: var(--cyan-2);
+  }
+
+  .conveyor-toggle:focus-visible {
+    outline: 1px dashed var(--cyan);
+    outline-offset: 3px;
+  }
+
+  .conveyor-crop {
+    overflow: hidden;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-family: var(--mono);
+  }
+
+  .cv-machine rect,
+  .cv-machine circle,
+  .cv-machine polygon,
+  .cv-band {
+    fill: #0a2d4c;
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+  }
+
+  .cv-machine .cv-plain {
+    stroke: none;
+  }
+
+  .cv-machine .cv-stripes {
+    fill: url(#cv-hazard);
+  }
+
+  .cv-hatch-line {
+    stroke: rgb(159 220 250 / 0.55);
+    stroke-width: 1.5;
+  }
+
+  .cv-hazard {
+    fill: rgb(243 217 139 / 0.75);
+  }
+
+  .cv-ground-line {
+    stroke: rgb(159 220 250 / 0.2);
+    stroke-width: 1;
+  }
+
+  .cv-floor {
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+  }
+
+  .cv-strut,
+  .cv-hose {
+    fill: none;
+    stroke: var(--cyan-2);
+    stroke-width: 3;
+    stroke-linecap: round;
+  }
+
+  .cv-hose {
+    stroke-width: 5;
+    stroke: #164a73;
+  }
+
+  .cv-detail {
+    stroke: var(--cyan-2);
+    stroke-width: 1.2;
+    fill: none;
+  }
+
+  .cv-machine .cv-rod {
+    fill: #123d61;
+  }
+
+  .cv-machine .cv-dial,
+  .cv-machine .cv-readout {
+    fill: var(--prussian-deep);
+    stroke: var(--hair);
+  }
+
+  .cv-needle {
+    stroke: var(--yellow);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .cv-machine .cv-pin {
+    fill: var(--yellow);
+    stroke: none;
+  }
+
+  .cv-pname {
+    font-size: 12px;
+    fill: var(--ink-2);
+  }
+
+  .cv-pct {
+    font-size: 22px;
+    font-weight: 500;
+    fill: var(--yellow);
+    text-anchor: end;
+  }
+
+  .cv-machine .cv-lamp {
+    fill: #17405f;
+  }
+
+  .cv-machine .cv-lamp[data-on="1"] {
+    fill: var(--green);
+    stroke: var(--green);
+  }
+
+  .cv-chain {
+    fill: none;
+    stroke: var(--cyan-2);
+    stroke-width: 2.5;
+    stroke-dasharray: 4 3;
+  }
+
+  .cv-machine .cv-gear {
+    fill: #123d61;
+  }
+
+  .cv-tread {
+    stroke: rgb(159 220 250 / 0.45);
+    stroke-width: 4;
+    stroke-dasharray: 3 13;
+  }
+
+  .cv-sack {
+    animation: breathe 2.2s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+  }
+
+  .cv-sack-body {
+    fill: #33283a;
+    stroke: var(--red);
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+  }
+
+  .cv-crease {
+    fill: none;
+    stroke: rgb(255 148 121 / 0.55);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+  }
+
+  .cv-sack-name {
+    font-size: 12px;
+    fill: var(--ink);
+    text-anchor: middle;
+  }
+
+  .cv-measured {
+    fill: url(#cv-hatch);
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+
+  .cv-solid {
+    fill: var(--cyan);
+    stroke: var(--prussian-deep);
+    stroke-width: 1.5;
+  }
+
+  .cv-strap {
+    fill: var(--prussian-deep);
+    opacity: 0.55;
+  }
+
+  .cv-stamp {
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--prussian-deep);
+    text-anchor: middle;
+  }
+
+  .cv-bit rect {
+    fill: var(--prussian-deep);
+    stroke: var(--red);
+    stroke-width: 1.4;
+  }
+
+  .cv-bit line,
+  .cv-impact line {
+    stroke: var(--red);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+  }
+
+  .cv-impact line {
+    stroke: var(--ink);
+  }
+
+  .cv-curtain rect {
+    fill: rgb(159 220 250 / 0.16);
+    stroke: rgb(159 220 250 / 0.6);
+    stroke-width: 1;
+  }
+
+  .cv-stack-label path {
+    fill: none;
+    stroke: var(--mute);
+    stroke-width: 1;
+  }
+
+  .cv-stack-label text {
+    font-size: 12px;
+    fill: var(--ink-2);
+  }
+
+  .cv-label-pct {
+    fill: var(--cyan);
+    font-weight: 500;
+  }
+
+  .cv-tag path {
+    fill: none;
+    stroke: var(--yellow);
+    stroke-width: 1.2;
+  }
+
+  .cv-tag text {
+    text-anchor: middle;
+  }
+
+  .cv-tag-num {
+    font-size: 20px;
+    font-weight: 500;
+    fill: var(--yellow);
+  }
+
+  .cv-tag-note {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    fill: var(--mute);
+  }
+
+  .cv-tags line {
+    stroke: var(--mute);
+  }
+
+  .cv-tags text {
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    fill: var(--mute);
+    text-anchor: middle;
+  }
+
+  .conveyor-legend {
+    display: none;
+  }
+
+  @keyframes breathe {
+    50% {
+      transform: scale(1.035, 0.975);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .conveyor-crop {
+      aspect-ratio: 920 / 560;
+    }
+
+    svg {
+      width: 143.48%;
+      margin-left: -27.17%;
+    }
+
+    .conveyor-sub,
+    .cv-stack-label,
+    .cv-sack-name,
+    .cv-pname,
+    .cv-tag-note {
+      display: none;
+    }
+
+    .cv-tags text {
+      font-size: 26px;
+      letter-spacing: 0.08em;
+    }
+
+    .cv-pct {
+      font-size: 30px;
+    }
+
+    .cv-tag-num {
+      font-size: 22px;
+    }
+
+    .conveyor-bar {
+      font-size: 11px;
+      padding: 8px 12px;
+    }
+
+    .conveyor-legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
+      margin: 0;
+      padding: 12px 14px 14px;
+      list-style: none;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-2);
+      border-top: 1px solid var(--hair);
+    }
+
+    .conveyor-legend b {
+      font-weight: 500;
+      color: var(--cyan);
+      margin-right: 6px;
+    }
+  }
+</style>

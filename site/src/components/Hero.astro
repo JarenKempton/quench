@@ -1,23 +1,120 @@
 ---
-import Assembly from "./Assembly.astro";
 import Command from "./Command.astro";
+import Conveyor from "./Conveyor.astro";
 import { kilo, startTokens } from "../context.ts";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-copy">
+  <div class="hero-head">
     <p class="eyebrow">A context profiler for coding agents</p>
     <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
+  </div>
+  <div class="hero-side">
     <p class="lede">
-      System prompt, built-in tools, MCP servers, instruction files and skills are all in context before your first
-      word. Quench reads the history Claude Code, Codex and Pi already keep, and shows what each layer costs.
+      System prompt, tools, MCP servers, instruction files and skills ride into every model call, swollen with things
+      the agent never touches. Quench reads the history Claude Code, Codex and Pi already keep and weighs each piece, so
+      you know what to cut.
     </p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
     </div>
   </div>
-  <div class="card figure-card hero-figure">
-    <Assembly />
+  <div class="hero-scene">
+    <Conveyor />
+    <p class="hero-note">Slab thickness is each layer's share of the starting load in a sample Claude Code run.</p>
   </div>
 </section>
+
+<style>
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+    gap: 24px clamp(32px, 4vw, 56px);
+    align-items: end;
+    padding: clamp(28px, 3.5vw, 44px) 0 56px;
+  }
+
+  .eyebrow {
+    margin: 0 0 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  h1 {
+    font-size: clamp(38px, 4.6vw, 60px);
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+
+  .lede {
+    margin: 0 0 20px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .hero-scene {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+  }
+
+  .hero-note {
+    margin: 14px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--mute);
+  }
+
+  .hero-head,
+  .hero-side,
+  .hero-scene {
+    animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .hero-side {
+    animation-delay: 0.08s;
+  }
+
+  .hero-scene {
+    animation-delay: 0.16s;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .hero {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 24px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .hero {
+      padding: 32px 0 48px;
+    }
+
+    .lede {
+      font-size: 16px;
+    }
+
+    .hero-scene {
+      margin: 8px calc(var(--pad) * -0.5) 0;
+    }
+  }
+</style>

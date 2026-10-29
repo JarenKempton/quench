@@ -330,80 +330,9 @@ h2 em {
   border-bottom-width: 1px;
 }
 
-
-
-
 .figure-card {
   margin: 0;
   padding: 28px 32px 22px;
-}
-
-.eyebrow {
-  margin: 0 0 18px;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--cyan);
-}
-
-
-
-
-
-/* Hero */
-
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: clamp(32px, 4vw, 56px);
-  align-items: center;
-  padding: clamp(48px, 7vw, 88px) 0 48px;
-}
-
-.hero-copy {
-  padding: 8px 0;
-}
-
-.hero h1 {
-  font-size: clamp(42px, 5.2vw, 66px);
-  line-height: 1.04;
-  margin-bottom: 24px;
-  text-wrap: balance;
-}
-
-.lede {
-  max-width: 30em;
-  margin: 0 0 36px;
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--ink-2);
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-}
-
-.hero-figure {
-  padding: 24px 24px 18px;
-}
-
-.exploded-wrap {
-  margin: 0;
-}
-
-.fig-total {
-  margin: 4px 0 0;
-  font-size: 17px;
-  color: var(--ink-2);
-}
-
-.fig-total b {
-  font-weight: 500;
-  color: var(--yellow);
 }
 
 .section-copy {
@@ -475,150 +404,6 @@ h2 em {
   color: var(--yellow);
 }
 
-/* Exploded view */
-
-.exploded {
-  position: relative;
-  width: 100%;
-  margin: 0;
-}
-
-.exploded svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.exploded .axis line {
-  stroke: var(--cyan-2);
-  stroke-width: 0.8;
-  stroke-dasharray: 14 4 2 4;
-  opacity: 0.45;
-}
-
-.exploded .face,
-.exploded .side {
-  stroke: var(--cyan);
-  stroke-width: 1;
-  stroke-linejoin: round;
-  transition: fill 0.2s, stroke-opacity 0.2s;
-}
-
-.exploded .face {
-  fill: rgb(159 220 250 / 0.05);
-}
-
-.exploded .side-l {
-  fill: rgb(159 220 250 / 0.18);
-}
-
-.exploded .side-r {
-  fill: rgb(159 220 250 / 0.09);
-}
-
-.exploded .prompt .face,
-.exploded .prompt .side {
-  fill: none;
-  stroke-dasharray: 4 3;
-}
-
-.exploded .strip {
-  fill: url(#hatch);
-  stroke: none;
-}
-
-.exploded .strip.used {
-  fill: rgb(159 220 250 / 0.3);
-}
-
-.exploded .hatch-line {
-  stroke: var(--red);
-  stroke-width: 0.8;
-  opacity: 0.8;
-}
-
-.exploded .leader {
-  fill: none;
-  stroke: var(--cyan-2);
-  stroke-width: 0.8;
-}
-
-.exploded .leader-dot {
-  fill: var(--cyan);
-}
-
-.exploded .ext {
-  stroke: var(--yellow);
-  stroke-width: 0.6;
-  opacity: 0.6;
-}
-
-.exploded .dim,
-.exploded .tick {
-  stroke: var(--yellow);
-  stroke-width: 1;
-}
-
-.exploded:has(.callouts li:hover) :is(.face, .side) {
-  stroke-opacity: 0.3;
-}
-
-.exploded:has(.callout-0:hover) .layer-0 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-1:hover) .layer-1 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-2:hover) .layer-2 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-3:hover) .layer-3 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-4:hover) .layer-4 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-5:hover) .layer-5 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded:has(.callout-6:hover) .layer-6 :is(.face, .side) {
-  stroke-opacity: 1;
-  fill: rgb(159 220 250 / 0.22);
-}
-
-.exploded .largest .side {
-  fill: url(#hatch);
-}
-
-.exploded .largest .side-l {
-  stroke: var(--red);
-}
-
-.exploded .largest .side-r {
-  stroke: var(--red);
-}
-
-.exploded .fig-note {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
 .fig-note {
   margin: 14px 0 0;
   font-family: var(--mono);
@@ -626,44 +411,6 @@ h2 em {
   line-height: 1.5;
   color: var(--mute);
 }
-
-.callouts {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.callouts li {
-  position: absolute;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  transform: translateY(-50%);
-  line-height: 1.2;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.callouts b {
-  font-size: 18px;
-  font-weight: 400;
-  color: var(--ink);
-  transition: color 0.2s;
-}
-
-.callouts span {
-  font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--cyan);
-}
-
-
-
-.callouts .flag span {
-  color: var(--red);
-}
-
 
 /* Plates */
 
@@ -785,7 +532,6 @@ h2 em {
   color: var(--prussian-deep);
 }
 
-
 /* Sections */
 
 .problem,
@@ -795,10 +541,6 @@ h2 em {
 .install {
   padding: 64px 0 96px;
 }
-
-
-
-
 
 /* Fig. 2: the window datum */
 
@@ -883,17 +625,9 @@ h2 em {
   color: var(--yellow);
 }
 
-
-
-
-
-
-
 .unused {
   margin: 0 0 56px;
 }
-
-
 
 .unused-rows {
   margin: 0;
@@ -1121,68 +855,6 @@ h2 em {
   color: var(--mute);
 }
 
-/* Motion */
-
-@keyframes draw-x {
-  from {
-    transform: scaleX(0);
-  }
-}
-
-@keyframes explode {
-  from {
-    transform: translateY(var(--from));
-    opacity: 0;
-  }
-  25% {
-    opacity: 1;
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-}
-
-.exploded .layer {
-  animation: explode 1.4s calc(0.2s + var(--i) * 0.08s) cubic-bezier(0.7, 0, 0.15, 1) both;
-}
-
-.exploded .dimension,
-.exploded .axis line,
-
-.callouts li {
-  animation: fade-in 0.5s calc(1.2s + var(--i) * 0.06s) both;
-}
-
-.hero-copy > * {
-  animation: fade-up 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-.hero-copy > :nth-child(2) {
-  animation-delay: 0.06s;
-}
-
-.hero-copy > :nth-child(3) {
-  animation-delay: 0.12s;
-}
-
-.hero-copy > :nth-child(4) {
-  animation-delay: 0.18s;
-}
-
-.hero-copy > :nth-child(5) {
-  animation-delay: 0.24s;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1255,46 +927,12 @@ h2 em {
     display: none;
   }
 
-  .lede,
   .section-copy p {
     font-size: 16px;
   }
 
-  .exploded {
-    aspect-ratio: auto !important;
-  }
-
-  .exploded svg {
-    position: static;
-    height: auto;
-  }
-
-  .exploded .leader {
-    display: none;
-  }
-
-  .exploded .callouts {
-    display: grid;
-    gap: 6px;
-    margin-top: 8px;
-  }
-
-  .exploded .callouts li {
-    position: static;
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    transform: none;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--hair);
-  }
-
   .figure-card {
     padding: 20px 16px;
-  }
-
-  .hero-figure {
-    padding: 16px 14px;
   }
 
   .fig-head b {
