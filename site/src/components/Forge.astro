@@ -1,0 +1,1174 @@
+---
+import { facts, rows, segments, slabWidth } from "../forge.ts";
+import { kilo } from "../context.ts";
+
+const H = 26;
+const TOP = 224;
+const dead = segments.find((s) => s.dead)!;
+const kept = segments.filter((s) => !s.dead);
+const keptWidth = dead.x;
+const left = {
+  scan: 120 - slabWidth / 2,
+  identify: 340 - slabWidth / 2,
+  smash: 545 - (dead.x + dead.w / 2),
+  pick: 640 - keptWidth / 2,
+  tank: 755 - keptWidth / 2,
+  bin: 895 - keptWidth / 2,
+};
+
+const shards = Array.from({ length: 7 }, (_, i) => {
+  const w = dead.w / 7;
+  const h = 7 + ((i * 5) % 6);
+  const j = ((i * 37) % 7) - 3;
+  return {
+    points: `${-w / 2},${-h / 2 + j * 0.4} ${w / 2 - 1.5},${-h / 2} ${w / 2},${h / 2 - 1} ${-w / 2 + 2},${h / 2}`,
+    x0: left.smash + dead.x + (i + 0.5) * w,
+    y0: 244 + (i % 2) * 3,
+    vx: (i - 3) * 13 + j * 4,
+    vy: -170 + (i % 3) * 55,
+    spin: (i % 2 ? 1 : -1) * (220 + i * 45),
+    rest: 338 - (i % 3) * 6,
+  };
+});
+
+const sparks = Array.from({ length: 9 }, (_, i) => {
+  const a = ((i < 5 ? 150 + i * 15 : -30 + (i - 5) * 15) * Math.PI) / 180;
+  return { dx: Math.cos(a), dy: Math.sin(a), len: 10 + ((i * 7) % 9) };
+});
+
+const puffs = Array.from({ length: 18 }, (_, i) => ({ x: 712 + ((i * 41) % 86), delay: i * 0.08, drift: ((i * 13) % 9) - 4 }));
+
+const rollers = Array.from({ length: 20 }, (_, i) => 24 + i * 34).filter((x) => x < 690);
+const binTop = (i: number) => 322 - 30 - 32 * i;
+const bin = (top: number) => `837,${top} 953,${top} 948,${top + 30} 842,${top + 30}`;
+
+const gauge = { cx: 968, cy: 118, r: 22, max: 30000 };
+const angle = (v: number) => ((-130 + (260 * v) / gauge.max) * Math.PI) / 180;
+const onDial = (v: number, r: number) =>
+  `${(gauge.cx + r * Math.sin(angle(v))).toFixed(1)},${(gauge.cy - r * Math.cos(angle(v))).toFixed(1)}`;
+
+const geo = { left, keptWidth, slabWidth, shards, sparks, puffs, dead, gauge };
+
+const steps = [
+  { text: "Reads the session history Claude Code, Codex and Pi already saved on disk. Nothing runs live.", cmd: "quench" },
+  {
+    text: `Measures each layer, loaded vs. used. The browser server sent 22 tools on all ${facts.requests} calls; the agent called none.`,
+    cmd: "quench profile mcp",
+  },
+  { text: "You drop the browser server from your own config; Quench never edits it. Quenched, the trimmed setup sets hard.", cmd: "" },
+  { text: "Later sessions are measured the same way, to confirm they start lighter and their runs still go well.", cmd: "quench report" },
+  { text: "Tuned once. Every session now starts from the trimmed setup. Run Quench again when your setup changes.", cmd: "quench runs" },
+];
+
+const beats = [
+  { title: "Scan", hook: "Dig through the history", sub: "saved sessions, after the fact" },
+  { title: "Identify", hook: "Find the dead weight", sub: "loaded vs. used" },
+  { title: "Smash", hook: "Knock it off, quench it", sub: "you cut; Quench never edits" },
+  { title: "Validate", hook: "Lock it in", sub: "later sessions, measured again" },
+];
+---
+
+<figure class="card forge" data-forge data-geo={JSON.stringify(geo)} aria-labelledby="forge-title">
+  <header class="forge-head">
+    <span class="fig-no">Fig. 1</span>
+    <span id="forge-title" class="fig-title">One tune-up, then it holds · sample Claude Code run</span>
+    <span class="status" data-status><i></i><span data-status-text>Line running</span></span>
+    <button type="button" class="replay" data-replay>Replay</button>
+  </header>
+
+  <div class="forge-body">
+    <div class="stage">
+      <svg viewBox="0 0 1000 380" role="img" aria-label="A forge line. Saved session history is scanned into a block of context layers; the block is heated and measured, the browser server that was never called stays cold; a hammer marked your cut knocks it off; the rest is quenched in water and set into a bin on a cart, where later sessions carry it.">
+        <defs>
+          <pattern id="forge-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="6" class="hatch" />
+          </pattern>
+          <clipPath id="forge-reveal"><rect data-reveal x="0" y="-80" width="0" height="200" /></clipPath>
+          <clipPath id="forge-deck"><rect data-deck-clip x="0" y="150" width="1000" height="120" /></clipPath>
+        </defs>
+
+        <g data-shake>
+          <g class="floor">
+            <line x1="0" y1="352" x2="1000" y2="352" class="ln" />
+            {Array.from({ length: 50 }, (_, i) => <line x1={i * 20} y1="352" x2={i * 20 - 8} y2="362" class="hair" />)}
+          </g>
+
+          <g class="scanner">
+            <rect x="18" y="64" width="208" height="8" class="body" />
+            <rect x="20" y="72" width="6" height="280" class="body" />
+            <rect x="218" y="72" width="6" height="280" class="body" />
+            <rect data-head x="98" y="72" width="44" height="22" class="body" />
+            <polygon data-beam points="" class="beam" />
+            <circle data-lamp cx="120" cy="56" r="4" class="lamp" />
+          </g>
+
+          <g class="heater">
+            <line x1="262" y1="0" x2="262" y2="140" class="ln" />
+            <line x1="418" y1="0" x2="418" y2="140" class="ln" />
+            <rect x="245" y="140" width="190" height="16" class="body" />
+            <polyline
+              data-coil
+              points={Array.from({ length: 21 }, (_, i) => `${255 + i * 8.5},${i % 2 ? 172 : 160}`).join(" ")}
+              class="coil"
+            />
+            <circle data-lamp cx="340" cy="132" r="4" class="lamp" />
+          </g>
+
+          <g class="press">
+            <rect x="488" y="34" width="8" height="318" class="body" />
+            <rect x="594" y="34" width="8" height="318" class="body" />
+            <rect x="482" y="28" width="126" height="12" class="body" />
+            <circle data-lamp cx="545" cy="20" r="4" class="lamp" />
+            <g data-ram>
+              <rect x="541" y="40" width="8" height="80" class="body" />
+              <rect x="503" y="120" width="84" height="36" class="body ram" />
+              <rect x="503" y="156" width="84" height="4" class="strike" />
+              <text x="545" y="143" class="lbl ram-lbl" text-anchor="middle">YOUR CUT</text>
+            </g>
+          </g>
+
+          <g class="hoist">
+            <line x1="700" y1="0" x2="700" y2="48" class="ln" />
+            <line x1="930" y1="0" x2="930" y2="48" class="ln" />
+            <rect x="610" y="48" width="340" height="6" class="body" />
+            <line data-cable x1="640" y1="64" x2="640" y2="120" class="cable" />
+            <g data-trolley>
+              <rect x="-13" y="54" width="26" height="10" class="body" />
+              <circle data-lamp cx="0" cy="48" r="3.5" class="lamp" />
+            </g>
+            <g data-hook>
+              <rect x="-24" y="-5" width="48" height="5" class="body" />
+              <rect x="-24" y="-5" width="3" height="9" class="body" />
+              <rect x="21" y="-5" width="3" height="9" class="body" />
+            </g>
+          </g>
+
+          <g class="belt">
+            {[40, 230, 420, 660].map((x) => <rect x={x} y="262" width="5" height="90" class="body" />)}
+            <rect x="10" y="250" width="680" height="12" rx="6" class="body" />
+            <line data-belt x1="16" y1="250.75" x2="684" y2="250.75" class="belt-top" />
+            {rollers.map((x) => (
+              <g data-roller transform={`translate(${x} 256)`}>
+                <circle r="4" class="roller" />
+                <line x1="-3" y1="0" x2="3" y2="0" class="roller" />
+              </g>
+            ))}
+          </g>
+
+          <g class="deck" clip-path="url(#forge-deck)">
+            {Array.from({ length: 6 }, (_, i) => (
+              <g transform={`translate(${37 + ((i * 3) % 5) - 2} ${244 - i * 6})`}>
+                <rect width="166" height="5" class="sheet" />
+                <line x1="8" y1="2.5" x2={60 + ((i * 29) % 80)} y2="2.5" class="sheet-line" />
+              </g>
+            ))}
+            <text x="120" y="200" class="lbl" text-anchor="middle" data-deck-label>{facts.sessions} saved sessions</text>
+          </g>
+
+          <g class="tank">
+            <path d="M696 244 H704 V346 H806 V244 H814" class="ln" />
+          </g>
+
+          <g class="cart">
+            <rect x="830" y="322" width="130" height="8" class="body" />
+            <rect x="954" y="150" width="6" height="172" class="body" />
+            <circle cx="852" cy="341" r="10" class="body" />
+            <circle cx="938" cy="341" r="10" class="body" />
+            <polygon points={bin(binTop(0))} class="bin" />
+            {[1, 2, 3].map((i) => (
+              <g data-bin={i}>
+                <polygon points={bin(binTop(i))} class="bin" />
+                {kept.map((s) => <rect x={895 - keptWidth / 2 + s.x} y={binTop(i) + 1} width={s.w} height={H} class="cool" />)}
+              </g>
+            ))}
+            <text x="895" y="186" class="lbl" text-anchor="middle" data-later>later sessions</text>
+            <text x="895" y="374" class="lbl" text-anchor="middle">carried into every session</text>
+            <line x1="957" y1="150" x2="963" y2="138" class="ln" />
+            <g class="gauge">
+              <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r} class="body" />
+              {[0, 10000, 20000, 30000].map((v) => <line x1={onDial(v, gauge.r - 6).split(",")[0]} y1={onDial(v, gauge.r - 6).split(",")[1]} x2={onDial(v, gauge.r - 1).split(",")[0]} y2={onDial(v, gauge.r - 1).split(",")[1]} class="hair" />)}
+              <circle cx={onDial(26004, gauge.r - 3).split(",")[0]} cy={onDial(26004, gauge.r - 3).split(",")[1]} r="2" class="mark-before" />
+              <line data-needle x1={gauge.cx} y1={gauge.cy} x2={gauge.cx} y2={gauge.cy - 16} class="needle" />
+              <circle cx={gauge.cx} cy={gauge.cy} r="2.5" class="needle-hub" />
+              <circle data-check cx="934" cy="118" r="6" class="check" />
+              <path data-check-mark d="M931 118 l2.2 2.4 l4 -4.6" class="check-mark" />
+            </g>
+          </g>
+
+          <g data-slab>
+            <g clip-path="url(#forge-reveal)">
+              {segments.map((s) => (
+                <rect data-seg={s.dead ? "dead" : "kept"} data-name={s.name} x={s.x} y="0" width={s.w} height={H} class="seg" />
+              ))}
+              <rect data-hatch x={dead.x} y="0" width={dead.w} height={H} fill="url(#forge-hatch)" />
+            </g>
+            <g data-ruler>
+              <line x1="0" y1="-12" x2={slabWidth} y2="-12" class="ruler" />
+              {segments.map((s) => <line x1={s.x} y1="-16" x2={s.x} y2="-8" class="ruler" />)}
+              <line x1={slabWidth} y1="-16" x2={slabWidth} y2="-8" class="ruler" />
+            </g>
+            <g data-tag>
+              <line x1={dead.x + dead.w / 2} y1="-16" x2={dead.x + dead.w / 2} y2="-30" class="tag-line" />
+              <text x={dead.x + dead.w / 2 - 20} y="-36" class="lbl tag" text-anchor="middle">{dead.name.replace("MCP: ", "")} MCP · 0 of 22 called</text>
+            </g>
+          </g>
+
+          <g class="sparks" data-sparks>
+            {sparks.map((s) => <line data-spark data-dx={s.dx} data-dy={s.dy} data-len={s.len} x1="545" y1="224" x2="545" y2="224" class="spark" />)}
+          </g>
+
+          <rect x="705" y="266" width="100" height="79" class="water" />
+          <line data-surface x1="705" y1="266" x2="805" y2="266" class="surface" />
+          <g data-steam>
+            {puffs.map((p) => <circle data-puff cx={p.x} cy="262" r="0" class="puff" />)}
+          </g>
+
+          <g class="scrap">
+            {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
+            <path d="M503 300 L509 350 H581 L587 300" class="body bin-scrap" />
+            <text x="545" y="331" class="lbl scrap-lbl" text-anchor="middle">CUT</text>
+          </g>
+        </g>
+      </svg>
+
+      <ol class="beats">
+        {beats.map((b, i) => (
+          <li>
+            <button type="button" data-beat={i}>
+              <span class="beat-no">0{i + 1}</span>
+              <span class="beat-title">{b.title}</span>
+              <span class="beat-hook">{b.hook}</span>
+              <span class="beat-sub">{b.sub}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <aside class="panel" aria-label="What Quench measured">
+      <p class="pn-label" data-count-label>Tokens before you type</p>
+      <p class="pn-count"><b data-count>{facts.start}</b><span class="pn-star" data-count-star>*</span></p>
+      <p class="pn-note" data-count-note>
+        Resent on all {facts.requests} model calls: <em>{facts.share}</em> of the run's {facts.input} input tokens.
+      </p>
+      <p class="pn-note pn-after" data-after-note>
+        <span class="chip">Illustrative</span> After cutting the browser server: {facts.start} − {facts.cut}. Was {facts.start}.
+      </p>
+      <table class="pn-rows">
+        <thead>
+          <tr><th>Layer</th><th>Tokens</th><th>Used</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr data-row={r.name} class:list={{ dead: r.used?.dead }}>
+              <td>{r.name}</td>
+              <td>{kilo(r.tokens)}</td>
+              <td>
+                <span class:list={["used", { note: !r.used }]}>{r.used?.text ?? r.note}</span>
+                {r.used?.dead && <span class="cut-note">you cut it</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div class="steps">
+        {steps.map((s, i) => (
+          <p data-step={i}>
+            {s.text} {s.cmd && <code><span class="prompt">$</span> {s.cmd}</code>}
+          </p>
+        ))}
+      </div>
+    </aside>
+  </div>
+
+  <figcaption>
+    Layer sizes split the measured {facts.start} by recorded characters, from one sample Claude Code run. *{facts.after} is
+    illustrative: {facts.start} minus the browser server's {facts.cut}. The sample has no after-trim data.
+  </figcaption>
+</figure>
+
+<script>
+  type Geo = {
+    left: Record<"scan" | "identify" | "smash" | "pick" | "tank" | "bin", number>;
+    keptWidth: number;
+    slabWidth: number;
+    shards: { x0: number; y0: number; vx: number; vy: number; spin: number; rest: number }[];
+    puffs: { x: number; delay: number; drift: number }[];
+    dead: { x: number; w: number };
+    gauge: { cx: number; cy: number; r: number; max: number };
+  };
+
+  const END = 17.8;
+  const BEATS = [0, 3.3, 7.3, 12.8];
+  const START = 26004;
+  const AFTER = 13713;
+
+  const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
+  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
+  const track = (t: number, keys: [number, number][], curve = ease) => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      const [t1, v1] = keys[i];
+      const [t0, v0] = keys[i - 1];
+      if (t <= t1) return lerp(v0, v1, curve(span(t, t0, t1)));
+    }
+    return keys[keys.length - 1][1];
+  };
+  const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const mix = (a: string, b: string, x: number) => {
+    const [p, q] = [hex(a), hex(b)];
+    return `rgb(${p.map((v, i) => Math.round(lerp(v, q[i], x))).join(" ")})`;
+  };
+  const kilo = (n: number) => `${(n / 1000).toFixed(1)}k`;
+
+  const RAW = "#24527a";
+  const HOT = "#ff9a52";
+  const COOL = "#9fdcfa";
+  const COIL_OFF = "#2b5a80";
+  const LAMP_ON = "#a9e8c4";
+  const LAMP_OFF = "#123c60";
+
+  function mount(root: HTMLElement) {
+    const geo: Geo = JSON.parse(root.dataset.geo!);
+    const $ = <T extends Element = SVGElement>(s: string) => root.querySelector<T>(s)!;
+    const $$ = <T extends Element = SVGElement>(s: string) => [...root.querySelectorAll<T>(s)];
+    const set = (el: Element, attrs: Record<string, string | number>) => {
+      for (const k in attrs) el.setAttribute(k, String(attrs[k]));
+    };
+
+    const slab = $("[data-slab]");
+    const reveal = $("[data-reveal]");
+    const deckClip = $("[data-deck-clip]");
+    const beam = $("[data-beam]");
+    const head = $("[data-head]");
+    const coil = $("[data-coil]");
+    const ram = $("[data-ram]");
+    const trolley = $("[data-trolley]");
+    const cable = $("[data-cable]");
+    const hook = $("[data-hook]");
+    const belt = $("[data-belt]");
+    const rollers = $$("[data-roller]");
+    const kept = $$("[data-seg='kept']");
+    const dead = $("[data-seg='dead']");
+    const hatch = $("[data-hatch]");
+    const ruler = $("[data-ruler]");
+    const tag = $("[data-tag]");
+    const shards = $$("[data-shard]");
+    const sparks = $$("[data-spark]");
+    const puffs = $$("[data-puff]");
+    const surface = $("[data-surface]");
+    const bins = $$("[data-bin]");
+    const later = $("[data-later]");
+    const needle = $("[data-needle]");
+    const check = $("[data-check]");
+    const checkMark = $("[data-check-mark]");
+    const lamps = $$("[data-lamp]");
+    const shake = $("[data-shake]");
+    const deckLabel = $("[data-deck-label]");
+    const count = $<HTMLElement>("[data-count]");
+    const star = $<HTMLElement>("[data-count-star]");
+    const countLabel = $<HTMLElement>("[data-count-label]");
+    const countNote = $<HTMLElement>("[data-count-note]");
+    const afterNote = $<HTMLElement>("[data-after-note]");
+    const rows = $$<HTMLElement>("[data-row]");
+    const deadRow = $<HTMLElement>("tr.dead");
+    const steps = $$<HTMLElement>("[data-step]");
+    const beatButtons = $$<HTMLButtonElement>("[data-beat]");
+    const status = $<HTMLElement>("[data-status]");
+    const statusText = $<HTMLElement>("[data-status-text]");
+    const { left, keptWidth, slabWidth } = geo;
+
+    const centre = Object.fromEntries(
+      $$("[data-seg]").map((el) => [el.dataset.name, Number(el.getAttribute("x")) + Number(el.getAttribute("width")) / 2]),
+    );
+
+    function render(t: number) {
+      const scanX = track(t, [[0.7, 35], [2.9, 35 + slabWidth]], (x) => x);
+      const x = track(t, [
+        [3.3, left.scan], [4.3, left.identify], [7.3, left.identify], [8.0, left.smash], [9.6, left.smash],
+        [10.3, left.pick], [10.9, left.pick], [11.4, left.tank], [12.8, left.tank], [13.3, left.bin],
+      ]);
+      const y = track(t, [[10.6, 224], [10.9, 150], [11.4, 150], [11.8, 292], [12.4, 292], [12.8, 150], [13.3, 150], [13.7, 293]]);
+      set(slab, { transform: `translate(${x.toFixed(2)} ${y.toFixed(2)})` });
+      set(reveal, { width: Math.max(0, scanX - left.scan) });
+
+      set(deckClip, { x: scanX });
+      deckLabel.style.opacity = String(1 - span(t, 0.6, 1.0));
+      const beamOn = span(t, 0.5, 0.7) * (1 - span(t, 2.9, 3.2));
+      set(head, { x: scanX - 22 });
+      set(beam, { points: `${scanX - 5},94 ${scanX + 5},94 ${scanX + 16},224 ${scanX - 16},224`, opacity: (beamOn * 0.55).toFixed(2) });
+
+      const coilHeat = span(t, 4.2, 4.8) * (1 - span(t, 7.4, 8.4));
+      set(coil, { stroke: mix(COIL_OFF, HOT, coilHeat) });
+
+      const heat = span(t, 4.5, 5.6);
+      const cool = span(t, 11.75, 12.7);
+      const fill = cool > 0 ? mix(HOT, COOL, cool) : mix(RAW, HOT, heat);
+      kept.forEach((el) => set(el, { fill }));
+      const marked = span(t, 5.8, 6.2);
+      set(dead, { fill: RAW, stroke: mix("#5aa9d2", "#ff9479", marked) });
+      const squash = span(t, 8.36, 8.44);
+      const gone = t >= 8.45;
+      set(dead, { y: (26 * 0.7 * squash).toFixed(2), height: (26 * (1 - 0.7 * squash)).toFixed(2), visibility: gone ? "hidden" : "visible" });
+      set(hatch, { opacity: (marked * 0.7).toFixed(2), visibility: gone ? "hidden" : "visible", y: (26 * 0.7 * squash).toFixed(2), height: (26 * (1 - 0.7 * squash)).toFixed(2) });
+      const leave = 1 - span(t, 7.25, 7.5);
+      set(ruler, { opacity: (span(t, 5.0, 5.3) * leave).toFixed(2) });
+      set(tag, { opacity: (span(t, 6.0, 6.3) * leave).toFixed(2) });
+
+      const drop = track(t, [[8.2, 0], [8.4, 64], [8.8, 64], [9.6, 0]], (p) => p * p);
+      set(ram, { transform: `translate(0 ${drop.toFixed(2)})` });
+      const jolt = t > 8.4 && t < 8.62 ? Math.sin((t - 8.4) * 90) * 1.6 * (1 - span(t, 8.4, 8.62)) : 0;
+      set(shake, { transform: `translate(0 ${jolt.toFixed(2)})` });
+
+      const sp = span(t, 8.4, 8.75);
+      sparks.forEach((el) => {
+        const dx = Number(el.dataset.dx), dy = Number(el.dataset.dy), len = Number(el.dataset.len);
+        const r0 = 6 + 46 * Math.sqrt(sp);
+        set(el, {
+          x1: 545 + dx * r0, y1: 224 + dy * r0 * 0.7, x2: 545 + dx * (r0 + len), y2: 224 + dy * (r0 + len) * 0.7,
+          opacity: sp > 0 && sp < 1 ? (1 - sp).toFixed(2) : 0,
+        });
+      });
+
+      shards.forEach((el, i) => {
+        const s = geo.shards[i];
+        if (!gone) return set(el, { visibility: "hidden" });
+        const land = (-s.vy + Math.sqrt(s.vy * s.vy + 4 * 450 * (s.rest - s.y0))) / 900;
+        const d = Math.min(t - 8.45, land);
+        const sx = clamp(s.x0 + s.vx * d, 514, 576);
+        const sy = s.y0 + s.vy * d + 450 * d * d;
+        set(el, { visibility: "visible", transform: `translate(${sx.toFixed(1)} ${sy.toFixed(1)}) rotate(${(s.spin * d).toFixed(1)})` });
+      });
+
+      const travel = Math.min(x, left.pick) - left.scan;
+      set(belt, { "stroke-dashoffset": (-travel).toFixed(1) });
+      rollers.forEach((el) => {
+        const [tx] = el.getAttribute("transform")!.match(/[\d.]+/g)!;
+        set(el, { transform: `translate(${tx} 256) rotate(${((travel / 4) * 57.3).toFixed(1)})` });
+      });
+
+      const tx = track(t, [[10.9, 640], [11.4, 755], [12.8, 755], [13.3, 895], [14.0, 895], [14.6, 640]]);
+      const carried = t >= 10.6 && t <= 13.7;
+      const hy = carried ? y : t < 13.7 ? track(t, [[10.3, 120], [10.6, 224]]) : track(t, [[13.7, 293], [14.0, 120]]);
+      set(trolley, { transform: `translate(${tx.toFixed(2)} 0)` });
+      set(hook, { transform: `translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
+      set(cable, { x1: tx.toFixed(2), x2: tx.toFixed(2), y2: (hy - 5).toFixed(2) });
+
+      const dip = span(t, 11.55, 11.8) * (1 - span(t, 12.4, 12.6));
+      set(surface, { y1: 266 - dip * 2.5, y2: 266 + dip * 1.5 });
+      puffs.forEach((el, i) => {
+        const p = geo.puffs[i];
+        const life = span(t, 11.6 + p.delay, 11.6 + p.delay + 1.5);
+        const on = life > 0 && life < 1;
+        set(el, {
+          cx: (p.x + p.drift * life * 4).toFixed(1),
+          cy: (262 - 140 * life).toFixed(1),
+          r: on ? (7 + 26 * life).toFixed(1) : 0,
+          opacity: on ? (0.6 * (1 - life) * Math.min(1, life * 6)).toFixed(2) : 0,
+        });
+      });
+
+      bins.forEach((el, i) => {
+        const fall = span(t, 14.6 + i * 0.45, 15.0 + i * 0.45);
+        const dy = fall < 1 ? -260 * (1 - fall * fall) : 0;
+        set(el, { transform: `translate(0 ${dy.toFixed(1)})`, opacity: fall > 0 ? 1 : 0 });
+      });
+      set(later, { opacity: span(t, 15.9, 16.3).toFixed(2) });
+
+      const measured = START * span(t, 0.7, 2.9);
+      const shown = t < 16.0 ? measured : lerp(START, AFTER, ease(span(t, 16.0, 17.0)));
+      const a = ((-130 + (260 * shown) / geo.gauge.max) * Math.PI) / 180;
+      set(needle, { x2: (geo.gauge.cx + 16 * Math.sin(a)).toFixed(1), y2: (geo.gauge.cy - 16 * Math.cos(a)).toFixed(1) });
+      const ok = span(t, 17.0, 17.2);
+      set(check, { opacity: ok.toFixed(2) });
+      set(checkMark, { opacity: ok.toFixed(2) });
+
+      const lit = span(t, 0, 0.4) * (1 - span(t, 17.3, 17.7));
+      lamps.forEach((el) => set(el, { fill: mix(LAMP_OFF, LAMP_ON, lit) }));
+
+      count.textContent = kilo(t < 16.0 ? measured : shown);
+      const after = t >= 16.0;
+      star.hidden = !after;
+      countLabel.textContent = after ? "Starting load, later sessions" : t < 2.9 ? "Reading saved history" : "Tokens before you type";
+      countNote.hidden = after;
+      afterNote.hidden = !after;
+      root.classList.toggle("is-after", after);
+
+      rows.forEach((row, i) => {
+        row.classList.toggle("is-in", scanX - left.scan >= centre[row.dataset.row!] || t > 2.9);
+        row.classList.toggle("is-used", t >= 5.5 + i * 0.15);
+      });
+      deadRow.classList.toggle("is-marked", t >= 6.0);
+      deadRow.classList.toggle("is-cut", t >= 8.45);
+
+      const beat = t >= END ? 4 : BEATS.filter((b) => t >= b).length - 1;
+      steps.forEach((el, i) => (el.hidden = i !== beat));
+      beatButtons.forEach((el, i) => {
+        el.classList.toggle("is-active", i === Math.min(beat, 3) && beat < 4);
+        el.classList.toggle("is-done", i < beat);
+      });
+      const off = t >= 17.3;
+      status.classList.toggle("is-off", off);
+      statusText.textContent = off ? "Line off · setup holds" : t > 0 ? "Line running" : "Ready";
+    }
+
+    const still = matchMedia("(prefers-reduced-motion: reduce)");
+    let raf = 0;
+    let from = 0;
+    let began = 0;
+
+    function play(at = 0) {
+      cancelAnimationFrame(raf);
+      if (still.matches) return render(at >= END ? END : Math.min(END, BEATS[BEATS.indexOf(at) + 1] ?? END) - 0.01);
+      from = at;
+      began = performance.now();
+      const frame = (now: number) => {
+        const t = from + (now - began) / 1000;
+        render(Math.min(t, END));
+        if (t < END) raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
+    }
+
+    $("[data-replay]").addEventListener("click", () => play(0));
+    beatButtons.forEach((el, i) => el.addEventListener("click", () => play(BEATS[i])));
+
+    if (still.matches) {
+      root.classList.add("is-still");
+      render(END);
+      return;
+    }
+    render(0);
+    const seen = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        seen.disconnect();
+        play(0);
+      },
+      { threshold: 0.3 },
+    );
+    seen.observe(root);
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-forge]").forEach(mount);
+</script>
+
+<style>
+  .forge {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+    padding: 0;
+  }
+
+  .forge-head {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--hair);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .forge-head > * {
+    white-space: nowrap;
+  }
+
+  .fig-no {
+    color: var(--ink);
+  }
+
+  .fig-title {
+    color: var(--ink-2);
+  }
+
+  .status {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink-2);
+  }
+
+  .status i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  .status.is-off i {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--mute);
+  }
+
+  .status.is-off {
+    color: var(--cyan);
+  }
+
+  .replay {
+    padding: 6px 14px;
+    font: inherit;
+    letter-spacing: inherit;
+    color: var(--cyan);
+    background: none;
+    border: 1px solid var(--cyan-2);
+    cursor: pointer;
+  }
+
+  .replay:hover {
+    color: var(--prussian-deep);
+    background: var(--cyan);
+  }
+
+  .is-still .replay {
+    display: none;
+  }
+
+  .forge-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .stage {
+    min-width: 0;
+    padding: 18px 18px 0;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .ln {
+    fill: none;
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+  }
+
+  .hair {
+    stroke: var(--hair);
+    stroke-width: 1;
+  }
+
+  .body {
+    fill: #0d3557;
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+  }
+
+  .ram {
+    fill: #134268;
+  }
+
+  .strike {
+    fill: var(--yellow);
+  }
+
+  .lbl {
+    font-family: var(--mono);
+    font-size: 14px;
+    fill: var(--ink-2);
+  }
+
+  .ram-lbl {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    fill: var(--yellow);
+  }
+
+  .scrap-lbl {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    fill: var(--red);
+  }
+
+  .bin-scrap {
+    fill: rgb(13 53 87 / 0.92);
+    stroke: var(--red);
+  }
+
+  .beam {
+    fill: var(--cyan);
+  }
+
+  .lamp {
+    stroke: var(--cyan-2);
+    stroke-width: 1;
+  }
+
+  .coil {
+    fill: none;
+    stroke-width: 3;
+    stroke-linejoin: round;
+  }
+
+  .cable {
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+  }
+
+  .belt-top {
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+    stroke-dasharray: 10 6;
+  }
+
+  .roller {
+    fill: #0a2c4a;
+    stroke: var(--cyan-2);
+    stroke-width: 1.2;
+  }
+
+  .sheet {
+    fill: #e4f3fc;
+    stroke: var(--prussian-deep);
+    stroke-width: 1;
+  }
+
+  .sheet-line {
+    stroke: #5a86a8;
+    stroke-width: 1.2;
+  }
+
+  .seg {
+    stroke: var(--prussian-deep);
+    stroke-width: 1.2;
+  }
+
+  .hatch {
+    stroke: var(--red);
+    stroke-width: 2;
+  }
+
+  .ruler {
+    stroke: var(--cyan);
+    stroke-width: 1;
+  }
+
+  .tag-line {
+    stroke: var(--red);
+    stroke-width: 1.2;
+  }
+
+  .tag {
+    fill: var(--red);
+  }
+
+  .spark {
+    stroke: var(--yellow);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .shard {
+    fill: #24527a;
+    stroke: var(--red);
+    stroke-width: 1;
+  }
+
+  .water {
+    fill: rgb(159 220 250 / 0.2);
+  }
+
+  .surface {
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+
+  .puff {
+    fill: #eaf7ff;
+  }
+
+  .cool {
+    fill: var(--cyan);
+    stroke: var(--prussian-deep);
+    stroke-width: 1.2;
+  }
+
+  .seam {
+    stroke: var(--prussian-deep);
+    stroke-width: 1.2;
+  }
+
+  .bin {
+    fill: rgb(13 53 87 / 0.35);
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  .mark-before {
+    fill: var(--red);
+  }
+
+  .needle {
+    stroke: var(--ink);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .needle-hub {
+    fill: var(--ink);
+  }
+
+  .check {
+    fill: var(--green);
+  }
+
+  .check-mark {
+    fill: none;
+    stroke: var(--prussian-deep);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .beats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 14px -18px 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--hair);
+  }
+
+  .beats li + li {
+    border-left: 1px solid var(--hair);
+  }
+
+  .beats button {
+    display: grid;
+    align-content: start;
+    width: 100%;
+    height: 100%;
+    gap: 2px;
+    padding: 14px 16px 16px;
+    text-align: left;
+    font: inherit;
+    color: var(--mute);
+    background: none;
+    border: 0;
+    cursor: pointer;
+    transition: color 0.3s, background 0.3s;
+  }
+
+  .beats button:hover {
+    background: rgb(159 220 250 / 0.04);
+  }
+
+  .beats button:focus-visible {
+    outline: 1px dashed var(--cyan);
+    outline-offset: -4px;
+  }
+
+  .beat-no,
+  .beat-title,
+  .beat-sub {
+    font-family: var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .beat-no {
+    font-size: 11px;
+  }
+
+  .beat-title {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .beat-hook {
+    margin-top: 4px;
+    font-size: 21px;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .beat-sub {
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: none;
+  }
+
+  .beats .is-done {
+    color: var(--ink-2);
+  }
+
+  .beats .is-active {
+    color: var(--ink);
+    background: rgb(159 220 250 / 0.06);
+    box-shadow: inset 0 2px 0 var(--cyan);
+  }
+
+  .beats .is-active .beat-no,
+  .beats .is-active .beat-title {
+    color: var(--cyan);
+  }
+
+  .is-still .beats button {
+    color: var(--ink-2);
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    padding: 22px 24px 20px;
+    border-left: 1px solid var(--hair);
+  }
+
+  .pn-label {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .pn-count {
+    margin: 6px 0 4px;
+    font-size: 66px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pn-count b {
+    font-weight: 300;
+  }
+
+  .is-after .pn-count b {
+    color: var(--cyan);
+  }
+
+  .pn-star {
+    margin-left: 2px;
+    font-size: 34px;
+    vertical-align: top;
+    color: var(--yellow);
+  }
+
+  .pn-note {
+    margin: 0 0 16px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink-2);
+  }
+
+  .pn-note em {
+    font-style: normal;
+    color: var(--yellow);
+  }
+
+  .chip {
+    margin-right: 6px;
+    padding: 1px 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--prussian-deep);
+    background: var(--yellow);
+  }
+
+  .pn-rows {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+
+  .pn-rows th {
+    padding: 0 0 6px;
+    font-size: 10.5px;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: left;
+    color: var(--mute);
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .pn-rows th:nth-child(2),
+  .pn-rows td:nth-child(2) {
+    text-align: right;
+    padding-right: 12px;
+  }
+
+  .pn-rows td {
+    padding: 6px 0;
+    color: var(--ink-2);
+    white-space: nowrap;
+    opacity: 0.25;
+    transition: opacity 0.4s, color 0.4s;
+  }
+
+  .pn-rows tr.is-in td {
+    opacity: 1;
+  }
+
+  .used {
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .is-used .used {
+    opacity: 1;
+  }
+
+  .used.note {
+    color: var(--mute);
+  }
+
+  .is-marked td {
+    color: var(--red);
+  }
+
+  .cut-note {
+    display: none;
+    margin-left: 6px;
+    color: var(--yellow);
+  }
+
+  .is-cut td:first-child,
+  .is-cut td:nth-child(2) {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+
+  .is-cut .used {
+    display: none;
+  }
+
+  .is-cut .cut-note {
+    display: inline;
+    margin: 0;
+  }
+
+  .steps {
+    margin-top: auto;
+    padding-top: 16px;
+  }
+
+  .steps p {
+    min-height: 6.6em;
+    margin: 0;
+    padding-top: 14px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink);
+    border-top: 1px solid var(--hair);
+  }
+
+  .steps code {
+    display: inline-block;
+    margin-top: 6px;
+    color: var(--cyan);
+  }
+
+  figcaption {
+    padding: 12px 20px 14px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--mute);
+    border-top: 1px solid var(--hair);
+  }
+
+  @media (max-width: 1080px) {
+    .forge-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panel {
+      border-left: 0;
+      border-top: 1px solid var(--hair);
+    }
+
+    .steps p {
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .fig-title {
+      display: none;
+    }
+
+    .beats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .beats li:nth-child(3) {
+      border-left: 0;
+    }
+
+    .beats li:nth-child(n + 3) {
+      border-top: 1px solid var(--hair);
+    }
+
+    .beat-hook {
+      font-size: 18px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .fig-no {
+      display: none;
+    }
+
+    .forge-head {
+      gap: 10px;
+      padding: 12px 14px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+    }
+
+    .stage {
+      padding: 12px 8px 0;
+    }
+
+    .beats {
+      margin: 10px -8px 0;
+    }
+
+    .beats button {
+      padding: 12px;
+    }
+
+    .lbl {
+      display: none;
+    }
+
+    svg :is(.ln, .body, .bin, .belt-top, .roller, .cable, .surface) {
+      vector-effect: non-scaling-stroke;
+      stroke-width: 1px;
+    }
+
+    .panel {
+      padding: 18px 14px;
+    }
+
+    .pn-count {
+      font-size: 54px;
+    }
+
+    .pn-rows {
+      font-size: 12px;
+    }
+
+    figcaption {
+      padding: 12px 14px;
+    }
+  }
+</style>
