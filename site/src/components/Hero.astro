@@ -6,19 +6,10 @@ import { kilo, startTokens } from "../context.ts";
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <p class="eyebrow">A context profiler for coding agents</p>
     <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
   </div>
   <div class="hero-copy">
-    <p class="lede">
-      System prompt, built-in tools, MCP servers, instruction files and skills ride along on every model call, used or
-      not. Quench reads the history Claude Code, Codex and Pi already keep and measures each piece. Cut what you never
-      use once, and every session after starts lighter.
-    </p>
-    <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
-      <Command text="quench" />
-    </div>
+    <Command text="quench" />
   </div>
   <Forge />
 </section>

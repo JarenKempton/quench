@@ -1,334 +1,435 @@
 ---
-import { facts, rows, segments, slabWidth } from "../forge.ts";
-import { kilo } from "../context.ts";
+import { facts, segments, slabWidth } from "../forge.ts";
 
-const H = 26;
-const TOP = 224;
+const BELT = 300;
+const SH = 44;
+const TH = 9;
 const dead = segments.find((s) => s.dead)!;
-const kept = segments.filter((s) => !s.dead);
-const keptWidth = dead.x;
-const left = {
-  scan: 120 - slabWidth / 2,
-  identify: 340 - slabWidth / 2,
-  smash: 545 - (dead.x + dead.w / 2),
-  pick: 640 - keptWidth / 2,
-  tank: 755 - keptWidth / 2,
-  bin: 895 - keptWidth / 2,
+const keptW = dead.x;
+const dc = dead.x + dead.w / 2;
+const at = { scan: 50, heat: 310, press: 640 - dc, tank: 824 - keptW / 2, cart: 1035 - keptW / 2 };
+
+const box = (x: number, y: number, w: number, h: number, tone = "") => [
+  { x, y, width: w, height: h, class: `f ${tone}` },
+  { x, y, width: w, height: Math.min(6, h / 3), class: `t ${tone}` },
+  { x, y: y + h - Math.min(4, h / 4), width: w, height: Math.min(4, h / 4), class: `s ${tone}` },
+];
+
+const rand = (i: number, k: number) => {
+  const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+  return v - Math.floor(v);
 };
 
-const shards = Array.from({ length: 7 }, (_, i) => {
-  const w = dead.w / 7;
-  const h = 7 + ((i * 5) % 6);
-  const j = ((i * 37) % 7) - 3;
+const G = 1800;
+const shards = Array.from({ length: 6 }, (_, i) => {
+  const c = i % 3;
+  const r = Math.floor(i / 3);
+  const w = dead.w / 3;
+  const h = SH / 2;
+  const x0 = at.press + dead.x + (c + 0.5) * w;
+  const y0 = BELT - SH + (r + 0.5) * h;
+  const restX = 606 + c * 30 + r * 12;
+  const restY = 382 - r * 7 - (c % 2) * 3;
+  const vy = -(240 + rand(i, 1) * 180);
+  const land = (-vy + Math.sqrt(vy * vy + 2 * G * (restY - y0))) / G;
+  const j = (rand(i, 2) - 0.5) * 8;
   return {
-    points: `${-w / 2},${-h / 2 + j * 0.4} ${w / 2 - 1.5},${-h / 2} ${w / 2},${h / 2 - 1} ${-w / 2 + 2},${h / 2}`,
-    x0: left.smash + dead.x + (i + 0.5) * w,
-    y0: 244 + (i % 2) * 3,
-    vx: (i - 3) * 13 + j * 4,
-    vy: -170 + (i % 3) * 55,
-    spin: (i % 2 ? 1 : -1) * (220 + i * 45),
-    rest: 338 - (i % 3) * 6,
+    points: `${-w / 2 + 2},${-h / 2 + j} ${w / 2},${-h / 2} ${w / 2 - 3},${h / 2} ${-w / 2},${h / 2 - j / 2}`,
+    x0,
+    y0,
+    vy,
+    land,
+    vx: (restX - x0) / land,
+    spin: (i % 2 ? 1 : -1) * (160 + rand(i, 3) * 200),
   };
 });
 
-const sparks = Array.from({ length: 9 }, (_, i) => {
-  const a = ((i < 5 ? 150 + i * 15 : -30 + (i - 5) * 15) * Math.PI) / 180;
-  return { dx: Math.cos(a), dy: Math.sin(a), len: 10 + ((i * 7) % 9) };
-});
+const sparks = Array.from({ length: 14 }, (_, i) => ({
+  a: (-180 + (i / 13) * 180 + (rand(i, 4) - 0.5) * 14) * (Math.PI / 180),
+  v: 120 + rand(i, 5) * 150,
+  len: 8 + rand(i, 6) * 14,
+}));
 
-const puffs = Array.from({ length: 18 }, (_, i) => ({ x: 712 + ((i * 41) % 86), delay: i * 0.08, drift: ((i * 13) % 9) - 4 }));
+const puffs = Array.from({ length: 26 }, (_, i) => ({
+  x: 768 + rand(i, 7) * 112,
+  delay: Math.pow(i / 26, 1.4) * 1.9,
+  life: 1.5 + rand(i, 8) * 0.9,
+  rise: 150 + rand(i, 9) * 130,
+  drift: 10 + rand(i, 10) * 60,
+  r0: 9 + rand(i, 11) * 8,
+  r1: 26 + rand(i, 12) * 26 - i * 0.4,
+  tone: i % 3 === 0 ? "puff b" : "puff",
+}));
 
-const rollers = Array.from({ length: 20 }, (_, i) => 24 + i * 34).filter((x) => x < 690);
-const binTop = (i: number) => 322 - 30 - 32 * i;
-const bin = (top: number) => `837,${top} 953,${top} 948,${top + 30} 842,${top + 30}`;
+const drops = Array.from({ length: 12 }, (_, i) => ({
+  x: 824 + (i % 2 ? 1 : -1) * (30 + rand(i, 13) * 40),
+  vx: (i % 2 ? 1 : -1) * (40 + rand(i, 14) * 110),
+  vy: -(220 + rand(i, 15) * 200),
+  r: 2.5 + rand(i, 16) * 2.5,
+}));
 
-const gauge = { cx: 968, cy: 118, r: 22, max: 30000 };
+const bubbles = Array.from({ length: 9 }, (_, i) => ({ x: at.tank + 8 + rand(i, 17) * (keptW - 16), phase: rand(i, 18) }));
+const drips = [0.22, 0.5, 0.8].map((f, i) => ({ x: at.tank + keptW * f, delay: i * 0.17 }));
+
+const rollers = Array.from({ length: 16 }, (_, i) => 52 + i * 44).filter((x) => x < 720);
+const coils = Array.from({ length: 11 }, (_, i) => 316 + i * 20);
+const lamps = [
+  { id: "scan", x: 160 },
+  { id: "tank", x: 824 },
+  { id: "cart", x: 1035 },
+];
+
+const gauge = { cx: 1136, cy: 190, r: 30, max: 30000 };
 const angle = (v: number) => ((-130 + (260 * v) / gauge.max) * Math.PI) / 180;
-const onDial = (v: number, r: number) =>
-  `${(gauge.cx + r * Math.sin(angle(v))).toFixed(1)},${(gauge.cy - r * Math.cos(angle(v))).toFixed(1)}`;
+const onDial = (v: number, r: number) => ({ x: gauge.cx + r * Math.sin(angle(v)), y: gauge.cy - r * Math.cos(angle(v)) });
+const ticks = Array.from({ length: 7 }, (_, i) => i * 5000).map((v) => ({ a: onDial(v, gauge.r - 9), b: onDial(v, gauge.r - 4) }));
+const ghost = { a: onDial(facts.start, gauge.r - 11), b: onDial(facts.start, gauge.r - 2) };
 
-const geo = { left, keptWidth, slabWidth, shards, sparks, puffs, dead, gauge };
+const sheets = Array.from({ length: 8 }, (_, i) => ({
+  x: at.scan + (rand(i, 19) - 0.5) * 8,
+  y: BELT - (i + 1) * (SH / 8),
+  w: slabWidth - 4 + (rand(i, 20) - 0.5) * 8,
+}));
 
-const steps = [
-  { text: "Reads the session history Claude Code, Codex and Pi already saved on disk. Nothing runs live.", cmd: "quench" },
-  {
-    text: `Measures each layer, loaded vs. used. The browser server sent 22 tools on all ${facts.requests} calls; the agent called none.`,
-    cmd: "quench profile mcp",
-  },
-  { text: "You drop the browser server from your own config; Quench never edits it. Quenched, the trimmed setup sets hard.", cmd: "" },
-  { text: "Later sessions are measured the same way, to confirm they start lighter and their runs still go well.", cmd: "quench report" },
-  { text: "Tuned once. Every session now starts from the trimmed setup. Run Quench again when your setup changes.", cmd: "quench runs" },
-];
-
-const beats = [
-  { title: "Scan", hook: "Dig through the history", sub: "saved sessions, after the fact" },
-  { title: "Identify", hook: "Find the dead weight", sub: "loaded vs. used" },
-  { title: "Smash", hook: "Knock it off, quench it", sub: "you cut; Quench never edits" },
-  { title: "Validate", hook: "Lock it in", sub: "later sessions, measured again" },
-];
+const geo = { at, keptW, slabWidth, dc, shards, sparks, puffs, drops, bubbles, drips, gauge, start: facts.start, after: facts.after, G };
+const beats = ["Scan", "Spot", "Smash", "Quench"];
 ---
 
-<figure class="card forge" data-forge data-geo={JSON.stringify(geo)} aria-labelledby="forge-title">
-  <header class="forge-head">
-    <span class="fig-no">Fig. 1</span>
-    <span id="forge-title" class="fig-title">One tune-up, then it holds · sample Claude Code run</span>
-    <span class="status" data-status><i></i><span data-status-text>Line running</span></span>
-    <button type="button" class="replay" data-replay>Replay</button>
-  </header>
+<figure class="card forge" data-forge data-state="ready" data-geo={JSON.stringify(geo)}>
+  <div class="stage">
+    <svg
+      viewBox="0 0 1200 460"
+      data-view
+      role="img"
+      aria-label={`A forge line, run once. Saved session history is scanned into a block measuring ${facts.startText} tokens. Heat shows what gets used; the browser MCP server stays cold, 0 of 22 tools called. A press knocks it off and it drops in the scrap bin. The rest is quenched in water, clamped onto a cart, and its gauge reads lower. Then the line switches off and the trimmed piece stays on the cart.`}
+    >
+      <defs>
+        <pattern id="fg-hz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="14" height="14" class="hz-dark" />
+          <rect width="7" height="14" class="hz-light" />
+        </pattern>
+        <clipPath id="fg-reveal"><rect data-reveal x="0" y="-80" width="0" height="140" /></clipPath>
+        <clipPath id="fg-sheets"><rect data-sheet-clip x="0" y="200" width="1200" height="120" /></clipPath>
+        <clipPath id="fg-kept"><rect x="0" y="0" width={keptW} height={SH} /></clipPath>
+      </defs>
 
-  <div class="forge-body">
-    <div class="stage">
-      <svg viewBox="0 0 1000 380" role="img" aria-label="A forge line. Saved session history is scanned into a block of context layers; the block is heated and measured, the browser server that was never called stays cold; a hammer marked your cut knocks it off; the rest is quenched in water and set into a bin on a cart, where later sessions carry it.">
-        <defs>
-          <pattern id="forge-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="6" class="hatch" />
-          </pattern>
-          <clipPath id="forge-reveal"><rect data-reveal x="0" y="-80" width="0" height="200" /></clipPath>
-          <clipPath id="forge-deck"><rect data-deck-clip x="0" y="150" width="1000" height="120" /></clipPath>
-        </defs>
+      <rect x="-40" y="-40" width="1280" height="540" class="wall" />
+      <g data-dim>
+        {Array.from({ length: 7 }, (_, i) => <rect x={i * 180 - 10} y="0" width="172" height="400" class="panel" />)}
+        <rect x="-40" y="400" width="1280" height="100" class="floor" />
+        <rect x="-40" y="400" width="1280" height="3" class="floor-edge" />
+        {lamps.map((l) => <ellipse data-pool={l.id} cx={l.x} cy="410" rx="130" ry="9" class="pool" />)}
+      </g>
 
-        <g data-shake>
-          <g class="floor">
-            <line x1="0" y1="352" x2="1000" y2="352" class="ln" />
-            {Array.from({ length: 50 }, (_, i) => <line x1={i * 20} y1="352" x2={i * 20 - 8} y2="362" class="hair" />)}
+      <g data-dim>
+        <g class="crane">
+          {[470, 820, 1170].map((x) => <rect x={x - 3} y="0" width="6" height="30" class="rod" />)}
+          {box(420, 30, 770, 14, "k").map((r) => <rect {...r} />)}
+        </g>
+
+        <g class="press-back">
+          {box(560, 60, 16, 340).map((r) => <rect {...r} />)}
+          {box(704, 60, 16, 340).map((r) => <rect {...r} />)}
+          {box(548, 388, 40, 12, "k").map((r) => <rect {...r} />)}
+          {box(692, 388, 40, 12, "k").map((r) => <rect {...r} />)}
+        </g>
+
+        <g class="scanner-back">
+          {box(20, 96, 12, 204).map((r) => <rect {...r} />)}
+          {box(288, 96, 12, 204).map((r) => <rect {...r} />)}
+        </g>
+
+        <g class="heater">
+          {[350, 496].map((x) => <rect x={x - 3} y="0" width="6" height="150" class="rod" />)}
+          {box(304, 146, 232, 52).map((r) => <rect {...r} />)}
+          {[0, 1, 2, 3, 4, 5].map((i) => <rect x={336 + i * 30} y="162" width="18" height="5" rx="2.5" class="vent" />)}
+          <circle data-lamp="16.35" cx="516" cy="166" r="5" class="lamp" />
+          <polygon data-heat-pool points="314,206 526,206 540,300 300,300" class="heat-pool" />
+          {coils.map((x) => <rect data-coil x={x} y="198" width="14" height="8" rx="3" class="coil" />)}
+        </g>
+      </g>
+
+      <g data-dim>
+        <g data-hook-back>
+          <line data-cable x1="900" y1="58" x2="900" y2="110" class="cable" />
+          <g data-trolley>
+            {box(-24, 42, 48, 16, "k").map((r) => <rect {...r} />)}
+            <circle cx="-13" cy="44" r="5" class="wheel" />
+            <circle cx="13" cy="44" r="5" class="wheel" />
+            <circle data-lamp="16.65" cx="0" cy="51" r="3.5" class="lamp" />
           </g>
-
-          <g class="scanner">
-            <rect x="18" y="64" width="208" height="8" class="body" />
-            <rect x="20" y="72" width="6" height="280" class="body" />
-            <rect x="218" y="72" width="6" height="280" class="body" />
-            <rect data-head x="98" y="72" width="44" height="22" class="body" />
-            <polygon data-beam points="" class="beam" />
-            <circle data-lamp cx="120" cy="56" r="4" class="lamp" />
-          </g>
-
-          <g class="heater">
-            <line x1="262" y1="0" x2="262" y2="140" class="ln" />
-            <line x1="418" y1="0" x2="418" y2="140" class="ln" />
-            <rect x="245" y="140" width="190" height="16" class="body" />
-            <polyline
-              data-coil
-              points={Array.from({ length: 21 }, (_, i) => `${255 + i * 8.5},${i % 2 ? 172 : 160}`).join(" ")}
-              class="coil"
-            />
-            <circle data-lamp cx="340" cy="132" r="4" class="lamp" />
-          </g>
-
-          <g class="press">
-            <rect x="488" y="34" width="8" height="318" class="body" />
-            <rect x="594" y="34" width="8" height="318" class="body" />
-            <rect x="482" y="28" width="126" height="12" class="body" />
-            <circle data-lamp cx="545" cy="20" r="4" class="lamp" />
-            <g data-ram>
-              <rect x="541" y="40" width="8" height="80" class="body" />
-              <rect x="503" y="120" width="84" height="36" class="body ram" />
-              <rect x="503" y="156" width="84" height="4" class="strike" />
-              <text x="545" y="143" class="lbl ram-lbl" text-anchor="middle">YOUR CUT</text>
-            </g>
-          </g>
-
-          <g class="hoist">
-            <line x1="700" y1="0" x2="700" y2="48" class="ln" />
-            <line x1="930" y1="0" x2="930" y2="48" class="ln" />
-            <rect x="610" y="48" width="340" height="6" class="body" />
-            <line data-cable x1="640" y1="64" x2="640" y2="120" class="cable" />
-            <g data-trolley>
-              <rect x="-13" y="54" width="26" height="10" class="body" />
-              <circle data-lamp cx="0" cy="48" r="3.5" class="lamp" />
-            </g>
-            <g data-hook>
-              <rect x="-24" y="-5" width="48" height="5" class="body" />
-              <rect x="-24" y="-5" width="3" height="9" class="body" />
-              <rect x="21" y="-5" width="3" height="9" class="body" />
-            </g>
-          </g>
-
-          <g class="belt">
-            {[40, 230, 420, 660].map((x) => <rect x={x} y="262" width="5" height="90" class="body" />)}
-            <rect x="10" y="250" width="680" height="12" rx="6" class="body" />
-            <line data-belt x1="16" y1="250.75" x2="684" y2="250.75" class="belt-top" />
-            {rollers.map((x) => (
-              <g data-roller transform={`translate(${x} 256)`}>
-                <circle r="4" class="roller" />
-                <line x1="-3" y1="0" x2="3" y2="0" class="roller" />
-              </g>
-            ))}
-          </g>
-
-          <g class="deck" clip-path="url(#forge-deck)">
-            {Array.from({ length: 6 }, (_, i) => (
-              <g transform={`translate(${37 + ((i * 3) % 5) - 2} ${244 - i * 6})`}>
-                <rect width="166" height="5" class="sheet" />
-                <line x1="8" y1="2.5" x2={60 + ((i * 29) % 80)} y2="2.5" class="sheet-line" />
-              </g>
-            ))}
-            <text x="120" y="200" class="lbl" text-anchor="middle" data-deck-label>{facts.sessions} saved sessions</text>
-          </g>
-
-          <g class="tank">
-            <path d="M696 244 H704 V346 H806 V244 H814" class="ln" />
-          </g>
-
-          <g class="cart">
-            <rect x="830" y="322" width="130" height="8" class="body" />
-            <rect x="954" y="150" width="6" height="172" class="body" />
-            <circle cx="852" cy="341" r="10" class="body" />
-            <circle cx="938" cy="341" r="10" class="body" />
-            <polygon points={bin(binTop(0))} class="bin" />
-            {[1, 2, 3].map((i) => (
-              <g data-bin={i}>
-                <polygon points={bin(binTop(i))} class="bin" />
-                {kept.map((s) => <rect x={895 - keptWidth / 2 + s.x} y={binTop(i) + 1} width={s.w} height={H} class="cool" />)}
-              </g>
-            ))}
-            <text x="895" y="186" class="lbl" text-anchor="middle" data-later>later sessions</text>
-            <text x="895" y="374" class="lbl" text-anchor="middle">carried into every session</text>
-            <line x1="957" y1="150" x2="963" y2="138" class="ln" />
-            <g class="gauge">
-              <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r} class="body" />
-              {[0, 10000, 20000, 30000].map((v) => <line x1={onDial(v, gauge.r - 6).split(",")[0]} y1={onDial(v, gauge.r - 6).split(",")[1]} x2={onDial(v, gauge.r - 1).split(",")[0]} y2={onDial(v, gauge.r - 1).split(",")[1]} class="hair" />)}
-              <circle cx={onDial(26004, gauge.r - 3).split(",")[0]} cy={onDial(26004, gauge.r - 3).split(",")[1]} r="2" class="mark-before" />
-              <line data-needle x1={gauge.cx} y1={gauge.cy} x2={gauge.cx} y2={gauge.cy - 16} class="needle" />
-              <circle cx={gauge.cx} cy={gauge.cy} r="2.5" class="needle-hub" />
-              <circle data-check cx="934" cy="118" r="6" class="check" />
-              <path data-check-mark d="M931 118 l2.2 2.4 l4 -4.6" class="check-mark" />
-            </g>
-          </g>
-
-          <g data-slab>
-            <g clip-path="url(#forge-reveal)">
-              {segments.map((s) => (
-                <rect data-seg={s.dead ? "dead" : "kept"} data-name={s.name} x={s.x} y="0" width={s.w} height={H} class="seg" />
-              ))}
-              <rect data-hatch x={dead.x} y="0" width={dead.w} height={H} fill="url(#forge-hatch)" />
-            </g>
-            <g data-ruler>
-              <line x1="0" y1="-12" x2={slabWidth} y2="-12" class="ruler" />
-              {segments.map((s) => <line x1={s.x} y1="-16" x2={s.x} y2="-8" class="ruler" />)}
-              <line x1={slabWidth} y1="-16" x2={slabWidth} y2="-8" class="ruler" />
-            </g>
-            <g data-tag>
-              <line x1={dead.x + dead.w / 2} y1="-16" x2={dead.x + dead.w / 2} y2="-30" class="tag-line" />
-              <text x={dead.x + dead.w / 2 - 20} y="-36" class="lbl tag" text-anchor="middle">{dead.name.replace("MCP: ", "")} MCP · 0 of 22 called</text>
-            </g>
-          </g>
-
-          <g class="sparks" data-sparks>
-            {sparks.map((s) => <line data-spark data-dx={s.dx} data-dy={s.dy} data-len={s.len} x1="545" y1="224" x2="545" y2="224" class="spark" />)}
-          </g>
-
-          <rect x="705" y="266" width="100" height="79" class="water" />
-          <line data-surface x1="705" y1="266" x2="805" y2="266" class="surface" />
-          <g data-steam>
-            {puffs.map((p) => <circle data-puff cx={p.x} cy="262" r="0" class="puff" />)}
-          </g>
-
-          <g class="scrap">
-            {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
-            <path d="M503 300 L509 350 H581 L587 300" class="body bin-scrap" />
-            <text x="545" y="331" class="lbl scrap-lbl" text-anchor="middle">CUT</text>
+          <g data-spreader>
+            {box(-keptW / 2 - 14, 0, keptW + 28, 10).map((r) => <rect {...r} />)}
+            <rect x="-9" y="-8" width="18" height="10" rx="3" class="t" />
           </g>
         </g>
-      </svg>
 
-      <ol class="beats">
-        {beats.map((b, i) => (
-          <li>
-            <button type="button" data-beat={i}>
-              <span class="beat-no">0{i + 1}</span>
-              <span class="beat-title">{b.title}</span>
-              <span class="beat-hook">{b.hook}</span>
-              <span class="beat-sub">{b.sub}</span>
-            </button>
-          </li>
+        <g class="tank-back">
+          <rect x="756" y="286" width="138" height="106" class="tank-in" />
+        </g>
+      </g>
+
+      <g class="cart">
+        {box(940, 340, 200, 14).map((r) => <rect {...r} />)}
+        <rect x="960" y="354" width="160" height="10" class="s k" />
+        {[978, 1100].map((x) => (
+          <g>
+            <circle cx={x} cy="380" r="20" class="tyre" />
+            <circle cx={x} cy="380" r="8" class="hub" />
+          </g>
         ))}
-      </ol>
-    </div>
+        {box(985, 332, 26, 8, "k").map((r) => <rect {...r} />)}
+        {box(1059, 332, 26, 8, "k").map((r) => <rect {...r} />)}
+        {box(950, 270, 12, 70).map((r) => <rect {...r} />)}
+        {box(1108, 270, 12, 70).map((r) => <rect {...r} />)}
+        {box(1132, 214, 8, 126).map((r) => <rect {...r} />)}
+        <g class="gauge">
+          <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r} class="dial-ring" />
+          <circle cx={gauge.cx} cy={gauge.cy} r={gauge.r - 5} class="dial" />
+          {ticks.map((t) => <line x1={t.a.x} y1={t.a.y} x2={t.b.x} y2={t.b.y} class="tick" />)}
+          <line x1={ghost.a.x} y1={ghost.a.y} x2={ghost.b.x} y2={ghost.b.y} class="ghost" />
+          <line data-needle x1={gauge.cx} y1={gauge.cy} x2={gauge.cx} y2={gauge.cy - 20} class="needle" />
+          <circle cx={gauge.cx} cy={gauge.cy} r="3.5" class="hub-dot" />
+        </g>
+        <circle data-ok cx="1122" cy="347" r="4.5" class="lamp" />
+      </g>
 
-    <aside class="panel" aria-label="What Quench measured">
-      <p class="pn-label" data-count-label>Tokens before you type</p>
-      <p class="pn-count"><b data-count>{facts.start}</b><span class="pn-star" data-count-star>*</span></p>
-      <p class="pn-note" data-count-note>
-        Resent on all {facts.requests} model calls: <em>{facts.share}</em> of the run's {facts.input} input tokens.
-      </p>
-      <p class="pn-note pn-after" data-after-note>
-        <span class="chip">Illustrative</span> After cutting the browser server: {facts.start} − {facts.cut}. Was {facts.start}.
-      </p>
-      <table class="pn-rows">
-        <thead>
-          <tr><th>Layer</th><th>Tokens</th><th>Used</th></tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr data-row={r.name} class:list={{ dead: r.used?.dead }}>
-              <td>{r.name}</td>
-              <td>{kilo(r.tokens)}</td>
-              <td>
-                <span class:list={["used", { note: !r.used }]}>{r.used?.text ?? r.note}</span>
-                {r.used?.dead && <span class="cut-note">you cut it</span>}
-              </td>
-            </tr>
+      <g data-dim>
+        <g class="belt">
+          {[70, 370, 520].map((x) => box(x, 322, 14, 78).map((r) => <rect {...r} />))}
+          <rect x="30" y="300" width="700" height="22" rx="11" class="rubber" />
+          <line data-belt x1="40" y1="302" x2="720" y2="302" class="belt-top" />
+          {rollers.map((x) => (
+            <g data-roller data-x={x} transform={`translate(${x} 311)`}>
+              <circle cx="0" cy="0" r="7" class="roller" />
+              <line x1="-5" y1="0" x2="5" y2="0" class="roller-spoke" />
+            </g>
           ))}
-        </tbody>
-      </table>
-      <div class="steps">
-        {steps.map((s, i) => (
-          <p data-step={i}>
-            {s.text} {s.cmd && <code><span class="prompt">$</span> {s.cmd}</code>}
-          </p>
+        </g>
+
+        <g class="sheets" clip-path="url(#fg-sheets)">
+          {sheets.map((s, i) => <rect x={s.x} y={s.y} width={s.w} height={SH / 8 - 0.8} rx="1" class:list={["sheet", { alt: i % 2 }]} />)}
+        </g>
+
+        <g data-ram>
+          <rect x="632" y="20" width="16" height="112" class="rod-steel" />
+          {box(586, 130, 108, 42).map((r) => <rect {...r} />)}
+          <rect x="586" y="172" width="108" height="14" fill="url(#fg-hz)" />
+          <rect x="586" y="184" width="108" height="3" class="s k" />
+        </g>
+
+        <g class="press-top">
+          {box(548, 48, 184, 40, "k").map((r) => <rect {...r} />)}
+          <circle data-lamp="16.5" cx="716" cy="68" r="5" class="lamp" />
+        </g>
+      </g>
+
+      <ellipse data-halo-out cx="0" cy="0" rx="0" ry="0" class="halo" />
+      <ellipse data-halo-in cx="0" cy="0" rx="0" ry="0" class="halo in" />
+
+      <g data-slab>
+        <g clip-path="url(#fg-reveal)">
+          <g data-kept>
+            {segments.filter((s) => !s.dead).map((s) => (
+              <g>
+                <rect data-face="front" x={s.x} y="0" width={Math.max(1, s.w - 1.5)} height={SH} />
+                <rect data-face="top" x={s.x} y="0" width={Math.max(1, s.w - 1.5)} height={TH} />
+              </g>
+            ))}
+            <rect x="0" y={SH - 4} width={keptW - 1.5} height="4" class="slab-shade" />
+            <g clip-path="url(#fg-kept)">
+              <polygon data-sheen points="0,0 18,0 -6,44 -24,44" class="sheen" />
+            </g>
+          </g>
+          <g data-dead>
+            <rect data-dead-front x={dead.x} y="0" width={dead.w} height={SH} class="cold" />
+            <rect data-dead-top x={dead.x} y="0" width={dead.w} height={TH} class="cold-top" />
+            <rect data-dead-shade x={dead.x} y={SH - 4} width={dead.w} height="4" class="slab-shade" />
+          </g>
+        </g>
+        <g data-flag>
+          <line x1={dc} y1="2" x2={dc} y2="-58" class="flag-pole" />
+          <g data-flag-cloth>
+            <rect x={dc} y="-58" width="64" height="28" rx="2" class="flag" />
+            <text x={dc + 32} y="-38.5" text-anchor="middle" class="flag-t">{facts.unused}</text>
+          </g>
+        </g>
+      </g>
+
+      <g data-dim>
+        <g data-hook-front>
+          {[-1, 1].map((side) => (
+            <g data-arm={side}>
+              <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 + 1} y="6" width="8" height="48" rx="2" class="t" />
+              <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 - 3} y="48" width="12" height="6" rx="2" class="t" />
+            </g>
+          ))}
+        </g>
+      </g>
+
+      <g class="clamps">
+        <g data-jaw="-1">
+          {box(944, 276, 14, 18, "y").map((r) => <rect {...r} />)}
+          {box(944, 276, 40, 10, "y").map((r) => <rect {...r} />)}
+        </g>
+        <g data-jaw="1">
+          {box(1112, 276, 14, 18, "y").map((r) => <rect {...r} />)}
+          {box(1086, 276, 40, 10, "y").map((r) => <rect {...r} />)}
+        </g>
+      </g>
+
+      <g data-dim>
+        <path data-water d="" class="water" />
+        <path data-surface d="" class="surface" />
+        {bubbles.map(() => <circle data-bubble r="0" class="bubble" />)}
+        <g class="tank-front">
+          <rect x="750" y="282" width="6" height="118" class="f" />
+          <rect x="894" y="282" width="6" height="118" class="f" />
+          {box(744, 278, 18, 8, "k").map((r) => <rect {...r} />)}
+          {box(888, 278, 18, 8, "k").map((r) => <rect {...r} />)}
+          {box(744, 390, 162, 10, "k").map((r) => <rect {...r} />)}
+          <line x1="770" y1="384" x2="800" y2="320" class="glint" />
+          <line x1="782" y1="386" x2="800" y2="348" class="glint" />
+        </g>
+
+        <g class="scrap">
+          <rect x="594" y="352" width="102" height="10" class="tank-in" />
+          {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
+          {box(588, 360, 114, 40, "k").map((r) => <rect {...r} />)}
+          <rect x="588" y="360" width="114" height="4" class="scrap-rim" />
+        </g>
+
+        <g class="scanner">
+          {box(12, 84, 296, 28).map((r) => <rect {...r} />)}
+          <rect x="100" y="87" width="120" height="23" rx="3" class="lcd" />
+          <text data-readout x="160" y="105.5" text-anchor="middle" class="readout">0.0k</text>
+          <circle data-lamp="16.2" cx="290" cy="98" r="5" class="lamp" />
+          <polygon data-beam points="" class="beam" />
+          <line data-scanline x1="0" y1="252" x2="0" y2="300" class="scanline" />
+          <g data-head>
+            {box(-24, 112, 48, 30, "k").map((r) => <rect {...r} />)}
+            <rect x="-16" y="142" width="32" height="5" rx="2" class="lens" />
+          </g>
+        </g>
+      </g>
+
+      {drops.map(() => <circle data-drop r="0" class="drop" />)}
+      {drips.map(() => <circle data-drip r="0" class="drop" />)}
+      <g class="steam">
+        {puffs.map((p) => <circle data-puff r="0" class={p.tone} />)}
+      </g>
+
+      {sparks.map(() => <line data-spark x1="0" y1="0" x2="0" y2="0" class="spark" />)}
+      <polygon
+        data-flash
+        points={Array.from({ length: 16 }, (_, i) => {
+          const r = i % 2 ? 14 : 46;
+          const a = (i / 16) * Math.PI * 2;
+          return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a) * 0.6).toFixed(1)}`;
+        }).join(" ")}
+        class="flash"
+      />
+
+      <g class="ceiling">
+        {lamps.map((l) => (
+          <g>
+            <polygon data-cone={l.id} points={`${l.x - 14},70 ${l.x + 14},70 ${l.x + 130},405 ${l.x - 130},405`} class="cone" />
+            <line x1={l.x} y1="0" x2={l.x} y2="58" class="cord" />
+            <polygon points={`${l.x - 8},58 ${l.x + 8},58 ${l.x + 20},72 ${l.x - 20},72`} class="shade" />
+            <rect data-bulb={l.id} x={l.x - 9} y="71" width="18" height="4" rx="2" class="bulb" />
+          </g>
         ))}
-      </div>
-    </aside>
+      </g>
+    </svg>
   </div>
 
-  <figcaption>
-    Layer sizes split the measured {facts.start} by recorded characters, from one sample Claude Code run. *{facts.after} is
-    illustrative: {facts.start} minus the browser server's {facts.cut}. The sample has no after-trim data.
-  </figcaption>
+  <div class="rail">
+    <ol class="beats">
+      {beats.map((b, i) => (
+        <li>
+          <button type="button" data-beat={i}>{b}</button>
+        </li>
+      ))}
+      <span class="progress" data-progress aria-hidden="true"></span>
+    </ol>
+    <p class="credit">Quench measures. You cut.</p>
+    <button type="button" class="replay" data-replay aria-label="Replay">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4" /></svg>
+    </button>
+  </div>
 </figure>
 
 <script>
+  type P = { x: number; y: number };
   type Geo = {
-    left: Record<"scan" | "identify" | "smash" | "pick" | "tank" | "bin", number>;
-    keptWidth: number;
+    at: Record<"scan" | "heat" | "press" | "tank" | "cart", number>;
+    keptW: number;
     slabWidth: number;
-    shards: { x0: number; y0: number; vx: number; vy: number; spin: number; rest: number }[];
-    puffs: { x: number; delay: number; drift: number }[];
-    dead: { x: number; w: number };
+    dc: number;
+    shards: { x0: number; y0: number; vx: number; vy: number; land: number; spin: number }[];
+    sparks: { a: number; v: number; len: number }[];
+    puffs: { x: number; delay: number; life: number; rise: number; drift: number; r0: number; r1: number }[];
+    drops: { x: number; vx: number; vy: number; r: number }[];
+    bubbles: { x: number; phase: number }[];
+    drips: { x: number; delay: number }[];
     gauge: { cx: number; cy: number; r: number; max: number };
+    start: number;
+    after: number;
+    G: number;
   };
 
-  const END = 17.8;
-  const BEATS = [0, 3.3, 7.3, 12.8];
-  const START = 26004;
-  const AFTER = 13713;
+  const END = 17.6;
+  const BEATS = [0, 3.0, 6.0, 10.8];
+  const STILLS = [2.85, 5.9, 7.72, END];
+  const IMPACT = 7.655;
+  const SPLASH = 11.04;
+  const CLUNK = 14.8;
+  const SH = 44;
 
   const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
-  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
   const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
-  const track = (t: number, keys: [number, number][], curve = ease) => {
+  const lin = (x: number) => x;
+  const inOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const out = (x: number) => 1 - Math.pow(1 - x, 3);
+  const quadIn = (x: number) => x * x;
+  const cubicIn = (x: number) => x * x * x;
+  const back = (s: number) => (x: number) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+  const inOutBack = (s: number) => (x: number) => {
+    const c = s * 1.525;
+    return x < 0.5
+      ? (Math.pow(2 * x, 2) * ((c + 1) * 2 * x - c)) / 2
+      : (Math.pow(2 * x - 2, 2) * ((c + 1) * (x * 2 - 2) + c) + 2) / 2;
+  };
+  type Key = [number, number, ((x: number) => number)?];
+  const track = (t: number, keys: Key[]) => {
     if (t <= keys[0][0]) return keys[0][1];
     for (let i = 1; i < keys.length; i++) {
-      const [t1, v1] = keys[i];
+      const [t1, v1, curve = inOut] = keys[i];
       const [t0, v0] = keys[i - 1];
       if (t <= t1) return lerp(v0, v1, curve(span(t, t0, t1)));
     }
     return keys[keys.length - 1][1];
   };
+  const decay = (t: number, from: number, k: number, w: number) =>
+    t < from ? 0 : Math.exp(-(t - from) * k) * Math.sin((t - from) * w);
+
   const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
   const mix = (a: string, b: string, x: number) => {
     const [p, q] = [hex(a), hex(b)];
     return `rgb(${p.map((v, i) => Math.round(lerp(v, q[i], x))).join(" ")})`;
   };
+  const ramp = (stops: string[], x: number) => {
+    const n = stops.length - 1;
+    const i = Math.min(n - 1, Math.floor(clamp(x) * n));
+    return mix(stops[i], stops[i + 1], clamp(x) * n - i);
+  };
   const kilo = (n: number) => `${(n / 1000).toFixed(1)}k`;
 
-  const RAW = "#24527a";
-  const HOT = "#ff9a52";
-  const COOL = "#9fdcfa";
-  const COIL_OFF = "#2b5a80";
-  const LAMP_ON = "#a9e8c4";
-  const LAMP_OFF = "#123c60";
+  const FRONT = { raw: "#3b5e7e", hot: ["#3b5e7e", "#9b3420", "#e8642a", "#ff8f3a"], cool: "#7fb0d2" };
+  const TOP = { raw: "#5d84a6", hot: ["#5d84a6", "#c9502c", "#ff9a52", "#ffc77a"], cool: "#d6effc" };
+  const LAMP = { off: "#163a5a", on: "#a9e8c4" };
+  const COIL = { off: "#24496b", on: "#ff9447" };
 
   function mount(root: HTMLElement) {
     const geo: Geo = JSON.parse(root.dataset.geo!);
@@ -337,209 +438,288 @@ const beats = [
     const set = (el: Element, attrs: Record<string, string | number>) => {
       for (const k in attrs) el.setAttribute(k, String(attrs[k]));
     };
+    const { at, keptW, slabWidth, dc, gauge } = geo;
 
+    const view = $("[data-view]");
     const slab = $("[data-slab]");
+    const deadG = $("[data-dead]");
+    const fronts = $$("[data-kept] [data-face='front']");
+    const tops = $$("[data-kept] [data-face='top']");
+    const deadFront = $("[data-dead-front]");
+    const deadTop = $("[data-dead-top]");
+    const deadShade = $("[data-dead-shade]");
+    const sheen = $("[data-sheen]");
     const reveal = $("[data-reveal]");
-    const deckClip = $("[data-deck-clip]");
+    const sheetClip = $("[data-sheet-clip]");
     const beam = $("[data-beam]");
+    const scanline = $("[data-scanline]");
     const head = $("[data-head]");
-    const coil = $("[data-coil]");
+    const readout = $("[data-readout]");
+    const flag = $("[data-flag]");
+    const cloth = $("[data-flag-cloth]");
+    const coils = $$("[data-coil]");
+    const heatPool = $("[data-heat-pool]");
+    const haloOut = $("[data-halo-out]");
+    const haloIn = $("[data-halo-in]");
     const ram = $("[data-ram]");
-    const trolley = $("[data-trolley]");
-    const cable = $("[data-cable]");
-    const hook = $("[data-hook]");
     const belt = $("[data-belt]");
     const rollers = $$("[data-roller]");
-    const kept = $$("[data-seg='kept']");
-    const dead = $("[data-seg='dead']");
-    const hatch = $("[data-hatch]");
-    const ruler = $("[data-ruler]");
-    const tag = $("[data-tag]");
     const shards = $$("[data-shard]");
     const sparks = $$("[data-spark]");
-    const puffs = $$("[data-puff]");
+    const flash = $("[data-flash]");
+    const trolley = $("[data-trolley]");
+    const cable = $("[data-cable]");
+    const spreader = $("[data-spreader]");
+    const hookFront = $("[data-hook-front]");
+    const arms = $$("[data-arm]");
+    const water = $("[data-water]");
     const surface = $("[data-surface]");
-    const bins = $$("[data-bin]");
-    const later = $("[data-later]");
+    const bubbles = $$("[data-bubble]");
+    const drops = $$("[data-drop]");
+    const drips = $$("[data-drip]");
+    const puffs = $$("[data-puff]");
+    const jaws = $$("[data-jaw]");
     const needle = $("[data-needle]");
-    const check = $("[data-check]");
-    const checkMark = $("[data-check-mark]");
+    const ok = $("[data-ok]");
     const lamps = $$("[data-lamp]");
-    const shake = $("[data-shake]");
-    const deckLabel = $("[data-deck-label]");
-    const count = $<HTMLElement>("[data-count]");
-    const star = $<HTMLElement>("[data-count-star]");
-    const countLabel = $<HTMLElement>("[data-count-label]");
-    const countNote = $<HTMLElement>("[data-count-note]");
-    const afterNote = $<HTMLElement>("[data-after-note]");
-    const rows = $$<HTMLElement>("[data-row]");
-    const deadRow = $<HTMLElement>("tr.dead");
-    const steps = $$<HTMLElement>("[data-step]");
+    const cones = $$("[data-cone]");
+    const bulbs = $$("[data-bulb]");
+    const pools = $$("[data-pool]");
+    const dims = $$("[data-dim]");
+    const progress = $<HTMLElement>("[data-progress]");
     const beatButtons = $$<HTMLButtonElement>("[data-beat]");
-    const status = $<HTMLElement>("[data-status]");
-    const statusText = $<HTMLElement>("[data-status-text]");
-    const { left, keptWidth, slabWidth } = geo;
+    const narrow = matchMedia("(max-width: 640px)");
 
-    const centre = Object.fromEntries(
-      $$("[data-seg]").map((el) => [el.dataset.name, Number(el.getAttribute("x")) + Number(el.getAttribute("width")) / 2]),
-    );
+    const lit = (t: number, off: number) => {
+      const on = t < 0.5 ? (t < 0.08 || (t > 0.16 && t < 0.22) || t > 0.3 ? span(t, 0, 0.06) : 0.15) : 1;
+      return on * (1 - span(t, off, off + 0.2));
+    };
 
     function render(t: number) {
-      const scanX = track(t, [[0.7, 35], [2.9, 35 + slabWidth]], (x) => x);
-      const x = track(t, [
-        [3.3, left.scan], [4.3, left.identify], [7.3, left.identify], [8.0, left.smash], [9.6, left.smash],
-        [10.3, left.pick], [10.9, left.pick], [11.4, left.tank], [12.8, left.tank], [13.3, left.bin],
+      const scanX = track(t, [[0.5, at.scan - 6], [2.8, at.scan + slabWidth + 6, lin]]);
+      const beamOn = span(t, 0.35, 0.55) * (1 - span(t, 2.8, 3.05));
+
+      const carried = t >= 9.35 && t < 14.15;
+      const sx = track(t, [
+        [3.0, at.scan], [3.9, at.heat, inOutBack(0.9)], [6.0, at.heat], [6.75, at.press, inOutBack(0.9)],
+        [9.95, at.press], [10.75, at.tank], [12.8, at.tank], [13.6, at.cart],
       ]);
-      const y = track(t, [[10.6, 224], [10.9, 150], [11.4, 150], [11.8, 292], [12.4, 292], [12.8, 150], [13.3, 150], [13.7, 293]]);
-      set(slab, { transform: `translate(${x.toFixed(2)} ${y.toFixed(2)})` });
-      set(reveal, { width: Math.max(0, scanX - left.scan) });
+      const sy = track(t, [
+        [9.35, 256], [9.45, 259], [9.95, 196], [10.85, 196], [11.15, 340, quadIn], [12.2, 340], [12.7, 196],
+        [13.7, 196], [14.1, 288, back(1.6)],
+      ]);
+      const hop = t > IMPACT && t < IMPACT + 0.34 ? -Math.abs(Math.sin(((t - IMPACT) / 0.34) * Math.PI * 1.5)) * 7 * (1 - span(t, IMPACT, IMPACT + 0.34)) : 0;
 
-      set(deckClip, { x: scanX });
-      deckLabel.style.opacity = String(1 - span(t, 0.6, 1.0));
-      const beamOn = span(t, 0.5, 0.7) * (1 - span(t, 2.9, 3.2));
-      set(head, { x: scanX - 22 });
-      set(beam, { points: `${scanX - 5},94 ${scanX + 5},94 ${scanX + 16},224 ${scanX - 16},224`, opacity: (beamOn * 0.55).toFixed(2) });
+      const tx = track(t, [[8.0, 900], [8.8, at.press + keptW / 2], [9.95, at.press + keptW / 2], [10.75, at.tank + keptW / 2], [12.8, at.tank + keptW / 2], [13.6, at.cart + keptW / 2]]);
+      const travelA = t >= 9.95 && t < 10.75 ? 3 * Math.sin(span(t, 9.95, 10.75) * Math.PI * 2) : -2.5 * decay(t, 10.75, 3.2, 9);
+      const travelB = t >= 12.8 && t < 13.6 ? 3 * Math.sin(span(t, 12.8, 13.6) * Math.PI * 2) : -2.5 * decay(t, 13.6, 4, 9);
+      const sway = carried ? (t < 12.8 ? travelA : travelB) : 0;
+      const hy = carried
+        ? sy - 26
+        : t < 9.35
+          ? track(t, [[8.8, 84], [9.2, 230, back(1.2)]])
+          : track(t, [[14.3, 262], [14.9, 84]]);
+      const grip = carried ? 1 : t < 9.35 ? span(t, 9.2, 9.35) : 1 - span(t, 14.15, 14.3);
+      const pivot = `rotate(${sway.toFixed(2)} ${tx.toFixed(1)} 58)`;
 
-      const coilHeat = span(t, 4.2, 4.8) * (1 - span(t, 7.4, 8.4));
-      set(coil, { stroke: mix(COIL_OFF, HOT, coilHeat) });
+      set(slab, { transform: `${pivot} translate(${sx.toFixed(2)} ${(sy + (carried ? 0 : hop)).toFixed(2)})` });
+      set(reveal, { width: Math.max(0, scanX - at.scan) });
+      set(sheetClip, { x: scanX });
+      set(head, { transform: `translate(${scanX.toFixed(1)} 0)` });
+      set(beam, { points: `${scanX - 14},147 ${scanX + 14},147 ${scanX + 26},300 ${scanX - 26},300`, opacity: (beamOn * 0.28).toFixed(2) });
+      set(scanline, { x1: scanX, x2: scanX, opacity: beamOn.toFixed(2) });
+      const measured = geo.start * span(t, 0.5, 2.8);
+      readout.textContent = kilo(measured);
+      root.classList.toggle("is-measured", t >= 2.8);
 
-      const heat = span(t, 4.5, 5.6);
-      const cool = span(t, 11.75, 12.7);
-      const fill = cool > 0 ? mix(HOT, COOL, cool) : mix(RAW, HOT, heat);
-      kept.forEach((el) => set(el, { fill }));
-      const marked = span(t, 5.8, 6.2);
-      set(dead, { fill: RAW, stroke: mix("#5aa9d2", "#ff9479", marked) });
-      const squash = span(t, 8.36, 8.44);
-      const gone = t >= 8.45;
-      set(dead, { y: (26 * 0.7 * squash).toFixed(2), height: (26 * (1 - 0.7 * squash)).toFixed(2), visibility: gone ? "hidden" : "visible" });
-      set(hatch, { opacity: (marked * 0.7).toFixed(2), visibility: gone ? "hidden" : "visible", y: (26 * 0.7 * squash).toFixed(2), height: (26 * (1 - 0.7 * squash)).toFixed(2) });
-      const leave = 1 - span(t, 7.25, 7.5);
-      set(ruler, { opacity: (span(t, 5.0, 5.3) * leave).toFixed(2) });
-      set(tag, { opacity: (span(t, 6.0, 6.3) * leave).toFixed(2) });
+      const coilOn = span(t, 3.95, 4.35) * (1 - span(t, 6.0, 6.6));
+      coils.forEach((el, i) => set(el, { fill: mix(COIL.off, COIL.on, clamp(coilOn * 1.4 - i * 0.03)) }));
+      set(heatPool, { opacity: (coilOn * 0.13).toFixed(3) });
+      const heat = span(t, 4.1, 5.5);
+      const cool = span(t, 11.1, 12.3);
+      const front = cool > 0 ? mix(FRONT.hot[3], FRONT.cool, out(cool)) : ramp(FRONT.hot, heat);
+      const top = cool > 0 ? mix(TOP.hot[3], TOP.cool, out(cool)) : ramp(TOP.hot, heat);
+      fronts.forEach((el) => set(el, { fill: front }));
+      tops.forEach((el) => set(el, { fill: top }));
+      const glow = heat * (1 - cool) * (t < SPLASH ? 1 : 1 - span(t, SPLASH, SPLASH + 0.4));
+      const cxs = sx + keptW / 2;
+      const cys = sy + SH / 2;
+      set(haloOut, { cx: cxs, cy: cys, rx: keptW * 0.85, ry: 46, opacity: (glow * 0.07).toFixed(3) });
+      set(haloIn, { cx: cxs, cy: cys, rx: keptW * 0.68, ry: 34, opacity: (glow * 0.09).toFixed(3) });
+      set(sheen, { transform: `translate(${lerp(-30, keptW + 40, inOut(span(t, 16.5, 17.3))).toFixed(1)} 0)`, opacity: t > 16.5 && t < 17.3 ? 1 : 0 });
 
-      const drop = track(t, [[8.2, 0], [8.4, 64], [8.8, 64], [9.6, 0]], (p) => p * p);
-      set(ram, { transform: `translate(0 ${drop.toFixed(2)})` });
-      const jolt = t > 8.4 && t < 8.62 ? Math.sin((t - 8.4) * 90) * 1.6 * (1 - span(t, 8.4, 8.62)) : 0;
-      set(shake, { transform: `translate(0 ${jolt.toFixed(2)})` });
-
-      const sp = span(t, 8.4, 8.75);
-      sparks.forEach((el) => {
-        const dx = Number(el.dataset.dx), dy = Number(el.dataset.dy), len = Number(el.dataset.len);
-        const r0 = 6 + 46 * Math.sqrt(sp);
-        set(el, {
-          x1: 545 + dx * r0, y1: 224 + dy * r0 * 0.7, x2: 545 + dx * (r0 + len), y2: 224 + dy * (r0 + len) * 0.7,
-          opacity: sp > 0 && sp < 1 ? (1 - sp).toFixed(2) : 0,
-        });
+      const flagIn = span(t, 4.9, 5.4);
+      const flagOut = span(t, IMPACT, IMPACT + 0.45);
+      const flagSwing = 14 * decay(t, 5.25, 2.6, 7);
+      set(flag, {
+        opacity: (Math.min(1, flagIn * 3) * (1 - flagOut)).toFixed(2),
+        transform: `translate(${(flagOut * 60).toFixed(1)} ${(lerp(-34, 0, back(2.2)(flagIn)) - 120 * out(flagOut)).toFixed(1)}) rotate(${(flagOut * 70).toFixed(1)} ${dc} 0)`,
       });
+      set(cloth, { transform: `skewY(${flagSwing.toFixed(2)})`, "transform-origin": `${dc}px -44px` });
+
+      const ramY = track(t, [
+        [6.8, 0], [7.4, -30, out], [7.55, -30], [IMPACT + 0.005, 94, cubicIn], [7.76, 86, out], [7.86, 92, quadIn], [8.1, 92], [8.9, 0],
+      ]);
+      const tremble = t > 7.4 && t < 7.55 ? Math.sin(t * 260) * 1.3 : 0;
+      set(ram, { transform: `translate(${tremble.toFixed(2)} ${ramY.toFixed(2)})` });
+      const gone = t >= IMPACT;
+      const squash = clamp((ramY - 70) / 14) * (t < IMPACT ? 1 : 0);
+      const dh = SH * (1 - 0.45 * squash);
+      set(deadG, { visibility: gone ? "hidden" : "visible" });
+      set(deadFront, { y: SH - dh, height: dh });
+      set(deadTop, { y: SH - dh });
+      set(deadShade, { y: SH - 4 });
+      const cold = span(t, 4.9, 5.2);
+      set(deadFront, { fill: mix(FRONT.raw, "#2d4b68", cold) });
+      set(deadTop, { fill: mix(TOP.raw, "#45698b", cold) });
 
       shards.forEach((el, i) => {
         const s = geo.shards[i];
         if (!gone) return set(el, { visibility: "hidden" });
-        const land = (-s.vy + Math.sqrt(s.vy * s.vy + 4 * 450 * (s.rest - s.y0))) / 900;
-        const d = Math.min(t - 8.45, land);
-        const sx = clamp(s.x0 + s.vx * d, 514, 576);
-        const sy = s.y0 + s.vy * d + 450 * d * d;
-        set(el, { visibility: "visible", transform: `translate(${sx.toFixed(1)} ${sy.toFixed(1)}) rotate(${(s.spin * d).toFixed(1)})` });
+        const d = Math.min(t - IMPACT, s.land);
+        const x = s.x0 + s.vx * d;
+        const y = s.y0 + s.vy * d + 0.5 * geo.G * d * d;
+        set(el, { visibility: "visible", transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((s.spin * d) / s.land).toFixed(1)})` });
+      });
+      const sp = t - IMPACT;
+      sparks.forEach((el, i) => {
+        const s = geo.sparks[i];
+        const on = sp > 0 && sp < 0.42;
+        const r0 = s.v * sp;
+        const g = 900 * sp * sp;
+        const ca = Math.cos(s.a);
+        const sa = Math.sin(s.a);
+        set(el, {
+          x1: 640 + ca * r0, y1: 262 + sa * r0 + g, x2: 640 + ca * (r0 + s.len), y2: 262 + sa * (r0 + s.len) + g,
+          opacity: on ? (1 - sp / 0.42).toFixed(2) : 0,
+        });
+      });
+      const fl = span(t, IMPACT, IMPACT + 0.16);
+      set(flash, {
+        transform: `translate(640 262) scale(${(0.4 + 0.9 * out(fl)).toFixed(2)})`,
+        opacity: fl > 0 && fl < 1 ? (1 - fl).toFixed(2) : 0,
       });
 
-      const travel = Math.min(x, left.pick) - left.scan;
+      const travel = Math.min(sx, at.press) - at.scan;
       set(belt, { "stroke-dashoffset": (-travel).toFixed(1) });
-      rollers.forEach((el) => {
-        const [tx] = el.getAttribute("transform")!.match(/[\d.]+/g)!;
-        set(el, { transform: `translate(${tx} 256) rotate(${((travel / 4) * 57.3).toFixed(1)})` });
-      });
+      rollers.forEach((el) => set(el, { transform: `translate(${el.dataset.x} 311) rotate(${((travel / 7) * 57.3).toFixed(1)})` }));
 
-      const tx = track(t, [[10.9, 640], [11.4, 755], [12.8, 755], [13.3, 895], [14.0, 895], [14.6, 640]]);
-      const carried = t >= 10.6 && t <= 13.7;
-      const hy = carried ? y : t < 13.7 ? track(t, [[10.3, 120], [10.6, 224]]) : track(t, [[13.7, 293], [14.0, 120]]);
       set(trolley, { transform: `translate(${tx.toFixed(2)} 0)` });
-      set(hook, { transform: `translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
-      set(cable, { x1: tx.toFixed(2), x2: tx.toFixed(2), y2: (hy - 5).toFixed(2) });
+      set(cable, { x1: tx.toFixed(2), x2: tx.toFixed(2), y2: (hy - 8).toFixed(2), transform: pivot });
+      set(spreader, { transform: `${pivot} translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
+      set(hookFront, { transform: `${pivot} translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
+      arms.forEach((el) => set(el, { transform: `translate(${(Number(el.dataset.arm) * 10 * (1 - grip)).toFixed(2)} 0)` }));
 
-      const dip = span(t, 11.55, 11.8) * (1 - span(t, 12.4, 12.6));
-      set(surface, { y1: 266 - dip * 2.5, y2: 266 + dip * 1.5 });
+      const sub = t >= 11.0 && t < 12.6 ? span(t, SPLASH, 11.15) * (1 - span(t, 12.3, 12.55)) : 0;
+      const lvl = 300 - 4 * sub;
+      const wave = (x: number) =>
+        6 * decay(t, SPLASH, 3, 14) * Math.sin(x * 0.09) + 3 * decay(t, 12.35, 3.5, 12) * Math.sin(x * 0.11 + 1) + 4 * decay(t, SPLASH, 2, 6) * Math.cos(x * 0.05);
+      const pts: P[] = [];
+      for (let x = 756; x <= 894; x += 6) pts.push({ x, y: lvl + wave(x) });
+      const line = pts.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y.toFixed(2)}`).join(" ");
+      set(water, { d: `${line} L894 392 L756 392 Z` });
+      set(surface, { d: line });
+
+      bubbles.forEach((el, i) => {
+        const b = geo.bubbles[i];
+        const on = t > 11.1 && t < 12.2 && heat * (1 - cool) > 0.15;
+        const p = ((t * 1.6 + b.phase) % 1 + 1) % 1;
+        set(el, { cx: (b.x + Math.sin(p * 9) * 3).toFixed(1), cy: (382 - p * 76).toFixed(1), r: on ? (1.5 + p * 2.5).toFixed(1) : 0 });
+      });
+      drops.forEach((el, i) => {
+        const d = geo.drops[i];
+        const u = t - SPLASH;
+        const y = lvl + d.vy * u + 0.5 * 1500 * u * u;
+        const on = u > 0 && y < lvl + 2;
+        set(el, { cx: (d.x + d.vx * u).toFixed(1), cy: y.toFixed(1), r: on ? d.r : 0 });
+      });
+      drips.forEach((el, i) => {
+        const d = geo.drips[i];
+        const u = t - 12.55 - d.delay;
+        const y = sy + SH + 2 + 0.5 * 1400 * u * u;
+        const on = u > 0 && y < 300 && t < 13.0;
+        set(el, { cx: d.x.toFixed(1), cy: y.toFixed(1), r: on ? 2.6 : 0 });
+      });
       puffs.forEach((el, i) => {
         const p = geo.puffs[i];
-        const life = span(t, 11.6 + p.delay, 11.6 + p.delay + 1.5);
+        const life = span(t, SPLASH + p.delay, SPLASH + p.delay + p.life);
         const on = life > 0 && life < 1;
         set(el, {
-          cx: (p.x + p.drift * life * 4).toFixed(1),
-          cy: (262 - 140 * life).toFixed(1),
-          r: on ? (7 + 26 * life).toFixed(1) : 0,
-          opacity: on ? (0.6 * (1 - life) * Math.min(1, life * 6)).toFixed(2) : 0,
+          cx: (p.x + p.drift * out(life)).toFixed(1),
+          cy: (296 - p.rise * out(life)).toFixed(1),
+          r: on ? lerp(p.r0, p.r1, out(life)).toFixed(1) : 0,
+          opacity: on ? (0.92 * Math.min(1, life * 6) * Math.pow(1 - life, 1.3)).toFixed(2) : 0,
         });
       });
 
-      bins.forEach((el, i) => {
-        const fall = span(t, 14.6 + i * 0.45, 15.0 + i * 0.45);
-        const dy = fall < 1 ? -260 * (1 - fall * fall) : 0;
-        set(el, { transform: `translate(0 ${dy.toFixed(1)})`, opacity: fall > 0 ? 1 : 0 });
+      const jaw = back(1.8)(span(t, 14.5, CLUNK));
+      jaws.forEach((el) => {
+        const side = Number(el.dataset.jaw);
+        set(el, { transform: `translate(${(side * 22 * (1 - jaw)).toFixed(2)} ${(-16 * (1 - jaw)).toFixed(2)})` });
       });
-      set(later, { opacity: span(t, 15.9, 16.3).toFixed(2) });
 
-      const measured = START * span(t, 0.7, 2.9);
-      const shown = t < 16.0 ? measured : lerp(START, AFTER, ease(span(t, 16.0, 17.0)));
-      const a = ((-130 + (260 * shown) / geo.gauge.max) * Math.PI) / 180;
-      set(needle, { x2: (geo.gauge.cx + 16 * Math.sin(a)).toFixed(1), y2: (geo.gauge.cy - 16 * Math.cos(a)).toFixed(1) });
-      const ok = span(t, 17.0, 17.2);
-      set(check, { opacity: ok.toFixed(2) });
-      set(checkMark, { opacity: ok.toFixed(2) });
+      const value = t < 15.0 ? measured : lerp(geo.start, geo.after, inOutBack(0.8)(span(t, 15.0, 15.9)));
+      const a = ((-130 + (260 * value) / gauge.max) * Math.PI) / 180;
+      set(needle, { x2: (gauge.cx + 21 * Math.sin(a)).toFixed(1), y2: (gauge.cy - 21 * Math.cos(a)).toFixed(1) });
+      set(ok, { fill: mix(LAMP.off, LAMP.on, span(t, 15.9, 16.05)) });
 
-      const lit = span(t, 0, 0.4) * (1 - span(t, 17.3, 17.7));
-      lamps.forEach((el) => set(el, { fill: mix(LAMP_OFF, LAMP_ON, lit) }));
-
-      count.textContent = kilo(t < 16.0 ? measured : shown);
-      const after = t >= 16.0;
-      star.hidden = !after;
-      countLabel.textContent = after ? "Starting load, later sessions" : t < 2.9 ? "Reading saved history" : "Tokens before you type";
-      countNote.hidden = after;
-      afterNote.hidden = !after;
-      root.classList.toggle("is-after", after);
-
-      rows.forEach((row, i) => {
-        row.classList.toggle("is-in", scanX - left.scan >= centre[row.dataset.row!] || t > 2.9);
-        row.classList.toggle("is-used", t >= 5.5 + i * 0.15);
+      lamps.forEach((el) => set(el, { fill: mix(LAMP.off, LAMP.on, lit(t, Number(el.dataset.lamp))) }));
+      cones.forEach((el, i) => {
+        const id = el.dataset.cone;
+        const v = id === "cart" ? lit(t, 99) : lit(t, id === "scan" ? 16.25 : 16.8);
+        set(el, { opacity: (v * (id === "cart" ? 0.05 : 0.032)).toFixed(3) });
+        set(bulbs[i], { opacity: (0.25 + 0.75 * v).toFixed(2) });
+        set(pools[i], { opacity: (v * 0.08).toFixed(3) });
       });
-      deadRow.classList.toggle("is-marked", t >= 6.0);
-      deadRow.classList.toggle("is-cut", t >= 8.45);
+      const dim = span(t, 16.3, 17.2);
+      dims.forEach((el) => (el.style.filter = dim > 0 ? `brightness(${(1 - 0.42 * dim).toFixed(3)})` : ""));
 
-      const beat = t >= END ? 4 : BEATS.filter((b) => t >= b).length - 1;
-      steps.forEach((el, i) => (el.hidden = i !== beat));
+      const shakeA = 7 * Math.exp(-sp * 12) * (sp > 0 && sp < 0.5 ? 1 : 0) + 1.6 * Math.exp(-(t - CLUNK) * 20) * (t > CLUNK && t < CLUNK + 0.2 ? 1 : 0);
+      const shx = Math.sin(t * 97) * shakeA;
+      const shy = Math.cos(t * 83) * shakeA * 0.7;
+      const vw = narrow.matches ? 560 : 1200;
+      const focus = track(t, [[0, 160], [3.0, 160], [3.9, 420], [6.0, 420], [6.75, 600], [9.95, 600], [10.75, 824], [12.8, 824], [13.6, 1035]]);
+      const camX = clamp(focus - vw / 2, 0, 1200 - vw);
+      set(view, { viewBox: `${(camX + shx).toFixed(2)} ${shy.toFixed(2)} ${vw} 460` });
+
+      const beat = BEATS.filter((b) => t >= b).length - 1;
+      progress.style.transform = `scaleX(${((beat + span(t, BEATS[beat], BEATS[beat + 1] ?? END)) / BEATS.length).toFixed(4)})`;
       beatButtons.forEach((el, i) => {
-        el.classList.toggle("is-active", i === Math.min(beat, 3) && beat < 4);
-        el.classList.toggle("is-done", i < beat);
+        el.classList.toggle("is-active", i === beat && t < END);
+        el.classList.toggle("is-done", i < beat || t >= END);
       });
-      const off = t >= 17.3;
-      status.classList.toggle("is-off", off);
-      statusText.textContent = off ? "Line off · setup holds" : t > 0 ? "Line running" : "Ready";
+      root.dataset.state = t >= END ? "done" : t > 0 ? "running" : "ready";
     }
 
     const still = matchMedia("(prefers-reduced-motion: reduce)");
     let raf = 0;
-    let from = 0;
-    let began = 0;
+    let shown = END;
 
     function play(at = 0) {
       cancelAnimationFrame(raf);
-      if (still.matches) return render(at >= END ? END : Math.min(END, BEATS[BEATS.indexOf(at) + 1] ?? END) - 0.01);
-      from = at;
-      began = performance.now();
+      if (still.matches) {
+        shown = STILLS[BEATS.indexOf(at)] ?? END;
+        return render(shown);
+      }
+      const began = performance.now();
       const frame = (now: number) => {
-        const t = from + (now - began) / 1000;
-        render(Math.min(t, END));
-        if (t < END) raf = requestAnimationFrame(frame);
+        shown = Math.min(END, at + (now - began) / 1000);
+        render(shown);
+        if (shown < END) raf = requestAnimationFrame(frame);
       };
       raf = requestAnimationFrame(frame);
     }
 
     $("[data-replay]").addEventListener("click", () => play(0));
     beatButtons.forEach((el, i) => el.addEventListener("click", () => play(BEATS[i])));
+    narrow.addEventListener("change", () => render(shown));
 
     if (still.matches) {
       root.classList.add("is-still");
       render(END);
       return;
     }
+    shown = 0;
     render(0);
     const seen = new IntersectionObserver(
       (entries) => {
@@ -547,7 +727,7 @@ const beats = [
         seen.disconnect();
         play(0);
       },
-      { threshold: 0.3 },
+      { threshold: 0.35 },
     );
     seen.observe(root);
   }
@@ -558,617 +738,456 @@ const beats = [
 <style>
   .forge {
     grid-column: 1 / -1;
-    margin: 8px 0 0;
+    margin: 0;
     padding: 0;
-  }
-
-  .forge-head {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--hair);
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .forge-head > * {
-    white-space: nowrap;
-  }
-
-  .fig-no {
-    color: var(--ink);
-  }
-
-  .fig-title {
-    color: var(--ink-2);
-  }
-
-  .status {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--ink-2);
-  }
-
-  .status i {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--green);
-  }
-
-  .status.is-off i {
-    background: transparent;
-    box-shadow: inset 0 0 0 1px var(--mute);
-  }
-
-  .status.is-off {
-    color: var(--cyan);
-  }
-
-  .replay {
-    padding: 6px 14px;
-    font: inherit;
-    letter-spacing: inherit;
-    color: var(--cyan);
-    background: none;
-    border: 1px solid var(--cyan-2);
-    cursor: pointer;
-  }
-
-  .replay:hover {
-    color: var(--prussian-deep);
-    background: var(--cyan);
-  }
-
-  .is-still .replay {
-    display: none;
-  }
-
-  .forge-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    overflow: hidden;
   }
 
   .stage {
-    min-width: 0;
-    padding: 18px 18px 0;
+    position: relative;
   }
 
   svg {
     display: block;
     width: 100%;
     height: auto;
-    overflow: visible;
   }
 
-  .ln {
-    fill: none;
-    stroke: var(--cyan-2);
-    stroke-width: 1.5;
+  .wall {
+    fill: #072039;
   }
 
-  .hair {
-    stroke: var(--hair);
-    stroke-width: 1;
+  .panel {
+    fill: #09263f;
   }
 
-  .body {
-    fill: #0d3557;
-    stroke: var(--cyan-2);
-    stroke-width: 1.5;
+  .floor {
+    fill: #051829;
   }
 
-  .ram {
-    fill: #134268;
+  .floor-edge {
+    fill: #10324f;
   }
 
-  .strike {
-    fill: var(--yellow);
+  .pool,
+  .cone {
+    fill: #eaf6ff;
   }
 
-  .lbl {
-    font-family: var(--mono);
-    font-size: 14px;
-    fill: var(--ink-2);
+  .f {
+    fill: #174670;
   }
 
-  .ram-lbl {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    fill: var(--yellow);
+  .t {
+    fill: #2c6898;
   }
 
-  .scrap-lbl {
-    font-size: 12px;
-    letter-spacing: 0.14em;
-    fill: var(--red);
+  .s {
+    fill: #0c2e4d;
   }
 
-  .bin-scrap {
-    fill: rgb(13 53 87 / 0.92);
-    stroke: var(--red);
+  .f.k {
+    fill: #11395d;
   }
 
-  .beam {
-    fill: var(--cyan);
+  .t.k {
+    fill: #215683;
   }
 
-  .lamp {
-    stroke: var(--cyan-2);
-    stroke-width: 1;
+  .s.k {
+    fill: #0a2540;
+  }
+
+  .f.y {
+    fill: #e2bd5c;
+  }
+
+  .t.y {
+    fill: #f7e3a6;
+  }
+
+  .s.y {
+    fill: #a8852f;
+  }
+
+  .rod {
+    fill: #0f3252;
+  }
+
+  .rod-steel {
+    fill: #3f6f97;
+  }
+
+  .hz-dark {
+    fill: #0c2e4d;
+  }
+
+  .hz-light {
+    fill: #f3d98b;
+  }
+
+  .vent {
+    fill: #0a2540;
   }
 
   .coil {
-    fill: none;
-    stroke-width: 3;
-    stroke-linejoin: round;
+    fill: #24496b;
+  }
+
+  .heat-pool,
+  .halo {
+    fill: #ff9447;
+  }
+
+  .halo.in {
+    fill: #ffb067;
+  }
+
+  .lamp {
+    fill: #163a5a;
   }
 
   .cable {
-    stroke: var(--cyan-2);
-    stroke-width: 1.5;
+    stroke: #5d84a6;
+    stroke-width: 2.5;
+  }
+
+  .wheel {
+    fill: #0a2540;
+  }
+
+  .rubber {
+    fill: #0a1c2e;
   }
 
   .belt-top {
-    stroke: var(--cyan);
-    stroke-width: 1.5;
-    stroke-dasharray: 10 6;
+    stroke: #2a5378;
+    stroke-width: 3;
+    stroke-dasharray: 16 10;
   }
 
   .roller {
-    fill: #0a2c4a;
-    stroke: var(--cyan-2);
-    stroke-width: 1.2;
+    fill: #10324f;
+  }
+
+  .roller-spoke {
+    stroke: #3f6f97;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .sheet {
-    fill: #e4f3fc;
-    stroke: var(--prussian-deep);
-    stroke-width: 1;
+    fill: #e8f4fc;
   }
 
-  .sheet-line {
-    stroke: #5a86a8;
-    stroke-width: 1.2;
+  .sheet.alt {
+    fill: #bcd7ea;
   }
 
-  .seg {
-    stroke: var(--prussian-deep);
-    stroke-width: 1.2;
+  .slab-shade {
+    fill: rgb(4 18 32 / 0.28);
   }
 
-  .hatch {
-    stroke: var(--red);
-    stroke-width: 2;
+  .sheen {
+    fill: rgb(255 255 255 / 0.55);
   }
 
-  .ruler {
-    stroke: var(--cyan);
-    stroke-width: 1;
+  .flag-pole {
+    stroke: #d7e9f5;
+    stroke-width: 2.5;
+    stroke-linecap: round;
   }
 
-  .tag-line {
-    stroke: var(--red);
-    stroke-width: 1.2;
+  .flag {
+    fill: #ff8a6b;
   }
 
-  .tag {
-    fill: var(--red);
+  .flag-t {
+    font-family: var(--mono);
+    font-size: 17px;
+    font-weight: 600;
+    fill: #2a0d06;
   }
 
-  .spark {
-    stroke: var(--yellow);
-    stroke-width: 2;
+  .tank-in {
+    fill: #061a2d;
+  }
+
+  .water {
+    fill: rgb(108 190 238 / 0.42);
+  }
+
+  .surface {
+    fill: none;
+    stroke: #b9e5fb;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+  }
+
+  .bubble {
+    fill: none;
+    stroke: #d6effc;
+    stroke-width: 1.4;
+  }
+
+  .glint {
+    stroke: rgb(255 255 255 / 0.12);
+    stroke-width: 3;
     stroke-linecap: round;
   }
 
   .shard {
-    fill: #24527a;
-    stroke: var(--red);
-    stroke-width: 1;
-  }
-
-  .water {
-    fill: rgb(159 220 250 / 0.2);
-  }
-
-  .surface {
-    stroke: var(--cyan);
-    stroke-width: 1.5;
-  }
-
-  .puff {
-    fill: #eaf7ff;
-  }
-
-  .cool {
-    fill: var(--cyan);
-    stroke: var(--prussian-deep);
-    stroke-width: 1.2;
-  }
-
-  .seam {
-    stroke: var(--prussian-deep);
-    stroke-width: 1.2;
-  }
-
-  .bin {
-    fill: rgb(13 53 87 / 0.35);
-    stroke: var(--cyan);
-    stroke-width: 1.5;
+    fill: #2d4b68;
+    stroke: #45698b;
+    stroke-width: 2;
     stroke-linejoin: round;
   }
 
-  .mark-before {
-    fill: var(--red);
+  .scrap-rim {
+    fill: #ff8a6b;
+  }
+
+  .tyre {
+    fill: #0a1c2e;
+  }
+
+  .hub {
+    fill: #2c6898;
+  }
+
+  .dial-ring {
+    fill: #2c6898;
+  }
+
+  .dial {
+    fill: #061a2d;
+  }
+
+  .tick {
+    stroke: #6fa3c9;
+    stroke-width: 2;
+  }
+
+  .ghost {
+    stroke: #ff8a6b;
+    stroke-width: 3;
   }
 
   .needle {
-    stroke: var(--ink);
+    stroke: #f2f9ff;
+    stroke-width: 3;
+    stroke-linecap: round;
+  }
+
+  .hub-dot {
+    fill: #f2f9ff;
+  }
+
+  .lcd {
+    fill: #051626;
+  }
+
+  .readout {
+    font-family: var(--mono);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    fill: #5f8fb4;
+    transition: fill 0.3s;
+  }
+
+  .is-measured .readout {
+    fill: #9fdcfa;
+  }
+
+  .beam {
+    fill: #9fdcfa;
+  }
+
+  .scanline {
+    stroke: #d6f2ff;
+    stroke-width: 2.5;
+  }
+
+  .lens {
+    fill: #9fdcfa;
+  }
+
+  .drop {
+    fill: #c8eafc;
+  }
+
+  .puff {
+    fill: #e6f2fa;
+  }
+
+  .puff.b {
+    fill: #bcd5e7;
+  }
+
+  .spark {
+    stroke: #ffd98a;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+
+  .flash {
+    fill: #fff6dc;
+  }
+
+  .cord {
+    stroke: #0f3252;
     stroke-width: 2;
-    stroke-linecap: round;
   }
 
-  .needle-hub {
-    fill: var(--ink);
+  .shade {
+    fill: #1c4b74;
   }
 
-  .check {
-    fill: var(--green);
+  .bulb {
+    fill: #fff6dc;
   }
 
-  .check-mark {
-    fill: none;
-    stroke: var(--prussian-deep);
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .beats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin: 14px -18px 0;
-    padding: 0;
-    list-style: none;
+  .rail {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 12px 0 0;
     border-top: 1px solid var(--hair);
   }
 
-  .beats li + li {
-    border-left: 1px solid var(--hair);
+  .beats {
+    position: relative;
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
   .beats button {
-    display: grid;
-    align-content: start;
-    width: 100%;
-    height: 100%;
-    gap: 2px;
-    padding: 14px 16px 16px;
-    text-align: left;
-    font: inherit;
+    padding: 16px 22px 15px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
     color: var(--mute);
     background: none;
     border: 0;
     cursor: pointer;
-    transition: color 0.3s, background 0.3s;
+    transition: color 0.3s;
   }
 
-  .beats button:hover {
-    background: rgb(159 220 250 / 0.04);
-  }
-
-  .beats button:focus-visible {
-    outline: 1px dashed var(--cyan);
-    outline-offset: -4px;
-  }
-
-  .beat-no,
-  .beat-title,
-  .beat-sub {
-    font-family: var(--mono);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .beat-no {
-    font-size: 11px;
-  }
-
-  .beat-title {
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  .beat-hook {
-    margin-top: 4px;
-    font-size: 21px;
-    line-height: 1.15;
-    text-wrap: balance;
-  }
-
-  .beat-sub {
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
-    text-transform: none;
-  }
-
+  .beats button:hover,
   .beats .is-done {
     color: var(--ink-2);
   }
 
   .beats .is-active {
     color: var(--ink);
-    background: rgb(159 220 250 / 0.06);
-    box-shadow: inset 0 2px 0 var(--cyan);
   }
 
-  .beats .is-active .beat-no,
-  .beats .is-active .beat-title {
-    color: var(--cyan);
+  .beats button:focus-visible,
+  .replay:focus-visible {
+    outline: 1px dashed var(--cyan);
+    outline-offset: -4px;
   }
 
-  .is-still .beats button {
-    color: var(--ink-2);
+  .progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 2px;
+    background: var(--cyan);
+    transform: scaleX(0);
+    transform-origin: left;
   }
 
-  .panel {
-    display: flex;
-    flex-direction: column;
-    padding: 22px 24px 20px;
-    border-left: 1px solid var(--hair);
+  .is-still .progress {
+    display: none;
   }
 
-  .pn-label {
-    margin: 0;
+  .credit {
+    margin: 0 0 0 auto;
     font-family: var(--mono);
     font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--cyan);
-  }
-
-  .pn-count {
-    margin: 6px 0 4px;
-    font-size: 66px;
-    font-weight: 300;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .pn-count b {
-    font-weight: 300;
-  }
-
-  .is-after .pn-count b {
-    color: var(--cyan);
-  }
-
-  .pn-star {
-    margin-left: 2px;
-    font-size: 34px;
-    vertical-align: top;
-    color: var(--yellow);
-  }
-
-  .pn-note {
-    margin: 0 0 16px;
-    font-size: 15px;
-    line-height: 1.45;
-    color: var(--ink-2);
-  }
-
-  .pn-note em {
-    font-style: normal;
-    color: var(--yellow);
-  }
-
-  .chip {
-    margin-right: 6px;
-    padding: 1px 6px;
-    font-family: var(--mono);
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--prussian-deep);
-    background: var(--yellow);
-  }
-
-  .pn-rows {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--mono);
-    font-size: 12.5px;
-  }
-
-  .pn-rows th {
-    padding: 0 0 6px;
-    font-size: 10.5px;
-    font-weight: 400;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    text-align: left;
+    letter-spacing: 0.04em;
     color: var(--mute);
-    border-bottom: 1px solid var(--hair);
-  }
-
-  .pn-rows th:nth-child(2),
-  .pn-rows td:nth-child(2) {
-    text-align: right;
-    padding-right: 12px;
-  }
-
-  .pn-rows td {
-    padding: 6px 0;
-    color: var(--ink-2);
     white-space: nowrap;
-    opacity: 0.25;
-    transition: opacity 0.4s, color 0.4s;
   }
 
-  .pn-rows tr.is-in td {
-    opacity: 1;
-  }
-
-  .used {
-    opacity: 0;
-    transition: opacity 0.4s;
-  }
-
-  .is-used .used {
-    opacity: 1;
-  }
-
-  .used.note {
-    color: var(--mute);
-  }
-
-  .is-marked td {
-    color: var(--red);
-  }
-
-  .cut-note {
-    display: none;
-    margin-left: 6px;
-    color: var(--yellow);
-  }
-
-  .is-cut td:first-child,
-  .is-cut td:nth-child(2) {
-    text-decoration: line-through;
-    text-decoration-thickness: 1px;
-  }
-
-  .is-cut .used {
-    display: none;
-  }
-
-  .is-cut .cut-note {
-    display: inline;
-    margin: 0;
-  }
-
-  .steps {
-    margin-top: auto;
-    padding-top: 16px;
-  }
-
-  .steps p {
-    min-height: 6.6em;
-    margin: 0;
-    padding-top: 14px;
-    font-size: 15px;
-    line-height: 1.45;
-    color: var(--ink);
-    border-top: 1px solid var(--hair);
-  }
-
-  .steps code {
-    display: inline-block;
-    margin-top: 6px;
+  .replay {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
     color: var(--cyan);
+    background: none;
+    border: 1px solid var(--hair);
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s, background 0.2s;
   }
 
-  figcaption {
-    padding: 12px 20px 14px;
-    font-family: var(--mono);
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--mute);
-    border-top: 1px solid var(--hair);
+  [data-state="done"] .replay {
+    opacity: 1;
+    pointer-events: auto;
   }
 
-  @media (max-width: 1080px) {
-    .forge-body {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .panel {
-      border-left: 0;
-      border-top: 1px solid var(--hair);
-    }
-
-    .steps p {
-      min-height: 0;
-    }
+  .replay:hover {
+    background: rgb(159 220 250 / 0.1);
   }
 
-  @media (max-width: 720px) {
-    .fig-title {
-      display: none;
+  .replay svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .is-still .replay {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .rail {
+      flex-wrap: wrap;
+      gap: 0;
+      padding: 0;
     }
 
     .beats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      flex: 1 0 100%;
     }
 
-    .beats li:nth-child(3) {
-      border-left: 0;
-    }
-
-    .beats li:nth-child(n + 3) {
-      border-top: 1px solid var(--hair);
-    }
-
-    .beat-hook {
-      font-size: 18px;
-    }
-  }
-
-  @media (max-width: 560px) {
-    .fig-no {
-      display: none;
-    }
-
-    .forge-head {
-      gap: 10px;
-      padding: 12px 14px;
-      font-size: 11px;
-      letter-spacing: 0.1em;
-    }
-
-    .stage {
-      padding: 12px 8px 0;
-    }
-
-    .beats {
-      margin: 10px -8px 0;
+    .beats li {
+      flex: 1;
     }
 
     .beats button {
-      padding: 12px;
+      width: 100%;
+      padding: 14px 0 13px;
+      font-size: 11.5px;
+      letter-spacing: 0.1em;
     }
 
-    .lbl {
-      display: none;
+    .credit {
+      margin: 0;
+      padding: 0 14px 14px;
+      font-size: 11.5px;
     }
 
-    svg :is(.ln, .body, .bin, .belt-top, .roller, .cable, .surface) {
-      vector-effect: non-scaling-stroke;
-      stroke-width: 1px;
-    }
-
-    .panel {
-      padding: 18px 14px;
-    }
-
-    .pn-count {
-      font-size: 54px;
-    }
-
-    .pn-rows {
-      font-size: 12px;
-    }
-
-    figcaption {
-      padding: 12px 14px;
+    .replay {
+      margin: 0 10px 10px auto;
+      width: 30px;
+      height: 30px;
     }
   }
 </style>
