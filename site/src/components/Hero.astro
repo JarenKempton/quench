@@ -1,87 +1,48 @@
 ---
 import Command from "./Command.astro";
-import run from "../samples/run.json";
 import { inputTokens, kilo, layerChars, layers, percent, requests, servers, skillUse, startTokens } from "../context.ts";
 import type { Copy, Part } from "../conveyor.ts";
 
 const tokens = (chars: number) => Math.round((chars / layerChars) * startTokens);
-const builtin = run.startingContext.parts.find((p) => p.kind === "tools");
-const builtinCount = builtin && "count" in builtin ? builtin.count : 0;
-const instructions = run.startingContext.parts.find((p) => p.kind === "instructions");
-const files = instructions && "files" in instructions ? instructions.files : 0;
 
 const measured: Part[] = layers.map((l) => {
-  const base = { tokens: tokens(l.chars), used: "", idle: false };
-  if (l.kind === "system") return { ...base, short: "SYSTEM", detail: "prompt", label: "system prompt", color: "var(--ink)" };
-  if (l.kind === "tools")
-    return {
-      ...base,
-      short: "TOOLS",
-      detail: `${builtinCount} built in`,
-      label: "built-in tools",
-      color: "var(--yellow)",
-    };
+  const base = { tokens: tokens(l.chars), used: "" };
   if (l.kind === "mcp_tools") {
     const s = servers.find((x) => l.name.endsWith(x.server));
-    const called = s?.called ?? 0;
-    const listed = s?.tools ?? 0;
-    return {
-      ...base,
-      used: `${called}/${listed} called`,
-      idle: called === 0,
-      short: (s?.server ?? "").toUpperCase(),
-      detail: `MCP · ${listed} tools`,
-      label: `mcp ${s?.server}`,
-      color: "var(--magenta)",
-    };
+    return { ...base, name: l.name, used: `${s?.called ?? 0} of ${s?.tools ?? 0} tools used` };
   }
-  if (l.kind === "instructions")
-    return { ...base, short: "CLAUDE.md", detail: `${files} files`, label: "instruction files", color: "var(--green)" };
-  return {
-    ...base,
-    used: `${skillUse.used}/${skillUse.listed} used`,
-    idle: skillUse.used === 0,
-    short: "SKILLS",
-    detail: `${skillUse.listed} listed`,
-    label: "skill list",
-    color: "var(--red)",
-  };
+  if (l.kind === "skills") return { ...base, name: "Skills", used: `${skillUse.used} of ${skillUse.listed} used` };
+  return { ...base, name: l.name };
 });
 
 const largest = measured.reduce((a, b) => (b.tokens > a.tokens ? b : a));
 const parts = [...measured.filter((p) => p !== largest), largest];
 
 const copy: Copy = {
-  resent: `sent again on each of ${requests} model calls: ${percent((startTokens * requests) / inputTokens)} of input`,
-  decide: "You decide what to cut.",
-  command: "$ quench profile mcp",
+  caption: "Example session",
+  total: kilo(startTokens),
+  unit: "tokens",
+  rows: [
+    "loaded at session start",
+    `sent with each of ${requests} model calls`,
+    `${percent((startTokens * requests) / inputTokens)} of input tokens`,
+  ],
 };
 
-const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.used})` : ""}`).join(", ");
+const summary = parts.map((p) => `${p.name} ${kilo(p.tokens)}${p.used ? `, ${p.used}` : ""}`).join("; ");
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-copy">
-    <p class="eyebrow">A context profiler for coding agents</p>
-    <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
-  </div>
-  <div class="hero-side">
-    <p class="lede">
-      System prompt, tools, MCP servers, instruction files and skills ride along on every model call, and much of it is
-      never used. Quench reads the history Claude Code, Codex and Pi already keep and measures each piece, so you can
-      trim it.
-    </p>
-    <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
-      <Command text="quench" />
-    </div>
+  <h1 id="hero-title">See what your coding agents load, what it costs, and where they go wrong.</h1>
+  <div class="hero-foot">
+    <p class="lede">Quench reads the session history Claude Code, Codex and Pi already keep on your machine.</p>
+    <Command text="quench" />
   </div>
   <figure class="conveyor" data-parts={JSON.stringify(parts)} data-copy={JSON.stringify(copy)}>
     <svg aria-hidden="true"></svg>
     <figcaption class="visually-hidden">
-      A conveyor carries each layer of a sample Claude Code session's starting context, read from its history. A press
-      forges each one to its measured size, a quench sets it, a stamper tags how much of it was used, and a cart collects
-      it: {summary}. {kilo(startTokens)} tokens in all, {copy.resent}. {copy.decide}
+      Each part of an example session's starting context drops onto a belt, is pressed to its measured size, cooled,
+      and stacked on a cart: {summary}. {copy.caption}: {copy.total} {copy.unit}, {copy.rows.join(", ")}.
     </figcaption>
   </figure>
 </section>
@@ -94,69 +55,46 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
 
 <style>
   .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    gap: 24px clamp(32px, 5vw, 72px);
-    align-items: end;
-    padding: clamp(32px, 4.5vw, 52px) 0 0;
-  }
-
-  .eyebrow {
-    margin: 0 0 20px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--cyan);
+    padding: clamp(32px, 4.5vw, 56px) 0 0;
   }
 
   h1 {
-    font-size: clamp(44px, 5.6vw, 80px);
+    max-width: 17em;
+    font-size: clamp(36px, 4.8vw, 66px);
     font-weight: 400;
-    line-height: 0.96;
-    letter-spacing: -0.035em;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
     text-wrap: balance;
   }
 
-  .lede {
-    max-width: 30em;
-    margin: 0 0 24px;
-    font-size: 18px;
-    line-height: 1.55;
-    color: var(--ink-2);
-  }
-
-  .hero-actions {
+  .hero-foot {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    gap: 14px 28px;
+    margin-top: clamp(18px, 2.4vw, 28px);
   }
 
-  .hero-copy > *,
-  .hero-side > * {
+  .lede {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  .hero > h1,
+  .hero-foot {
     animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 
-  .hero-copy > :nth-child(2) {
-    animation-delay: 0.06s;
-  }
-
-  .hero-side > :nth-child(1) {
-    animation-delay: 0.14s;
-  }
-
-  .hero-side > :nth-child(2) {
-    animation-delay: 0.2s;
+  .hero-foot {
+    animation-delay: 0.1s;
   }
 
   .conveyor {
-    grid-column: 1 / -1;
-    --hot: #ffad66;
-    --hot-core: #fff0d4;
     position: relative;
-    height: 404px;
-    margin: clamp(12px, 2vw, 20px) calc(-1 * var(--pad)) 0;
+    height: 420px;
+    margin: clamp(24px, 3vw, 36px) calc(-1 * var(--pad)) 0;
     background: var(--plate);
     border-top: 1px solid var(--hair);
     border-bottom: 1px solid var(--hair);
@@ -177,15 +115,9 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
     }
   }
 
-  @media (max-width: 960px) {
-    .hero {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
   @media (max-width: 900px) {
     .conveyor {
-      height: 510px;
+      height: 540px;
     }
   }
 
@@ -201,298 +133,119 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
     font-family: var(--mono);
   }
 
-  .qc-shadow {
-    fill: rgb(2 14 26 / 0.55);
-  }
-
-  .qc-body {
-    stroke-width: 1.5;
-  }
-
-  .qc-name {
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    fill: var(--prussian-deep);
-  }
-
-  .qc-detail {
-    fill: var(--prussian-deep);
-    opacity: 0.75;
-  }
-
-  .qc-dim {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 1;
-  }
-
-  .qc-value {
-    font-weight: 600;
-    fill: var(--ink);
-  }
-
-  .qc-stamp rect {
-    fill: var(--prussian-deep);
-    stroke: var(--ink-2);
-    stroke-width: 1.5;
-  }
-
-  .qc-stamp text {
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    fill: var(--ink-2);
-  }
-
-  .qc-stamp.qc-idle rect {
-    stroke: var(--red);
-  }
-
-  .qc-stamp.qc-idle text {
-    fill: var(--red);
-  }
-
-  .qc-num {
-    fill: var(--mute);
-    letter-spacing: 0.12em;
-  }
-
-  .conveyor .qc-verb {
-    font-family: var(--sans);
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    fill: var(--ink);
-  }
-
-  .conveyor .qc-verb-line {
-    fill: none;
-    stroke: rgb(159 220 250 / 0.42);
-    stroke-width: 1;
-  }
-
-  .qc-rail {
-    stroke: var(--hair);
-    stroke-width: 2;
-  }
-
-  .qc-hopper {
+  .qc-machine {
     fill: var(--prussian);
     stroke: var(--cyan-2);
     stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
-  .qc-belt {
-    fill: var(--prussian-deep);
+  .qc-machine.qc-open {
+    fill: none;
+  }
+
+  .qc-line {
+    fill: none;
     stroke: var(--cyan-2);
     stroke-width: 1.5;
+  }
+
+  .qc-hub {
+    fill: var(--cyan-2);
   }
 
   .qc-tread {
-    stroke: var(--cyan);
-    stroke-width: 2;
-    stroke-dasharray: 3 13;
-  }
-
-  .qc-tread-return {
-    stroke: var(--mute);
-  }
-
-  .qc-roller {
-    fill: var(--prussian);
-    stroke: var(--cyan);
-    stroke-width: 1;
-  }
-
-  .qc-spoke {
-    stroke: var(--cyan);
-    stroke-width: 1;
-  }
-
-  .qc-head {
-    fill: var(--prussian);
     stroke: var(--cyan-2);
     stroke-width: 1.5;
+    stroke-dasharray: 10 14;
   }
 
-  .qc-rod {
-    fill: var(--prussian);
-    stroke: var(--cyan-2);
-    stroke-width: 1.5;
+  .qc-piece {
+    stroke: none;
   }
 
-  .qc-slab {
-    fill: var(--cyan);
-  }
-
-
-  .qc-hazard-a {
-    fill: var(--yellow);
-  }
-
-  .qc-hazard-b {
-    fill: var(--prussian-deep);
-  }
-
-  .qc-streak {
-    fill: none;
-    stroke: var(--ink);
-    stroke-width: 2;
-    stroke-linecap: round;
-  }
-
-
-
-  .qc-label {
-    fill: var(--ink-2);
-  }
-
-  .qc-label-value {
-    font-weight: 600;
-    fill: var(--ink);
-  }
-
-  .qc-label-usage {
-    fill: var(--mute);
-  }
-
-  .qc-label-usage.qc-idle {
-    fill: var(--red);
-  }
-
-  .conveyor .qc-counter {
-    font-family: var(--sans);
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    fill: var(--ink);
-  }
-
-  .conveyor .qc-counter.qc-counter-done {
-    fill: var(--prussian-deep);
-  }
-
-  .qc-hot {
-    fill: var(--hot-core);
-    stroke: var(--hot);
-    stroke-width: 2;
-  }
-
-  .qc-hot.qc-flash {
-    fill: var(--ink);
-    stroke: var(--ink);
-  }
-
-  .qc-value.qc-value-hot {
-    fill: var(--hot);
-  }
-
-  .qc-spark {
-    fill: var(--hot);
-  }
-
-  .conveyor .qc-station-note {
-    fill: var(--mute);
-    letter-spacing: 0.02em;
-  }
-
-  .conveyor .qc-station-note.qc-station-note-on {
-    fill: var(--ink-2);
-  }
-
-  .qc-leg {
-    fill: none;
-    stroke: var(--hair);
-    stroke-width: 2;
-  }
-
-  .qc-tank {
-    fill: none;
-    stroke: var(--cyan-2);
+  .qc-piece.qc-raw {
+    fill: rgb(169 203 226 / 0.14);
+    stroke: var(--ink-2);
     stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
-  .qc-tank-water {
-    fill: rgb(159 220 250 / 0.22);
+  .qc-cool {
+    fill: var(--cyan);
   }
 
-  .qc-drop {
-    fill: var(--cyan);
+  .qc-value {
+    font-weight: 500;
+    fill: var(--ink);
   }
 
   .qc-water {
     fill: none;
     stroke: var(--cyan);
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-dasharray: 7 6;
-  }
-
-  .qc-hood-body {
-    fill: var(--prussian);
-    stroke: var(--cyan-2);
     stroke-width: 1.5;
-    stroke-linejoin: round;
+    stroke-linecap: round;
   }
 
-  .qc-nozzle {
-    fill: var(--cyan);
+  .qc-spray {
+    stroke-dasharray: 6 5;
+  }
+
+  .qc-tank-water {
+    fill: rgb(159 220 250 / 0.14);
   }
 
   .qc-steam {
-    fill: var(--ink);
-  }
-
-  .qc-pad {
-    fill: var(--ink-2);
-  }
-
-  .qc-pad.qc-idle {
-    fill: var(--red);
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.5;
+    stroke-linecap: round;
   }
 
   .qc-tray {
-    fill: rgb(8 38 64 / 0.85);
+    fill: var(--prussian-deep);
     stroke: var(--cyan-2);
     stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
-  .qc-post {
-    fill: none;
-    stroke: var(--cyan-2);
-    stroke-width: 3;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .qc-platform {
-    fill: var(--cyan-2);
-  }
-
-  .qc-wheel {
-    fill: var(--prussian);
-    stroke: var(--cyan);
-    stroke-width: 1.5;
-  }
-
-  .qc-line {
+  .qc-label {
     fill: var(--ink-2);
+    white-space: pre;
   }
 
-  .qc-decide {
+  .qc-label-value {
+    font-weight: 500;
     fill: var(--ink);
   }
 
-  .qc-command {
-    fill: var(--cyan);
+  .qc-label-used {
+    fill: var(--mute);
   }
 
-  .qc-counter-block {
-    fill: var(--cyan);
+  .conveyor .qc-caption,
+  .conveyor .qc-row,
+  .conveyor .qc-counter {
+    font-family: var(--sans);
   }
 
   .qc-caption {
-    letter-spacing: 0.16em;
-    fill: var(--cyan);
+    fill: var(--mute);
+  }
+
+  .qc-counter {
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    fill: var(--ink);
+  }
+
+  .qc-unit {
+    font-weight: 400;
+    letter-spacing: 0;
+    fill: var(--ink-2);
+  }
+
+  .qc-row {
+    fill: var(--ink-2);
   }
 </style>
