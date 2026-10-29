@@ -1,4 +1,4 @@
-import { inputTokens, kilo, layers, requests, servers, skillUse, startTokens } from "./context.ts";
+import { inputTokens, kilo, layers, requests, startTokens } from "./context.ts";
 
 type Point = [number, number];
 type Attrs = Record<string, string>;
@@ -7,28 +7,26 @@ export const W = 960;
 export const H = 460;
 export const BELT = 250;
 export const FLOOR = 440;
-export const CYCLE = 2.4;
-export const MOVE = 0.85;
+export const CYCLE = 2.1;
+export const MOVE = 0.75;
 export const PITCH = 225;
-export const SLOTS = 8;
 export const SLAB_W = 124;
-export const RAM_UP = 106;
+export const RAM_UP = 124;
 export const LEFT_END = 450;
 export const RIGHT_START = 636;
 export const BELT_END = 700;
 export const ROLLERS = [10, 100, 190, 280, 370];
 export const TANK_L = 470;
 export const TANK_R = 620;
-export const BEAM = 118;
 export const WATER = 284;
 export const CART_X = 840;
 export const CART_TOP = 402;
 export const WHEELS = [-52, 52];
-export const STEAM = 9;
+export const STEAM = 5;
 
 const STACK_H = 140;
 const DIP = 122;
-const IMPACT = 0.35;
+const IMPACT = 0.42;
 const SUBMERGED = 0.45;
 
 export const station = (p: number) => 95 + p * PITCH;
@@ -80,20 +78,14 @@ const sackOutline = (w: number, h: number, seed: number) => {
 };
 
 const creases = (w: number, h: number, seed: number) =>
-  [0, 1, 2].map((i) => {
+  [0, 1].map((i) => {
     const side = i === 1 ? 1 : -1;
-    const x0 = side * w * (0.18 + 0.12 * rand(seed + i));
-    const y0 = -h * (0.82 - 0.12 * i);
-    const x1 = x0 + side * w * 0.14;
+    const x0 = side * w * (0.2 + 0.1 * rand(seed + i));
+    const y0 = -h * 0.8;
+    const x1 = x0 + side * w * 0.12;
     const y1 = y0 + h * 0.2;
-    return `M${f(x0)} ${f(y0)}Q${f(x0 + side * w * 0.12)} ${f(y0 + h * 0.02)} ${f(x1)} ${f(y1)}`;
+    return `M${f(x0)} ${f(y0)}Q${f(x0 + side * w * 0.1)} ${f(y0 + h * 0.02)} ${f(x1)} ${f(y1)}`;
   });
-
-const used = (l: (typeof layers)[number]) => {
-  if (l.kind === "skills") return { used: skillUse.used, of: skillUse.listed };
-  const server = servers.find((s) => l.name === `MCP: ${s.server}`);
-  return server ? { used: server.called, of: server.tools } : null;
-};
 
 export const items = [...layers]
   .sort((a, b) => b.share - a.share)
@@ -101,9 +93,8 @@ export const items = [...layers]
     const w = 116 + l.share * 100;
     const h = 64 + l.share * 120;
     return {
-      name: l.name,
+      name: l.kind === "skills" ? "Skills" : l.name,
       tokens: l.share * startTokens,
-      use: used(l),
       w,
       h,
       slab: Math.max(6, l.share * STACK_H),
@@ -120,31 +111,32 @@ export const stack = items.map((it) => {
   floorY -= it.slab;
   return { bottom, top: floorY };
 });
-export const stackTop = floorY;
+
+export const END = (items.length + 2) * CYCLE + MOVE + 0.5;
 
 const ramBottom = (j: number, dwell: number) => {
-  if (j >= items.length) return RAM_UP;
+  if (j < 0 || j >= items.length) return RAM_UP;
   const stop = BELT - items[j].slab;
-  const down = easeIn(span(dwell, 0.05, IMPACT));
-  const up = inOut(span(dwell, 0.85, 1.35));
-  return RAM_UP + (stop - RAM_UP) * down * (1 - up);
+  const lift = 10 * Math.sin(Math.PI * span(dwell, 0, 0.18));
+  const down = easeIn(span(dwell, 0.18, IMPACT));
+  const up = inOut(span(dwell, 0.8, 1.25));
+  return RAM_UP - lift + (stop - RAM_UP) * down * (1 - up);
 };
 
 const platDepth = (j: number, dwell: number) =>
-  j < items.length ? DIP * inOut(span(dwell, 0.08, SUBMERGED)) * (1 - inOut(span(dwell, 0.95, 1.4))) : 0;
+  j >= 0 && j < items.length ? DIP * inOut(span(dwell, 0.08, SUBMERGED)) * (1 - inOut(span(dwell, 0.9, 1.3))) : 0;
 
 const wave = (y: number, amp: number, t: number) => {
   let d = `M${TANK_L + 2} ${f(y)}`;
   for (let x = TANK_L + 2; x < TANK_R - 2; x += 12) {
-    const dy = amp * Math.sin(x * 0.12 - t * 9) + 1.5 * Math.sin(x * 0.05 + t * 2);
-    d += `L${Math.min(x + 12, TANK_R - 2)} ${f(y + dy)}`;
+    d += `L${Math.min(x + 12, TANK_R - 2)} ${f(y + amp * Math.sin(x * 0.12 - t * 9))}`;
   }
   return d;
 };
 
-export const STILL = SLOTS * CYCLE + MOVE + 1.3;
-
-export function scene(t: number) {
+export function scene(time: number) {
+  const t = Math.min(time, END);
+  const n = items.length;
   const c = Math.floor(t / CYCLE);
   const tau = t - c * CYCLE;
   const e = inOut(clamp01(tau / MOVE));
@@ -161,60 +153,54 @@ export function scene(t: number) {
   attrs.rs = spin(RIGHT_START, 12);
   attrs.re = spin(BELT_END, 12);
 
-  const pj = mod(c - 1, SLOTS);
-  const pressing = pj < items.length;
+  const pj = c - 1;
   const ram = ramBottom(pj, dwell);
   const since = dwell - IMPACT;
-  const shake = pressing && since > 0 ? 3 * Math.exp(-since * 14) * Math.cos(since * 60) : 0;
-  attrs.press = { transform: `translate(0 ${f(shake)})` };
   attrs.ram = { transform: `translate(0 ${f(ram - RAM_UP)})` };
-  attrs.rod = { height: f(ram - 20 - 84) };
-  attrs.impact = { opacity: f(pressing ? (since >= 0 ? 1 - span(since, 0, 0.22) : 0) : 0) };
+  attrs.rod = { height: f(Math.max(0, ram - 22 - 84)) };
 
-  const tj = mod(c - 2, SLOTS);
-  const dipping = tj < items.length;
+  const tj = c - 2;
+  const dipping = tj >= 0 && tj < n;
   const depth = platDepth(tj, dwell);
   const plat = BELT + depth;
   attrs.plat = { transform: `translate(0 ${f(depth)})` };
-  attrs.cable0 = { y2: f(plat) };
-  attrs.cable1 = { y2: f(plat) };
   const level = WATER - (dipping ? 7 * (depth / DIP) * (items[tj].slab / 66) : 0);
   attrs.water = { y: f(level), height: f(FLOOR - 4 - level) };
-  const ripple = dipping ? 5 * Math.exp(-Math.max(0, dwell - 0.3) * 3) * span(depth, 0, 20) : 0;
+  const ripple = dipping ? 4 * Math.exp(-Math.max(0, dwell - 0.3) * 3) * span(depth, 0, 20) : 0;
   attrs.surface = { d: wave(level, ripple, t) };
 
   const life = dwell - (SUBMERGED - 0.05);
   for (let i = 0; i < STEAM; i++) {
-    const l = dipping ? span(life, i * 0.06, i * 0.06 + 0.7) : 0;
+    const l = dipping ? span(life, i * 0.08, i * 0.08 + 0.8) : 0;
     const seed = tj * 17 + i;
-    const x = TANK_X + (rand(seed) - 0.5) * 110 + (rand(seed + 1) - 0.5) * 50 * l;
-    const y = level - 4 - 120 * easeOut(l);
+    const x = TANK_X + (rand(seed) - 0.5) * 100 + (rand(seed + 1) - 0.5) * 40 * l;
+    const y = level - 6 - 110 * easeOut(l);
     attrs[`st${i}`] = {
       opacity: f(l > 0 && l < 1 ? (1 - l) * Math.min(1, l * 6) : 0),
-      transform: `translate(${f(x)} ${f(y)}) scale(${f(0.5 + 1.3 * l)})`,
+      transform: `translate(${f(x)} ${f(y)}) scale(${f(0.6 + 1.2 * l)})`,
     };
   }
 
   items.forEach((it, j) => {
-    const p = mod(c - j, SLOTS);
+    const p = c - j;
     const key = `b${j}`;
     let px = station(p - 1) + e * PITCH;
     let y = BELT;
     let rot = 0;
-    let visible = p <= 3;
+    let visible = p >= 0 && p <= 3;
     let sx = 1;
     let sy = 1;
     let slab = p >= 2;
-    let heat = p === 2 ? 1 - span(dwell, SUBMERGED, 1.0) : p >= 3 ? 0 : 1;
+    const heat = p === 2 ? 1 - span(dwell, SUBMERGED, 1.0) : p >= 3 ? 0 : 1;
     let springX = 1;
 
-    if (p === 1 && pressing && pj === j) {
+    if (p === 1) {
       if (since < 0) {
         sy = Math.min(it.h, BELT - ram) / it.h;
         sx = Math.min(1 + 0.55 * (1 - sy), 214 / it.w);
       } else {
         slab = true;
-        springX = 1 + 0.35 * (1 - outBack(span(since, 0, 0.3)));
+        springX = 1 + 0.3 * (1 - outBack(span(since, 0, 0.3)));
       }
     }
     if (p === 2 && dwell >= 0) y = plat;
@@ -235,23 +221,14 @@ export function scene(t: number) {
     attrs[`${key}t`] = { opacity: f(1 - span(heat, 0, 0.5)) };
   });
 
-  const k = mod(c - 3, SLOTS);
-  const landed = k < items.length ? k + (tau >= MOVE ? 1 : 0) : k === items.length ? items.length : 0;
-  let cartDx = 0;
-  if (k === items.length) cartDx = 320 * easeIn(span(tau, 0.15, 1.9));
-  if (k === items.length + 1) cartDx = 240 * (1 - easeOut(span(tau, 0.1, 1.5)));
-  attrs.cart = { transform: `translate(${f(cartDx)} 0)` };
-  WHEELS.forEach((x, i) => (attrs[`w${i}`] = { transform: `rotate(${f((cartDx / 12) * (180 / Math.PI))} ${CART_X + x} 427)` }));
+  const landed = Math.max(0, Math.min(n, c - 3 + (tau >= MOVE ? 1 : 0)));
   items.forEach((_, j) => (attrs[`s${j}`] = { opacity: j < landed ? "1" : "0" }));
-  const strap = k === items.length - 1 ? inOut(span(dwell, 0.15, 0.6)) : k === items.length ? 1 : 0;
-  attrs.straps = { opacity: f(Math.min(1, strap * 3)), transform: `translate(0 ${f(-30 * (1 - strap))})` };
-  attrs.lamp = { "data-on": strap >= 1 ? "1" : "0" };
 
-  const fresh = k < items.length && tau >= MOVE ? k : -1;
+  const fresh = c - 3 >= 0 && c - 3 < n && tau >= MOVE ? c - 3 : -1;
   const count =
-    items.slice(0, landed).reduce((n, it) => n + it.tokens, 0) -
+    items.slice(0, landed).reduce((sum, it) => sum + it.tokens, 0) -
     (fresh >= 0 ? items[fresh].tokens * (1 - easeOut(span(dwell, 0, 0.5))) : 0);
   texts.count = kilo(count);
 
-  return { attrs, texts, rows: items.map((_, j) => (j === fresh && dwell < 1.2 ? "now" : j < landed ? "on" : "off")) };
+  return { attrs, texts };
 }

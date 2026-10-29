@@ -1,20 +1,12 @@
 ---
 import Command from "./Command.astro";
 import Conveyor from "./Conveyor.astro";
-import { kilo, startTokens } from "../context.ts";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-head">
-    <p class="eyebrow">A context profiler for coding agents</p>
-    <h1 id="hero-title">Your agent loads <em>{kilo(startTokens)} tokens</em> before you type.</h1>
-  </div>
+  <h1 id="hero-title">See what your coding agents load, what it costs, and where they go wrong.</h1>
   <div class="hero-side">
-    <p class="lede">
-      System prompt, tools, MCP servers, instruction files and skills ride into every model call, swollen with things
-      the agent never touches. Quench reads the history Claude Code, Codex and Pi already keep and weighs each piece, so
-      you know what to cut.
-    </p>
+    <p class="lede">Quench reads the session history Claude Code, Codex and Pi already keep on your machine.</p>
     <div class="hero-actions">
       <a class="btn" href="#install">Install</a>
       <Command text="quench" />
@@ -22,7 +14,6 @@ import { kilo, startTokens } from "../context.ts";
   </div>
   <div class="hero-scene">
     <Conveyor />
-    <p class="hero-note">Slab thickness is each layer's share of the starting load in a sample Claude Code run.</p>
   </div>
 </section>
 
@@ -35,24 +26,16 @@ import { kilo, startTokens } from "../context.ts";
     padding: clamp(28px, 3.5vw, 44px) 0 56px;
   }
 
-  .eyebrow {
-    margin: 0 0 18px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--cyan);
-  }
-
   h1 {
-    font-size: clamp(38px, 4.6vw, 60px);
-    line-height: 1.02;
+    margin: 0;
+    font-size: clamp(36px, 4.2vw, 56px);
+    line-height: 1.04;
     text-wrap: balance;
   }
 
   .lede {
     margin: 0 0 20px;
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1.6;
     color: var(--ink-2);
   }
@@ -69,14 +52,7 @@ import { kilo, startTokens } from "../context.ts";
     margin-top: 8px;
   }
 
-  .hero-note {
-    margin: 14px 0 0;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--mute);
-  }
-
-  .hero-head,
+  h1,
   .hero-side,
   .hero-scene {
     animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -107,10 +83,6 @@ import { kilo, startTokens } from "../context.ts";
   @media (max-width: 560px) {
     .hero {
       padding: 32px 0 48px;
-    }
-
-    .lede {
-      font-size: 16px;
     }
 
     .hero-scene {

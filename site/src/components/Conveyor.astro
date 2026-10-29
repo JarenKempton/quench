@@ -1,10 +1,10 @@
 ---
 import {
-  BEAM,
   BELT,
   BELT_END,
   CART_TOP,
   CART_X,
+  END,
   FLOOR,
   H,
   LEFT_END,
@@ -14,272 +14,168 @@ import {
   ROLLERS,
   SLAB_W,
   STEAM,
-  STILL,
   TANK_L,
   TANK_R,
   TANK_X,
   W,
-  WATER,
   WHEELS,
   items,
   resentShare,
   scene,
   stack,
-  stackTop,
 } from "../conveyor.ts";
-import { inputTokens, kilo, percent, requests, startTokens } from "../context.ts";
+import { kilo, percent, requests, servers, skillUse, startTokens } from "../context.ts";
 
-const { attrs: a, texts, rows } = scene(STILL);
+const { attrs: a, texts } = scene(END);
 const half = SLAB_W / 2;
-const stages = [
-  { n: "01", name: "Bloat in", note: "loaded before you type" },
-  { n: "02", name: "Squeeze", note: "each layer weighed" },
-  { n: "03", name: "Quench", note: "read after the fact" },
-  { n: "04", name: "Lock in & deliver", note: "one measured profile" },
+const rollers = [
+  ...ROLLERS.map((x, i) => ({ k: `r${i}`, x, r: 8 })),
+  { k: "rl", x: LEFT_END, r: 12 },
+  { k: "rs", x: RIGHT_START, r: 12 },
+  { k: "re", x: BELT_END, r: 12 },
 ];
-const heat = [-34, 0, 34];
+const browser = servers.find((s) => s.server === "browser")!;
+const steps = [
+  { x: 95, word: "Load" },
+  { x: PRESS_X, word: "Measure" },
+  { x: TANK_X, word: "Quench" },
+  { x: CART_X, word: "Stack" },
+];
+const rows = [
+  { label: `Resent on all ${requests} calls`, value: `${percent(resentShare)} of input` },
+  { label: "MCP: browser", value: `${browser.called} of ${browser.tools} tools used` },
+  { label: "Skills", value: `${skillUse.used} of ${skillUse.listed} used` },
+];
 ---
 
 <figure class="conveyor" data-conveyor>
-  <figcaption class="conveyor-bar">
-    <span><b>Fig. 1</b> Starting load<span class="conveyor-sub">, one sample Claude Code run</span></span>
-    <button type="button" class="conveyor-toggle" data-toggle aria-pressed="false">Pause</button>
-  </figcaption>
+  <div class="conveyor-line">
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby="conveyor-desc">
+      <desc id="conveyor-desc">
+        Six sacks, one per context layer in an example Claude Code session, ride a belt into a press that flattens each
+        into a hot slab as thick as that layer's share of the starting load. Each slab is quenched in a water tank and
+        stacked on a cart, which ends up holding {kilo(startTokens)} tokens.
+      </desc>
 
-  <div class="conveyor-body">
-    <div class="conveyor-line">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-labelledby="conveyor-desc">
-        <desc id="conveyor-desc">
-          A conveyor carries six swollen sacks, one per context layer, into a press that squeezes each into a hot slab
-          as thick as that layer's share of the starting load. A hoist dips each slab into a quench tank, where it steams
-          and sets. The cooled slabs stack on a cart, get strapped down and roll out as one {kilo(startTokens)}-token
-          load.
-        </desc>
-        <defs>
-          <pattern id="cv-hazard" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="7" height="14" class="cv-hazard"></rect>
-          </pattern>
-          <pattern id="cv-ground" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-            <line x1="0" y1="0" x2="0" y2="9" class="cv-ground-line"></line>
-          </pattern>
-        </defs>
+      <line x1="0" y1={FLOOR} x2={W} y2={FLOOR} class="cv-line"></line>
 
-        <g class="cv-ground">
-          <rect x="0" y={FLOOR} width={W} height="20" fill="url(#cv-ground)"></rect>
-          <line x1="0" y1={FLOOR} x2={W} y2={FLOOR} class="cv-floor"></line>
-        </g>
+      <g class="cv-machine">
+        {[40, 150, 680].map((x) => <rect x={x} y={BELT + 24} width="10" height={FLOOR - BELT - 24}></rect>)}
+        <path d={`M-60 ${BELT}H${LEFT_END}A12 12 0 0 1 ${LEFT_END} ${BELT + 24}H-60Z`}></path>
+        <path
+          d={`M${RIGHT_START} ${BELT}H${BELT_END}A12 12 0 0 1 ${BELT_END} ${BELT + 24}H${RIGHT_START}A12 12 0 0 1 ${RIGHT_START} ${BELT}Z`}
+        ></path>
+        <line x1="-60" y1={BELT + 3} x2={LEFT_END} y2={BELT + 3} class="cv-tread" data-k="tread-l" {...a["tread-l"]}></line>
+        <line x1={RIGHT_START} y1={BELT + 3} x2={BELT_END} y2={BELT + 3} class="cv-tread" data-k="tread-r" {...a["tread-r"]}></line>
+        {
+          rollers.map(({ k, x, r }) => (
+            <g data-k={k} {...a[k]}>
+              <circle cx={x} cy={BELT + 12} r={r}></circle>
+              <line x1={x - r} y1={BELT + 12} x2={x + r} y2={BELT + 12} class="cv-line"></line>
+            </g>
+          ))
+        }
+      </g>
 
-        <g class="cv-machine">
-          {[40, 150, 680].map((x) => <rect x={x} y={BELT + 24} width="10" height={FLOOR - BELT - 24}></rect>)}
-          <path d={`M-60 ${BELT}H${LEFT_END}A12 12 0 0 1 ${LEFT_END} ${BELT + 24}H-60Z`} class="cv-band"></path>
-          <path
-            d={`M${RIGHT_START} ${BELT}H${BELT_END}A12 12 0 0 1 ${BELT_END} ${BELT + 24}H${RIGHT_START}A12 12 0 0 1 ${RIGHT_START} ${BELT}Z`}
-            class="cv-band"
-          ></path>
-          <line x1="-60" y1={BELT + 3} x2={LEFT_END} y2={BELT + 3} class="cv-tread" data-k="tread-l" {...a["tread-l"]}></line>
-          <line x1={RIGHT_START} y1={BELT + 3} x2={BELT_END} y2={BELT + 3} class="cv-tread" data-k="tread-r" {...a["tread-r"]}></line>
-          {
-            ROLLERS.map((x, i) => (
-              <g data-k={`r${i}`} {...a[`r${i}`]}>
-                <circle cx={x} cy={BELT + 12} r="8"></circle>
-                <line x1={x - 8} y1={BELT + 12} x2={x + 8} y2={BELT + 12} class="cv-detail"></line>
+      <g class="cv-machine">
+        <rect x={PRESS_X - 128} y="40" width="16" height={FLOOR - 40}></rect>
+        <rect x={PRESS_X + 112} y="40" width="16" height={FLOOR - 40}></rect>
+        <rect x={PRESS_X - 30} y="6" width="60" height="34" rx="3"></rect>
+        <rect x={PRESS_X - 144} y="34" width="288" height="50" rx="4"></rect>
+        <rect x={PRESS_X - 9} y="84" width="18" data-k="rod" {...a.rod}></rect>
+        <rect x={PRESS_X - 108} y={RAM_UP - 22} width="216" height="22" rx="2" data-k="ram" {...a.ram}></rect>
+      </g>
+
+      <g class="cv-machine">
+        <rect x={TANK_L} y={BELT + 10} width={TANK_R - TANK_L} height={FLOOR - BELT - 10} class="cv-tank"></rect>
+        <rect x={TANK_X - 66} y={BELT} width="132" height="7" rx="1" data-k="plat" {...a.plat}></rect>
+      </g>
+
+      <g class="cv-machine">
+        <path d={`M${CART_X + 78} ${CART_TOP}L${CART_X + 86} ${CART_TOP - 92}H${CART_X + 98}`} class="cv-handle"></path>
+        <rect x={CART_X - 78} y={CART_TOP} width="156" height="10" rx="2"></rect>
+        {WHEELS.map((x) => <circle cx={CART_X + x} cy="427" r="12"></circle>)}
+      </g>
+
+      <g>
+        {
+          items.map((it, j) => (
+            <g data-k={`s${j}`} {...a[`s${j}`]}>
+              <rect x={CART_X - half} y={stack[j].top} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
+              {it.slab >= 15 && (
+                <text x={CART_X} y={(stack[j].top + stack[j].bottom) / 2 + 5} class="cv-stamp">
+                  {kilo(it.tokens)}
+                </text>
+              )}
+            </g>
+          ))
+        }
+      </g>
+
+      <g>
+        {
+          items.map((it, j) => (
+            <g data-k={`b${j}`} {...a[`b${j}`]}>
+              <g data-k={`b${j}s`} {...a[`b${j}s`]}>
+                <path d={it.outline} class="cv-sack"></path>
+                {it.creases.map((d) => <path d={d} class="cv-crease"></path>)}
+                <path d={`M-4 ${-it.h - 3}L-13 ${-it.h - 15}L-2 ${-it.h - 9}L5 ${-it.h - 17}L4 ${-it.h - 3}`} class="cv-sack"></path>
+                <text x="0" y={-it.h * 0.4} class="cv-name">{it.name}</text>
               </g>
-            ))
-          }
-          {
-            [
-              ["rl", LEFT_END],
-              ["rs", RIGHT_START],
-              ["re", BELT_END],
-            ].map(([k, x]) => (
-              <g data-k={k} {...a[k as string]}>
-                <circle cx={x} cy={BELT + 12} r="12"></circle>
-                <line x1={(x as number) - 12} y1={BELT + 12} x2={(x as number) + 12} y2={BELT + 12} class="cv-detail"></line>
-                <line x1={x} y1={BELT} x2={x} y2={BELT + 24} class="cv-detail"></line>
-              </g>
-            ))
-          }
-        </g>
-
-        <g class="cv-machine" data-k="press" {...a.press}>
-          <rect x={PRESS_X - 128} y="40" width="16" height={FLOOR - 40}></rect>
-          <rect x={PRESS_X + 112} y="40" width="16" height={FLOOR - 40}></rect>
-          <rect x={PRESS_X - 26} y="6" width="52" height="26" rx="3"></rect>
-          <rect x={PRESS_X - 144} y="30" width="288" height="54" rx="4"></rect>
-          <line x1={PRESS_X - 144} y1="46" x2={PRESS_X + 144} y2="46" class="cv-detail"></line>
-          <rect x={PRESS_X - 9} y="84" width="18" class="cv-rod" data-k="rod" {...a.rod}></rect>
-          <g data-k="ram" {...a.ram}>
-            <rect x={PRESS_X - 108} y={RAM_UP - 22} width="216" height="22" rx="2"></rect>
-            <rect x={PRESS_X - 108} y={RAM_UP - 8} width="216" height="8" class="cv-plain cv-stripes"></rect>
-          </g>
-        </g>
-
-        <g class="cv-machine">
-          <rect x={TANK_L - 4} y={BEAM} width="8" height={BELT + 10 - BEAM}></rect>
-          <rect x={TANK_R - 4} y={BEAM} width="8" height={BELT + 10 - BEAM}></rect>
-          <rect x={TANK_L - 14} y={BEAM - 16} width={TANK_R - TANK_L + 28} height="16" rx="2"></rect>
-          <rect x={TANK_X - 26} y={BEAM - 38} width="52" height="22" rx="3"></rect>
-          <circle cx={TANK_X} cy={BEAM - 27} r="5" class="cv-drum"></circle>
-          <line x1={TANK_X - 50} y1={BEAM} x2={TANK_X - 50} class="cv-cable" data-k="cable0" {...a.cable0}></line>
-          <line x1={TANK_X + 50} y1={BEAM} x2={TANK_X + 50} class="cv-cable" data-k="cable1" {...a.cable1}></line>
-          <rect x={TANK_L} y={BELT + 10} width={TANK_R - TANK_L} height={FLOOR - BELT - 10} class="cv-tank"></rect>
-        </g>
-
-        <g class="cv-machine" data-k="plat" {...a.plat}>
-          <rect x={TANK_X - 66} y={BELT} width="132" height="7" rx="1"></rect>
-        </g>
-
-        <g class="cv-cart" data-k="cart" {...a.cart}>
-          <g class="cv-machine">
-            <path d={`M${CART_X + 78} ${CART_TOP}L${CART_X + 86} ${CART_TOP - 92}H${CART_X + 98}`} class="cv-handle"></path>
-            <rect x={CART_X - 78} y={CART_TOP} width="156" height="10" rx="2"></rect>
-            {
-              WHEELS.map((x, i) => (
-                <g data-k={`w${i}`} {...a[`w${i}`]}>
-                  <circle cx={CART_X + x} cy="427" r="12"></circle>
-                  <line x1={CART_X + x - 12} y1="427" x2={CART_X + x + 12} y2="427" class="cv-detail"></line>
-                </g>
-              ))
-            }
-          </g>
-          {
-            items.map((it, j) => (
-              <g data-k={`s${j}`} {...a[`s${j}`]}>
-                <rect x={CART_X - half} y={stack[j].top} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
+              <g data-k={`b${j}m`} {...a[`b${j}m`]}>
+                <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
+                <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-hot" data-k={`b${j}h`} {...a[`b${j}h`]}></rect>
                 {it.slab >= 15 && (
-                  <text x={CART_X} y={(stack[j].top + stack[j].bottom) / 2 + 5} class="cv-stamp">
+                  <text x="0" y={-it.slab / 2 + 5} class="cv-stamp" data-k={`b${j}t`} {...a[`b${j}t`]}>
                     {kilo(it.tokens)}
                   </text>
                 )}
               </g>
-            ))
-          }
-          <g data-k="straps" {...a.straps} class="cv-straps">
-            {[-44, 38].map((dx) => <rect x={CART_X + dx} y={stackTop - 4} width="6" height={CART_TOP - stackTop + 4}></rect>)}
-            <rect x={CART_X - 50} y={stackTop - 8} width="100" height="6" rx="1"></rect>
-            <circle cx={CART_X} cy={stackTop - 18} r="6" class="cv-lamp" data-k="lamp" {...a.lamp}></circle>
-          </g>
-        </g>
-
-        <g class="cv-items">
-          {
-            items.map((it, j) => (
-              <g data-k={`b${j}`} {...a[`b${j}`]}>
-                <g data-k={`b${j}s`} {...a[`b${j}s`]}>
-                  <g class="cv-sack" style={`animation-delay:${-j * 0.37}s`}>
-                    <path d={it.outline} class="cv-sack-body"></path>
-                    {it.creases.map((d) => <path d={d} class="cv-crease"></path>)}
-                    <path
-                      d={`M-4 ${-it.h - 3}L-13 ${-it.h - 15}L-2 ${-it.h - 9}L5 ${-it.h - 17}L4 ${-it.h - 3}`}
-                      class="cv-sack-body"
-                    ></path>
-                    <text x="0" y={-it.h * 0.4} class="cv-sack-name">{it.name}</text>
-                  </g>
-                </g>
-                <g data-k={`b${j}m`} {...a[`b${j}m`]}>
-                  <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-solid"></rect>
-                  <rect x={-half} y={-it.slab} width={SLAB_W} height={it.slab} class="cv-hot" data-k={`b${j}h`} {...a[`b${j}h`]}></rect>
-                  <g data-k={`b${j}t`} {...a[`b${j}t`]}>
-                    {it.slab >= 15 && (
-                      <text x="0" y={-it.slab / 2 + 5} class="cv-stamp">
-                        {kilo(it.tokens)}
-                      </text>
-                    )}
-                  </g>
-                  <g data-k={`b${j}h`} class="cv-heat" {...a[`b${j}h`]}>
-                    {heat.map((dx, i) => (
-                      <path
-                        d={`M${dx} ${-it.slab - 6}q5 -7 0 -14q-5 -7 0 -14`}
-                        style={`animation-delay:${-i * 0.33}s`}
-                      ></path>
-                    ))}
-                  </g>
-                </g>
-              </g>
-            ))
-          }
-          <g data-k="impact" {...a.impact} class="cv-impact">
-            {[-1, 1].map((s) =>
-              [6, 16, 26].map((dy, i) => (
-                <line
-                  x1={PRESS_X + s * (half + 14 + i * 6)}
-                  y1={BELT - dy}
-                  x2={PRESS_X + s * (half + 38 + i * 8)}
-                  y2={BELT - dy}
-                ></line>
-              )),
-            )}
-          </g>
-        </g>
-
-        <g class="cv-bath">
-          <rect x={TANK_L + 2} width={TANK_R - TANK_L - 4} class="cv-water" data-k="water" {...a.water}></rect>
-          <path class="cv-surface" data-k="surface" {...a.surface}></path>
-          <rect x={TANK_L} y={BELT + 10} width={TANK_R - TANK_L} height={FLOOR - BELT - 10} class="cv-tank-front"></rect>
-        </g>
-
-        <g class="cv-steam">
-          {
-            Array.from({ length: STEAM }, (_, i) => (
-              <g data-k={`st${i}`} {...a[`st${i}`]}>
-                <circle cx="0" cy="0" r="12"></circle>
-                <circle cx={i % 2 ? 9 : -9} cy="-5" r="8"></circle>
-              </g>
-            ))
-          }
-        </g>
-      </svg>
-
-      <ol class="conveyor-stages">
-        {
-          stages.map((s) => (
-            <li>
-              <span class="cv-num">{s.n}</span> {s.name}
-              <small>{s.note}</small>
-            </li>
+            </g>
           ))
         }
-      </ol>
-    </div>
+      </g>
 
-    <div class="conveyor-panel">
-      <p class="cv-kicker">Tokens before you type</p>
-      <p class="cv-count">
-        <span aria-hidden="true" data-count>{texts.count}</span>
-        <span class="visually-hidden">{kilo(startTokens)}</span>
-      </p>
-      <p class="cv-resent">
-        Resent on all {requests} model calls: <b>{percent(resentShare)}</b> of the run's {kilo(inputTokens)} input tokens.
-      </p>
-      <table class="cv-layers">
-        <thead>
-          <tr>
-            <th scope="col">Layer</th>
-            <th scope="col">Tokens</th>
-            <th scope="col">Used</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            items.map((it, j) => (
-              <tr data-row={rows[j]}>
-                <th scope="row">{it.name}</th>
-                <td>{kilo(it.tokens)}</td>
-                <td class={it.use?.used === 0 ? "cv-zero" : undefined}>
-                  {it.use ? `${it.use.used} of ${it.use.of}` : "—"}
-                </td>
-              </tr>
-            ))
-          }
-        </tbody>
-      </table>
-      <p class="cv-next">You decide what to cut: <code>quench profile mcp</code></p>
-    </div>
+      <rect x={TANK_L + 2} width={TANK_R - TANK_L - 4} class="cv-water" data-k="water" {...a.water}></rect>
+      <path class="cv-surface" data-k="surface" {...a.surface}></path>
+      <rect x={TANK_L} y={BELT + 10} width={TANK_R - TANK_L} height={FLOOR - BELT - 10} class="cv-tank-front"></rect>
+
+      <g class="cv-steam">
+        {Array.from({ length: STEAM }, (_, i) => <circle r="11" data-k={`st${i}`} {...a[`st${i}`]}></circle>)}
+      </g>
+    </svg>
+
+    <ol class="conveyor-steps">
+      {steps.map((s) => <li style={`left:${(s.x / W) * 100}%`}>{s.word}</li>)}
+    </ol>
+
+    <button type="button" class="conveyor-toggle" data-toggle aria-label="Replay">
+      <svg viewBox="0 0 16 16" aria-hidden="true" data-icon="play"><path d="M4 2.5v11l9-5.5z"></path></svg>
+      <svg viewBox="0 0 16 16" aria-hidden="true" data-icon="pause"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"></path></svg>
+    </button>
+  </div>
+
+  <div class="conveyor-panel">
+    <p class="cv-count">
+      <span aria-hidden="true" data-count>{texts.count}</span>
+      <span class="visually-hidden">{kilo(startTokens)}</span>
+    </p>
+    <p class="cv-unit">tokens at session start <span>example</span></p>
+    <dl class="cv-rows">
+      {
+        rows.map((r) => (
+          <div>
+            <dt>{r.label}</dt>
+            <dd>{r.value}</dd>
+          </div>
+        ))
+      }
+    </dl>
   </div>
 </figure>
 
 <script>
-  import { scene, STILL } from "../conveyor.ts";
+  import { END, scene } from "../conveyor.ts";
 
   const root = document.querySelector<HTMLElement>("[data-conveyor]");
   if (root) {
@@ -289,53 +185,56 @@ const heat = [-34, 0, 34];
       els.set(key, [...(els.get(key) ?? []), el]);
     }
     const count = root.querySelector<HTMLElement>("[data-count]")!;
-    const rows = [...root.querySelectorAll<HTMLElement>("[data-row]")];
     const button = root.querySelector<HTMLButtonElement>("[data-toggle]")!;
     const still = matchMedia("(prefers-reduced-motion: reduce)");
-    let t = STILL;
+    let t = still.matches ? END : 0;
     let last = 0;
     let frame = 0;
-    let onScreen = true;
+    let onScreen = false;
     let paused = still.matches;
 
     const draw = () => {
-      const { attrs, texts, rows: states } = scene(t);
+      const { attrs, texts } = scene(t);
       for (const key in attrs) {
         for (const el of els.get(key) ?? []) {
           for (const name in attrs[key]) el.setAttribute(name, attrs[key][name]);
         }
       }
       if (count.textContent !== texts.count) count.textContent = texts.count;
-      rows.forEach((row, j) => row.dataset.row !== states[j] && (row.dataset.row = states[j]));
+    };
+
+    const running = () => onScreen && !paused && t < END;
+
+    const label = () => {
+      const state = t >= END ? "replay" : paused ? "play" : "pause";
+      button.dataset.state = state;
+      button.setAttribute("aria-label", { replay: "Replay", play: "Play", pause: "Pause" }[state]);
     };
 
     const tick = (now: number) => {
-      if (last) t += Math.min(0.05, (now - last) / 1000);
+      if (last) t = Math.min(END, t + Math.min(0.05, (now - last) / 1000));
       last = now;
       draw();
-      frame = requestAnimationFrame(tick);
+      if (running()) frame = requestAnimationFrame(tick);
+      else label();
     };
 
     const sync = () => {
       cancelAnimationFrame(frame);
       last = 0;
-      if (onScreen && !paused) frame = requestAnimationFrame(tick);
-      button.textContent = paused ? "Play" : "Pause";
-      button.setAttribute("aria-pressed", String(paused));
+      if (running()) frame = requestAnimationFrame(tick);
+      label();
     };
 
     button.addEventListener("click", () => {
-      paused = !paused;
+      if (t >= END) {
+        t = 0;
+        paused = false;
+      } else paused = !paused;
+      draw();
       sync();
     });
-    still.addEventListener("change", () => {
-      paused = still.matches;
-      if (paused) {
-        t = STILL;
-        draw();
-      }
-      sync();
-    });
+    draw();
     new IntersectionObserver(([entry]) => {
       onScreen = entry.isIntersecting;
       sync();
@@ -346,60 +245,15 @@ const heat = [-34, 0, 34];
 
 <style>
   .conveyor {
-    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
     margin: 0;
     border: 1px solid var(--hair);
     background: rgb(7 34 58 / 0.94);
-    box-shadow: 0 0 0 6px rgb(12 50 83 / 0.55);
-  }
-
-  .conveyor-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 16px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--mute);
-    border-bottom: 1px solid var(--hair);
-  }
-
-  .conveyor-bar b {
-    font-weight: 500;
-    color: var(--cyan);
-    margin-right: 10px;
-  }
-
-  .conveyor-toggle {
-    padding: 4px 10px;
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: var(--ink-2);
-    background: none;
-    border: 1px solid var(--hair);
-    cursor: pointer;
-  }
-
-  .conveyor-toggle:hover {
-    color: var(--cyan);
-    border-color: var(--cyan-2);
-  }
-
-  .conveyor-toggle:focus-visible {
-    outline: 1px dashed var(--cyan);
-    outline-offset: 3px;
-  }
-
-  .conveyor-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 330px;
   }
 
   .conveyor-line {
+    position: relative;
     min-width: 0;
     overflow: hidden;
   }
@@ -408,54 +262,17 @@ const heat = [-34, 0, 34];
     display: block;
     width: 100%;
     height: auto;
-    font-family: var(--mono);
   }
 
   .cv-machine rect,
   .cv-machine circle,
-  .cv-band {
+  .cv-machine path {
     fill: #0a2d4c;
     stroke: var(--cyan-2);
     stroke-width: 1.5;
   }
 
-  .cv-machine .cv-plain {
-    stroke: none;
-  }
-
-  .cv-machine .cv-stripes {
-    fill: url(#cv-hazard);
-  }
-
-  .cv-hazard {
-    fill: rgb(243 217 139 / 0.75);
-  }
-
-  .cv-ground-line {
-    stroke: rgb(159 220 250 / 0.2);
-    stroke-width: 1;
-  }
-
-  .cv-floor {
-    stroke: var(--cyan-2);
-    stroke-width: 1.5;
-  }
-
-  .cv-detail {
-    stroke: var(--cyan-2);
-    stroke-width: 1.2;
-    fill: none;
-  }
-
-  .cv-machine .cv-rod {
-    fill: #123d61;
-  }
-
-  .cv-machine .cv-drum {
-    fill: #123d61;
-  }
-
-  .cv-cable {
+  .cv-line {
     stroke: var(--cyan-2);
     stroke-width: 1.5;
   }
@@ -464,43 +281,36 @@ const heat = [-34, 0, 34];
     fill: var(--prussian-deep);
   }
 
-  .cv-tread {
+  .cv-machine .cv-tread {
     stroke: rgb(159 220 250 / 0.45);
     stroke-width: 3;
     stroke-dasharray: 3 12;
   }
 
-  .cv-handle {
+  .cv-machine .cv-handle {
     fill: none;
-    stroke: var(--cyan-2);
     stroke-width: 3;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
 
   .cv-sack {
-    animation: breathe 2.2s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: 50% 100%;
-  }
-
-  .cv-sack-body {
     fill: #33283a;
     stroke: var(--red);
-    stroke-width: 1.6;
+    stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
   .cv-crease {
     fill: none;
     stroke: rgb(255 148 121 / 0.55);
-    stroke-width: 1.2;
+    stroke-width: 1.5;
     stroke-linecap: round;
   }
 
-  .cv-sack-name {
+  .cv-name {
     font-family: var(--sans);
-    font-size: 16px;
+    font-size: 17px;
     fill: var(--ink);
     text-anchor: middle;
   }
@@ -513,29 +323,16 @@ const heat = [-34, 0, 34];
 
   .cv-hot {
     fill: var(--red);
-    stroke: #ffc0a8;
+    stroke: var(--prussian-deep);
     stroke-width: 1.5;
   }
 
-  .cv-heat path {
-    fill: none;
-    stroke: var(--red);
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    animation: shimmer 1s ease-in-out infinite;
-  }
-
   .cv-stamp {
+    font-family: var(--mono);
     font-size: 15px;
     font-weight: 600;
     fill: var(--prussian-deep);
     text-anchor: middle;
-  }
-
-  .cv-impact line {
-    stroke: var(--ink);
-    stroke-width: 1.4;
-    stroke-linecap: round;
   }
 
   .cv-water {
@@ -545,7 +342,7 @@ const heat = [-34, 0, 34];
   .cv-surface {
     fill: none;
     stroke: var(--cyan);
-    stroke-width: 2;
+    stroke-width: 1.5;
   }
 
   .cv-tank-front {
@@ -555,176 +352,111 @@ const heat = [-34, 0, 34];
   }
 
   .cv-steam circle {
-    fill: rgb(238 248 255 / 0.16);
-    stroke: rgb(238 248 255 / 0.75);
-    stroke-width: 1.2;
-  }
-
-  .cv-straps rect {
-    fill: var(--yellow);
-  }
-
-  .cv-lamp {
-    fill: #17405f;
-    stroke: var(--cyan-2);
+    fill: rgb(238 248 255 / 0.14);
+    stroke: rgb(238 248 255 / 0.7);
     stroke-width: 1.5;
   }
 
-  .cv-lamp[data-on="1"] {
-    fill: var(--green);
-    stroke: var(--green);
-  }
-
-  .conveyor-stages {
-    display: grid;
-    grid-template-columns: 205fr 225fr 240fr 290fr;
+  .conveyor-steps {
+    position: relative;
+    height: 40px;
     margin: 0;
-    padding: 4px 0 18px;
+    padding: 0;
     list-style: none;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    text-align: center;
-    color: var(--ink);
+    font-size: 15px;
+    color: var(--ink-2);
   }
 
-  .conveyor-stages small {
-    display: block;
-    margin-top: 4px;
-    font-size: 12px;
-    letter-spacing: 0;
-    text-transform: none;
-    color: var(--mute);
+  .conveyor-steps li {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
   }
 
-  .cv-num {
-    color: var(--cyan-2);
+  .conveyor-toggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--ink-2);
+    background: none;
+    border: 1px solid var(--hair);
+    cursor: pointer;
+  }
+
+  .conveyor-toggle svg {
+    width: 12px;
+    fill: currentColor;
+  }
+
+  .conveyor-toggle[data-state="pause"] [data-icon="play"],
+  .conveyor-toggle:not([data-state="pause"]) [data-icon="pause"] {
+    display: none;
+  }
+
+  .conveyor-toggle:hover {
+    color: var(--cyan);
+    border-color: var(--cyan-2);
+  }
+
+  .conveyor-toggle:focus-visible {
+    outline: 1px dashed var(--cyan);
+    outline-offset: 3px;
   }
 
   .conveyor-panel {
     display: flex;
     flex-direction: column;
-    padding: 22px 22px 20px;
+    justify-content: center;
+    padding: 28px 24px;
     border-left: 1px solid var(--hair);
   }
 
-  .cv-kicker {
-    margin: 0;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--cyan);
-  }
-
   .cv-count {
-    margin: 4px 0 6px;
-    font-size: 64px;
+    margin: 0;
+    font-size: 76px;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--ink);
   }
 
-  .cv-resent {
-    margin: 0 0 18px;
-    font-size: 14px;
-    line-height: 1.45;
+  .cv-unit {
+    margin: 8px 0 28px;
+    font-size: 16px;
     color: var(--ink-2);
   }
 
-  .cv-resent b {
-    font-weight: 500;
-    color: var(--yellow);
-  }
-
-  .cv-layers {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--mono);
-    font-size: 12.5px;
-  }
-
-  .cv-layers th,
-  .cv-layers td {
-    padding: 5px 0;
-    text-align: right;
-    font-weight: 400;
-    white-space: nowrap;
-  }
-
-  .cv-layers th:first-child {
-    text-align: left;
-  }
-
-  .cv-layers thead th {
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+  .cv-unit span {
+    margin-left: 6px;
     color: var(--mute);
-    border-bottom: 1px solid var(--hair);
   }
 
-  .cv-layers tbody tr {
-    color: var(--ink-2);
-    transition:
-      opacity 0.3s,
-      background-color 0.3s;
+  .cv-rows {
+    margin: 0;
   }
 
-  .cv-layers tbody tr[data-row="off"] {
-    opacity: 0.32;
+  .cv-rows div {
+    padding: 10px 0;
+    border-top: 1px solid var(--hair);
   }
 
-  .cv-layers tbody tr[data-row="now"] {
-    color: var(--ink);
-    background: rgb(159 220 250 / 0.1);
-  }
-
-  .cv-layers tbody th {
-    padding-left: 6px;
-  }
-
-  .cv-layers tbody td:last-child {
-    padding-right: 6px;
-  }
-
-  .cv-layers td:nth-child(2) {
-    color: var(--cyan);
-  }
-
-  .cv-layers .cv-zero {
-    color: var(--red);
-  }
-
-  .cv-next {
-    margin: auto 0 0;
-    padding-top: 16px;
+  .cv-rows dt {
     font-size: 14px;
-    color: var(--ink-2);
+    color: var(--mute);
   }
 
-  .cv-next code {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--cyan);
-  }
-
-  @keyframes breathe {
-    50% {
-      transform: scale(1.035, 0.975);
-    }
-  }
-
-  @keyframes shimmer {
-    50% {
-      transform: translateY(-4px);
-      opacity: 0.4;
-    }
+  .cv-rows dd {
+    margin: 2px 0 0;
+    font-size: 17px;
+    color: var(--ink);
   }
 
   @media (max-width: 980px) {
-    .conveyor-body {
+    .conveyor {
       grid-template-columns: minmax(0, 1fr);
     }
 
@@ -735,33 +467,22 @@ const heat = [-34, 0, 34];
   }
 
   @media (max-width: 640px) {
-    .conveyor-sub,
-    .cv-sack-name,
-    .cv-stamp,
-    .conveyor-stages small {
+    .cv-name,
+    .cv-stamp {
       display: none;
     }
 
-    .conveyor-bar {
-      font-size: 11px;
-      padding: 8px 12px;
-    }
-
-    .conveyor-stages {
-      padding: 2px 4px 14px;
-      letter-spacing: 0.02em;
-    }
-
-    .cv-num {
-      display: block;
+    .conveyor-steps {
+      height: 32px;
+      font-size: 13px;
     }
 
     .conveyor-panel {
-      padding: 18px 14px;
+      padding: 20px 16px;
     }
 
     .cv-count {
-      font-size: 56px;
+      font-size: 60px;
     }
   }
 </style>
