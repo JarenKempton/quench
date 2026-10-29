@@ -1,16 +1,14 @@
 ---
 import Command from "./Command.astro";
 import run from "../samples/run.json";
-import { kilo, layerChars, layers, servers, skillUse, startTokens } from "../context.ts";
-import type { Part } from "../conveyor.ts";
+import { inputTokens, kilo, layerChars, layers, percent, requests, servers, skillUse, startTokens } from "../context.ts";
+import type { Copy, Part } from "../conveyor.ts";
 
 const tokens = (chars: number) => Math.round((chars / layerChars) * startTokens);
 const builtin = run.startingContext.parts.find((p) => p.kind === "tools");
 const builtinCount = builtin && "count" in builtin ? builtin.count : 0;
-const builtinUsed = new Set(run.calls.filter((c) => !c.server).map((c) => c.tool)).size;
 const instructions = run.startingContext.parts.find((p) => p.kind === "instructions");
 const files = instructions && "files" in instructions ? instructions.files : 0;
-const usage = (used: number, of: number) => ({ used: `${used}/${of} used`, idle: used === 0 });
 
 const measured: Part[] = layers.map((l) => {
   const base = { tokens: tokens(l.chars), used: "", idle: false };
@@ -18,7 +16,6 @@ const measured: Part[] = layers.map((l) => {
   if (l.kind === "tools")
     return {
       ...base,
-      ...usage(builtinUsed, builtinCount),
       short: "TOOLS",
       detail: `${builtinCount} built in`,
       label: "built-in tools",
@@ -26,20 +23,24 @@ const measured: Part[] = layers.map((l) => {
     };
   if (l.kind === "mcp_tools") {
     const s = servers.find((x) => l.name.endsWith(x.server));
+    const called = s?.called ?? 0;
+    const listed = s?.tools ?? 0;
     return {
       ...base,
-      ...usage(s?.called ?? 0, s?.tools ?? 0),
-      short: "MCP",
-      detail: `${s?.server} · ${s?.tools} tools`,
+      used: `${called}/${listed} called`,
+      idle: called === 0,
+      short: (s?.server ?? "").toUpperCase(),
+      detail: `MCP · ${listed} tools`,
       label: `mcp ${s?.server}`,
       color: "var(--magenta)",
     };
   }
   if (l.kind === "instructions")
-    return { ...base, short: "AGENTS.md", detail: `${files} files`, label: "instruction files", color: "var(--green)" };
+    return { ...base, short: "CLAUDE.md", detail: `${files} files`, label: "instruction files", color: "var(--green)" };
   return {
     ...base,
-    ...usage(skillUse.used, skillUse.listed),
+    used: `${skillUse.used}/${skillUse.listed} used`,
+    idle: skillUse.used === 0,
     short: "SKILLS",
     detail: `${skillUse.listed} listed`,
     label: "skill list",
@@ -49,6 +50,12 @@ const measured: Part[] = layers.map((l) => {
 
 const largest = measured.reduce((a, b) => (b.tokens > a.tokens ? b : a));
 const parts = [...measured.filter((p) => p !== largest), largest];
+
+const copy: Copy = {
+  resent: `sent again on each of ${requests} model calls: ${percent((startTokens * requests) / inputTokens)} of input`,
+  decide: "You decide what to cut.",
+  command: "$ quench profile mcp",
+};
 
 const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.used})` : ""}`).join(", ");
 ---
@@ -69,11 +76,12 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
       <Command text="quench" />
     </div>
   </div>
-  <figure class="conveyor" data-parts={JSON.stringify(parts)}>
+  <figure class="conveyor" data-parts={JSON.stringify(parts)} data-copy={JSON.stringify(copy)}>
     <svg aria-hidden="true"></svg>
     <figcaption class="visually-hidden">
-      A conveyor pulls each bloated layer of a demo session's starting context into a press, smashes it to its measured
-      size and stacks it: {summary}. {kilo(startTokens)} tokens in all.
+      A conveyor carries each layer of a sample Claude Code session's starting context, read from its history. A press
+      forges each one to its measured size, a quench sets it, a stamper tags how much of it was used, and a cart collects
+      it: {summary}. {kilo(startTokens)} tokens in all, {copy.resent}. {copy.decide}
     </figcaption>
   </figure>
 </section>
@@ -144,8 +152,10 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
 
   .conveyor {
     grid-column: 1 / -1;
+    --hot: #ffad66;
+    --hot-core: #fff0d4;
     position: relative;
-    height: 372px;
+    height: 404px;
     margin: clamp(12px, 2vw, 20px) calc(-1 * var(--pad)) 0;
     background: var(--plate);
     border-top: 1px solid var(--hair);
@@ -173,13 +183,15 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
     }
   }
 
+  @media (max-width: 900px) {
+    .conveyor {
+      height: 510px;
+    }
+  }
+
   @media (max-width: 560px) {
     .lede {
       font-size: 16px;
-    }
-
-    .conveyor {
-      height: 340px;
     }
   }
 </style>
@@ -312,11 +324,6 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
     fill: var(--cyan);
   }
 
-  .qc-slab-text {
-    font-weight: 600;
-    letter-spacing: 0.32em;
-    fill: var(--prussian-deep);
-  }
 
   .qc-hazard-a {
     fill: var(--yellow);
@@ -333,15 +340,7 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
     stroke-linecap: round;
   }
 
-  .qc-bracket {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 2;
-  }
 
-  .qc-pallet {
-    fill: var(--cyan-2);
-  }
 
   .qc-label {
     fill: var(--ink-2);
@@ -369,6 +368,123 @@ const summary = parts.map((p) => `${p.label} ${kilo(p.tokens)}${p.used ? ` (${p.
 
   .conveyor .qc-counter.qc-counter-done {
     fill: var(--prussian-deep);
+  }
+
+  .qc-hot {
+    fill: var(--hot-core);
+    stroke: var(--hot);
+    stroke-width: 2;
+  }
+
+  .qc-hot.qc-flash {
+    fill: var(--ink);
+    stroke: var(--ink);
+  }
+
+  .qc-value.qc-value-hot {
+    fill: var(--hot);
+  }
+
+  .qc-spark {
+    fill: var(--hot);
+  }
+
+  .conveyor .qc-station-note {
+    fill: var(--mute);
+    letter-spacing: 0.02em;
+  }
+
+  .conveyor .qc-station-note.qc-station-note-on {
+    fill: var(--ink-2);
+  }
+
+  .qc-leg {
+    fill: none;
+    stroke: var(--hair);
+    stroke-width: 2;
+  }
+
+  .qc-tank {
+    fill: none;
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  .qc-tank-water {
+    fill: rgb(159 220 250 / 0.22);
+  }
+
+  .qc-drop {
+    fill: var(--cyan);
+  }
+
+  .qc-water {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 7 6;
+  }
+
+  .qc-hood-body {
+    fill: var(--prussian);
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  .qc-nozzle {
+    fill: var(--cyan);
+  }
+
+  .qc-steam {
+    fill: var(--ink);
+  }
+
+  .qc-pad {
+    fill: var(--ink-2);
+  }
+
+  .qc-pad.qc-idle {
+    fill: var(--red);
+  }
+
+  .qc-tray {
+    fill: rgb(8 38 64 / 0.85);
+    stroke: var(--cyan-2);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  .qc-post {
+    fill: none;
+    stroke: var(--cyan-2);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .qc-platform {
+    fill: var(--cyan-2);
+  }
+
+  .qc-wheel {
+    fill: var(--prussian);
+    stroke: var(--cyan);
+    stroke-width: 1.5;
+  }
+
+  .qc-line {
+    fill: var(--ink-2);
+  }
+
+  .qc-decide {
+    fill: var(--ink);
+  }
+
+  .qc-command {
+    fill: var(--cyan);
   }
 
   .qc-counter-block {
