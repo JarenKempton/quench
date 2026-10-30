@@ -11,7 +11,7 @@ for (const width of [1440, 390]) {
   await page.evaluate(() =>
     document.querySelectorAll(".reveal").forEach((el) => el.classList.add("in")),
   );
-  await page.waitForTimeout(9000);
+  await page.waitForTimeout(10000);
   await page.screenshot({ path: `/tmp/landing-fable-${width}.png`, fullPage: true });
   await page.close();
 }
@@ -22,7 +22,7 @@ const box = await frames.evaluate(() => {
   const r = document.querySelector(".hero-anim")!.getBoundingClientRect();
   return { x: r.x, y: r.y, width: r.width, height: r.height };
 });
-const at = [1300, 4900, 8600];
+const at = [1200, 5700, 9600];
 let elapsed = 0;
 for (const [i, t] of at.entries()) {
   await frames.waitForTimeout(t - elapsed);
@@ -41,7 +41,7 @@ const recording = await browser.newContext({
 });
 const clip = await recording.newPage();
 await clip.goto(url, { waitUntil: "networkidle" });
-await clip.waitForTimeout(9200);
+await clip.waitForTimeout(10200);
 const video = clip.video();
 await recording.close();
 if (video) await rename(await video.path(), "/tmp/landing-fable.webm");
