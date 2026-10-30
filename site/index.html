@@ -6,7 +6,7 @@
     <title>Quench — see what your coding agents load, what it costs, and where they go wrong</title>
     <meta
       name="description"
-      content="Quench reads the session history Claude Code, Codex and Pi already keep on your machine. It shows what each session starts with, how that grows, and which tool calls keep failing. Nothing leaves your machine unless you opt in."
+      content="Quench reads the session history Claude Code, Codex and Pi already keep on your machine and shows what each session starts with, how that grows, and which tool calls keep failing. Nothing leaves your machine unless you opt in."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,384 +19,125 @@
   <body>
     <header class="nav">
       <a class="wordmark" href="#top">quench</a>
-      <nav>
-        <a href="#load">Load</a>
-        <a href="#wrong">Failures</a>
-        <a href="#commands">Commands</a>
-        <a href="#principles">Principles</a>
-        <a class="gh" href="https://github.com/JarenKempton/quench">GitHub</a>
-      </nav>
+      <a class="gh" href="https://github.com/JarenKempton/quench">GitHub</a>
     </header>
 
     <main id="top">
       <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">A profiler for coding agents · Claude Code, Codex, Pi</p>
-          <h1>See what your coding agents load, what it costs, and where they go wrong.</h1>
-          <p class="lede">
-            Quench reads the session history your agents already keep on this machine. One command
-            shows what every session starts with, how that context grows, which models and effort
-            levels you really use, and which tool calls keep failing the same way. Nothing leaves
-            your machine unless you opt in.
-          </p>
-          <div class="cta">
-            <div class="install" data-copy>
-              <code
-                >gh release download --repo JarenKempton/quench --pattern "quench-linux-x64"
-                --output ~/.local/bin/quench</code
-              >
-              <button type="button" aria-label="Copy install command">copy</button>
-            </div>
-            <p class="fine">
-              Linux and macOS, x64 and arm64. <code>chmod +x</code>, then run
-              <code>quench</code> with no arguments. MIT.
-            </p>
-          </div>
-        </div>
+        <h1>See what your coding agents load, what it costs, and where they go wrong.</h1>
 
-        <figure
-          class="term hero-term wrap reveal"
-          aria-label="Example output of quench with no arguments"
-        >
-          <figcaption><span class="dot"></span>$ quench</figcaption>
-          <pre><span class="title"> QUENCH </span>  <b>last 30 days</b> <i>·</i> 67 sessions <i>· Claude Code 48 · Codex 14 · Pi 5</i>
-
-<span class="h">▍</span><b>Every session starts with</b>
-  <b>Claude Code</b>  6.1 KB instructions  23 skills  <span class="bar"><span class="f" style="--w:12"></span></span> <i>14.6k chars</i>
-  <b>Codex</b>        2.4 KB instructions  9 skills   <span class="bar"><span class="f" style="--w:5"></span></span> <i>5.8k chars</i>
-  <b>Pi</b>           <i>no instructions</i>    <i>no skill list</i>
-  <i>Projects add their own instruction files on top.</i>
-
-<span class="h">▍</span><b>Worth a look</b>
-  <span class="b1"> 1 </span> <b>7 skills listed but never used</b>
-     <i>Claude Code 5 · Codex 2 — each one costs context up front</i>
-     <span class="acc">→ quench profile skills</span>
-  <span class="b2"> 2 </span> <b>"pnpm" failed 11× in atlas-api</b>
-     <i>6 sessions · 18.2k chars of output</i>
-     <span class="acc">→ quench profile failures</span>
-  <span class="b3"> 3 </span> <b>atlas-api starts with 48.3k chars of instructions</b>
-     <i>3.1× your next project</i>
-     <span class="acc">→ quench profile instructions</span>
-  <span class="b4"> 4 </span> <b>3 worktrees idle for 30 days</b>
-     <span class="acc">→ quench worktrees</span>
-
-<span class="h">▍</span><b>Busiest projects</b>
-  <b>atlas-api</b>       41 sessions  <span class="good">today</span>       <span class="bar"><span class="f" style="--w:12"></span></span> <i>48.3k</i>
-  <b>docs-site</b>       17 sessions  <i>2 days ago</i>  <span class="bar"><span class="f" style="--w:4"></span></span> <i>15.4k</i>
-  <b>billing-worker</b>   9 sessions  <i>6 days ago</i>  <span class="bar"><span class="f" style="--w:3"></span></span> <i>11.9k</i>
-
-<i>More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help</i></pre>
-        </figure>
-      </section>
-
-      <section id="load" class="story">
-        <div class="story-head reveal">
-          <p class="eyebrow">What it costs</p>
-          <h2>Most of what the model reads is the same thing, again and again.</h2>
-          <p>
-            Every model call re-reads the whole context. So the instructions, skill listings and MCP
-            definitions a session <em>starts</em> with are paid for on every call that follows.
-            Quench calls that the <strong>starting load</strong>: the context the first model call
-            carried, and its share of all the tokens a harness processed.
-          </p>
-        </div>
-
-        <div
-          class="load-viz reveal"
+        <svg
+          class="hero-anim"
+          viewBox="0 0 960 440"
           role="img"
-          aria-label="A stacked bar of one session's context: starting load of 21.0 thousand tokens stays constant across nine model calls while the work on top grows to a peak of 30.0 thousand, then drops after a compaction."
+          aria-label="Session files from Claude Code, Codex and Pi flow into quench, which produces a context bar whose starting load is 21.0 thousand tokens of a 30.0 thousand peak, a repeated failure of pnpm counted eleven times, and 23 listed skills of which 7 were never used."
         >
-          <div class="load-legend">
-            <span><i class="sw sw-start"></i>starting load</span>
-            <span><i class="sw sw-work"></i>the work itself</span>
-            <span><i class="sw sw-compact"></i>compaction</span>
-          </div>
-          <div class="load-cols">
-            <div class="col" style="--start: 21; --work: 0"><em>call 1</em></div>
-            <div class="col" style="--start: 21; --work: 1.4"></div>
-            <div class="col" style="--start: 21; --work: 3.1"></div>
-            <div class="col" style="--start: 21; --work: 4.8"></div>
-            <div class="col" style="--start: 21; --work: 6.2"></div>
-            <div class="col" style="--start: 21; --work: 9"><em>peak 30.0k</em></div>
-            <div class="col compact" style="--start: 21; --work: 1.1"><em>compaction</em></div>
-            <div class="col" style="--start: 21; --work: 2.6"></div>
-            <div class="col" style="--start: 21; --work: 4"><em>call 9</em></div>
-          </div>
-          <div class="load-axis">
-            <span>0</span><span>starting load 21.0k</span><span>30k</span>
-          </div>
-        </div>
+          <g class="src src-1" transform="translate(40 50)">
+            <rect class="box" width="230" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">Claude Code</text>
+            <text class="path" x="14" y="40">~/.claude/projects</text>
+            <g class="rows" transform="translate(14 52)">
+              <rect class="row r1" y="0" width="180" height="5" rx="2" />
+              <rect class="row r2" y="10" width="140" height="5" rx="2" />
+              <rect class="row r3" y="20" width="200" height="5" rx="2" />
+            </g>
+          </g>
+          <g class="src src-2" transform="translate(40 172)">
+            <rect class="box" width="230" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">Codex</text>
+            <text class="path" x="14" y="40">~/.codex/sessions</text>
+            <g class="rows" transform="translate(14 52)">
+              <rect class="row r1" y="0" width="160" height="5" rx="2" />
+              <rect class="row r2" y="10" width="200" height="5" rx="2" />
+              <rect class="row r3" y="20" width="120" height="5" rx="2" />
+            </g>
+          </g>
+          <g class="src src-3" transform="translate(40 294)">
+            <rect class="box" width="230" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">Pi</text>
+            <text class="path" x="14" y="40">~/.pi/agent/sessions</text>
+            <g class="rows" transform="translate(14 52)">
+              <rect class="row r1" y="0" width="130" height="5" rx="2" />
+              <rect class="row r2" y="10" width="190" height="5" rx="2" />
+              <rect class="row r3" y="20" width="150" height="5" rx="2" />
+            </g>
+          </g>
 
-        <div class="story-grid">
-          <figure class="term reveal">
-            <figcaption><span class="dot"></span>$ quench report</figcaption>
-            <pre>Last 30 days
+          <path class="flow f1" d="M270 96 C 340 96, 340 220, 410 220" />
+          <path class="flow f2" d="M270 218 C 340 218, 340 220, 410 220" />
+          <path class="flow f3" d="M270 340 C 340 340, 340 220, 410 220" />
 
-<b>Claude Code</b>
-  Sessions          48 (+19 subagent)
-  Agent runs        412
-  Model calls       3,904
-  Tokens processed  214.7M
-  Starting load     median 21.0k  (p10 9.4k, p90 38.2k)  <span class="acc">(61% of tokens processed)</span>
-  Peak context      median 74.3k  (p10 23.1k, p90 151.0k)
-  Compactions       19 in 14 sessions
-  Tool calls        5,118 (233 errors)
-  Models            claude-opus-5-5 71%, claude-sonnet-5-5 24%, claude-haiku-5-5 5%
-  Effort            high 58%, medium 31%, unknown 11%
+          <g class="core" transform="translate(410 186)">
+            <rect class="core-box" width="130" height="68" rx="8" />
+            <text class="core-lbl" x="65" y="41" text-anchor="middle">quench</text>
+          </g>
 
-<b>Codex</b>
-  Sessions          14 (+0 subagent)
-  Agent runs        96
-  Model calls       1,041
-  Tokens processed  48.9M
-  Starting load     median 18.7k  (p10 12.0k, p90 27.5k)  <span class="acc">(74% of tokens processed)</span>
-  Peak context      median 51.2k  (p10 19.8k, p90 98.4k)
-  Compactions       3 in 3 sessions
-  Tool calls        1,380 (errors not recorded)
-  Models            gpt-6.1-sol 100%
-  Effort            high 100%</pre>
-          </figure>
-          <aside class="notes reveal">
-            <h3>Numbers you can trace</h3>
-            <ul>
-              <li>
-                <strong>Starting load</strong> is the context at a session's first model call. The
-                share in parentheses is how much of everything processed was that same load,
-                re-read.
-              </li>
-              <li>
-                <strong>Peak context</strong> is the largest single call. Compactions are counted
-                from the harness's own record, with the tokens they replaced.
-              </li>
-              <li>
-                <strong>Unknown stays unknown.</strong> Codex records no tool error flag, so Quench
-                says "errors not recorded" rather than zero. Effort a harness did not log is
-                "unknown".
-              </li>
-              <li>
-                Every value traces to a line in a file on disk. Lines that no longer fit a harness's
-                format are counted as unparsed and shown, so a format change is visible instead of
-                silently wrong.
-              </li>
-            </ul>
-          </aside>
-        </div>
-      </section>
+          <path class="out o1" d="M540 220 C 590 220, 590 92, 640 92" />
+          <path class="out o2" d="M540 220 C 590 220, 590 220, 640 220" />
+          <path class="out o3" d="M540 220 C 590 220, 590 348, 640 348" />
 
-      <section id="wrong" class="story">
-        <div class="story-head reveal">
-          <p class="eyebrow">Where they go wrong</p>
-          <h2>The same tool call failing the same way, eleven times, in six sessions.</h2>
-          <p>
-            Agents repeat mistakes across sessions because nothing connects them. Quench groups tool
-            failures by what failed: the same missing file, the same missing command, the same
-            rejection by a hook, the same bad input. Each row shows how often, in how many sessions,
-            the longest streak in a row, and how much error output it pushed into context.
-          </p>
-        </div>
+          <g class="res res-1" transform="translate(640 50)">
+            <rect class="box" width="280" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">starting load</text>
+            <text class="val" x="266" y="22" text-anchor="end">21.0k of 30.0k</text>
+            <rect class="track" x="14" y="40" width="252" height="14" rx="2" />
+            <rect class="fill-start" x="14" y="40" width="176" height="14" rx="2" />
+            <rect class="fill-work" x="190" y="40" width="76" height="14" rx="2" />
+            <text class="path" x="14" y="76">re-read on every model call</text>
+          </g>
 
-        <figure class="term wide reveal">
-          <figcaption><span class="dot"></span>$ quench profile failures</figcaption>
-          <pre><span class="h">▍</span><b>Repeated failures · tool calls that failed the same way · last 30 days</b>
-  Project         Kind             What                                   Failures  Sessions  In a row  Output      Agents
-  atlas-api       no such command  pnpm                                         11         6         4  18.2k chars  Claude Code, Codex
-  atlas-api       no such file     src/routes/health.ts                          7         3         3   2.9k chars  Claude Code
-  docs-site       rejected         Bash(git push --force)                        5         5         1   1.1k chars  Claude Code
-  billing-worker  exit code        bun test                                      4         2         4  41.6k chars  Claude Code
-  docs-site       bad input        Edit: old_string not found                    3         2         2   0.8k chars  Pi
-  <i>… 9 more in --json</i>
-  233 failed tool calls in all, returning 312.4k chars of output. In a row: the longest streak of this failure with no other result between.</pre>
-        </figure>
+          <g class="res res-2" transform="translate(640 178)">
+            <rect class="box" width="280" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">repeated failure</text>
+            <text class="val" x="266" y="22" text-anchor="end">×11</text>
+            <text class="path" x="14" y="44">pnpm · no such command</text>
+            <g class="ticks" transform="translate(14 58)">
+              <rect x="0" width="18" height="12" rx="2" />
+              <rect x="22" width="18" height="12" rx="2" />
+              <rect x="44" width="18" height="12" rx="2" />
+              <rect x="66" width="18" height="12" rx="2" />
+              <rect x="88" width="18" height="12" rx="2" />
+              <rect x="110" width="18" height="12" rx="2" />
+              <rect x="132" width="18" height="12" rx="2" />
+              <rect x="154" width="18" height="12" rx="2" />
+              <rect x="176" width="18" height="12" rx="2" />
+              <rect x="198" width="18" height="12" rx="2" />
+              <rect x="220" width="18" height="12" rx="2" />
+            </g>
+          </g>
 
-        <div class="story-grid flip">
-          <aside class="notes reveal">
-            <h3>Then read the session that went wrong</h3>
-            <p>
-              <code>quench runs</code> lays one session out as what you asked, what the agent did,
-              and what you said back. A <strong>run</strong> is everything between two of your
-              messages: model, effort, context at start and peak, tool calls and errors, subagents,
-              compactions, duration.
-            </p>
-            <p>
-              Your reply is the outcome signal. "no, use the existing router" after a run is worth
-              more than any benchmark, and it is already on your disk.
-            </p>
-          </aside>
-          <figure class="term wrap reveal">
-            <figcaption><span class="dot"></span>$ quench runs</figcaption>
-            <pre>Claude Code session 7f3a in ~/code/atlas-api
+          <g class="res res-3" transform="translate(640 306)">
+            <rect class="box" width="280" height="92" rx="6" />
+            <text class="lbl" x="14" y="22">skills listed</text>
+            <text class="val" x="266" y="22" text-anchor="end">7 never used</text>
+            <g class="chips" transform="translate(14 38)">
+              <rect x="0" y="0" />
+              <rect x="22" y="0" />
+              <rect x="44" y="0" />
+              <rect x="66" y="0" class="dead" />
+              <rect x="88" y="0" />
+              <rect x="110" y="0" />
+              <rect x="132" y="0" class="dead" />
+              <rect x="154" y="0" />
+              <rect x="176" y="0" />
+              <rect x="198" y="0" class="dead" />
+              <rect x="220" y="0" />
+              <rect x="242" y="0" />
+              <rect x="0" y="22" />
+              <rect x="22" y="22" class="dead" />
+              <rect x="44" y="22" />
+              <rect x="66" y="22" />
+              <rect x="88" y="22" />
+              <rect x="110" y="22" class="dead" />
+              <rect x="132" y="22" />
+              <rect x="154" y="22" />
+              <rect x="176" y="22" class="dead" />
+              <rect x="198" y="22" />
+              <rect x="220" y="22" class="dead" />
+            </g>
+          </g>
+        </svg>
 
-<b>#1</b>   "Add a health check endpoint"
-     claude-opus-5-5 · high · context 21.0k → 27.4k · 4 model calls · 6 tool calls · <span class="warn">2 tool errors</span> · 1 subagent · 48s
-  →  "no, use the existing router"
-
-<b>#2</b>   "no, use the existing router"
-     claude-opus-5-5 · high · context 27.4k → 30.0k · 2 model calls · 3 tool calls · 1 compaction · 31s
-  →  "run the tests"
-
-<b>#3</b>   "run the tests"
-     claude-opus-5-5 · medium · context 9.2k → 14.8k · 2 model calls · 2 tool calls · 19s
-  →  <i>(session ended)</i></pre>
-          </figure>
-        </div>
-      </section>
-
-      <section id="commands" class="commands">
-        <div class="story-head reveal">
-          <p class="eyebrow">Eight commands</p>
-          <h2>Offline by default. Model calls only where it says so.</h2>
-        </div>
-        <ul class="cmd-grid">
-          <li class="reveal">
-            <code>quench</code>
-            <p>
-              A short summary: what sessions start with, what is worth a look, busiest projects.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench profile [section]</code>
-            <p>
-              Every table, or one: <span>projects</span>, <span>mcp</span>,
-              <span>instructions</span>, <span>skills</span>, <span>failures</span>.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench report</code>
-            <p>
-              Per harness: starting load, peak context, compactions, tool errors, models and effort.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench runs [session]</code>
-            <p>
-              One session as prompt → what the agent did → your reply. Default: the latest one here.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench sources [session]</code>
-            <p>
-              What one session read and loaded: native reads, shell reads, injected instructions,
-              MCP calls.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench steering &lt;dir&gt;</code>
-            <p>
-              Current instruction-file inventory for a project and the rule candidates inside them.
-            </p>
-          </li>
-          <li class="reveal">
-            <code>quench worktrees</code>
-            <p>
-              Idle linked worktrees, which are safe to remove and why the rest are kept. Read-only.
-            </p>
-          </li>
-          <li class="reveal optin">
-            <code>quench corrections</code>
-            <p>
-              Human correction and agent supervision rates, counted separately.
-              <strong>Opt-in</strong>: asks a model with your own key, and
-              <code>--dry-run</code> shows what would be sent first.
-            </p>
-          </li>
-        </ul>
-        <p class="fine center reveal">
-          Every command takes <code>--json</code>. Agents ask Quench through a skill that runs
-          <code>quench … --json</code>, not an MCP server, because MCP tool definitions are the
-          largest source of context bloat Quench measures.
-        </p>
-      </section>
-
-      <section id="principles" class="principles">
-        <div class="story-head reveal">
-          <p class="eyebrow">How it is built</p>
-          <h2>Rules the code follows.</h2>
-        </div>
-        <dl class="rules">
-          <div class="reveal">
-            <dt>Local-first</dt>
-            <dd>
-              Everything works offline from files already on the machine. Anything that sends data
-              anywhere is opt-in and says exactly what it sends.
-            </dd>
-          </div>
-          <div class="reveal">
-            <dt>No fake numbers</dt>
-            <dd>
-              Every number traces to a file on disk. Estimates are labeled. If a harness did not
-              record something, the field is null, never zero.
-            </dd>
-          </div>
-          <div class="reveal">
-            <dt>Not an orchestrator</dt>
-            <dd>
-              Quench reads what agents did and helps you steer them. It never runs an agent, and it
-              never removes a worktree.
-            </dd>
-          </div>
-          <div class="reveal">
-            <dt>Recorded loads over predictions</dt>
-            <dd>
-              When a session's history records the instructions it loaded, that is what gets
-              reported, compared with disk only by exact hash.
-            </dd>
-          </div>
-          <div class="reveal">
-            <dt>Bring your own compute</dt>
-            <dd>
-              Model-backed analysis uses your key. A verdict is cached and paid for once. Running
-              Quench costs its maintainers nothing per user.
-            </dd>
-          </div>
-          <div class="reveal">
-            <dt>Streams at scale</dt>
-            <dd>
-              Sessions are read one at a time, line by line. On the reference machine, 3.6 GB across
-              1,220 files reads in about 8 s with a 0.5 GB peak.
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <section class="harnesses">
-        <div class="story-head reveal">
-          <p class="eyebrow">Supported harnesses</p>
-          <h2>Found where they already live.</h2>
-        </div>
-        <table class="reveal">
-          <thead>
-            <tr>
-              <th>Harness</th>
-              <th>Reads from</th>
-              <th>Override</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Claude Code <span>CLI, desktop, Agent SDK</span></td>
-              <td><code>~/.claude/projects</code></td>
-              <td><code>CLAUDE_CONFIG_DIR</code> or <code>--claude-home</code></td>
-            </tr>
-            <tr>
-              <td>Codex <span>CLI, app</span></td>
-              <td><code>~/.codex/sessions</code></td>
-              <td><code>CODEX_HOME</code> or <code>--codex-home</code></td>
-            </tr>
-            <tr>
-              <td>Pi</td>
-              <td><code>~/.pi/agent/sessions</code></td>
-              <td><code>PI_CODING_AGENT_DIR</code> or <code>--pi-home</code></td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="fine center reveal">
-          Adding one is a single adapter file. Each line is validated; lines that do not fit are
-          counted, not dropped.
-        </p>
-      </section>
-
-      <section class="install-end reveal">
-        <h2>Run it on this month.</h2>
         <div class="install" data-copy>
           <code
             >gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output
@@ -404,15 +145,300 @@
           >
           <button type="button" aria-label="Copy install command">copy</button>
         </div>
-        <p class="fine">
-          Swap in <code>linux-arm64</code>, <code>darwin-x64</code> or <code>darwin-arm64</code>.
-          Later, <code>quench update</code> keeps it current on the stable or nightly channel.
-        </p>
+      </section>
+
+      <section class="feat" id="load">
+        <header class="reveal">
+          <code>quench report</code>
+          <h2>Starting load is paid again on every call.</h2>
+        </header>
+        <figure
+          class="diagram chart reveal"
+          role="img"
+          aria-label="Nine model calls in one session. The starting load of 21.0 thousand tokens is in every call. Work on top grows to a peak of 30.0 thousand at call six, a compaction at call seven drops it, and it grows again."
+        >
+          <div class="chart-grid">
+            <div class="y"><span>30k</span><span>20k</span><span>10k</span><span>0</span></div>
+            <div class="plot">
+              <div class="gridline" style="--at: 30"></div>
+              <div class="gridline" style="--at: 20"></div>
+              <div class="gridline" style="--at: 10"></div>
+              <div class="refline" style="--at: 21"><span>starting load 21.0k</span></div>
+              <div class="cols">
+                <div class="col" style="--start: 21; --work: 0"></div>
+                <div class="col" style="--start: 21; --work: 1.4"></div>
+                <div class="col" style="--start: 21; --work: 3.1"></div>
+                <div class="col" style="--start: 21; --work: 4.8"></div>
+                <div class="col" style="--start: 21; --work: 6.2"></div>
+                <div class="col" style="--start: 21; --work: 9"><em>peak 30.0k</em></div>
+                <div class="col compact" style="--start: 21; --work: 1.1"><em>compaction</em></div>
+                <div class="col" style="--start: 21; --work: 2.6"></div>
+                <div class="col" style="--start: 21; --work: 4"></div>
+              </div>
+            </div>
+          </div>
+          <div class="x"><span>call 1</span><span>call 9</span></div>
+          <figcaption>
+            <span><i class="sw sw-start"></i>starting load · 61% of tokens processed</span>
+            <span><i class="sw sw-work"></i>the work</span>
+            <span><i class="sw sw-compact"></i>compaction</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="feat" id="failures">
+        <header class="reveal">
+          <code>quench profile failures</code>
+          <h2>The same failure, across sessions.</h2>
+        </header>
+        <figure
+          class="diagram fails reveal"
+          role="img"
+          aria-label="Six session timelines each contain tool calls, eleven of which are the same failure: pnpm, no such command. The longest streak in a row is four. They collapse into one summary row."
+        >
+          <div class="sessions">
+            <div class="sess">
+              <b>session 1</b><i></i><i></i><i class="x"></i><i></i><i class="x"></i><i></i><i></i>
+            </div>
+            <div class="sess">
+              <b>session 2</b><i></i><i class="x"></i><i class="x"></i><i class="x"></i
+              ><i class="x"></i><i></i><i></i>
+            </div>
+            <div class="sess">
+              <b>session 3</b><i></i><i></i><i></i><i class="x"></i><i></i><i></i><i></i>
+            </div>
+            <div class="sess">
+              <b>session 4</b><i></i><i></i><i class="x"></i><i></i><i></i><i></i><i></i>
+            </div>
+            <div class="sess">
+              <b>session 5</b><i></i><i class="x"></i><i></i><i></i><i></i><i class="x"></i><i></i>
+            </div>
+            <div class="sess">
+              <b>session 6</b><i></i><i></i><i></i><i></i><i class="x"></i><i></i><i></i>
+            </div>
+          </div>
+          <div class="rollup">
+            <span class="what">pnpm</span>
+            <span class="kind">no such command</span>
+            <span class="n"><b>11</b> failures</span>
+            <span class="n"><b>6</b> sessions</span>
+            <span class="n"><b>4</b> in a row</span>
+            <span class="n"><b>18.2k</b> chars of output</span>
+          </div>
+        </figure>
+      </section>
+
+      <section class="feat" id="runs">
+        <header class="reveal">
+          <code>quench runs</code>
+          <h2>Your prompt, the run, your reply.</h2>
+        </header>
+        <figure
+          class="diagram runs reveal"
+          role="img"
+          aria-label="Three runs of one session. Each shows the prompt, the model and effort, context at start and peak, tool calls, then the reply that followed."
+        >
+          <div class="run">
+            <div class="prompt">"Add a health check endpoint"</div>
+            <div class="facts">
+              <span class="ctx"><i style="--a: 21; --b: 27.4"></i></span>claude-opus-5-5 · high ·
+              context 21.0k → 27.4k · 6 tool calls · <em>2 tool errors</em> · 1 subagent · 48s
+            </div>
+            <div class="reply">→ "no, use the existing router"</div>
+          </div>
+          <div class="run">
+            <div class="prompt">"no, use the existing router"</div>
+            <div class="facts">
+              <span class="ctx"><i style="--a: 27.4; --b: 30"></i></span>claude-opus-5-5 · high ·
+              context 27.4k → 30.0k · 3 tool calls · 1 compaction · 31s
+            </div>
+            <div class="reply">→ "run the tests"</div>
+          </div>
+          <div class="run">
+            <div class="prompt">"run the tests"</div>
+            <div class="facts">
+              <span class="ctx"><i style="--a: 9.2; --b: 14.8"></i></span>claude-opus-5-5 · medium ·
+              context 9.2k → 14.8k · 2 tool calls · 19s
+            </div>
+            <div class="reply dim">→ (session ended)</div>
+          </div>
+        </figure>
+      </section>
+
+      <section class="feat" id="skills">
+        <header class="reveal">
+          <code>quench profile skills</code>
+          <h2>Listed every session. Never used.</h2>
+        </header>
+        <figure
+          class="diagram skills reveal"
+          role="img"
+          aria-label="Claude Code listed 23 skills to the model in a typical session, 14.6 thousand characters up front. Sixteen were used at least once; seven were never used."
+        >
+          <div class="skill-row">
+            <b>Claude Code</b>
+            <div class="chips">
+              <i></i><i></i><i class="dead"></i><i></i><i></i><i></i><i class="dead"></i><i></i
+              ><i></i><i></i><i class="dead"></i><i></i><i></i><i class="dead"></i><i></i><i></i
+              ><i></i><i class="dead"></i><i></i><i></i><i class="dead"></i><i></i
+              ><i class="dead"></i>
+            </div>
+            <span>23 listed · 14.6k chars · <em>7 never used</em></span>
+          </div>
+          <div class="skill-row">
+            <b>Codex</b>
+            <div class="chips">
+              <i></i><i></i><i></i><i class="dead"></i><i></i><i></i><i class="dead"></i><i></i
+              ><i></i>
+            </div>
+            <span>9 listed · 5.8k chars · <em>2 never used</em></span>
+          </div>
+          <div class="skill-row">
+            <b>Pi</b>
+            <div class="chips"></div>
+            <span class="muted">no skill list</span>
+          </div>
+        </figure>
+      </section>
+
+      <section class="feat" id="sources">
+        <header class="reveal">
+          <code>quench sources</code>
+          <h2>What one session actually read.</h2>
+        </header>
+        <figure
+          class="diagram sources reveal"
+          role="img"
+          aria-label="One session's recorded evidence: instructions the harness injected, native Read calls, shell reads, searches which are not counted as reads, and MCP calls."
+        >
+          <ol class="trace">
+            <li class="t-inst">
+              <span class="k">instructions</span><span class="v">CLAUDE.md · AGENTS.md</span
+              ><span class="s">injected at start</span>
+            </li>
+            <li class="t-read">
+              <span class="k">Read</span><span class="v">src/routes/health.ts</span
+              ><span class="s">1–84 of 84</span>
+            </li>
+            <li class="t-shell">
+              <span class="k">cat</span><span class="v">package.json</span
+              ><span class="s">shell read</span>
+            </li>
+            <li class="t-search">
+              <span class="k">rg</span><span class="v">"healthz" src/</span
+              ><span class="s">search · not a read</span>
+            </li>
+            <li class="t-mcp">
+              <span class="k">mcp</span><span class="v">docs / search</span
+              ><span class="s">4.1k chars back</span>
+            </li>
+            <li class="t-read">
+              <span class="k">Read</span><span class="v">docs/api.md</span
+              ><span class="s"><em>failed</em></span>
+            </li>
+          </ol>
+        </figure>
+      </section>
+
+      <section class="feat" id="worktrees">
+        <header class="reveal">
+          <code>quench worktrees</code>
+          <h2>Idle worktrees, and the command for each.</h2>
+        </header>
+        <figure
+          class="diagram trees reveal"
+          role="img"
+          aria-label="Five linked worktrees. Two are idle, merged and clean, so they get a git worktree remove command. One is idle but kept for uncommitted changes. Two are active. Quench removes nothing."
+        >
+          <div class="tree safe">
+            <b>feature/health-check</b><span>idle 41 days · merged · clean</span
+            ><code>git worktree remove ../wt/health-check</code>
+          </div>
+          <div class="tree safe">
+            <b>fix/retry-backoff</b><span>idle 36 days · upstream deleted · clean</span
+            ><code>git worktree remove ../wt/retry-backoff</code>
+          </div>
+          <div class="tree kept">
+            <b>spike/new-router</b><span>idle 33 days · <em>kept: uncommitted changes</em></span>
+          </div>
+          <div class="tree active"><b>release/2.4</b><span>used 2 days ago</span></div>
+          <div class="tree active"><b>main</b><span>used today</span></div>
+        </figure>
+      </section>
+
+      <section class="feat" id="corrections">
+        <header class="reveal">
+          <code>quench corrections</code>
+          <h2>Who corrected the agent: you, or another agent.</h2>
+        </header>
+        <figure
+          class="diagram corr reveal"
+          role="img"
+          aria-label="Replies to agent runs are classified. Replies from people and from automation are counted separately. Opt-in: uses your own key, and dry run sends nothing."
+        >
+          <div class="corr-col">
+            <b>from people</b>
+            <div class="stack">
+              <i class="c"></i><i class="c"></i><i class="c"></i><i></i><i></i><i></i><i></i><i></i
+              ><i></i><i></i>
+            </div>
+            <span><em>3 of 10</em> corrections</span>
+          </div>
+          <div class="corr-col">
+            <b>from automation</b>
+            <div class="stack"><i class="c"></i><i></i><i></i><i></i><i></i><i></i></div>
+            <span><em>1 of 6</em> corrections</span>
+          </div>
+          <div class="corr-col">
+            <b>sender unknown</b>
+            <div class="stack"><i class="u"></i><i class="u"></i></div>
+            <span>2 · counted apart</span>
+          </div>
+          <figcaption>
+            opt-in · your <code>TYPESAFE_API_KEY</code> · <code>--dry-run</code> sends nothing
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="feat" id="local">
+        <header class="reveal">
+          <code>no network</code>
+          <h2>Nothing leaves your machine unless you opt in.</h2>
+        </header>
+        <figure
+          class="diagram local reveal"
+          role="img"
+          aria-label="Harness session folders on disk flow into quench and out to your terminal. One dotted, opt-in path leads to a judge model with your key. Nothing else leaves the machine."
+        >
+          <div class="disk">
+            <span>~/.claude/projects</span>
+            <span>~/.codex/sessions</span>
+            <span>~/.pi/agent/sessions</span>
+          </div>
+          <div class="pipe"></div>
+          <div class="qbox">quench</div>
+          <div class="pipe"></div>
+          <div class="out-term">your terminal</div>
+          <div class="optin">
+            <span class="dots"></span><span>opt-in · <code>corrections</code> only</span>
+          </div>
+        </figure>
+      </section>
+
+      <section class="install-end reveal">
+        <div class="install" data-copy>
+          <code
+            >gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output
+            ~/.local/bin/quench</code
+          >
+          <button type="button" aria-label="Copy install command">copy</button>
+        </div>
+        <p class="fine">linux-x64 · linux-arm64 · darwin-x64 · darwin-arm64 · MIT</p>
       </section>
     </main>
 
     <footer>
-      <span>quench · MIT</span>
+      <span>quench</span>
       <a href="https://github.com/JarenKempton/quench">github.com/JarenKempton/quench</a>
     </footer>
     <script src="page.js" defer></script>
