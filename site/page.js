@@ -1,13 +1,9 @@
+import { mountForge } from "./forge.js";
+
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const hero = document.querySelector(".hero-anim");
 const revealed = document.querySelectorAll(".reveal");
 
-const narrow = matchMedia("(max-width: 600px)");
-const frame = () => hero.setAttribute("viewBox", narrow.matches ? "120 10 780 490" : "0 0 900 500");
-frame();
-narrow.addEventListener("change", frame);
-
-if (!reduced) requestAnimationFrame(() => hero.classList.add("play"));
+document.querySelectorAll("[data-forge]").forEach(mountForge);
 
 if (reduced || !("IntersectionObserver" in window)) {
   revealed.forEach((el) => el.classList.add("in"));
