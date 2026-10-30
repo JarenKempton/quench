@@ -107,6 +107,11 @@ h2 {
   font-family: var(--mono);
 }
 
+.hero-anim .s {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .install {
   display: flex;
   max-width: 760px;
@@ -144,254 +149,268 @@ h2 {
   color: var(--accent);
 }
 
-/* hero svg */
+/* hero: the forge */
 
-.hero-anim .box {
-  fill: var(--panel);
-  stroke: var(--line-2);
+.hero-anim {
+  max-width: 640px;
 }
 
 .hero-anim .lbl {
   fill: var(--ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
-.hero-anim .path {
-  fill: var(--ink-3);
-  font-size: 11px;
-}
-
-.hero-anim .val {
-  fill: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.hero-anim .row {
-  fill: var(--line-2);
-}
-
-.hero-anim .flow,
-.hero-anim .out {
-  fill: none;
-  stroke: var(--accent-dim);
-  stroke-width: 1.5;
-  stroke-dasharray: 600;
-  stroke-dashoffset: 0;
-}
-
-.hero-anim .core-box {
-  fill: var(--accent);
-}
-
-.hero-anim .core-lbl {
-  fill: #06201f;
-  font-size: 17px;
-  font-weight: 500;
-}
-
-.hero-anim .track {
-  fill: var(--line);
-}
-
-.hero-anim .fill-start {
-  fill: var(--accent);
-}
-
-.hero-anim .fill-work {
-  fill: var(--warm);
-}
-
-.hero-anim .ticks rect {
+.hero-anim .bad {
   fill: var(--red);
 }
 
-.hero-anim .chips rect {
-  width: 18px;
-  height: 14px;
-  rx: 2px;
-  fill: var(--accent-dim);
+.hero-anim .ok {
+  fill: var(--accent);
 }
 
-.hero-anim .chips rect.dead {
-  fill: var(--line-2);
+.hero-anim .metal {
+  fill: #4d5157;
+}
+
+.hero-anim .marks line {
+  stroke: #1b1d20;
+  stroke-width: 2;
+}
+
+.hero-anim .unused {
+  fill: none;
   stroke: var(--red);
-  stroke-width: 1;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
 }
 
-.hero-anim .src,
-.hero-anim .core,
-.hero-anim .res {
-  opacity: 1;
+.hero-anim .s {
+  fill: #b7bfc6;
+  opacity: 0;
 }
 
-.hero-anim.play .src {
+.hero-anim .bar {
+  transform-origin: 0 0;
+}
+
+.hero-anim .blank {
+  transform-origin: 130px 30px;
+}
+
+.hero-anim .hammer {
+  transform-origin: 0 0;
+  transform: rotate(62deg);
+}
+
+.hero-anim.play .hammer {
+  animation: swing 3.6s both;
+}
+
+.hero-anim.play .blank {
+  animation: thud 3.6s both;
+}
+
+.hero-anim.play .metal {
+  animation: heat 7s both;
+}
+
+.hero-anim.play .bar {
+  animation: plunge 7.6s both;
+}
+
+.hero-anim.play .s {
+  animation: steam 1.7s ease-out both;
+}
+
+.hero-anim.play .s1 {
+  animation-delay: 4.55s;
+}
+.hero-anim.play .s2 {
+  animation-delay: 4.7s;
+}
+.hero-anim.play .s3 {
+  animation-delay: 4.85s;
+}
+.hero-anim.play .s4 {
+  animation-delay: 5.05s;
+}
+.hero-anim.play .s5 {
+  animation-delay: 5.25s;
+}
+.hero-anim.play .s6 {
+  animation-delay: 5.5s;
+}
+
+.hero-anim.play .marks,
+.hero-anim.play .lbl {
   animation: appear 0.5s var(--ease) both;
+  animation-delay: 6.9s;
 }
 
-.hero-anim.play .src-2 {
-  animation-delay: 0.15s;
+.hero-anim.play .l2 {
+  animation-delay: 7.1s;
+}
+.hero-anim.play .l3 {
+  animation-delay: 7.3s;
+}
+.hero-anim.play .l4 {
+  animation-delay: 7.5s;
+}
+.hero-anim.play .l5 {
+  animation-delay: 7.7s;
 }
 
-.hero-anim.play .src-3 {
-  animation-delay: 0.3s;
-}
-
-.hero-anim.play .row {
-  animation: appear 0.3s var(--ease) both;
-}
-
-.hero-anim.play .src .r1 {
-  animation-delay: 0.5s;
-}
-.hero-anim.play .src .r2 {
-  animation-delay: 0.65s;
-}
-.hero-anim.play .src .r3 {
-  animation-delay: 0.8s;
-}
-
-.hero-anim.play .flow {
-  animation: draw 0.8s var(--ease) both;
-  animation-delay: 1s;
-}
-
-.hero-anim.play .core {
-  animation: appear 0.5s var(--ease) both;
-  animation-delay: 1.5s;
-}
-
-.hero-anim.play .out {
-  animation: draw 0.7s var(--ease) both;
-  animation-delay: 2.1s;
-}
-
-.hero-anim.play .res {
-  animation: appear 0.5s var(--ease) both;
-  animation-delay: 2.6s;
-}
-
-.hero-anim.play .res-2 {
-  animation-delay: 2.75s;
-}
-.hero-anim.play .res-3 {
-  animation-delay: 2.9s;
-}
-
-.hero-anim.play .fill-start {
-  transform-origin: 14px 0;
-  transform-box: view-box;
-  animation: growx 0.9s var(--ease) both;
-  animation-delay: 3.1s;
-}
-
-.hero-anim.play .fill-work {
-  transform-origin: 190px 0;
-  transform-box: view-box;
-  animation: growx 0.6s var(--ease) both;
-  animation-delay: 3.9s;
-}
-
-.hero-anim.play .ticks rect {
-  animation: appear 0.2s var(--ease) both;
-}
-
-.hero-anim.play .ticks rect:nth-child(1) {
-  animation-delay: 3.3s;
-}
-.hero-anim.play .ticks rect:nth-child(2) {
-  animation-delay: 3.42s;
-}
-.hero-anim.play .ticks rect:nth-child(3) {
-  animation-delay: 3.54s;
-}
-.hero-anim.play .ticks rect:nth-child(4) {
-  animation-delay: 3.66s;
-}
-.hero-anim.play .ticks rect:nth-child(5) {
-  animation-delay: 3.78s;
-}
-.hero-anim.play .ticks rect:nth-child(6) {
-  animation-delay: 3.9s;
-}
-.hero-anim.play .ticks rect:nth-child(7) {
-  animation-delay: 4.02s;
-}
-.hero-anim.play .ticks rect:nth-child(8) {
-  animation-delay: 4.14s;
-}
-.hero-anim.play .ticks rect:nth-child(9) {
-  animation-delay: 4.26s;
-}
-.hero-anim.play .ticks rect:nth-child(10) {
-  animation-delay: 4.38s;
-}
-.hero-anim.play .ticks rect:nth-child(11) {
-  animation-delay: 4.5s;
-}
-
-.hero-anim.play .chips rect {
-  animation: appear 0.3s var(--ease) both;
-  animation-delay: 3.4s;
-}
-
-.hero-anim.play .chips rect.dead {
-  animation: fade-dead 0.5s var(--ease) both;
-  animation-delay: 4.2s;
-}
-
-.hero-anim.play .val {
-  animation: appear 0.4s var(--ease) both;
-  animation-delay: 4.6s;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+@keyframes swing {
+  0%,
+  16.7% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
   }
-  to {
-    opacity: 1;
+  20.8%,
+  22.2% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  27.8% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
+  }
+  31.9%,
+  33.3% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  38.9% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
+  }
+  43.1%,
+  44.4% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  50% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
+  }
+  54.2%,
+  55.6% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  61.1% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
+  }
+  65.3%,
+  66.7% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  72.2% {
+    transform: rotate(55deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.5);
+  }
+  76.4%,
+  77.8% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  83.3% {
+    transform: rotate(55deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: rotate(62deg);
+  }
+}
+
+@keyframes thud {
+  0%,
+  20%,
+  24%,
+  31%,
+  35%,
+  42%,
+  46%,
+  53%,
+  57%,
+  64%,
+  68%,
+  75%,
+  79%,
+  100% {
+    transform: none;
+  }
+  21.5%,
+  32.5%,
+  43.5%,
+  54.5%,
+  65.5%,
+  76.5% {
+    transform: scale(1.015, 0.93);
+  }
+}
+
+@keyframes heat {
+  0% {
+    fill: #d4521a;
+  }
+  10% {
+    fill: #de5d1b;
+  }
+  45%,
+  66% {
+    fill: #ffb24a;
+  }
+  72% {
+    fill: #e0541c;
+  }
+  78% {
+    fill: #8a331c;
+  }
+  85% {
+    fill: #3f3839;
+  }
+  90%,
+  100% {
+    fill: #4d5157;
+  }
+}
+
+@keyframes plunge {
+  0%,
+  47.4% {
+    transform: none;
+    animation-timing-function: ease-out;
+  }
+  52.6% {
+    transform: translate(24px, -46px) rotate(-5deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.6);
+  }
+  60.5%,
+  78.9% {
+    transform: translate(130px, 150px) rotate(20deg);
+    animation-timing-function: ease-in-out;
+  }
+  89.5%,
+  100% {
     transform: none;
   }
 }
 
-@keyframes appear {
-  from {
+@keyframes steam {
+  0% {
     opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes draw {
-  from {
-    stroke-dashoffset: 600;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes growx {
-  from {
-    transform: scaleX(0);
-  }
-  to {
     transform: none;
   }
-}
-
-@keyframes fade-dead {
-  from {
-    fill: var(--accent-dim);
-    stroke: transparent;
+  18% {
+    opacity: 0.55;
   }
-  to {
-    fill: var(--line-2);
-    stroke: var(--red);
+  100% {
+    opacity: 0;
+    transform: translateY(-130px) scale(1.9);
   }
 }
 
@@ -1209,9 +1228,6 @@ footer a {
   .col.compact em {
     display: none;
   }
-  .hero-anim {
-    max-width: 340px;
-  }
   .x {
     margin-left: 46px;
     padding: 0 3px;
@@ -1240,5 +1256,14 @@ footer a {
     flex-direction: column;
     gap: 6px;
     padding: 16px 18px;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
