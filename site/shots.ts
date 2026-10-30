@@ -3,7 +3,15 @@ import { chromium } from "/tmp/hero-tools/node_modules/playwright";
 
 const url = process.env.URL ?? "http://localhost:4350";
 const exe = "/usr/lib/chromium/chromium";
-const browser = await chromium.launch({ executablePath: exe });
+const browser = await chromium.launch({
+  executablePath: exe,
+  args: [
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader",
+    "--ignore-gpu-blocklist",
+  ],
+});
 
 for (const width of [1440, 390]) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -33,6 +41,12 @@ for (const [i, t] of at.entries()) {
     animations: "allow",
   });
 }
+await frames.screenshot({
+  path: `${import.meta.dir}/hero-still.jpg`,
+  clip: box,
+  type: "jpeg",
+  quality: 82,
+});
 await frames.close();
 
 const recording = await browser.newContext({

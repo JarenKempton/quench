@@ -1,9 +1,8 @@
-import { mountForge } from "./forge.js";
-
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const revealed = document.querySelectorAll(".reveal");
 
-document.querySelectorAll("[data-forge]").forEach(mountForge);
+const forge = document.querySelector("[data-forge]");
+if (forge) void import("./forge.js").then(({ mountForge }) => mountForge(forge));
 
 if (reduced || !("IntersectionObserver" in window)) {
   revealed.forEach((el) => el.classList.add("in"));

@@ -6,5 +6,11 @@
     "preview": "bun serve.ts",
     "build": "bun build.ts",
     "shots": "bun shots.ts"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0"
   }
 }
