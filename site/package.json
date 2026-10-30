@@ -1,0 +1,10 @@
+{
+  "name": "@quench/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "bun serve.ts",
+    "build": "bun build.ts",
+    "shots": "bun shots.ts"
+  }
+}
