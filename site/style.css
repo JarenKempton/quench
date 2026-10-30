@@ -510,14 +510,6 @@ h2 {
   z-index: 2;
 }
 
-.refline span {
-  position: absolute;
-  right: 0;
-  bottom: 4px;
-  color: var(--accent);
-  font-size: 11px;
-}
-
 .cols {
   position: absolute;
   inset: 0;
