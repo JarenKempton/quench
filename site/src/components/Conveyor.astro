@@ -59,10 +59,10 @@ const rows = [
   { name: "Skills", used: skillUse.used, of: skillUse.listed, cut: skillUse.used < skillUse.listed },
 ];
 const steps = [
-  { x: LOAD_X, word: "Load" },
-  { x: P, word: "Measure", note: "you remove them" },
-  { x: TANK_X, word: "Quench" },
-  { x: CART_X, word: "Stack" },
+  { x: LOAD_X, word: "Load", note: "your setup" },
+  { x: P, word: "Measure", note: "you cut the unused", cut: true },
+  { x: TANK_X, word: "Quench", note: "the rest sets" },
+  { x: CART_X, word: "Stack", note: "what you keep" },
 ];
 const casters = [CART_X - 52, CART_X + 52];
 ---
@@ -286,10 +286,12 @@ const casters = [CART_X - 52, CART_X + 52];
         steps.map((s) => (
           <li style={`left:${(s.x / W) * 100}%`}>
             {s.word}
-            {s.note && (
-              <span class="cv-note" data-k="note-cut" {...a["note-cut"]}>
+            {s.cut ? (
+              <span class="cv-note cv-note-cut" data-k="note-cut" {...a["note-cut"]}>
                 {s.note}
               </span>
+            ) : (
+              <span class="cv-note">{s.note}</span>
             )}
           </li>
         ))
@@ -570,6 +572,10 @@ const casters = [CART_X - 52, CART_X + 52];
 
   .cv-note {
     font-size: 14px;
+    color: var(--mute);
+  }
+
+  .cv-note-cut {
     color: var(--yellow);
   }
 
@@ -658,6 +664,10 @@ const casters = [CART_X - 52, CART_X + 52];
 
     .cv-note {
       font-size: 12px;
+    }
+
+    .cv-note:not(.cv-note-cut) {
+      display: none;
     }
 
     .conveyor-panel {
