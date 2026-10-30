@@ -1,253 +1,12 @@
 ---
-import { facts, segments, slabWidth } from "../forge.ts";
+import { aria, geo } from "../forge.ts";
 
-const BELT = 300;
-const SH = 48;
-const TH = 9;
-const dead = segments.find((s) => s.dead)!;
-const keptW = dead.x;
-const dc = dead.x + dead.w / 2;
-const at = { scan: 50, heat: 308, press: 640 - dc, tank: 824 - keptW / 2, cart: 1035 - keptW / 2 };
-
-const box = (x: number, y: number, w: number, h: number, tone = "") => [
-  { x, y, width: w, height: h, class: `f ${tone}` },
-  { x, y, width: w, height: Math.min(6, h / 3), class: `t ${tone}` },
-  { x, y: y + h - Math.min(4, h / 4), width: w, height: Math.min(4, h / 4), class: `s ${tone}` },
-];
-
-const rand = (i: number, k: number) => {
-  const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
-  return v - Math.floor(v);
-};
-
-const G = 1800;
-const shards = Array.from({ length: 6 }, (_, i) => {
-  const c = i % 3;
-  const r = Math.floor(i / 3);
-  const w = dead.w / 3;
-  const h = SH / 2;
-  const x0 = at.press + dead.x + (c + 0.5) * w;
-  const y0 = BELT - SH + (r + 0.5) * h;
-  const restX = 608 + c * 28 + r * 12;
-  const restY = 380 - r * 8 - (c % 2) * 3;
-  const vy = -(160 + rand(i, 1) * 120);
-  const land = (-vy + Math.sqrt(vy * vy + 2 * G * (restY - y0))) / G;
-  const j = (rand(i, 2) - 0.5) * 8;
-  return {
-    points: `${-w / 2 + 2},${-h / 2 + j} ${w / 2},${-h / 2} ${w / 2 - 3},${h / 2} ${-w / 2},${h / 2 - j / 2}`,
-    x0,
-    y0,
-    vy,
-    land,
-    vx: (restX - x0) / land,
-    spin: (i % 2 ? 1 : -1) * (90 + rand(i, 3) * 120),
-  };
-});
-
-const puffs = Array.from({ length: 16 }, (_, i) => ({
-  x: 772 + rand(i, 7) * 104,
-  delay: Math.pow(i / 16, 1.4) * 1.6,
-  life: 1.5 + rand(i, 8) * 0.8,
-  rise: 140 + rand(i, 9) * 110,
-  drift: 10 + rand(i, 10) * 50,
-  r0: 10 + rand(i, 11) * 8,
-  r1: 30 + rand(i, 12) * 22,
-}));
-
-const drops = Array.from({ length: 10 }, (_, i) => ({
-  x: 824 + (i % 2 ? 1 : -1) * (30 + rand(i, 13) * 40),
-  vx: (i % 2 ? 1 : -1) * (40 + rand(i, 14) * 100),
-  vy: -(200 + rand(i, 15) * 180),
-  r: 2.5 + rand(i, 16) * 2.5,
-}));
-
-const bubbles = Array.from({ length: 8 }, (_, i) => ({ x: at.tank + 8 + rand(i, 17) * (keptW - 16), phase: rand(i, 18) }));
-const drips = [0.22, 0.5, 0.8].map((f, i) => ({ x: at.tank + keptW * f, delay: i * 0.17 }));
-
-const rollers = Array.from({ length: 16 }, (_, i) => 52 + i * 44).filter((x) => x < 720);
-const coils = Array.from({ length: 12 }, (_, i) => 312 + i * 20);
-
-const sheets = Array.from({ length: 8 }, (_, i) => ({
-  x: at.scan + (rand(i, 19) - 0.5) * 8,
-  y: BELT - (i + 1) * (SH / 8),
-  w: slabWidth - 4 + (rand(i, 20) - 0.5) * 8,
-}));
-
-const geo = { at, keptW, slabWidth, SH, BELT, shards, puffs, drops, bubbles, drips, start: facts.start, G };
 const beats = ["Scan", "Spot", "Smash", "Quench"];
 ---
 
 <figure class="card forge" data-forge data-state="ready" data-geo={JSON.stringify(geo)}>
-  <div class="stage">
-    <svg
-      viewBox="0 0 1200 460"
-      data-view
-      role="img"
-      aria-label={`A production line, run once. Saved session history is scanned into a block measuring ${facts.startText} tokens. Heat shows which parts get used. The ${facts.server} part stays cold: ${facts.unused}. You remove it, and it drops in the scrap bin. The rest is quenched in water and clamped onto a cart, where it stays.`}
-    >
-      <defs>
-        <clipPath id="fg-reveal"><rect data-reveal x="0" y="-80" width="0" height="140" /></clipPath>
-        <clipPath id="fg-sheets"><rect data-sheet-clip x="0" y="200" width="1200" height="120" /></clipPath>
-      </defs>
-
-      <rect x="-40" y="-40" width="1280" height="540" class="wall" />
-      <rect x="-40" y="400" width="1280" height="100" class="floor" />
-      <rect x="-40" y="400" width="1280" height="3" class="floor-edge" />
-
-      <g class="crane">
-        {[470, 820, 1170].map((x) => <rect x={x - 3} y="0" width="6" height="30" class="rod" />)}
-        {box(420, 30, 770, 14, "k").map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="press-back">
-        {box(560, 60, 16, 340).map((r) => <rect {...r} />)}
-        {box(704, 60, 16, 340).map((r) => <rect {...r} />)}
-        {box(548, 388, 40, 12, "k").map((r) => <rect {...r} />)}
-        {box(692, 388, 40, 12, "k").map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="scanner-back">
-        {box(20, 96, 12, 204).map((r) => <rect {...r} />)}
-        {box(288, 96, 12, 204).map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="heater">
-        {[356, 500].map((x) => <rect x={x - 3} y="0" width="6" height="150" class="rod" />)}
-        {box(302, 146, 252, 52).map((r) => <rect {...r} />)}
-        {coils.map((x) => <rect data-coil x={x} y="198" width="14" height="8" rx="3" class="coil" />)}
-      </g>
-
-      <g data-hook-back>
-        <line data-cable x1="900" y1="58" x2="900" y2="110" class="cable" />
-        <g data-trolley>
-          {box(-24, 42, 48, 16, "k").map((r) => <rect {...r} />)}
-          <circle cx="-13" cy="44" r="5" class="wheel" />
-          <circle cx="13" cy="44" r="5" class="wheel" />
-        </g>
-        <g data-spreader>
-          {box(-keptW / 2 - 14, 0, keptW + 28, 10).map((r) => <rect {...r} />)}
-          <rect x="-9" y="-8" width="18" height="10" rx="3" class="t" />
-        </g>
-      </g>
-
-      <rect x="756" y="286" width="138" height="106" class="tank-in" />
-
-      <g class="cart">
-        {box(940, 340, 200, 14).map((r) => <rect {...r} />)}
-        <rect x="960" y="354" width="160" height="10" class="s k" />
-        {[978, 1100].map((x) => (
-          <g>
-            <circle cx={x} cy="380" r="20" class="tyre" />
-            <circle cx={x} cy="380" r="8" class="hub" />
-          </g>
-        ))}
-        {box(985, 332, 26, 8, "k").map((r) => <rect {...r} />)}
-        {box(1059, 332, 26, 8, "k").map((r) => <rect {...r} />)}
-        {box(950, 266, 12, 74).map((r) => <rect {...r} />)}
-        {box(1108, 266, 12, 74).map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="belt">
-        {[70, 370, 520].map((x) => box(x, 322, 14, 78).map((r) => <rect {...r} />))}
-        <rect x="30" y="300" width="700" height="22" rx="11" class="rubber" />
-        <line data-belt x1="40" y1="302" x2="720" y2="302" class="belt-top" />
-        {rollers.map((x) => (
-          <g data-roller data-x={x} transform={`translate(${x} 311)`}>
-            <circle cx="0" cy="0" r="7" class="roller" />
-            <line x1="-5" y1="0" x2="5" y2="0" class="roller-spoke" />
-          </g>
-        ))}
-      </g>
-
-      <g class="sheets" clip-path="url(#fg-sheets)">
-        {sheets.map((s, i) => <rect x={s.x} y={s.y} width={s.w} height={SH / 8 - 0.8} rx="1" class:list={["sheet", { alt: i % 2 }]} />)}
-      </g>
-
-      <g data-ram>
-        <rect x="632" y="20" width="16" height="112" class="rod-steel" />
-        {box(582, 130, 116, 56).map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="press-top">
-        {box(548, 48, 184, 40, "k").map((r) => <rect {...r} />)}
-      </g>
-
-      <g data-slab>
-        <g clip-path="url(#fg-reveal)">
-          <g data-kept>
-            {segments.filter((s) => !s.dead).map((s) => (
-              <g>
-                <rect data-face="front" x={s.x} y="0" width={Math.max(1, s.w - 1.5)} height={SH} />
-                <rect data-face="top" x={s.x} y="0" width={Math.max(1, s.w - 1.5)} height={TH} />
-              </g>
-            ))}
-            <rect x="0" y={SH - 4} width={keptW - 1.5} height="4" class="slab-shade" />
-          </g>
-          <g data-dead>
-            <rect data-dead-front x={dead.x} y="0" width={dead.w} height={SH} />
-            <rect data-dead-top x={dead.x} y="0" width={dead.w} height={TH} />
-            <rect data-dead-shade x={dead.x} y={SH - 4} width={dead.w} height="4" class="slab-shade" />
-            <g data-tag>
-              <text x={dc} y="25" text-anchor="middle" class="tag">{facts.server}</text>
-              <text data-unused opacity="0" x={dc} y="40" text-anchor="middle" class="tag used">{facts.unused}</text>
-            </g>
-          </g>
-        </g>
-      </g>
-
-      <g data-hook-front>
-        {[-1, 1].map((side) => (
-          <g data-arm={side}>
-            <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 + 1} y="6" width="8" height="52" rx="2" class="t" />
-            <rect x={side < 0 ? -keptW / 2 - 9 : keptW / 2 - 3} y="52" width="12" height="6" rx="2" class="t" />
-          </g>
-        ))}
-      </g>
-
-      <g class="clamps">
-        <g data-jaw="-1">
-          {box(944, 272, 14, 18).map((r) => <rect {...r} />)}
-          {box(944, 272, 40, 10).map((r) => <rect {...r} />)}
-        </g>
-        <g data-jaw="1">
-          {box(1112, 272, 14, 18).map((r) => <rect {...r} />)}
-          {box(1086, 272, 40, 10).map((r) => <rect {...r} />)}
-        </g>
-      </g>
-
-      <path data-water d="" class="water" />
-      <path data-surface d="" class="surface" />
-      {bubbles.map(() => <circle data-bubble r="0" class="bubble" />)}
-      <g class="tank-front">
-        <rect x="750" y="282" width="6" height="118" class="f" />
-        <rect x="894" y="282" width="6" height="118" class="f" />
-        {box(744, 278, 18, 8, "k").map((r) => <rect {...r} />)}
-        {box(888, 278, 18, 8, "k").map((r) => <rect {...r} />)}
-        {box(744, 390, 162, 10, "k").map((r) => <rect {...r} />)}
-      </g>
-
-      <g class="scrap">
-        <rect x="594" y="352" width="102" height="10" class="tank-in" />
-        {shards.map((s) => <polygon data-shard points={s.points} class="shard" />)}
-        {box(588, 360, 114, 40, "k").map((r) => <rect {...r} />)}
-        <text data-note opacity="0" x="645" y="434" text-anchor="middle" class="note">you remove it</text>
-      </g>
-
-      <g class="scanner">
-        {box(12, 84, 296, 30).map((r) => <rect {...r} />)}
-        <rect x="58" y="87" width="204" height="24" rx="3" class="lcd" />
-        <text data-readout x="160" y="105.5" text-anchor="middle" class="readout">0.0k tokens</text>
-        <line data-scanline x1="0" y1="252" x2="0" y2="300" class="scanline" />
-        <g data-head>
-          {box(-24, 114, 48, 30, "k").map((r) => <rect {...r} />)}
-          <rect x="-16" y="144" width="32" height="5" rx="2" class="lens" />
-        </g>
-      </g>
-
-      {drops.map(() => <circle data-drop r="0" class="drop" />)}
-      {drips.map(() => <circle data-drip r="0" class="drop" />)}
-      {puffs.map(() => <circle data-puff r="0" class="puff" />)}
-    </svg>
+  <div class="stage" data-stage>
+    <canvas data-view role="img" aria-label={aria}></canvas>
   </div>
 
   <div class="rail">
@@ -266,43 +25,45 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
 </figure>
 
 <script>
-  type P = { x: number; y: number };
-  type Geo = {
-    at: Record<"scan" | "heat" | "press" | "tank" | "cart", number>;
-    keptW: number;
-    slabWidth: number;
-    SH: number;
-    BELT: number;
-    shards: { x0: number; y0: number; vx: number; vy: number; land: number; spin: number }[];
-    puffs: { x: number; delay: number; life: number; rise: number; drift: number; r0: number; r1: number }[];
-    drops: { x: number; vx: number; vy: number; r: number }[];
-    bubbles: { x: number; phase: number }[];
-    drips: { x: number; delay: number }[];
-    start: number;
-    G: number;
-  };
+  type Part = { x: number; w: number; kind: "base" | "tracker" | "plate" | "block" };
+  type Geo = { width: number; keptW: number; parts: Part[]; start: number; usedLabel: string; idleLabel: string[]; note: string };
+  type RGB = [number, number, number];
+  type Ctx = CanvasRenderingContext2D;
 
-  const END = 15.4;
-  const BEATS = [0, 3.0, 6.0, 10.8];
-  const STILLS = [2.85, 5.9, 8.45, END];
-  const IMPACT = 7.655;
-  const SPLASH = 11.04;
+  const H = 520;
+  const W = 2470;
+  const FL = 468;
+  const BT = 372;
+  const SH = 66;
+  const TD = 12;
+  const SX = 66;
+  const HX = 650;
+  const XE = 1380;
+  const TX = 1840;
+  const CX = 2250;
+  const TANK = 155;
+  const WL = 380;
+  const FT = 392;
+  const BIN = { x0: XE - 80, x1: XE + 252, rim: 410, front: 440, floor: 456 };
+  const G = 2600;
+
+  const END = 17.2;
+  const BEATS = [0, 3.0, 6.6, 10.0];
+  const STILLS = [2.85, 6.4, 9.7, END];
+  const IMPACT = 8.3;
+  const SPLASH = 13.35;
+  const LIFT = 14.6;
 
   const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
   const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
   const lin = (x: number) => x;
   const inOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const sine = (x: number) => 0.5 - Math.cos(Math.PI * x) / 2;
   const out = (x: number) => 1 - Math.pow(1 - x, 3);
-  const quadIn = (x: number) => x * x;
   const cubicIn = (x: number) => x * x * x;
+  const accel = (x: number) => (x * x + x) / 2;
   const back = (s: number) => (x: number) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
-  const inOutBack = (s: number) => (x: number) => {
-    const c = s * 1.525;
-    return x < 0.5
-      ? (Math.pow(2 * x, 2) * ((c + 1) * 2 * x - c)) / 2
-      : (Math.pow(2 * x - 2, 2) * ((c + 1) * (x * 2 - 2) + c) + 2) / 2;
-  };
   type Key = [number, number, ((x: number) => number)?];
   const track = (t: number, keys: Key[]) => {
     if (t <= keys[0][0]) return keys[0][1];
@@ -315,202 +76,753 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
   };
   const decay = (t: number, from: number, k: number, w: number) =>
     t < from ? 0 : Math.exp(-(t - from) * k) * Math.sin((t - from) * w);
-
-  const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-  const mix = (a: string, b: string, x: number) => {
-    const [p, q] = [hex(a), hex(b)];
-    return `rgb(${p.map((v, i) => Math.round(lerp(v, q[i], x))).join(" ")})`;
+  const rand = (i: number, k: number) => {
+    const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+    return v - Math.floor(v);
   };
-  const ramp = (stops: string[], x: number) => {
+
+  const hex = (s: string): RGB => [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16)) as RGB;
+  const mix = (a: RGB, b: RGB, x: number): RGB => [lerp(a[0], b[0], x), lerp(a[1], b[1], x), lerp(a[2], b[2], x)];
+  const css = (c: RGB, a = 1) => `rgb(${c[0] | 0} ${c[1] | 0} ${c[2] | 0} / ${a.toFixed(3)})`;
+  const ramp = (stops: RGB[], x: number) => {
     const n = stops.length - 1;
-    const i = Math.min(n - 1, Math.floor(clamp(x) * n));
-    return mix(stops[i], stops[i + 1], clamp(x) * n - i);
+    const v = clamp(x) * n;
+    const i = Math.min(n - 1, Math.floor(v));
+    return mix(stops[i], stops[i + 1], v - i);
   };
-  const kilo = (n: number) => `${(n / 1000).toFixed(1)}k tokens`;
+  const lum = (c: RGB) => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+  const WHITE: RGB = [255, 255, 255];
+  const BLACK: RGB = [0, 0, 0];
 
-  const FRONT = { raw: "#3b5e7e", cold: "#2a4560", hot: ["#3b5e7e", "#9b3420", "#e8642a", "#ff8f3a"], cool: "#7fb0d2" };
-  const TOP = { raw: "#5d84a6", cold: "#3c5c7b", hot: ["#5d84a6", "#c9502c", "#ff9a52", "#ffc77a"], cool: "#d6effc" };
-  const COIL = { off: "#24496b", on: "#ff9447" };
+  const RAW = hex("#3d6b93");
+  const HEAT = ["#3d6b93", "#5b3438", "#8f2614", "#c93a19", "#ee611f", "#ff8d33", "#ffc56a"].map(hex);
+  const TEMPER = ["#2b3946", "#a8925f", "#8c6a4a", "#61567a", "#4a69a0", "#6d9dc3"].map(hex);
+  const DARK_TEXT: RGB = hex("#0b2540");
+  const HOT_TEXT: RGB = hex("#3d1005");
+  const LIGHT_TEXT: RGB = hex("#e8f5fd");
+
+  const TONES = {
+    steel: { f: ["#2c6492", "#1b4b75", "#0f3050"].map(hex), top: ["#4f8bbb", "#3672a2"].map(hex), edge: 0.5 },
+    dark: { f: ["#1f4f79", "#143c61", "#0a2641"].map(hex), top: ["#3b72a0", "#2a5d8a"].map(hex), edge: 0.32 },
+    deep: { f: ["#173d61", "#0f2f4d", "#081f37"].map(hex), top: ["#2b5b86", "#1f4b73"].map(hex), edge: 0.22 },
+  };
+  type Tone = keyof typeof TONES;
+
+  function vgrad(c: Ctx, y0: number, y1: number, stops: [number, string][]) {
+    const g = c.createLinearGradient(0, y0, 0, y1);
+    stops.forEach(([o, s]) => g.addColorStop(o, s));
+    return g;
+  }
+  function hgrad(c: Ctx, x0: number, x1: number, stops: [number, string][]) {
+    const g = c.createLinearGradient(x0, 0, x1, 0);
+    stops.forEach(([o, s]) => g.addColorStop(o, s));
+    return g;
+  }
+
+  function box(c: Ctx, x: number, y: number, w: number, h: number, tone: Tone = "steel", depth = 0) {
+    const m = TONES[tone];
+    if (depth) {
+      c.fillStyle = vgrad(c, y - depth, y, [[0, css(m.top[1])], [1, css(m.top[0])]]);
+      c.fillRect(x, y - depth, w, depth);
+    }
+    c.fillStyle = vgrad(c, y, y + h, [[0, css(m.f[0])], [0.45, css(m.f[1])], [1, css(m.f[2])]]);
+    c.fillRect(x, y, w, h);
+    c.fillStyle = hgrad(c, x, x + w, [[0, "rgb(255 255 255 / 0.035)"], [0.5, "rgb(0 0 0 / 0)"], [1, "rgb(0 0 0 / 0.14)"]]);
+    c.fillRect(x, y, w, h);
+    c.fillStyle = `rgb(190 225 250 / ${m.edge})`;
+    c.fillRect(x, y, w, 1);
+    c.fillStyle = "rgb(0 8 18 / 0.35)";
+    c.fillRect(x, y + h - 1.2, w, 1.2);
+  }
+
+  function rod(c: Ctx, x: number, y: number, w: number, h: number, tone: Tone = "dark", chrome = false) {
+    const m = TONES[tone];
+    const spec = chrome ? mix(m.top[0], WHITE, 0.55) : mix(m.f[0], WHITE, 0.18);
+    c.fillStyle = hgrad(c, x, x + w, [
+      [0, css(m.f[2])],
+      [0.28, css(m.f[0])],
+      [0.4, css(spec)],
+      [0.62, css(m.f[1])],
+      [1, css(mix(m.f[2], BLACK, 0.2))],
+    ]);
+    c.fillRect(x, y, w, h);
+  }
+
+  function shade(c: Ctx, cx: number, cy: number, rx: number, ry: number, a: number) {
+    if (a <= 0.003) return;
+    c.save();
+    c.translate(cx, cy);
+    c.scale(1, ry / rx);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0, `rgb(1 8 16 / ${a})`);
+    g.addColorStop(0.6, `rgb(1 8 16 / ${a * 0.45})`);
+    g.addColorStop(1, "rgb(1 8 16 / 0)");
+    c.fillStyle = g;
+    c.fillRect(-rx, -rx, rx * 2, rx * 2);
+    c.restore();
+  }
+
+  function glow(c: Ctx, cx: number, cy: number, rx: number, ry: number, color: RGB, a: number) {
+    if (a <= 0.003) return;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    c.translate(cx, cy);
+    c.scale(1, ry / rx);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0, css(color, a));
+    g.addColorStop(0.45, css(color, a * 0.4));
+    g.addColorStop(1, css(color, 0));
+    c.fillStyle = g;
+    c.fillRect(-rx, -rx, rx * 2, rx * 2);
+    c.restore();
+  }
+
+  function wheel(c: Ctx, x: number, y: number, r: number, angle: number, tyre = false) {
+    const g = c.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    if (tyre) {
+      g.addColorStop(0, "#1a2c3e");
+      g.addColorStop(1, "#050d16");
+    } else {
+      g.addColorStop(0, "#5e93bf");
+      g.addColorStop(0.55, "#24537d");
+      g.addColorStop(1, "#0c2742");
+    }
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+    const hub = tyre ? r * 0.5 : r * 0.42;
+    if (tyre) {
+      const h = c.createRadialGradient(x - hub * 0.3, y - hub * 0.4, 1, x, y, hub);
+      h.addColorStop(0, "#6c9cc4");
+      h.addColorStop(1, "#1d4870");
+      c.fillStyle = h;
+      c.beginPath();
+      c.arc(x, y, hub, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = tyre ? "#0b2236" : "#0a2036";
+    for (let k = 0; k < 3; k++) {
+      const a = angle + (k * Math.PI * 2) / 3;
+      c.beginPath();
+      c.arc(x + Math.cos(a) * hub * 0.62, y + Math.sin(a) * hub * 0.62, Math.max(1, r * 0.11), 0, Math.PI * 2);
+      c.fill();
+    }
+    c.beginPath();
+    c.arc(x, y, Math.max(1, r * 0.13), 0, Math.PI * 2);
+    c.fill();
+  }
 
   function mount(root: HTMLElement) {
     const geo: Geo = JSON.parse(root.dataset.geo!);
-    const $ = <T extends Element = SVGElement>(s: string) => root.querySelector<T>(s)!;
-    const $$ = <T extends Element = SVGElement>(s: string) => [...root.querySelectorAll<T>(s)];
-    const set = (el: Element, attrs: Record<string, string | number>) => {
-      for (const k in attrs) el.setAttribute(k, String(attrs[k]));
-    };
-    const { at, keptW, slabWidth, SH, BELT } = geo;
-    const rest = BELT - SH;
-
-    const view = $("[data-view]");
-    const slab = $("[data-slab]");
-    const deadG = $("[data-dead]");
-    const fronts = $$("[data-kept] [data-face='front']");
-    const tops = $$("[data-kept] [data-face='top']");
-    const deadFront = $("[data-dead-front]");
-    const deadTop = $("[data-dead-top]");
-    const tag = $("[data-tag]");
-    const unused = $("[data-unused]");
-    const reveal = $("[data-reveal]");
-    const sheetClip = $("[data-sheet-clip]");
-    const scanline = $("[data-scanline]");
-    const head = $("[data-head]");
-    const readout = $("[data-readout]");
-    const coils = $$("[data-coil]");
-    const ram = $("[data-ram]");
-    const belt = $("[data-belt]");
-    const rollers = $$("[data-roller]");
-    const shards = $$("[data-shard]");
-    const note = $("[data-note]");
-    const trolley = $("[data-trolley]");
-    const cable = $("[data-cable]");
-    const spreader = $("[data-spreader]");
-    const hookFront = $("[data-hook-front]");
-    const arms = $$("[data-arm]");
-    const water = $("[data-water]");
-    const surface = $("[data-surface]");
-    const bubbles = $$("[data-bubble]");
-    const drops = $$("[data-drop]");
-    const drips = $$("[data-drip]");
-    const puffs = $$("[data-puff]");
-    const jaws = $$("[data-jaw]");
-    const progress = $<HTMLElement>("[data-progress]");
+    const $ = <T extends Element = HTMLElement>(s: string) => root.querySelector<T>(s)!;
+    const $$ = <T extends Element = HTMLElement>(s: string) => [...root.querySelectorAll<T>(s)];
+    const canvas = $<HTMLCanvasElement>("[data-view]");
+    const stage = $("[data-stage]");
+    const c = canvas.getContext("2d")!;
+    const progress = $("[data-progress]");
     const beatButtons = $$<HTMLButtonElement>("[data-beat]");
     const narrow = matchMedia("(max-width: 640px)");
+    const mono = getComputedStyle(root).getPropertyValue("--mono").trim() || "monospace";
+
+    const S = geo.width;
+    const K = geo.keptW;
+    const C = S - K;
+    const PX = XE - K;
+    const block = geo.parts[geo.parts.length - 1];
+    const plates = geo.parts.filter((p) => p.kind === "plate" && p.x >= K);
+    const tracker = geo.parts.find((p) => p.kind === "tracker")!;
+    const idlers = Array.from({ length: 40 }, (_, i) => 76 + i * 46).filter((x) => x < XE - 40);
+
+    const blockFall = (() => {
+      const v0 = 420;
+      const d = BIN.floor - BT;
+      const land = (-v0 + Math.sqrt(v0 * v0 + 2 * G * d)) / G;
+      return { v0, d, land, hop: (0.12 * (v0 + G * land)) / G };
+    })();
+    const plateFall = plates.map((p, i) => {
+      const v0 = 360 + rand(i, 1) * 120;
+      const d = BIN.floor - BT;
+      return {
+        p,
+        delay: 0.01 * i,
+        v0,
+        d,
+        land: (-v0 + Math.sqrt(v0 * v0 + 2 * G * d)) / G,
+        dx: -6 + rand(i, 2) * 6,
+        angle: -(0.95 + rand(i, 3) * 0.32),
+      };
+    });
+
+    const puffs = Array.from({ length: 96 }, (_, i) => {
+      const early = i < 78;
+      const t0 = early ? SPLASH + 1.6 * Math.pow(i / 78, 1.8) : LIFT + 0.1 + ((i - 78) / 18) * 0.9;
+      return {
+        t0,
+        x: early ? TX - K / 2 - 6 + rand(i, 4) * (K + 12) : rand(i, 4),
+        y: early ? 364 + rand(i, 5) * 22 : 0,
+        life: Math.min(1.7 + rand(i, 6) * 1.1, END - 0.05 - t0),
+        v: 90 + rand(i, 7) * 110,
+        drift: -8 + rand(i, 8) * 30,
+        wob: 6 + rand(i, 9) * 10,
+        ph: rand(i, 10) * 6.28,
+        r0: 9 + rand(i, 11) * 8,
+        r1: 40 + rand(i, 12) * 46,
+        a: early ? 0.2 + rand(i, 13) * 0.16 : 0.12 + rand(i, 13) * 0.08,
+        late: !early,
+      };
+    });
+    const drops = Array.from({ length: 14 }, (_, i) => {
+      const side = i % 2 ? 1 : -1;
+      return { x: TX + side * (K / 2 - 10 - rand(i, 14) * 60), vx: side * (30 + rand(i, 15) * 110), vy: -(240 + rand(i, 16) * 200), r: 1.5 + rand(i, 17) * 1.4 };
+    });
+    const drips = Array.from({ length: 6 }, (_, i) => ({ f: 0.08 + (i / 5) * 0.84 + (rand(i, 18) - 0.5) * 0.06, t0: LIFT + 0.12 + rand(i, 19) * 0.55 }));
+    const bubbles = Array.from({ length: 18 }, (_, i) => ({ x: TX - K / 2 + 8 + rand(i, 20) * (K - 16), y: 366 + rand(i, 21) * 22, ph: rand(i, 22), rate: 2.2 + rand(i, 23) * 2 }));
+
+    const slabX = (t: number) => track(t, [[0, SX], [3.0, SX], [4.2, HX], [6.6, HX], [7.6, PX]]);
+    const trolleyX = (t: number) =>
+      track(t, [[0, TX], [8.7, TX], [9.8, PX + K / 2, sine], [11.7, PX + K / 2], [12.9, TX, sine], [15.15, TX], [15.95, CX, sine]]);
+    const HANG = 48;
+    const GRIP = BT - SH - HANG;
+    const spreaderY = (t: number) =>
+      track(t, [
+        [0, 70], [9.8, 70], [10.4, GRIP], [10.7, GRIP], [11.7, 40], [12.9, 40], [SPLASH, WL - SH - HANG, accel], [13.65, 400 - HANG, out],
+        [LIFT, 400 - HANG], [15.15, 150], [15.95, 150], [16.4, 386 - SH - HANG], [16.6, 386 - SH - HANG], [17.1, 150],
+      ]);
+    const attached = (t: number) => t >= 10.6 && t < 16.5;
+    const ramY = (t: number) =>
+      track(t, [
+        [7.75, 0], [8.1, -14, out], [8.16, -14], [IMPACT, 24, cubicIn], [8.36, 36, out], [8.46, 29], [8.56, 33], [8.66, 32],
+        [8.9, 32], [9.6, 0],
+      ]);
+
+    const sway = (() => {
+      const dt = 1 / 240;
+      const t0 = 10.6;
+      const n = Math.ceil((END + 0.5 - t0) / dt);
+      const out = new Float32Array(n);
+      const len = (t: number) => spreaderY(t) + HANG + SH / 2 - 34;
+      let th = 0;
+      let w = 0;
+      for (let i = 0; i < n; i++) {
+        const t = t0 + i * dt;
+        const a = (trolleyX(t + dt) - 2 * trolleyX(t) + trolleyX(t - dt)) / (dt * dt);
+        const L = Math.max(30, len(t));
+        const dL = (len(t + dt) - len(t - dt)) / (2 * dt);
+        const acc = -(1800 / L) * th - (0.022 * a) / L - ((2 * dL) / L) * w - 2.6 * w;
+        w += acc * dt;
+        th += w * dt;
+        if ((t > SPLASH - 0.2 && t < LIFT + 0.2) || t > 16.2) {
+          th *= Math.exp(-7 * dt);
+          w *= Math.exp(-7 * dt);
+        }
+        out[i] = clamp(th, -0.04, 0.04);
+      }
+      return (t: number) => (t < t0 ? 0 : out[Math.min(n - 1, Math.round((t - t0) / dt))]);
+    })();
+
+    const heatAt = (t: number) => 0.8 * inOut(span(t, 4.4, 6.0)) * (1 - 0.07 * span(t, 6.0, SPLASH));
+    const tone = (t: number) => {
+      const hot = heatAt(Math.min(t, SPLASH));
+      if (t < SPLASH) return { mid: ramp(HEAT, hot), T: hot, q: -1 };
+      const T = hot * Math.exp(-(t - SPLASH) * 2.6);
+      const q = span(t, SPLASH + 0.9, SPLASH + 3.4);
+      return { mid: mix(ramp(TEMPER, q), ramp(HEAT, T), clamp(T * 3)), T, q };
+    };
+
+    let k = 1;
+    let vw = 1240;
+    let backLayer: HTMLCanvasElement | null = null;
+    let foreLayer: HTMLCanvasElement | null = null;
+
+    function layer(draw: (c: Ctx) => void) {
+      const cv = document.createElement("canvas");
+      cv.width = Math.ceil(W * k);
+      cv.height = Math.ceil(H * k);
+      const cc = cv.getContext("2d")!;
+      cc.setTransform(k, 0, 0, k, 0, 0);
+      draw(cc);
+      return cv;
+    }
+
+    function drawBack(c: Ctx) {
+      c.fillStyle = vgrad(c, 0, FL, [[0, "#0c2c4b"], [0.55, "#0a2744"], [1, "#071d34"]]);
+      c.fillRect(0, 0, W, FL);
+      [420, 1300, 2150].forEach((x) => glow(c, x, 40, 760, 420, hex("#5a9ccc"), 0.05));
+      c.fillStyle = vgrad(c, FL - 70, FL, [[0, "rgb(1 8 18 / 0)"], [1, "rgb(1 8 18 / 0.32)"]]);
+      c.fillRect(0, FL - 70, W, 70);
+      c.fillStyle = vgrad(c, FL, H, [[0, "#0e2b47"], [0.25, "#091f35"], [1, "#04111f"]]);
+      c.fillRect(0, FL, W, H - FL);
+      c.fillStyle = "rgb(150 200 235 / 0.12)";
+      c.fillRect(0, FL, W, 1);
+
+      box(c, 1040, 6, W - 1040, 14, "dark");
+      [1100, 1620, 2140].forEach((x) => box(c, x - 4, -4, 8, 10, "deep"));
+
+      [34, 540].forEach((x) => {
+        shade(c, x + 7, FL + 3, 30, 6, 0.5);
+        rod(c, x, 146, 14, FL - 146, "dark");
+        box(c, x - 8, FL - 6, 30, 6, "deep");
+      });
+      box(c, 26, 118, 536, 30, "steel", 8);
+      c.fillStyle = "#03111f";
+      c.fillRect(196, 123, 200, 21);
+      c.fillStyle = vgrad(c, 123, 144, [[0, "rgb(160 210 240 / 0.08)"], [0.5, "rgb(160 210 240 / 0)"], [1, "rgb(0 0 0 / 0)"]]);
+      c.fillRect(196, 123, 200, 21);
+
+      [700, 1060].forEach((x) => rod(c, x - 3, 0, 6, 196, "dark"));
+      box(c, 630, 200, 500, 44, "steel", 10);
+      box(c, 638, 244, 484, 6, "deep");
+
+      [XE - 18, XE + C + 2].forEach((x) => {
+        shade(c, x + 8, FL + 3, 34, 6, 0.5);
+        rod(c, x, 200, 16, FL - 200, "dark");
+        box(c, x - 10, FL - 8, 36, 8, "deep");
+      });
+
+      [64, 344, 624, 904, 1184, XE - 104].forEach((x) => {
+        shade(c, x + 6, FL + 2, 22, 5, 0.45);
+        rod(c, x, BT + 44, 12, FL - BT - 44, "deep");
+        box(c, x - 6, FL - 5, 24, 5, "deep");
+      });
+      box(c, 14, BT + 36, XE - 8, 10, "dark");
+
+      shade(c, (BIN.x0 + BIN.x1) / 2, FL + 3, (BIN.x1 - BIN.x0) / 2 + 20, 8, 0.55);
+      c.fillStyle = vgrad(c, BIN.rim, BIN.floor, [[0, "#06182a"], [1, "#030d18"]]);
+      c.fillRect(BIN.x0, BIN.rim, BIN.x1 - BIN.x0, BIN.floor - BIN.rim);
+      c.fillStyle = "rgb(170 215 245 / 0.28)";
+      c.fillRect(BIN.x0, BIN.rim, BIN.x1 - BIN.x0, 1);
+      [BIN.x0 - 4, BIN.x1 - 2].forEach((x) => box(c, x, BIN.rim, 6, BIN.front - BIN.rim, "dark"));
+
+      shade(c, TX, FL + 3, TANK + 34, 8, 0.55);
+      c.fillStyle = vgrad(c, 348, FT, [[0, "#081d31"], [1, "#040f1c"]]);
+      c.fillRect(TX - TANK, 348, TANK * 2, FT - 348);
+      c.fillStyle = "rgb(170 215 245 / 0.3)";
+      c.fillRect(TX - TANK, 348, TANK * 2, 1);
+      [TX - TANK - 10, TX + TANK].forEach((x) => {
+        c.fillStyle = vgrad(c, 348, FT, [[0, css(TONES.steel.top[1])], [1, css(TONES.steel.top[0])]]);
+        c.fillRect(x, 348, 10, FT - 348);
+      });
+
+      const ux = K / 2 + 8;
+      shade(c, CX, FL + 3, 190, 8, 0.55);
+      [CX - ux - 12, CX + ux].forEach((x) => rod(c, x, 300, 12, 86, "steel"));
+      box(c, CX - 170, 386, 340, 14, "steel", 10);
+      box(c, CX - 150, 400, 300, 14, "deep");
+      [CX - 118, CX + 118].forEach((x) => {
+        box(c, x - 14, 412, 28, 16, "dark");
+        wheel(c, x, FL - 24, 24, 0.4, true);
+      });
+    }
+
+    function drawFore(c: Ctx) {
+      box(c, BIN.x0 - 6, BIN.front, BIN.x1 - BIN.x0 + 12, FL - BIN.front, "dark", 4);
+      box(c, TX - TANK - 10, FT, TANK * 2 + 20, FL - FT, "dark", 5);
+      c.fillStyle = vgrad(c, FT, FL, [[0, "rgb(255 255 255 / 0)"], [1, "rgb(0 6 14 / 0.25)"]]);
+      c.fillRect(TX - TANK - 10, FT, TANK * 2 + 20, FL - FT);
+    }
+
+    function face(x: number, y: number, w: number, h: number, mid: RGB, T: number, edge?: RGB) {
+      c.fillStyle = edge ? hgrad(c, x, x + w, [[0, css(edge)], [0.5, css(mid)], [1, css(edge)]]) : css(mid);
+      c.fillRect(x, y, w, h);
+      const m = 1 - clamp(T * 1.3);
+      if (m > 0) {
+        c.fillStyle = vgrad(c, y, y + h, [
+          [0, `rgb(255 255 255 / ${0.2 * m})`],
+          [0.12, `rgb(255 255 255 / ${0.07 * m})`],
+          [0.5, "rgb(0 0 0 / 0)"],
+          [1, `rgb(0 6 16 / ${0.4 * m})`],
+        ]);
+        c.fillRect(x, y, w, h);
+      }
+      if (T > 0.05) {
+        c.fillStyle = vgrad(c, y, y + h, [
+          [0, `rgb(70 6 0 / ${0.3 * T})`],
+          [0.45, `rgb(255 235 170 / ${0.16 * T})`],
+          [1, `rgb(50 4 0 / ${0.4 * T})`],
+        ]);
+        c.fillRect(x, y, w, h);
+      }
+    }
+
+    function top(x: number, y: number, w: number, mid: RGB, T: number, heater: number) {
+      const tc = T > 0.05 ? ramp(HEAT, Math.min(1, T * 1.05)) : mix(mid, hex("#a9d6f2"), 0.3);
+      c.fillStyle = vgrad(c, y - TD, y, [[0, css(mix(tc, BLACK, 0.12))], [1, css(tc)]]);
+      c.fillRect(x, y - TD, w, TD);
+      if (heater > 0) {
+        c.fillStyle = `rgb(255 130 50 / ${0.16 * heater})`;
+        c.fillRect(x, y - TD, w, TD);
+      }
+      c.fillStyle = `rgb(225 242 255 / ${0.5 * (1 - clamp(T * 1.4))})`;
+      c.fillRect(x, y, w, 1);
+    }
+
+    function seams(x: number, y: number, list: Part[], from: number, to: number, T: number) {
+      c.fillStyle = T > 0.2 ? `rgb(90 20 4 / ${0.55 * T})` : "rgb(4 18 32 / 0.6)";
+      list.forEach((p) => {
+        if (p.x <= from || p.x >= to) return;
+        c.fillRect(x + p.x - 0.6, y - TD, 1.2, SH + TD);
+      });
+    }
+
+    function text(lines: string[], cx: number, y: number, color: RGB, a: number) {
+      if (a <= 0.01) return;
+      c.font = `500 12.5px ${mono}`;
+      c.textAlign = "center";
+      c.textBaseline = "alphabetic";
+      c.fillStyle = css(color, a);
+      lines.forEach((l, i) => c.fillText(l, cx, y + i * 16));
+    }
+
+    const ink = (bg: RGB, hot: number) => {
+      const dark = mix(DARK_TEXT, HOT_TEXT, clamp(hot * 2));
+      return mix(LIGHT_TEXT, dark, clamp((lum(bg) - 0.36) * 8));
+    };
+
+    function piece(t: number, x: number, y: number, whole: boolean, heater: number, labels: number) {
+      const st = tone(t);
+      const edge = st.q >= 0 && st.q < 1 && st.T < 0.3 ? ramp(TEMPER, st.q + 0.12) : undefined;
+      const coldMid = RAW;
+      face(x, y, K, SH, st.mid, st.T, edge);
+      top(x, y, K, st.mid, st.T, heater);
+      if (whole) {
+        face(x + K, y, C, SH, coldMid, 0);
+        top(x + K, y, C, coldMid, 0, heater);
+        seams(x, y, geo.parts, K - 0.1, S, 0);
+        c.fillStyle = "rgb(2 10 20 / 0.55)";
+        c.fillRect(x + K - 0.7, y - TD, 1.4, SH + TD);
+        const cx = x + block.x + block.w / 2;
+        text(geo.idleLabel, cx, y + 24, LIGHT_TEXT, labels);
+      }
+      seams(x, y, geo.parts, 0, K, st.T);
+      text([geo.usedLabel], x + tracker.x + tracker.w / 2, y + 24, ink(st.mid, st.T), labels);
+      c.fillStyle = "rgb(0 6 14 / 0.4)";
+      c.fillRect(x, y + SH - 1.5, whole ? S : K, 1.5);
+    }
 
     function render(t: number) {
-      const scanX = track(t, [[0.5, at.scan - 6], [2.8, at.scan + slabWidth + 6, lin]]);
-      const scanning = span(t, 0.35, 0.55) * (1 - span(t, 2.8, 3.05));
+      const cw = canvas.width;
+      const ch = canvas.height;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      const wide = !narrow.matches;
+      const focus = wide
+        ? 0
+        : track(t, [
+            [0, SX + S / 2], [3.0, SX + S / 2], [4.2, HX + S / 2], [6.6, HX + S / 2], [7.6, XE + 40], [9.7, XE + 40],
+            [10.5, PX + K / 2], [11.7, PX + K / 2], [12.9, TX, sine], [15.15, TX], [15.95, CX, sine],
+          ]);
+      const camX = wide
+        ? track(t, [[0, 0], [6.6, 0], [7.7, 560], [11.7, 560], [12.9, W - vw, sine]])
+        : clamp(focus - vw / 2, 0, W - vw);
+      c.drawImage(backLayer!, Math.round(camX * k), 0, cw, ch, 0, 0, cw, ch);
+      c.setTransform(k, 0, 0, k, -camX * k, 0);
 
-      const carried = t >= 9.35 && t < 14.15;
-      const sx = track(t, [
-        [3.0, at.scan], [3.9, at.heat, inOutBack(0.9)], [6.0, at.heat], [6.75, at.press, inOutBack(0.9)],
-        [9.95, at.press], [10.75, at.tank], [12.8, at.tank], [13.6, at.cart],
-      ]);
-      const sy = track(t, [
-        [9.35, rest], [9.45, rest + 3], [9.95, 196], [10.85, 196], [11.15, 340, quadIn], [12.2, 340], [12.7, 196],
-        [13.7, 196], [14.1, 284, back(1.6)],
-      ]);
-      const hop = t > IMPACT && t < IMPACT + 0.3 ? -Math.abs(Math.sin(((t - IMPACT) / 0.3) * Math.PI)) * 4 : 0;
+      const on = span(t, 4.1, 4.5) * (1 - span(t, 6.1, 6.9));
+      for (let i = 0; i < 16; i++) {
+        const x = 650 + i * 29.5;
+        const e = clamp(on * 1.3 - i * 0.015);
+        c.fillStyle = vgrad(c, 250, 257, [[0, css(mix(hex("#173a5a"), hex("#ffb35c"), e))], [1, css(mix(hex("#0d2740"), hex("#e2501c"), e))]]);
+        c.beginPath();
+        c.roundRect(x, 250, 22, 7, 3);
+        c.fill();
+      }
+      const sx = t < 10.6 ? slabX(t) : PX;
+      const under = clamp(1 - Math.abs(sx - HX) / 260);
+      glow(c, 880, 262, 300, 60, hex("#ff7a30"), 0.32 * on);
 
-      const tx = track(t, [[8.0, 900], [8.8, at.press + keptW / 2], [9.95, at.press + keptW / 2], [10.75, at.tank + keptW / 2], [12.8, at.tank + keptW / 2], [13.6, at.cart + keptW / 2]]);
-      const travelA = t >= 9.95 && t < 10.75 ? 3 * Math.sin(span(t, 9.95, 10.75) * Math.PI * 2) : -2.5 * decay(t, 10.75, 3.2, 9);
-      const travelB = t >= 12.8 && t < 13.6 ? 3 * Math.sin(span(t, 12.8, 13.6) * Math.PI * 2) : -2.5 * decay(t, 13.6, 4, 9);
-      const sway = carried ? (t < 12.8 ? travelA : travelB) : 0;
-      const hy = carried
-        ? sy - 26
-        : t < 9.35
-          ? track(t, [[8.8, 84], [9.2, rest - 26, back(1.2)]])
-          : track(t, [[14.3, 258], [14.9, 84]]);
-      const grip = carried ? 1 : t < 9.35 ? span(t, 9.2, 9.35) : 1 - span(t, 14.15, 14.3);
-      const pivot = `rotate(${sway.toFixed(2)} ${tx.toFixed(1)} 58)`;
+      const scanX = track(t, [[0.4, SX - 8], [2.6, SX + S + 8, lin]]);
+      const scanning = span(t, 0.25, 0.45) * (1 - span(t, 2.6, 2.85));
+      box(c, scanX - 22, 148, 44, 22, "steel");
+      c.fillStyle = css(mix(hex("#2b5576"), hex("#bfeaff"), scanning));
+      c.fillRect(scanX - 14, 170, 28, 3);
+      if (scanning > 0) {
+        c.fillStyle = `rgb(159 220 250 / ${0.1 * scanning})`;
+        c.fillRect(scanX - 3, 173, 6, BT - 173);
+        c.fillStyle = `rgb(200 240 255 / ${0.8 * scanning})`;
+        c.fillRect(scanX - 0.6, 173, 1.2, BT - 173);
+        glow(c, scanX, BT - SH - TD + 2, 26, 6, hex("#9fdcfa"), 0.5 * scanning);
+      }
+      const p = span(t, 0.4, 2.6);
+      c.font = `500 15px ${mono}`;
+      c.textAlign = "center";
+      c.fillStyle = t >= 2.6 ? "#9fdcfa" : "#5f8fb4";
+      c.fillText(`${((geo.start * p) / 1000).toFixed(1)}k tokens`, 296, 139);
 
-      set(slab, { transform: `${pivot} translate(${sx.toFixed(2)} ${(sy + (carried ? 0 : hop)).toFixed(2)})` });
-      set(reveal, { width: Math.max(0, scanX - at.scan) });
-      set(sheetClip, { x: scanX });
-      set(head, { transform: `translate(${scanX.toFixed(1)} 0)` });
-      set(scanline, { x1: scanX, x2: scanX, opacity: scanning.toFixed(2) });
-      readout.textContent = kilo(geo.start * span(t, 0.5, 2.8));
-      root.classList.toggle("is-measured", t >= 2.8);
+      const travel = sx - SX;
+      c.lineWidth = 5;
+      c.strokeStyle = "#08182a";
+      c.beginPath();
+      c.roundRect(20, BT, XE - 20, 34, 17);
+      c.stroke();
+      [37, XE - 17].forEach((x) => wheel(c, x, BT + 17, 13, travel / 13));
+      idlers.forEach((x) => wheel(c, x, BT + 11, 8, travel / 8));
+      c.fillStyle = vgrad(c, BT - TD, BT, [[0, "#0c1f33"], [1, "#132a40"]]);
+      c.fillRect(22, BT - TD, XE - 24, TD);
+      c.fillStyle = "rgb(140 190 230 / 0.07)";
+      for (let x = 22 + (((-travel % 24) + 24) % 24); x < XE - 4; x += 24) c.fillRect(x, BT - TD, 2, TD);
+      c.fillStyle = "#07162a";
+      c.fillRect(20, BT, XE - 20, 4);
 
-      const coilOn = span(t, 3.95, 4.35) * (1 - span(t, 6.0, 6.6));
-      coils.forEach((el, i) => set(el, { fill: mix(COIL.off, COIL.on, clamp(coilOn * 1.4 - i * 0.03)) }));
-      const heat = span(t, 4.1, 5.5);
-      const cool = span(t, 11.1, 12.3);
-      const front = cool > 0 ? mix(FRONT.hot[3], FRONT.cool, out(cool)) : ramp(FRONT.hot, heat);
-      const top = cool > 0 ? mix(TOP.hot[3], TOP.cool, out(cool)) : ramp(TOP.hot, heat);
-      fronts.forEach((el) => set(el, { fill: front }));
-      tops.forEach((el) => set(el, { fill: top }));
+      const ry = ramY(t);
+      const jolt = 1.4 * decay(t, IMPACT, 9, 38);
 
-      const cold = span(t, 4.9, 5.2);
-      set(deadFront, { fill: mix(FRONT.raw, FRONT.cold, cold) });
-      set(deadTop, { fill: mix(TOP.raw, TOP.cold, cold) });
-      set(unused, { opacity: span(t, 5.0, 5.35).toFixed(2) });
-
-      const ramY = track(t, [
-        [6.8, 0], [7.4, -30, out], [7.55, -30], [IMPACT + 0.005, 88, cubicIn], [7.76, 82, out], [7.86, 86, quadIn], [8.1, 86], [8.9, 0],
-      ]);
-      set(ram, { transform: `translate(0 ${ramY.toFixed(2)})` });
-      const gone = t >= IMPACT;
-      const squash = t < IMPACT ? clamp((ramY - 66) / 16) : 0;
-      const dh = SH * (1 - 0.45 * squash);
-      set(deadG, { visibility: gone ? "hidden" : "visible" });
-      set(deadFront, { y: SH - dh, height: dh });
-      set(deadTop, { y: SH - dh });
-      set(tag, { opacity: (1 - squash).toFixed(2) });
-
-      shards.forEach((el, i) => {
-        const s = geo.shards[i];
-        if (!gone) return set(el, { visibility: "hidden" });
-        const d = Math.min(t - IMPACT, s.land);
-        const x = s.x0 + s.vx * d;
-        const y = s.y0 + s.vy * d + 0.5 * geo.G * d * d;
-        set(el, { visibility: "visible", transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((s.spin * d) / s.land).toFixed(1)})` });
-      });
-      set(note, { opacity: (span(t, 8.1, 8.45) * (narrow.matches ? 1 - span(t, 9.9, 10.3) : 1)).toFixed(2) });
-
-      const travel = Math.min(sx, at.press) - at.scan;
-      set(belt, { "stroke-dashoffset": (-travel).toFixed(1) });
-      rollers.forEach((el) => set(el, { transform: `translate(${el.dataset.x} 311) rotate(${((travel / 7) * 57.3).toFixed(1)})` }));
-
-      set(trolley, { transform: `translate(${tx.toFixed(2)} 0)` });
-      set(cable, { x1: tx.toFixed(2), x2: tx.toFixed(2), y2: (hy - 8).toFixed(2), transform: pivot });
-      set(spreader, { transform: `${pivot} translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
-      set(hookFront, { transform: `${pivot} translate(${tx.toFixed(2)} ${hy.toFixed(2)})` });
-      arms.forEach((el) => set(el, { transform: `translate(${(Number(el.dataset.arm) * 10 * (1 - grip)).toFixed(2)} 0)` }));
-
-      const sub = t >= 11.0 && t < 12.6 ? span(t, SPLASH, 11.15) * (1 - span(t, 12.3, 12.55)) : 0;
-      const lvl = 300 - 4 * sub;
-      const wave = (x: number) =>
-        6 * decay(t, SPLASH, 3, 14) * Math.sin(x * 0.09) + 3 * decay(t, 12.35, 3.5, 12) * Math.sin(x * 0.11 + 1) + 4 * decay(t, SPLASH, 2, 6) * Math.cos(x * 0.05);
-      const pts: P[] = [];
-      for (let x = 756; x <= 894; x += 6) pts.push({ x, y: lvl + wave(x) });
-      const line = pts.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y.toFixed(2)}`).join(" ");
-      set(water, { d: `${line} L894 392 L756 392 Z` });
-      set(surface, { d: line });
-
-      bubbles.forEach((el, i) => {
-        const b = geo.bubbles[i];
-        const on = t > 11.1 && t < 12.2 && heat * (1 - cool) > 0.15;
-        const p = ((t * 1.6 + b.phase) % 1 + 1) % 1;
-        set(el, { cx: (b.x + Math.sin(p * 9) * 3).toFixed(1), cy: (382 - p * 76).toFixed(1), r: on ? (1.5 + p * 2.5).toFixed(1) : 0 });
-      });
-      drops.forEach((el, i) => {
-        const d = geo.drops[i];
-        const u = t - SPLASH;
-        const y = lvl + d.vy * u + 0.5 * 1500 * u * u;
-        const on = u > 0 && y < lvl + 2;
-        set(el, { cx: (d.x + d.vx * u).toFixed(1), cy: y.toFixed(1), r: on ? d.r : 0 });
-      });
-      drips.forEach((el, i) => {
-        const d = geo.drips[i];
-        const u = t - 12.55 - d.delay;
-        const y = sy + SH + 2 + 0.5 * 1400 * u * u;
-        const on = u > 0 && y < 300 && t < 13.0;
-        set(el, { cx: d.x.toFixed(1), cy: y.toFixed(1), r: on ? 2.6 : 0 });
-      });
-      puffs.forEach((el, i) => {
-        const p = geo.puffs[i];
-        const life = span(t, SPLASH + p.delay, SPLASH + p.delay + p.life);
-        const on = life > 0 && life < 1;
-        set(el, {
-          cx: (p.x + p.drift * out(life)).toFixed(1),
-          cy: (296 - p.rise * out(life)).toFixed(1),
-          r: on ? lerp(p.r0, p.r1, out(life)).toFixed(1) : 0,
-          opacity: on ? (0.85 * Math.min(1, life * 6) * Math.pow(1 - life, 1.3)).toFixed(2) : 0,
+      if (t >= IMPACT) {
+        const u = t - IMPACT;
+        plateFall.forEach((f, i) => {
+          const v = Math.max(0, u - f.delay);
+          const fall = Math.min(v, f.land);
+          const y = BT + f.v0 * fall + 0.5 * G * fall * fall;
+          const tip = back(1.3)(span(v, f.land * 0.4, f.land + 0.35)) * f.angle;
+          const x = PX + f.p.x + f.p.w / 2 + f.dx * clamp(v / f.land);
+          c.save();
+          c.translate(x, Math.min(y, BIN.floor));
+          c.rotate(tip);
+          face(-f.p.w / 2, -SH, f.p.w - 0.8, SH, mix(RAW, BLACK, 0.05 * i), 0);
+          top(-f.p.w / 2, -SH, f.p.w - 0.8, RAW, 0, 0);
+          c.restore();
         });
+        const b = blockFall;
+        let dy: number;
+        if (u < b.land) dy = b.v0 * u + 0.5 * G * u * u;
+        else {
+          const w = u - b.land;
+          const vb = b.hop * G;
+          dy = b.d - Math.max(0, vb * w - 0.5 * G * w * w);
+        }
+        const settle = span(u, b.land, b.land + 0.3);
+        const bx = PX + block.x + 6 * clamp(u / b.land);
+        c.save();
+        c.translate(bx, BT + Math.min(dy, b.d));
+        c.rotate(-0.025 * out(settle));
+        c.translate(0, -SH);
+        face(0, 0, block.w, SH, RAW, 0);
+        top(0, 0, block.w, RAW, 0, 0);
+        text(geo.idleLabel, block.w / 2, 24, LIGHT_TEXT, 1);
+        c.fillStyle = "rgb(0 6 14 / 0.4)";
+        c.fillRect(0, SH - 1.5, block.w, 1.5);
+        c.restore();
+      }
+
+      const sp = spreaderY(t);
+      const tx = trolleyX(t);
+      const th = attached(t) ? sway(t) : 0;
+      const pivotY = 30;
+      const labels = span(t, 5.5, 5.95);
+
+      let px = sx;
+      let py = BT - SH + (t >= IMPACT ? jolt : 0);
+      if (attached(t)) {
+        px = tx - K / 2;
+        py = sp + HANG;
+      } else if (t >= 16.5) {
+        px = CX - K / 2;
+        py = 386 - SH;
+      }
+
+      const lift = attached(t) ? clamp((BT - (py + SH)) / 260) : 0;
+      if (t < 10.6 || t >= 16.5) shade(c, px + (t < IMPACT ? S : K) / 2, py + SH + 2, (t < IMPACT ? S : K) / 2 + 10, 5, 0.55);
+      else if (px + K > TX - TANK && px < TX + TANK && py + SH > 340) shade(c, px + K / 2, WL, K / 2, 6, 0.3);
+      else shade(c, px + K / 2, FL + 6, K / 2 + 30 + lift * 60, 9 + lift * 6, 0.42 * (1 - lift * 0.6));
+
+      const T = tone(t).T;
+      const inTank = Math.abs(px + K / 2 - TX) < 20 && py + SH > WL - 2;
+      const wave = (x: number, depth: number) => {
+        let y = 0;
+        [SPLASH, LIFT + 0.18].forEach((s0, n) => {
+          const u = t - s0;
+          if (u <= 0) return;
+          const amp = (n ? 2.2 : 4) * Math.exp(-u * 1.7);
+          const d = Math.abs(x - TX);
+          y += amp * Math.sin(d * 0.06 - u * 11 + depth) * Math.exp(-Math.max(0, d - 60 - u * 160) * 0.05);
+        });
+        return y;
+      };
+      const sub = t > SPLASH - 0.1 && t < LIFT + 0.6 ? span(t, SPLASH - 0.1, 13.65) * (1 - span(t, LIFT, LIFT + 0.55)) : 0;
+      const level = 360 - 4 * sub;
+
+      const water = (y0: number, y1: number) => {
+        c.save();
+        c.beginPath();
+        c.rect(TX - TANK, y0, TANK * 2, y1 - y0);
+        c.clip();
+        c.fillStyle = vgrad(c, level, FT, [[0, "rgb(92 160 205 / 0.78)"], [0.5, "rgb(46 104 150 / 0.82)"], [1, "rgb(24 70 112 / 0.88)"]]);
+        c.beginPath();
+        c.moveTo(TX - TANK, FT);
+        for (let x = TX - TANK; x <= TX + TANK; x += 5) c.lineTo(x, level + wave(x, 0) * 0.6);
+        c.lineTo(TX + TANK, FT);
+        c.closePath();
+        c.fill();
+        c.lineWidth = 1.2;
+        [0.18, 0.45, 0.75].forEach((f, n) => {
+          c.strokeStyle = `rgb(200 235 255 / ${0.12 + 0.06 * n})`;
+          c.beginPath();
+          const yb = lerp(level, FT, f);
+          for (let x = TX - TANK; x <= TX + TANK; x += 5) {
+            const y = yb + wave(x, n * 1.3) * (0.6 + f) + Math.sin(x * 0.05 + n + t * 0.8) * 0.5;
+            x === TX - TANK ? c.moveTo(x, y) : c.lineTo(x, y);
+          }
+          c.stroke();
+        });
+        [SPLASH, LIFT + 0.18].forEach((s0) => {
+          for (let r = 0; r < 3; r++) {
+            const u = t - s0 - r * 0.22;
+            if (u <= 0 || u > 1.6) continue;
+            const grow = 6 + u * 120;
+            c.strokeStyle = `rgb(215 240 255 / ${0.45 * Math.exp(-u * 2.2)})`;
+            c.lineWidth = 1.4;
+            c.beginPath();
+            c.roundRect(TX - K / 2 - grow, 378 - 4 - grow * 0.14, K + grow * 2, 8 + grow * 0.28, 4 + grow * 0.14);
+            c.stroke();
+          }
+        });
+        if (inTank && T > 0.08) {
+          bubbles.forEach((b) => {
+            const ph = (t * b.rate + b.ph) % 1;
+            if (ph > 0.55) return;
+            const r = 1 + ph * 4;
+            c.strokeStyle = `rgb(230 245 255 / ${0.7 * (1 - ph / 0.55) * clamp(T * 3)})`;
+            c.lineWidth = 1;
+            c.beginPath();
+            c.ellipse(b.x, b.y, r, r * 0.4, 0, 0, Math.PI * 2);
+            c.stroke();
+          });
+        }
+        c.restore();
+      };
+
+      water(348, WL);
+
+      const ramTop = 214 + ry;
+      if (t < IMPACT + 0.05) {
+        const near = span(ry, 0, 24);
+        piece(t, px, py, t < IMPACT, under * on, labels);
+        if (near > 0 && t < IMPACT) {
+          c.fillStyle = `rgb(1 8 18 / ${0.35 * near})`;
+          c.fillRect(XE, py - TD, C, TD);
+        }
+      } else {
+        c.save();
+        if (th) {
+          c.translate(tx, pivotY);
+          c.rotate(th);
+          c.translate(-tx, -pivotY);
+        }
+        piece(t, px, py, false, 0, 1);
+        c.restore();
+      }
+
+      c.save();
+      if (th) {
+        c.translate(tx, pivotY);
+        c.rotate(th);
+        c.translate(-tx, -pivotY);
+      }
+      const grip = t < 16.45 ? span(t, 10.4, 10.6) : 1 - span(t, 16.45, 16.6);
+      const open = 12 * (1 - grip);
+      c.fillStyle = vgrad(c, 36, sp, [[0, "#7fb0d4"], [1, "#4e80a8"]]);
+      [-18, 16].forEach((dx) => c.fillRect(tx + dx, 36, 2, sp - 36));
+      box(c, tx - K / 2 - 12, sp, K + 24, 14, "steel", 5);
+      [-1, 1].forEach((side) => {
+        const ax = side < 0 ? tx - K / 2 - 12 - open : tx + K / 2 + 2 + open;
+        box(c, ax, sp + 14, 10, HANG - 14 + SH / 2 + 6, "dark");
+        box(c, side < 0 ? ax + 4 : ax - 4, sp + HANG + SH / 2 - 2, 10, 8, "steel");
+      });
+      c.restore();
+      box(c, tx - 30, 20, 60, 14, "dark");
+      [-16, 16].forEach((dx) => wheel(c, tx + dx, 20, 6, tx / 6));
+
+      if (inTank || (px + K > TX - TANK && px < TX + TANK && py + SH > WL)) {
+        water(WL, FT);
+        glow(c, TX, 380, K * 0.7, 26, hex("#ff7a2e"), 0.55 * T * T);
+      }
+
+      rod(c, XE + C / 2 - 12, 200, 24, ramTop - 200, "steel", true);
+      box(c, XE + 2, ramTop, C - 4, 50, "steel", 10);
+      box(c, XE + 6, ramTop + 50, C - 12, 6, "deep");
+      box(c, XE + 14, 168, C + 12, 36, "steel", 10);
+
+      c.drawImage(foreLayer!, 0, 0, W, H);
+
+      const jaw = back(1.6)(span(t, 16.55, 16.85));
+      [-1, 1].forEach((side) => {
+        const x = side < 0 ? CX - K / 2 - 14 : CX + K / 2 + 14;
+        c.save();
+        c.translate(x, 300);
+        c.rotate(side * 1.75 * (1 - jaw));
+        box(c, side < 0 ? -6 : -24, -4, 30, 12, "steel", 4);
+        c.restore();
       });
 
-      const jaw = back(1.8)(span(t, 14.5, 14.8));
-      jaws.forEach((el) => {
-        const side = Number(el.dataset.jaw);
-        set(el, { transform: `translate(${(side * 22 * (1 - jaw)).toFixed(2)} ${(-16 * (1 - jaw)).toFixed(2)})` });
+      drops.forEach((d) => {
+        const u = t - SPLASH;
+        if (u <= 0) return;
+        const y = level + d.vy * u + 0.5 * 1500 * u * u;
+        if (y > level + 2) return;
+        c.fillStyle = "rgb(205 236 252 / 0.85)";
+        c.beginPath();
+        c.arc(d.x + d.vx * u, y, d.r, 0, Math.PI * 2);
+        c.fill();
+      });
+      drips.forEach((d) => {
+        const u = t - d.t0;
+        if (u <= 0) return;
+        const x0 = trolleyX(d.t0) - K / 2 + d.f * K;
+        const y0 = spreaderY(d.t0) + HANG + SH;
+        const y = y0 + 0.5 * 1500 * u * u;
+        if (y > level + 4) return;
+        c.fillStyle = "rgb(205 236 252 / 0.85)";
+        c.beginPath();
+        c.ellipse(x0, y, 1.6, 2.6, 0, 0, Math.PI * 2);
+        c.fill();
       });
 
-      const vw = narrow.matches ? 420 : 1200;
-      const focus = track(t, [[0, 160], [3.0, 160], [3.9, 480], [6.0, 480], [6.75, 600], [9.95, 600], [10.75, 824], [12.8, 824], [13.6, 1035]]);
-      const camX = clamp(focus - vw / 2, 0, 1200 - vw);
-      set(view, { viewBox: `${camX.toFixed(2)} 0 ${vw} 460` });
+      puffs.forEach((pf) => {
+        const a = t - pf.t0;
+        if (a <= 0 || a >= pf.life) return;
+        const f = a / pf.life;
+        const x0 = pf.late ? trolleyX(pf.t0) - K / 2 + pf.x * K : pf.x;
+        const y0 = pf.late ? spreaderY(pf.t0) + HANG : pf.y;
+        const rise = (pf.v * (1 - Math.exp(-a * 1.6))) / 1.6 + 26 * a;
+        const x = x0 + pf.drift * a + Math.sin(a * 2.1 + pf.ph) * pf.wob * f;
+        const y = y0 - rise;
+        const r = lerp(pf.r0, pf.r1, 1 - Math.exp(-a * 1.3));
+        const alpha = pf.a * Math.min(1, f * 7) * Math.pow(1 - f, 1.6);
+        const warm = pf.late ? 0 : clamp(tone(pf.t0).T * 1.2) * (1 - f);
+        const col = mix(hex("#e3f0f8"), hex("#ffb37a"), warm * 0.45);
+        const g = c.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, css(col, alpha));
+        g.addColorStop(0.5, css(col, alpha * 0.5));
+        g.addColorStop(1, css(col, 0));
+        c.fillStyle = g;
+        c.fillRect(x - r, y - r, r * 2, r * 2);
+      });
+
+      if (T > 0.05 && !inTank) {
+        c.save();
+        if (th) {
+          c.translate(tx, pivotY);
+          c.rotate(th);
+          c.translate(-tx, -pivotY);
+        }
+        glow(c, px + K / 2, py + SH / 2, K * 0.62, 70, hex("#ff7a2e"), 0.3 * T * T);
+        glow(c, px + K / 2, py + SH / 2, K * 0.45, 40, hex("#ffb060"), 0.12 * T * T);
+        c.restore();
+      }
+
+      const noteA = span(t, 9.0, 9.4);
+      if (noteA > 0) {
+        c.font = `400 14px ${mono}`;
+        c.textAlign = "center";
+        c.fillStyle = `rgb(169 203 226 / ${0.9 * noteA})`;
+        c.fillText(geo.note, (BIN.x0 + BIN.x1) / 2, 500);
+      }
+
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      const v = c.createRadialGradient(cw / 2, ch * 0.4, ch * 0.3, cw / 2, ch * 0.4, Math.max(cw, ch) * 0.75);
+      v.addColorStop(0, "rgb(2 10 20 / 0)");
+      v.addColorStop(1, "rgb(2 10 20 / 0.35)");
+      c.fillStyle = v;
+      c.fillRect(0, 0, cw, ch);
 
       const beat = BEATS.filter((b) => t >= b).length - 1;
       progress.style.transform = `scaleX(${((beat + span(t, BEATS[beat], BEATS[beat + 1] ?? END)) / BEATS.length).toFixed(4)})`;
@@ -519,6 +831,19 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
         el.classList.toggle("is-done", i < beat || t >= END);
       });
       root.dataset.state = t >= END ? "done" : t > 0 ? "running" : "ready";
+    }
+
+    function size() {
+      vw = narrow.matches ? 460 : 1240;
+      const cssW = stage.clientWidth;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const s = cssW / vw;
+      k = s * dpr;
+      canvas.style.height = `${(cssW * H) / vw}px`;
+      canvas.width = Math.round(vw * k);
+      canvas.height = Math.round(H * k);
+      backLayer = layer(drawBack);
+      foreLayer = layer(drawFore);
     }
 
     const still = matchMedia("(prefers-reduced-motion: reduce)");
@@ -540,9 +865,22 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
       raf = requestAnimationFrame(frame);
     }
 
+    size();
+    let width = stage.clientWidth;
+    new ResizeObserver(() => {
+      if (stage.clientWidth === width) return;
+      width = stage.clientWidth;
+      size();
+      render(shown);
+    }).observe(stage);
+    narrow.addEventListener("change", () => {
+      size();
+      render(shown);
+    });
+    document.fonts?.ready.then(() => render(shown));
+
     $("[data-replay]").addEventListener("click", () => play(0));
     beatButtons.forEach((el, i) => el.addEventListener("click", () => play(BEATS[i])));
-    narrow.addEventListener("change", () => render(shown));
 
     if (still.matches) {
       root.classList.add("is-still");
@@ -575,183 +913,12 @@ const beats = ["Scan", "Spot", "Smash", "Quench"];
 
   .stage {
     position: relative;
+    background: #071d34;
   }
 
-  svg {
+  canvas {
     display: block;
     width: 100%;
-    height: auto;
-  }
-
-  .wall {
-    fill: #072039;
-  }
-
-  .floor {
-    fill: #051829;
-  }
-
-  .floor-edge {
-    fill: #10324f;
-  }
-
-  .f {
-    fill: #174670;
-  }
-
-  .t {
-    fill: #2c6898;
-  }
-
-  .s {
-    fill: #0c2e4d;
-  }
-
-  .f.k {
-    fill: #11395d;
-  }
-
-  .t.k {
-    fill: #215683;
-  }
-
-  .s.k {
-    fill: #0a2540;
-  }
-
-  .rod {
-    fill: #0f3252;
-  }
-
-  .rod-steel {
-    fill: #3f6f97;
-  }
-
-  .coil {
-    fill: #24496b;
-  }
-
-  .cable {
-    stroke: #5d84a6;
-    stroke-width: 2.5;
-  }
-
-  .wheel {
-    fill: #0a2540;
-  }
-
-  .rubber {
-    fill: #0a1c2e;
-  }
-
-  .belt-top {
-    stroke: #2a5378;
-    stroke-width: 3;
-    stroke-dasharray: 16 10;
-  }
-
-  .roller {
-    fill: #10324f;
-  }
-
-  .roller-spoke {
-    stroke: #3f6f97;
-    stroke-width: 2;
-    stroke-linecap: round;
-  }
-
-  .sheet {
-    fill: #e8f4fc;
-  }
-
-  .sheet.alt {
-    fill: #bcd7ea;
-  }
-
-  .slab-shade {
-    fill: rgb(4 18 32 / 0.28);
-  }
-
-  .tag {
-    font-family: var(--mono);
-    font-size: 13.5px;
-    font-weight: 500;
-    fill: #eef8ff;
-  }
-
-  .note {
-    font-family: var(--mono);
-    font-size: 14px;
-    fill: var(--ink-2);
-  }
-
-  .tank-in {
-    fill: #061a2d;
-  }
-
-  .water {
-    fill: rgb(108 190 238 / 0.42);
-  }
-
-  .surface {
-    fill: none;
-    stroke: #b9e5fb;
-    stroke-width: 2.5;
-    stroke-linejoin: round;
-  }
-
-  .bubble {
-    fill: none;
-    stroke: #d6effc;
-    stroke-width: 1.4;
-  }
-
-  .shard {
-    fill: #2a4560;
-    stroke: #3c5c7b;
-    stroke-width: 2;
-    stroke-linejoin: round;
-  }
-
-  .tyre {
-    fill: #0a1c2e;
-  }
-
-  .hub {
-    fill: #2c6898;
-  }
-
-  .lcd {
-    fill: #051626;
-  }
-
-  .readout {
-    font-family: var(--mono);
-    font-size: 17px;
-    font-weight: 500;
-    fill: #5f8fb4;
-    transition: fill 0.3s;
-  }
-
-  .is-measured .readout {
-    fill: #9fdcfa;
-  }
-
-  .scanline {
-    stroke: #d6f2ff;
-    stroke-width: 2.5;
-  }
-
-  .lens {
-    fill: #9fdcfa;
-  }
-
-  .drop {
-    fill: #c8eafc;
-  }
-
-  .puff {
-    fill: #e6f2fa;
   }
 
   .rail {
