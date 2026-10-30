@@ -100,7 +100,6 @@ const T = {
   rise: [10.0, 10.55],
   out: [10.65, 11.3],
   land: 11.72,
-  keep: [11.95, 12.35],
 };
 export const END = 12.6;
 export const FRAMES = { load: 2.0, quench: 0, end: END };
@@ -268,7 +267,6 @@ export function scene(time: number) {
   a.keep = { transform: `translate(${f(kx - KEEP_C)} ${f(ky - BELT)}) rotate(${f(rot)} ${f(KEEP_C)} ${BELT})` };
 
   a["note-cut"] = { style: `opacity:${f(span(t, T.note[0], T.note[1]))}` };
-  a["note-keep"] = { style: `opacity:${f(span(t, T.keep[0], T.keep[1]))}` };
 
   return a;
 }

@@ -1,5 +1,5 @@
 ---
-import { inputTokens, kilo, model, peakTokens, percent, requests, startTokens, windowTokens } from "../context.ts";
+import { inputTokens, kilo, peakTokens, percent, requests, startTokens } from "../context.ts";
 
 const width = 1000;
 const height = 200;
@@ -12,15 +12,10 @@ const barTop = 120;
 const barBottom = 160;
 const ticks = [0, 10000, 20000, 30000, 40000, 50000];
 const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
-const resent = startTokens * requests;
 ---
 
 <figure class="card figure-card datum">
-  <p class="fig-head">
-    <b>{percent(resent / inputTokens)}*</b>
-    of this run's {kilo(inputTokens)} input tokens were the same {kilo(startTokens)} starting load, sent again with each of
-    its {requests} model calls
-  </p>
+  <p class="fig-head"><b>{percent((startTokens * requests) / inputTokens)}</b> of this run's input was that resend.</p>
   <div class="datum-drawing" style={`aspect-ratio:${width}/${height}`}>
     <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
       <defs>
@@ -56,20 +51,9 @@ const resent = startTokens * requests;
     </ol>
 
     <ul class="datum-labels">
-      <li class="window-label" style={`left:${pct(x0, width)};top:${pct(40, height)}`}>
-        <b>{windowTokens.toLocaleString("en-US")}</b> tokens: the context window of <code>{model}</code>
-      </li>
-      <li style={`left:${pct(x(peakTokens), width)};top:${pct(72, height)}`}>
-        <b>{kilo(peakTokens)}</b> at the run's peak
-      </li>
-      <li style={`left:${pct(x(startTokens), width)};top:${pct(100, height)}`}>
-        <b>{kilo(startTokens)}</b> before you type: {percent(startTokens / windowTokens, 1)} of the window, {percent(startTokens / peakTokens)} of the peak*
-      </li>
+      <li class="window-label" style={`left:${pct(x0, width)};top:${pct(40, height)}`}>context window</li>
+      <li style={`left:${pct(x(peakTokens), width)};top:${pct(72, height)}`}><b>{kilo(peakTokens)}</b> peak</li>
+      <li style={`left:${pct(x(startTokens), width)};top:${pct(100, height)}`}>start</li>
     </ul>
   </div>
-
-  <p class="fig-note">
-    Fig. 2 · One run, to scale up to 50k with the rest of the window broken off. From <code>quench runs --json</code>.
-    *Derived from the run's start, model calls and input tokens.
-  </p>
 </figure>

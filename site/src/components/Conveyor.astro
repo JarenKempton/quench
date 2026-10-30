@@ -33,7 +33,7 @@ import {
   firstCut,
   scene,
 } from "../conveyor.ts";
-import { inputTokens, kilo, layers, percent, requests, servers, skillUse, startTokens } from "../context.ts";
+import { kilo, servers, skillUse, startTokens } from "../context.ts";
 
 const a = scene(END);
 const P = PRESS_X;
@@ -49,19 +49,20 @@ const ring = (l: number, r: number, open: boolean) =>
 const dim = (l: number, r: number, ticks: number[]) =>
   `M${l} ${DIM_Y}H${r}M${l} ${DIM_Y - 6}V${top - 3}M${r} ${DIM_Y - 6}V${top - 3}` +
   ticks.map((x) => `M${x} ${DIM_Y - 3}V${DIM_Y + 3}`).join("");
-const resent = (startTokens * requests) / inputTokens;
-const usage = new Map<string, { text: string; cut: boolean }>(
-  servers.map((s) => [`MCP: ${s.server}`, { text: `${s.called} of ${s.tools} tools used`, cut: s.called === 0 }]),
-);
-usage.set("Skill list", { text: `${skillUse.used} of ${skillUse.listed} used`, cut: skillUse.used < skillUse.listed });
-const rows = [...layers]
-  .sort((x, y) => y.share - x.share)
-  .map((l) => ({ name: l.name, tokens: kilo(l.share * startTokens), use: usage.get(l.name) }));
+const rows = [
+  ...servers.map((s) => ({
+    name: `${s.server[0].toUpperCase()}${s.server.slice(1)} MCP`,
+    used: s.called,
+    of: s.tools,
+    cut: s.called === 0,
+  })),
+  { name: "Skills", used: skillUse.used, of: skillUse.listed, cut: skillUse.used < skillUse.listed },
+];
 const steps = [
   { x: LOAD_X, word: "Load" },
-  { x: P, word: "Measure", note: { k: "note-cut", text: "unused, you remove them", cut: true } },
+  { x: P, word: "Measure", note: "you remove them" },
   { x: TANK_X, word: "Quench" },
-  { x: CART_X, word: "Stack", note: { k: "note-keep", text: "what you keep", cut: false } },
+  { x: CART_X, word: "Stack" },
 ];
 const casters = [CART_X - 52, CART_X + 52];
 ---
@@ -286,8 +287,8 @@ const casters = [CART_X - 52, CART_X + 52];
           <li style={`left:${(s.x / W) * 100}%`}>
             {s.word}
             {s.note && (
-              <span class:list={["cv-note", { "cv-cut": s.note.cut }]} data-k={s.note.k} {...a[s.note.k]}>
-                {s.note.text}
+              <span class="cv-note" data-k="note-cut" {...a["note-cut"]}>
+                {s.note}
               </span>
             )}
           </li>
@@ -304,15 +305,13 @@ const casters = [CART_X - 52, CART_X + 52];
         rows.map((r) => (
           <div>
             <dt>{r.name}</dt>
-            <dd class:list={["cv-use", { "cv-cut": r.use?.cut }]}>{r.use?.text}</dd>
-            <dd class="cv-tok">{r.tokens}</dd>
+            <dd class:list={{ "cv-cut": r.cut }}>
+              {r.used} of {r.of} used
+            </dd>
           </div>
         ))
       }
     </dl>
-    <p class="cv-resent">
-      Resent on all {requests} calls<span>{percent(resent)} of {kilo(inputTokens)} input</span>
-    </p>
   </div>
 </figure>
 
@@ -571,10 +570,6 @@ const casters = [CART_X - 52, CART_X + 52];
 
   .cv-note {
     font-size: 14px;
-    color: var(--cyan);
-  }
-
-  .cv-note.cv-cut {
     color: var(--yellow);
   }
 
@@ -588,15 +583,16 @@ const casters = [CART_X - 52, CART_X + 52];
 
   .cv-count {
     margin: 0;
-    font-size: 64px;
+    font-family: var(--mono);
+    font-size: 60px;
+    letter-spacing: -0.04em;
     line-height: 1;
-    font-variant-numeric: tabular-nums;
     color: var(--ink);
   }
 
   .cv-unit {
-    margin: 8px 0 18px;
-    font-size: 16px;
+    margin: 10px 0 28px;
+    font-size: 15px;
     color: var(--ink-2);
   }
 
@@ -607,15 +603,15 @@ const casters = [CART_X - 52, CART_X + 52];
 
   .cv-split {
     margin: 0;
-    border-top: 1px solid var(--hair);
   }
 
   .cv-split div {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
+    display: flex;
+    justify-content: space-between;
     align-items: baseline;
-    gap: 10px;
-    padding: 5px 0;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--hair);
   }
 
   .cv-split dt {
@@ -625,39 +621,13 @@ const casters = [CART_X - 52, CART_X + 52];
 
   .cv-split dd {
     margin: 0;
-  }
-
-  .cv-use {
-    font-size: 13px;
-    color: var(--mute);
-    text-align: right;
-  }
-
-  .cv-use.cv-cut {
-    color: var(--yellow);
-  }
-
-  .cv-tok {
-    min-width: 40px;
     font-family: var(--mono);
-    font-size: 14px;
-    text-align: right;
+    font-size: 13px;
     color: var(--ink-2);
   }
 
-  .cv-resent {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding-top: 12px;
-    border-top: 1px solid var(--hair);
-    font-size: 14px;
-    color: var(--mute);
-  }
-
-  .cv-resent span {
-    font-size: 17px;
-    color: var(--ink);
+  .cv-split .cv-cut {
+    color: var(--yellow);
   }
 
   @media (max-width: 980px) {
@@ -695,7 +665,7 @@ const casters = [CART_X - 52, CART_X + 52];
     }
 
     .cv-count {
-      font-size: 56px;
+      font-size: 52px;
     }
   }
 </style>

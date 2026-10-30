@@ -2,15 +2,12 @@ import run from "./samples/run.json";
 
 type Part = (typeof run.startingContext.parts)[number];
 
-export const model = run.model;
 export const windowTokens = 1_000_000;
 export const startTokens = run.contextStart;
 export const peakTokens = run.contextPeak;
 export const requests = run.inferences;
 export const inputTokens = run.usage.input + run.usage.cacheRead + run.usage.cacheWrite;
-export const promptChars = run.prompt.length;
 
-export const month = { days: 30, processed: 2_000_000, startShare: 0.7 };
 export const skillUse = { listed: 12, used: 3 };
 
 const order = ["system", "tools", "mcp_tools", "instructions", "skills"];

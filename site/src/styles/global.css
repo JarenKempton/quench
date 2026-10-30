@@ -1,45 +1,3 @@
-@font-face {
-  font-family: "IBM Plex Sans Condensed";
-  src: url("/fonts/plex-cond-300.woff2") format("woff2");
-  font-weight: 300;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Sans Condensed";
-  src: url("/fonts/plex-cond-400.woff2") format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Sans Condensed";
-  src: url("/fonts/plex-cond-500.woff2") format("woff2");
-  font-weight: 500;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/fonts/plex-mono-400.woff2") format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/fonts/plex-mono-500.woff2") format("woff2");
-  font-weight: 500;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/fonts/plex-mono-600.woff2") format("woff2");
-  font-weight: 600;
-  font-display: swap;
-}
-
 :root {
   --prussian: #0c3253;
   --prussian-deep: #082640;
@@ -54,8 +12,8 @@
   --yellow: #f3d98b;
   --green: #a9e8c4;
   --magenta: #e2b0f5;
-  --sans: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --max: 1120px;
   --pad: clamp(20px, 5vw, 64px);
 }
@@ -65,6 +23,7 @@
 }
 
 html {
+  background: var(--prussian-deep);
   scroll-behavior: smooth;
 }
 
@@ -74,8 +33,8 @@ body {
   min-height: 100vh;
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 17px;
-  font-weight: 300;
+  font-size: 16px;
+  font-weight: 400;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
@@ -130,9 +89,9 @@ h2,
 h3 {
   margin: 0;
   font-family: var(--sans);
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 1.02;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 h1 em,
@@ -150,29 +109,6 @@ h2 em {
   white-space: nowrap;
 }
 
-.section-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0 0 48px;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.section-head::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--hair);
-}
-
-.sec-no {
-  color: var(--cyan);
-}
-
 /* Sheet */
 
 .sheet {
@@ -187,6 +123,7 @@ h2 em {
 .top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 22px 0;
   border-bottom: 1px solid var(--hair);
 }
@@ -198,7 +135,6 @@ h2 em {
   font-family: var(--mono);
   font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.04em;
   color: var(--ink);
   text-decoration: none;
 }
@@ -234,32 +170,16 @@ h2 em {
   transform: translateY(-0.5px);
 }
 
-.top nav {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-}
-
-.top nav a {
-  color: var(--ink-2);
-  text-decoration: none;
-}
-
-.top nav a:hover {
-  color: var(--ink);
-}
-
-.top nav .nav-cta {
+.nav-cta {
   padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--cyan);
+  text-decoration: none;
   border: 1px solid var(--cyan-2);
 }
 
-.top nav .nav-cta:hover {
+.nav-cta:hover {
   color: var(--prussian-deep);
   background: var(--cyan);
 }
@@ -281,12 +201,9 @@ h2 em {
 
 .btn {
   display: inline-block;
-  padding: 10px 22px;
-  font-family: var(--mono);
-  font-size: 13px;
+  padding: 9px 22px;
+  font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--prussian-deep);
   background: var(--cyan);
   text-decoration: none;
@@ -335,57 +252,15 @@ h2 em {
   padding: 28px 32px 22px;
 }
 
-.section-copy {
-  max-width: 44em;
-  margin-bottom: 36px;
-}
-
-.section-copy h2 {
-  margin-bottom: 16px;
-  font-size: clamp(32px, 3.8vw, 48px);
-  line-height: 1.08;
+.section-title {
+  margin: 0 0 32px;
+  font-size: clamp(30px, 3.4vw, 42px);
   text-wrap: balance;
 }
 
-.section-copy p {
-  margin: 0;
-  max-width: 40em;
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--ink-2);
-}
-
-.section-intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: clamp(32px, 5vw, 72px);
-  align-items: end;
-  margin-bottom: 36px;
-}
-
-.section-intro .section-copy {
-  margin-bottom: 0;
-}
-
-.stat {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding-left: 24px;
-  border-left: 1px solid var(--yellow);
-}
-
-.stat b {
-  font-size: clamp(64px, 7vw, 96px);
-  font-weight: 300;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-}
-
-.stat span {
-  font-size: 16px;
-  line-height: 1.5;
+.section-line {
+  margin: -20px 0 32px;
+  font-size: 17px;
   color: var(--ink-2);
 }
 
@@ -399,17 +274,11 @@ h2 em {
 
 .fig-head b {
   margin-right: 8px;
+  font-family: var(--mono);
   font-size: 32px;
   font-weight: 400;
+  letter-spacing: -0.03em;
   color: var(--yellow);
-}
-
-.fig-note {
-  margin: 14px 0 0;
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--mute);
 }
 
 /* Plates */
@@ -442,28 +311,6 @@ h2 em {
   right: -7px;
   border-bottom-width: 1px;
   border-right-width: 1px;
-}
-
-.plate figcaption {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 18px;
-  border-bottom: 1px solid var(--hair);
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  color: var(--mute);
-}
-
-.plate-no {
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  color: var(--cyan);
-}
-
-.plate-no::before {
-  content: "Plate ";
 }
 
 .plate pre {
@@ -535,14 +382,13 @@ h2 em {
 /* Sections */
 
 .problem,
-.bloat,
 .drift-section,
 .features,
 .install {
-  padding: 64px 0 96px;
+  padding: 56px 0 80px;
 }
 
-/* Fig. 2: the window datum */
+/* The window datum */
 
 .datum-drawing {
   position: relative;
@@ -625,71 +471,7 @@ h2 em {
   color: var(--yellow);
 }
 
-.unused {
-  margin: 0 0 56px;
-}
-
-.unused-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.unused-rows li {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 28px;
-  align-items: center;
-  padding: 20px 0;
-}
-
-.unused-rows li + li {
-  border-top: 1px solid var(--hair);
-}
-
-.count {
-  margin: 0;
-  font-size: 56px;
-  font-weight: 300;
-  line-height: 1;
-  color: var(--ink);
-}
-
-.count small {
-  margin-left: 8px;
-  font-family: var(--mono);
-  font-size: 16px;
-  color: var(--mute);
-}
-
-.unused-what {
-  margin: 0 0 10px;
-  font-size: 18px;
-  color: var(--ink);
-}
-
-.unused-note {
-  margin: 10px 0 0;
-  font-family: var(--mono);
-  font-size: 14px;
-  color: var(--ink-2);
-}
-
-.use-bar {
-  display: flex;
-  height: 14px;
-  border: 1px solid var(--cyan-2);
-}
-
-.use-bar .used {
-  background: var(--cyan);
-}
-
-.use-bar .idle {
-  background: repeating-linear-gradient(45deg, rgb(255 148 121 / 0.85) 0 1.5px, transparent 1.5px 6px);
-}
-
-/* Fig. 5: drift */
+/* Drift */
 
 .sequence {
   margin: 0;
@@ -757,68 +539,20 @@ h2 em {
   background: linear-gradient(90deg, rgb(255 148 121 / 0.08), transparent 70%);
 }
 
-/* Features */
-
-.feature {
-  display: grid;
-  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
-  gap: 40px;
-  align-items: start;
-  padding: 20px 0;
-}
-
-.feature-copy {
-  position: sticky;
-  top: 32px;
-  margin: 0;
-}
-
-.feature h3 {
-  margin-bottom: 10px;
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 1.2;
-}
-
-.feature-copy p {
-  margin-bottom: 20px;
-  font-size: 16px;
-}
-
-.plate-lead {
-  margin: 0 0 16px;
-  font-size: 18px;
-  color: var(--ink-2);
-}
-
 /* Install */
 
 .install {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   gap: 40px;
   align-items: start;
-}
-
-.install .section-head {
-  grid-column: 1 / -1;
-  margin-bottom: 0;
-}
-
-.install-copy {
-  margin: 0;
-}
-
-.install-steps {
-  display: grid;
-  gap: 32px;
 }
 
 /* Footer title block */
 
 .title-block {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   margin: 0 calc(-1 * var(--pad));
   color: var(--mute);
   border-top: 1px solid var(--hair);
@@ -843,18 +577,6 @@ h2 em {
   padding-left: 24px;
 }
 
-.tb-cell:nth-child(3),
-.tb-cell:nth-child(4) {
-  padding: 16px 24px;
-}
-
-.tb-label {
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--mute);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -872,26 +594,15 @@ h2 em {
 
 @media (max-width: 960px) {
   .hero,
-  .feature,
-  .install,
-  .section-intro {
+  .install {
     grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
-  }
-
-  .feature-copy {
-    position: static;
-  }
-
-  .feature {
-    gap: 20px;
-    padding: 28px 0 40px;
+    gap: 24px;
   }
 }
 
 @media (max-width: 720px) {
   .title-block {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .tb-wide {
@@ -900,11 +611,6 @@ h2 em {
     border-left: 0;
     border-top: 1px solid var(--hair);
     padding-left: var(--pad);
-  }
-
-  .unused-rows li {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
   }
 }
 
@@ -916,19 +622,6 @@ h2 em {
   .sheet {
     margin: 0;
     border: 0;
-  }
-
-  .top nav {
-    gap: 16px;
-    font-size: 12px;
-  }
-
-  .top nav a:not(.nav-cta) {
-    display: none;
-  }
-
-  .section-copy p {
-    font-size: 16px;
   }
 
   .figure-card {
@@ -980,24 +673,10 @@ h2 em {
     font-size: 12px;
   }
 
-  .plate figcaption {
-    padding: 8px 14px;
-  }
-
   .problem,
-  .bloat,
   .drift-section,
   .features,
   .install {
     padding: 48px 0 72px;
   }
-
-  .tb-cell:nth-child(3),
-  .tb-cell:nth-child(4) {
-    padding: 14px 14px;
-  }
-}
-
-.fig-note code {
-  white-space: nowrap;
 }

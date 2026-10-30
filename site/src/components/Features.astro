@@ -1,44 +1,10 @@
 ---
-import Feature from "./Feature.astro";
-import SectionHead from "./SectionHead.astro";
+import Terminal from "./Terminal.astro";
 import summary from "../samples/summary.ansi?raw";
-import report from "../samples/report.ansi?raw";
-import skills from "../samples/skills.ansi?raw";
-import failures from "../samples/failures.ansi?raw";
-import sources from "../samples/sources.ansi?raw";
 ---
 
 <section class="features" id="features" aria-labelledby="features-title">
-  <SectionHead no="04" name="What Quench shows" />
-  <div class="section-copy">
-    <h2 id="features-title">Quench shows each layer and what it costs, so you can trim it.</h2>
-    <p>Every number on this page came from these commands, run on a synthetic demo history.</p>
-  </div>
-  <Feature index={0} title="A summary of every layer" command="quench" caption="~/code/acme-api" output={summary}>
-    Run it with no arguments. It finds each harness home on its own, shows what every session starts with, and points
-    at what is worth a look.
-  </Feature>
-  <Feature index={1} title="What each session starts with" command="quench report" output={report} truncated>
-    Per harness: the starting load, how much of everything processed it was, peak context, compactions, tool errors,
-    and which models and effort levels you actually use.
-  </Feature>
-  <Feature index={2} title="What loads and goes unused" command="quench profile skills" output={skills}>
-    Skills, MCP servers and instruction files, per agent and per project. Quench compares what sessions were offered
-    with what they called, so dead weight stands out.
-  </Feature>
-  <Feature index={3} title="Failures that repeat" command="quench profile failures" output={failures}>
-    Missing files, missing commands, hook rejections, bad tool input. Grouped by what failed, with streaks and how
-    much output each one fed back into context.
-  </Feature>
-  <Feature
-    index={4}
-    title="Where one session's context came from"
-    command="quench sources"
-    shown="quench sources ~/.claude/projects/…/orders.jsonl"
-    output={sources}
-    truncated
-  >
-    File reads, shell reads and searches, MCP calls, skill loads and the instruction files the harness injected.
-    Uncertain evidence is labelled, not guessed.
-  </Feature>
+  <h2 id="features-title" class="section-title">Run it on your own history.</h2>
+  <p class="section-line">Every number on this page is from a demo history.</p>
+  <Terminal command="quench" output={summary} />
 </section>

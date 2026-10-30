@@ -1,17 +1,11 @@
 ---
 import Drift from "./Drift.astro";
-import SectionHead from "./SectionHead.astro";
+import { calls } from "../context.ts";
+
+const pushes = calls.filter((c) => c.why.startsWith("guard")).length;
 ---
 
 <section class="drift-section" id="drift" aria-labelledby="drift-title">
-  <SectionHead no="03" name="Drift" />
-  <div class="section-copy">
-    <h2 id="drift-title">A bloated context is one reason agents drift off task.</h2>
-    <p>
-      Here are the same run's tool calls, in order. It started well, then failed five times in a row, four of them the
-      same blocked command. The history can't prove the load caused this. It does show what drift looks like, and
-      Quench finds it.
-    </p>
-  </div>
+  <h2 id="drift-title" class="section-title">This run retried a blocked push {pushes} times.</h2>
   <Drift />
 </section>

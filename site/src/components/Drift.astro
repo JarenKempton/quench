@@ -2,11 +2,9 @@
 import { calls } from "../context.ts";
 
 const firstFail = calls.findIndex((c) => !c.ok);
-const pushes = calls.filter((c) => c.why.startsWith("guard")).length;
 ---
 
 <figure class="card figure-card drift">
-  <p class="fig-head"><b>{pushes}×</b> in a row, the run retried the same blocked force push.</p>
   <ol class="sequence">
     {
       calls.map((c, i) => (
@@ -18,8 +16,4 @@ const pushes = calls.filter((c) => c.why.startsWith("guard")).length;
       ))
     }
   </ol>
-  <figcaption class="fig-note">
-    Fig. 4 · One run's {calls.length} tool calls in order, from <code>quench runs --json</code>; failure text from{" "}
-    <code>quench profile failures</code>.
-  </figcaption>
 </figure>
