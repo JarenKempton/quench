@@ -144,8 +144,10 @@ judge id plus the exact input, so changing a question (and its id) re-asks clean
 
 Who sent a reply comes from structure first: typed/scheduled harness origins, then optional
 host sender evidence, then fixed formats. T3 Code's PR-watch, server-restart and delegated-task
-notices (anchored to their fixed text) are host automation of kind `info`; a reply that is only a
-slash command is the person's `new_request` (harness source) unless evidence says automation.
+notices (anchored to their fixed text) are host automation of kind `info`; a reply the harness
+recorded as a user command (`invocation` by `user`, carried as `Run.replyCommand`) is the person's
+`new_request` (harness source) unless evidence says automation. Only Claude Code records one;
+leading `/` text is never parsed as a command.
 Neither reaches Jev; cached verdicts for them stay untouched. Everything else is inferred by the
 judge from the message alone. The
 output distinguishes harness evidence, host evidence, model inference and unresolved senders.

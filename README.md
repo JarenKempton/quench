@@ -82,9 +82,11 @@ before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a repl
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. T3 Code's PR-watch, restart and delegated-task notices
-count as host automation with kind `info`; a reply that is only a slash command (`/compact`,
-`/model x`, `/<skill> args`) counts as a person's `new_request` (harness source) unless harness or
-host evidence says automation. Neither is sent to Jev. The output counts each source separately. Human and automation replies have separate
+count as host automation with kind `info`; a reply the harness recorded as a slash command
+(Claude Code's `<command-name>`) counts as a person's `new_request` (harness source) unless
+harness or host evidence says automation. Neither is sent to Jev. Text that merely starts with
+`/` is not treated as a command: Codex and Pi record no command marker, so their replies are
+judged normally. The output counts each source separately. Human and automation replies have separate
 correction rates, outcome signals and recent examples; unresolved senders remain a separate
 bucket. Rates use classified replies only; only the correction verdict increases their numerator.
 JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAutomation` and

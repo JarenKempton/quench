@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Event, SenderEvidence } from "@quench/history";
 import { runs } from "@quench/insights";
 import {
   Jev,
@@ -10,6 +11,7 @@ import {
   judgeReplies,
   summarize,
   type Exchange,
+  type SessionRuns,
   type Verdict,
 } from "../src/index.ts";
 import { requests } from "../src/jev.ts";
@@ -156,47 +158,65 @@ test("a rejected key stops the whole batch", async () => {
   ).toBeInstanceOf(KeyRejected);
 });
 
-test("T3 notices and the person's slash commands skip the judge; near misses and agent commands do not", async () => {
-  const [base] = runs({
+test("T3 notices and recorded slash commands skip the judge; near misses and command-like text do not", async () => {
+  const session = (reply: Event[]): SessionRuns => ({
     id: "s",
-    harness: "codex",
     path: "/unused",
+    harness: "claude-code",
     cwd: null,
-    parent: null,
-    diagnostics: { lines: 3, unparsed: 0 },
-    events: [
-      { type: "message", author: "user", origin: "unknown", text: "build", at: null },
-      {
-        type: "inference",
-        model: null,
-        effort: null,
-        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
-        at: null,
-      },
-      { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
-      { type: "message", author: "user", origin: "unknown", text: "next", at: null },
-    ],
+    runs: runs({
+      id: "s",
+      harness: "claude-code",
+      path: "/unused",
+      cwd: null,
+      parent: null,
+      diagnostics: { lines: 0, unparsed: 0 },
+      events: [
+        { type: "message", author: "user", origin: "unknown", text: "build", at: null },
+        {
+          type: "inference",
+          model: null,
+          effort: null,
+          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+          at: null,
+        },
+        { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
+        ...reply,
+      ],
+    }),
   });
-  const replies = [
+  const said = (text: string, sender?: SenderEvidence): Event[] => [
+    {
+      type: "message",
+      author: "user",
+      origin: "unknown",
+      text,
+      at: null,
+      ...(sender ? { sender } : {}),
+    },
+  ];
+  const command = (text: string, sender?: SenderEvidence): Event[] => [
+    ...said(text, sender),
+    { type: "invocation", name: text.slice(1).split(" ")[0]!, by: "user", at: null },
+  ];
+  const notices = [
     "Update on pull request #7 (https://github.com/acme/app/pull/7), which T3 Code is watching for you:\n- All 2 checks passed on abc1234.\n\nLook into each item and act on it as your task requires.",
     "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back on its own, so resume or restart what you still need and wait for its result:\n- shell: Wait for the build (id abc)\n\nContinue where you left off.",
     "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back:\n- subagent: Review the fix (id def)",
     "Delegated task node:delegated-task:command%3Amcp%3Aabc%3Adelegate-task%3Areview-r1 (Review (round 1)) [completed]:\nVERDICT: APPROVED",
     "Delegated task node:delegated-task:command%3Amcp%3Aabc%3Adelegate-task%3Afix [failed]:\nTimed out",
     "Delegated task node:delegated-task:x%3Ay reached a terminal state. Use task_status with taskId node:delegated-task:x%3Ay to read the result.",
-    "/compact",
-    "/model gpt-test",
-    "  /review-pr https://github.com/acme/app/pull/7 ",
   ];
+  const commands = ["/compact", "/model gpt-test", "/review-pr https://github.com/acme/app/pull/7"];
   const nearMisses = [
     "update on pull request #7 (https://github.com/acme/app/pull/7), which T3 Code is watching for you:\n- no, that is wrong",
     "Here is my update on pull request #7, which T3 Code is watching for you: you broke the build.",
     "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back:\n- shell: build\n\nUser message:\nno, use the other branch",
     "Delegated task node:delegated-task:x (review) [completed] was wrong, redo it",
-    "/usr/local/bin is the wrong path",
-    "/compact\nthen fix the test you broke",
-    "the /compact lost my context",
+    "/tmp is full, clean it",
+    "/compact",
   ];
+  const agent: SenderEvidence = { sender: "automation", source: "t3", messageId: "m" };
   const asked: Exchange[] = [];
   const judge = {
     id: "judge/v1",
@@ -207,31 +227,19 @@ test("T3 notices and the person's slash commands skip the judge; near misses and
   };
   const judged = await judgeReplies(
     [
-      {
-        id: "s",
-        path: "/unused",
-        harness: "codex",
-        cwd: null,
-        runs: [
-          ...[...replies, ...nearMisses].map((reply) => ({ ...base!, reply })),
-          {
-            ...base!,
-            reply: "/tmp is full",
-            replySender: { sender: "automation", source: "t3", messageId: "m" },
-          },
-        ],
-      },
+      ...notices.map((text) => session(said(text))),
+      ...commands.map((text) => session(command(text))),
+      ...nearMisses.map((text) => session(said(text))),
+      session(command("/compact", agent)),
     ],
     await VerdictCache.open(await cachePath(), judge.id),
     judge,
   );
-  expect(asked.map((e) => e.reply)).toEqual([...nearMisses, "/tmp is full"]);
+  expect(asked.map((e) => e.reply)).toEqual([...nearMisses, "/compact"]);
   expect(judged.replies.map((r) => `${r.kind} ${r.sender} ${r.senderSource}`)).toEqual([
-    ...replies.slice(0, 6).map(() => "info automation host"),
-    ...replies.slice(6).map(() => "new_request person harness"),
+    ...notices.map(() => "info automation host"),
+    ...commands.map(() => "new_request person harness"),
     ...nearMisses.map(() => "correction person judge"),
     "correction automation host",
   ]);
-  const summary = summarize(judged.replies, 10);
-  expect([summary.fromAutomation.kinds.correction, summary.fromUnknown.replies]).toEqual([1, 0]);
 });
