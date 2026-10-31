@@ -8,6 +8,7 @@ export type SenderEvidence = {
   sender: "person" | "automation";
   source: string;
   messageId: string;
+  notice?: true;
 };
 
 export type SessionEnricher = (session: Session) => Session;

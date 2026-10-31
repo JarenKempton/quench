@@ -90,7 +90,7 @@ const fromAutomation = (run: Run) =>
   run.replyOrigin === "scheduled" || run.replySender?.sender === "automation";
 
 function presetKind(run: Run, reply: string): ReplyKind | null {
-  if (isT3Notice(reply)) return "info";
+  if (run.replySender?.notice || isT3Notice(reply)) return "info";
   if (run.replyCommand && !fromAutomation(run)) return "new_request";
   return null;
 }
