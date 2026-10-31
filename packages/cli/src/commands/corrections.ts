@@ -50,12 +50,13 @@ type Options = {
   themes: boolean;
   themeLimit: number;
   causes: boolean;
+  cachedOnly: boolean;
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const replyJudge = options.dryRun ? null : Jev.fromEnv();
+  const replyJudge = options.dryRun || options.cachedOnly ? null : Jev.fromEnv();
   const optIn = options.themes || options.causes;
-  if (!options.dryRun && !optIn && !replyJudge) {
+  if (!options.dryRun && !options.cachedOnly && !optIn && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
   }
@@ -140,14 +141,17 @@ export async function corrections(home: Home, options: Options): Promise<number>
         })
       : (themes
           ? renderThemes(themes, judged, options.days)
-          : render(summary, judged, options.days, cache.judge, tokens)) +
+          : render(summary, judged, options.days, cache.judge, tokens, options.cachedOnly)) +
           (causes ? renderCauses(causes, options.examples) : ""),
   );
   if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
   if (
     optIn &&
     !options.dryRun &&
-    (judged.pending || themes?.pending || themes?.blocked || causes?.pending)
+    ((judged.pending && !options.cachedOnly) ||
+      themes?.pending ||
+      themes?.blocked ||
+      causes?.pending)
   ) {
     process.stderr.write(
       "Classifying missing replies, grouping and asking causes use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview each stage.\n",
@@ -234,6 +238,7 @@ function render(
   days: number,
   judge: string,
   tokens: Jev["tokens"] | null,
+  cachedOnly: boolean,
 ): string {
   const people = summary.fromPeople;
   const bots = summary.fromAutomation;
@@ -292,7 +297,9 @@ function render(
   if (judged.pending) {
     lines.push(
       "",
-      `Dry run: ${judged.pending} replies not judged yet would be sent to Jev in ${judged.pending * 2} requests.`,
+      cachedOnly
+        ? `${judged.pending} replies not judged yet stay unclassified (--cached-only).`
+        : `Dry run: ${judged.pending} replies not judged yet would be sent to Jev in ${judged.pending * 2} requests.`,
     );
   }
   if (tokens && judged.newlyJudged) {

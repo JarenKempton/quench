@@ -178,6 +178,7 @@ is implied by local replay tests.
 
 ```sh
 quench corrections --causes --dry-run
+quench corrections --causes --cached-only
 quench corrections --causes --json
 ```
 
@@ -196,6 +197,10 @@ the exact question, choices and excerpt. `--dry-run` sends nothing, writes nothi
 the number of cause requests. Corrections not asked yet show as pending and failed answers as
 failed. Neither is dropped or cached. Without a key, missing work exits with code 2, and a failure
 exits with code 1. Each request has a 10-second timeout and no retries.
+
+`--causes` first classifies any reply that has no cached verdict, which can cost far more than the
+cause questions. `--cached-only` skips that step: replies without a verdict stay unclassified, and
+only the corrections already known are asked about.
 
 ## Profile
 

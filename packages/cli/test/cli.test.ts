@@ -187,6 +187,49 @@ test("corrections uses optional host evidence over a cached sender, and degrades
   expect(noKey.stdout).toContain("1 pending");
 });
 
+test("corrections --cached-only never classifies new replies, so it needs no key", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "quench-cli-cached-"));
+  const sessions = join(dir, ".claude/projects/demo");
+  await mkdir(sessions, { recursive: true });
+  await Bun.write(
+    join(sessions, "s.jsonl"),
+    [
+      {
+        type: "user",
+        timestamp: "2026-10-20T10:00:00Z",
+        message: { role: "user", content: "build" },
+      },
+      {
+        type: "assistant",
+        timestamp: "2026-10-20T10:00:01Z",
+        message: {
+          id: "a",
+          model: "model",
+          content: [{ type: "text", text: "done" }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      {
+        type: "user",
+        timestamp: "2026-10-20T10:00:03Z",
+        message: { role: "user", content: "no, the other file" },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n") + "\n",
+  );
+  const args = ["corrections", "--days", "36500", "--no-host-history"];
+  expect((await quenchAt(dir, ...args)).code).toBe(2);
+  const cached = await quenchAt(dir, ...args, "--cached-only", "--json");
+  expect(cached.code).toBe(0);
+  const out = JSON.parse(cached.stdout);
+  expect([out.pending, out.newlyJudged]).toEqual([1, 0]);
+  expect(await Bun.file(join(dir, ".quench/local/judgments.jsonl")).exists()).toBe(false);
+  expect((await quench("report", "--cached-only")).stderr).toContain(
+    "--cached-only is only available for corrections",
+  );
+});
+
 test("unknown commands and bad input fail with a message", async () => {
   expect((await quench("frobnicate")).code).toBe(1);
   expect((await quench("report", "--days", "zero")).stderr).toContain(
