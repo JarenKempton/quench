@@ -543,9 +543,43 @@ h2 em {
 
 .install {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  gap: 40px;
-  align-items: start;
+  gap: 32px;
+}
+
+.install-os {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.install-lines {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.install-line {
+  position: relative;
+  min-width: 0;
+}
+
+.install-copy {
+  position: absolute;
+  right: 12px;
+  bottom: 16px;
+  padding: 6px 12px;
+  font: 500 13px var(--sans);
+  color: var(--prussian-deep);
+  background: var(--cyan);
+  border: 0;
+  cursor: pointer;
+}
+
+.install-lines pre {
+  white-space: pre;
+  overflow-x: auto;
+  padding-right: 96px;
 }
 
 /* Footer title block */
