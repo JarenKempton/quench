@@ -1,3 +1,4 @@
+import { pathParts } from "./files.ts";
 import { harnesses } from "./harnesses/index.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId } from "./model.ts";
@@ -33,7 +34,7 @@ export function describeServer(config: unknown): Pick<McpServer, "transport" | "
   const command = typeof entry.command === "string" ? entry.command : null;
   const type = typeof entry.type === "string" ? entry.type : null;
   if (url) return { transport: type ?? "http", target: host(url) };
-  if (command) return { transport: type ?? "stdio", target: command.split("/").at(-1) ?? null };
+  if (command) return { transport: type ?? "stdio", target: pathParts(command).at(-1) ?? null };
   return { transport: type ?? "unknown", target: null };
 }
 

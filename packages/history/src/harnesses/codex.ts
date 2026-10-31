@@ -402,9 +402,9 @@ function skillListing(line: Line): EventKind | null {
     [...block.matchAll(/^- `(r\d+)` = `([^`]+)`$/gm)].map(([, id, path]) => [id!, path!]),
   );
   const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(([, name, file]) => {
-    const [root, ...rest] = file!.split("/");
+    const [root, ...rest] = file!.split(/[\\/]/);
     const base = roots.get(root!);
-    return { name: name!, path: base ? [base, ...rest].join("/") : file! };
+    return { name: name!, path: base ? join(base, ...rest) : file! };
   });
   return { type: "skills", listed, chars: block.length };
 }

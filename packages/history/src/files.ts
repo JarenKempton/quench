@@ -49,3 +49,8 @@ async function commonRoot(dotGit: string): Promise<string | null> {
   if (!common) return null;
   return basename(common) === ".git" ? dirname(common) : common;
 }
+
+export const pathParts = (path: string) => path.split(/[\\/]/).filter(Boolean);
+
+export const isInside = (path: string, dir: string) =>
+  path.startsWith(`${dir}/`) || path.startsWith(`${dir}\\`);

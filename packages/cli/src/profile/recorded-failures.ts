@@ -1,5 +1,5 @@
 import { heading } from "../style.ts";
-import { harnessById, type HarnessId, type SessionPlace } from "@quench/history";
+import { harnessById, isInside, type HarnessId, type SessionPlace } from "@quench/history";
 import { chars, count, projectName, table } from "../format.ts";
 
 const SHOWN = 15;
@@ -36,7 +36,7 @@ export function repeatedFailures(placesByRoot: Map<string, SessionPlace[]>): Fai
         failures += f.failures;
         total += f.chars;
         if (f.what === null) continue;
-        const what = f.what.startsWith(`${root}/`) ? f.what.slice(root.length + 1) : f.what;
+        const what = isInside(f.what, root) ? f.what.slice(root.length + 1) : f.what;
         const key = `${root}\0${f.kind}\0${what}`;
         const row =
           rows.get(key) ??

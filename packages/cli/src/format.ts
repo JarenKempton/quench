@@ -1,3 +1,4 @@
+import { isInside, pathParts } from "@quench/history";
 import { durationSeconds, type Run } from "@quench/insights";
 
 export function tokens(n: number): string {
@@ -73,10 +74,10 @@ export const count = (n: number) => n.toLocaleString("en-US");
 export const chars = (n: number) => `${tokens(n)} chars`;
 
 export const shortPath = (path: string, homeDir: string) =>
-  path === homeDir || path.startsWith(`${homeDir}/`) ? `~${path.slice(homeDir.length)}` : path;
+  path === homeDir || isInside(path, homeDir) ? `~${path.slice(homeDir.length)}` : path;
 
 export const projectName = (root: string, homeDir: string) =>
-  root === homeDir ? "~" : (root.split("/").at(-1) ?? root);
+  root === homeDir ? "~" : (pathParts(root).at(-1) ?? root);
 
 export function median(values: number[]): number | null {
   if (!values.length) return null;

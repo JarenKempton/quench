@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import {
   discoverAll,
   harnessById,
+  isInside,
   readSessions,
   startingContext,
   type Home,
@@ -26,7 +27,7 @@ export async function runs(
     return 1;
   }
   const refs = (await discoverAll(home)).filter(
-    (r) => r.path === path || r.path.startsWith(`${path.replace(/\.jsonl$/, "")}/`),
+    (r) => r.path === path || isInside(r.path, path.replace(/\.jsonl$/, "")),
   );
   const sessions: Session[] = [];
   for await (const outcome of readSessions(refs)) if (outcome.ok) sessions.push(outcome.session);
