@@ -156,6 +156,13 @@ The corrections summary keeps person, automation and unresolved senders separate
 replies enter each attributed rate and signal set. Recent examples retain session/run locations
 and sender evidence. Routine coordination remains its classified reply kind, not a correction.
 
+`behaviour(run)` in insights derives typed signals from a run alone: repeated failures keyed by
+failure kind and what failed (the masked summary, shell command signature or path from
+`failedCall` in history, with "nothing found" exits ignored), invalid tool input, duration and
+tokens processed. Each carries its evidence as call positions or measured values. Tool names are
+listed as evidence, never compared against a known name. They join the reply signal buckets as
+yes/no rows, so they are correlations with corrections, not causes.
+
 ### Correction themes
 
 `corrections --themes` uses the normal reply pipeline: reuse cached verdicts, classify missing

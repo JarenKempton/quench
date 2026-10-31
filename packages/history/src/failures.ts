@@ -65,13 +65,13 @@ export function recordedFailures(session: Session): SessionFailure[] {
     }
 
     const call = event.callId === null ? undefined : callsById.get(event.callId);
-    const signature = shellSignatureOf(call);
-    if (isNothingFound(event.failure, signature)) {
+    const failed = failedCall(event.failure, call);
+    if (!failed) {
       breakRun();
       continue;
     }
 
-    const what = whatFailed(event.failure, call, signature);
+    const { what } = failed;
     const key = `${event.failure.kind}\0${what}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
@@ -82,6 +82,15 @@ export function recordedFailures(session: Session): SessionFailure[] {
     row.chars += event.chars;
   }
   return [...rows.values()];
+}
+
+export function failedCall(
+  failure: Failure,
+  call: ToolCall | undefined,
+): { kind: Failure["kind"]; what: string | null } | null {
+  const signature = shellSignatureOf(call);
+  if (isNothingFound(failure, signature)) return null;
+  return { kind: failure.kind, what: whatFailed(failure, call, signature) };
 }
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {

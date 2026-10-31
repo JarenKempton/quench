@@ -166,6 +166,13 @@ test("T3 notices and the person's slash commands skip the judge; near misses and
     diagnostics: { lines: 3, unparsed: 0 },
     events: [
       { type: "message", author: "user", origin: "unknown", text: "build", at: null },
+      {
+        type: "inference",
+        model: null,
+        effort: null,
+        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        at: null,
+      },
       { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
       { type: "message", author: "user", origin: "unknown", text: "next", at: null },
     ],

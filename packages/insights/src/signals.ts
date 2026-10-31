@@ -1,4 +1,5 @@
 import { harnessById, type HarnessId } from "@quench/history";
+import { behaviour, behaviourLabel, type BehaviourKind } from "./behaviour.ts";
 import { durationSeconds, type Run } from "./run.ts";
 
 export type Sample = { harness: HarnessId; position: number; run: Run; corrected: boolean };
@@ -66,6 +67,12 @@ const SIGNALS: [string, (s: Sample) => Placed | null][] = [
   ],
   ["Model", (s) => (s.run.model === null ? null : [0, s.run.model])],
   ["Harness", (s) => [0, harnessById[s.harness].label]],
+  ...(Object.keys(behaviourLabel) as BehaviourKind[]).map(
+    (kind): [string, (s: Sample) => Placed] => [
+      behaviourLabel[kind],
+      (s) => (behaviour(s.run).some((b) => b.kind === kind) ? [0, "yes"] : [1, "no"]),
+    ],
+  ),
 ];
 
 export const signals = (samples: readonly Sample[]): Signal[] =>

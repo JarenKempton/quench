@@ -90,6 +90,13 @@ bucket. Rates use classified replies only; only the correction verdict increases
 JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAutomation` and
 `fromUnknown`. Examples include the history path, session, run and sender evidence.
 
+Each run also gets behaviour signals read from its own log, with no model call: the same failure
+(kind and what failed) 3 or more times, invalid tool input 2 or more times, 15 minutes or more of
+agent time, and 10M or more tokens processed. They appear as yes/no rows in the "what came before"
+tables and on each example, with the call positions behind them (`behaviour` in JSON). Rework and
+early "done" claims are not detected: edit targets and completion claims are not recorded
+structurally, so detecting them would mean guessing from text.
+
 `corrections` can read T3 Code's local
 `~/.t3/userdata/statev2.sqlite` **read-only** when it exists; T3 is not another harness or a
 requirement. Use `--host-history <sqlite-file>` for another location, or `--no-host-history` to
