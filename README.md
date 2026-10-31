@@ -80,8 +80,11 @@ your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of
 before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a reply is paid for once.
 `--dry-run` shows how many replies would be sent without sending anything.
 
-Sender attribution uses harness metadata first, optional host evidence second, and Jev's guess
-otherwise. The output counts each source separately. Human and automation replies have separate
+Sender attribution uses harness metadata first, optional host evidence second, fixed message
+formats third, and Jev's guess otherwise. T3 Code's PR-watch, restart and delegated-task notices
+count as host automation with kind `info`; a reply that is only a slash command (`/compact`,
+`/model x`, `/<skill> args`) counts as a person's `new_request` (harness source) unless harness or
+host evidence says automation. Neither is sent to Jev. The output counts each source separately. Human and automation replies have separate
 correction rates, outcome signals and recent examples; unresolved senders remain a separate
 bucket. Rates use classified replies only; only the correction verdict increases their numerator.
 JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAutomation` and
