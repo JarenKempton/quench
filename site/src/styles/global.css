@@ -148,48 +148,11 @@ h2 em {
   height: 30px;
 }
 
-.nav-cta {
-  padding: 6px 14px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--cyan);
-  text-decoration: none;
-  border: 1px solid var(--cyan-2);
-}
-
-.nav-cta:hover {
-  color: var(--prussian-deep);
-  background: var(--cyan);
-}
-
-/* Inline command and button */
-
-.inline-cmd {
-  display: inline-flex;
-  gap: 10px;
-  padding: 9px 16px;
-  font-size: 13px;
-  border: 1px dashed var(--cyan-2);
-}
+/* Prompt */
 
 .prompt {
   color: var(--mute);
   user-select: none;
-}
-
-.btn {
-  display: inline-block;
-  padding: 9px 22px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--prussian-deep);
-  background: var(--cyan);
-  text-decoration: none;
-  transition: background 0.15s;
-}
-
-.btn:hover {
-  background: var(--ink);
 }
 
 /* Cards */
@@ -622,7 +585,6 @@ h2 em {
 /* Responsive */
 
 @media (max-width: 960px) {
-  .hero,
   .install {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
