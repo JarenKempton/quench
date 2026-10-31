@@ -85,16 +85,21 @@ async function fakeGh(asset: string) {
   const assets = join(fake, "assets");
   await Bun.write(join(assets, asset), binary);
   await Bun.write(join(assets, "SHA256SUMS"), `${sha(binary)}  ${asset}\n`);
+  const script = join(fake, "gh.js");
   await Bun.write(
-    join(fake, "gh"),
+    script,
     [
-      "#!/bin/sh",
-      `echo "$*" >> "${fake}/calls"`,
-      '[ "$1" = auth ] && exit 0',
-      'while [ $# -gt 0 ]; do [ "$1" = --dir ] && dir=$2; shift; done',
-      `cp "${assets}"/* "$dir"`,
+      'import { appendFileSync, copyFileSync, readdirSync } from "node:fs";',
+      'import { join } from "node:path";',
+      "const args = process.argv.slice(2);",
+      `appendFileSync(${JSON.stringify(join(fake, "calls"))}, args.join(" ") + "\\n");`,
+      'const dir = args[args.indexOf("--dir") + 1];',
+      `if (args[0] === "release") for (const name of readdirSync(${JSON.stringify(assets)}))`,
+      `  copyFileSync(join(${JSON.stringify(assets)}, name), join(dir, name));`,
     ].join("\n"),
   );
+  await Bun.write(join(fake, "gh"), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  await Bun.write(join(fake, "gh.cmd"), `@"${process.execPath}" "${script}" %*\r\n`);
   await chmod(join(fake, "gh"), 0o755);
   return {
     env: { PATH: `${fake}${delimiter}${process.env.PATH}` },
@@ -139,7 +144,7 @@ for (const shell of ["pwsh", "powershell"].filter((name) => Bun.which(name))) {
     expect(await stat(join(run.bin, "quench.exe")).catch(() => null)).toBeNull();
   });
 
-  test.skipIf(!posix)(`install.ps1 in ${shell} falls back to gh for nightly`, async () => {
+  test(`install.ps1 in ${shell} falls back to gh for nightly`, async () => {
     const gh = await fakeGh(asset);
     const run = await ps({ ...gh.env, QUENCH_RELEASE: "nightly" });
     expect(run.code).toBe(0);
