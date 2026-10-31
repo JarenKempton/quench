@@ -89,7 +89,7 @@ export function describe(b: Behaviour): string {
   const label = behaviourLabel[b.kind].toLowerCase();
   switch (b.kind) {
     case "retry-loop":
-      return `${label} (${b.failure} ×${b.calls.length}: ${b.what}; calls ${b.calls.join(", ")})`;
+      return `${label} (${b.failure} ×${b.calls.length}: ${b.what ?? b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
     case "bad-tool-input":
       return `${label} (${b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
     case "long-run":

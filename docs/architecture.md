@@ -160,7 +160,8 @@ and sender evidence. Routine coordination remains its classified reply kind, not
 
 `behaviour(run)` in insights derives typed signals from a run alone: repeated failures keyed by
 failure kind and what failed (the masked summary, shell command signature or path from
-`failedCall` in history, with "nothing found" exits ignored), invalid tool input, duration and
+`failedCall` in history, with "nothing found" exits ignored; when none is recorded, kind and the
+failing tool, compared only for equality within the run), invalid tool input, duration and
 tokens processed. Each carries its evidence as call positions or measured values. Tool names are
 listed as evidence, never compared against a known name. They join the reply signal buckets as
 yes/no rows, so they are correlations with corrections, not causes.
