@@ -174,6 +174,29 @@ outputs are reproducible; the moving `jev-latest` alias is not an accuracy guara
 files or histories are edited, no prose drafts are generated, and no live semantic-accuracy claim
 is implied by local replay tests.
 
+## What went wrong in corrections
+
+```sh
+quench corrections --causes --dry-run
+quench corrections --causes --json
+```
+
+`--causes` asks Jev one fixed-choice question for each reply already classified as a correction,
+never for other replies: what did the agent do wrong? The choices are misread instruction, wrong
+assumption, ignored rule or instruction, bad tool use, rabbit hole / over-engineering, claimed
+done too early, or none (steering or preference). Each answer sits beside the behaviour signals
+from the run it reacted to. Totals are split by people, automation and unresolved senders, by
+behaviour signal, and by the existing model, effort and harness buckets. Causes and behaviour are
+correlations; neither proves the other.
+
+Only the clipped exchange is sent, as with themes: the last 500 assistant characters and the
+first 1,000 correction characters, with no paths, IDs or models. Identical exchanges share one
+request. Answers are cached in `~/.quench/local/causes.jsonl`, keyed by the cause judge id plus
+the exact question, choices and excerpt. `--dry-run` sends nothing, writes nothing and reports
+the number of cause requests. Corrections not asked yet show as pending and failed answers as
+failed. Neither is dropped or cached. Without a key, missing work exits with code 2, and a failure
+exits with code 1. Each request has a 10-second timeout and no retries.
+
 ## Profile
 
 ```sh

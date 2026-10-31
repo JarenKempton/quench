@@ -24,7 +24,9 @@ const Line = z.object({
   decision: ThemeDecision,
 });
 
-export class ThemeCache {
+type ChoiceInput = { choices: Record<string, string> };
+
+export class ThemeCache<I extends ChoiceInput = ThemeInput> {
   readonly warnings: string[] = [];
   private constructor(
     readonly path: string,
@@ -32,7 +34,10 @@ export class ThemeCache {
     private readonly known: Map<string, ThemeDecision>,
   ) {}
 
-  static async open(path: string, judge: string): Promise<ThemeCache> {
+  static async open<I extends ChoiceInput = ThemeInput>(
+    path: string,
+    judge: string,
+  ): Promise<ThemeCache<I>> {
     const known = new Map<string, ThemeDecision>();
     const diagnostics = { lines: 0, unparsed: 0 };
     if (await Bun.file(path).exists()) {
@@ -40,17 +45,17 @@ export class ThemeCache {
         if (line.judge === judge) known.set(line.key, line.decision);
       }
     }
-    const cache = new ThemeCache(path, judge, known);
+    const cache = new ThemeCache<I>(path, judge, known);
     if (diagnostics.unparsed) cache.warnings.push("Malformed theme cache records were ignored.");
     return cache;
   }
 
-  get(input: ThemeInput): ThemeDecision | undefined {
+  get(input: I): ThemeDecision | undefined {
     const decision = this.known.get(this.key(input));
     return decision && Object.hasOwn(input.choices, decision.choice) ? decision : undefined;
   }
 
-  async remember(input: ThemeInput, value: ThemeDecision): Promise<void> {
+  async remember(input: I, value: ThemeDecision): Promise<void> {
     const decision = ThemeDecision.parse(value);
     if (!Object.hasOwn(input.choices, decision.choice)) throw new Error("Unknown theme choice");
     const key = this.key(input);
@@ -65,7 +70,7 @@ export class ThemeCache {
     this.known.set(key, decision);
   }
 
-  private key(input: ThemeInput): string {
+  private key(input: I): string {
     return createHash("sha256")
       .update(JSON.stringify([this.judge, input]))
       .digest("hex");

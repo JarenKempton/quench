@@ -161,6 +161,30 @@ test("corrections uses optional host evidence over a cached sender, and degrades
   expect(fallback.code).toBe(0);
   expect(JSON.parse(fallback.stdout).senderSources.judge).toBe(1);
   expect(fallback.stderr).toContain("incompatible");
+
+  const causes = await quenchAt(dir, ...args, "--causes", "--no-host-history");
+  expect(causes.code).toBe(0);
+  const asked = JSON.parse(causes.stdout).causes;
+  expect([asked.corrections, asked.pending, asked.cacheHits, asked.tokens]).toEqual([
+    1,
+    1,
+    0,
+    null,
+  ]);
+  expect(asked.caused.map((c: { cause: string; sender: string }) => [c.cause, c.sender])).toEqual([
+    ["pending", "person"],
+  ]);
+  expect(await Bun.file(join(dir, ".quench/local/causes.jsonl")).exists()).toBe(false);
+  const noKey = await quenchAt(
+    dir,
+    "corrections",
+    "--days",
+    "36500",
+    "--causes",
+    "--no-host-history",
+  );
+  expect(noKey.code).toBe(2);
+  expect(noKey.stdout).toContain("1 pending");
 });
 
 test("unknown commands and bad input fail with a message", async () => {

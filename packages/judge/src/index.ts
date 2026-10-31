@@ -1,5 +1,6 @@
 export { VerdictCache } from "./cache.ts";
-export { Jev, JevThemes, KeyRejected } from "./jev.ts";
+export * from "./causes.ts";
+export { Jev, JevCauses, JevThemes, KeyRejected } from "./jev.ts";
 export { ThemeCache } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {
