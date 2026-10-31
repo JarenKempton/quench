@@ -2,24 +2,44 @@
 import Terminal from "./Terminal.astro";
 
 const base = "https://github.com/JarenKempton/quench/releases/latest/download";
-const lines = [
-  { os: "macOS · Linux", command: `curl -fsSL ${base}/install.sh | sh` },
-  { os: "Windows", command: `irm ${base}/install.ps1 | iex` },
+const unix = `curl -fsSL ${base}/install.sh | sh`;
+const platforms = [
+  { id: "macos", name: "macOS", command: unix },
+  { id: "linux", name: "Linux", command: unix },
+  { id: "windows", name: "Windows", command: `irm ${base}/install.ps1 | iex` },
 ];
 ---
 
 <section class="install" id="install" aria-labelledby="install-title">
-  <div>
-    <h2 id="install-title" class="section-title">One line to install.</h2>
-    <p class="section-line">macOS, Linux or Windows.</p>
-  </div>
-  <div class="install-lines">
+  <h2 id="install-title" class="section-title">One line to install.</h2>
+  <div class="install-picker" data-install>
+    <div class="install-tabs" role="tablist" aria-label="Platform">
+      {
+        platforms.map((p, i) => (
+          <button
+            type="button"
+            role="tab"
+            id={`install-tab-${p.id}`}
+            aria-controls={`install-${p.id}`}
+            aria-selected={i === 0 ? "true" : "false"}
+            data-platform={p.id}
+          >
+            {p.name}
+          </button>
+        ))
+      }
+    </div>
     {
-      lines.map((l) => (
-        <div class="install-line">
-          <p class="install-os">{l.os}</p>
-          <Terminal command={l.command} />
-          <button type="button" class="install-copy" data-copy={l.command}>
+      platforms.map((p, i) => (
+        <div
+          class="install-line"
+          role="tabpanel"
+          id={`install-${p.id}`}
+          aria-labelledby={`install-tab-${p.id}`}
+          hidden={i !== 0}
+        >
+          <Terminal command={p.command} />
+          <button type="button" class="install-copy" data-copy={p.command}>
             Copy
           </button>
         </div>
@@ -29,6 +49,32 @@ const lines = [
 </section>
 
 <script>
+  const picker = document.querySelector<HTMLElement>("[data-install]");
+  const tabs = [...(picker?.querySelectorAll<HTMLButtonElement>("[role=tab]") ?? [])];
+
+  const select = (platform: string) => {
+    for (const tab of tabs) {
+      const on = tab.dataset.platform === platform;
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+      document.getElementById(tab.getAttribute("aria-controls") ?? "")!.hidden = !on;
+    }
+  };
+
+  const agent = navigator.userAgent;
+  select(/Windows/.test(agent) ? "windows" : /Mac|iPhone|iPad/.test(agent) ? "macos" : "linux");
+
+  for (const [i, tab] of tabs.entries()) {
+    tab.addEventListener("click", () => select(tab.dataset.platform!));
+    tab.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (!step) return;
+      const next = tabs[(i + step + tabs.length) % tabs.length]!;
+      select(next.dataset.platform!);
+      next.focus();
+    });
+  }
+
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]"))
     button.addEventListener("click", async () => {
       await navigator.clipboard.writeText(button.dataset.copy ?? "");
