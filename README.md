@@ -330,8 +330,7 @@ makes no model calls, reads no host database and writes no files or caches.
 ## Status
 
 Early and changing. Direction and scope: [#45](https://github.com/JarenKempton/quench/issues/45).
-Releases are built by `.github/workflows/release.yml` when a `v*` tag matching
-`packages/cli/package.json`'s version is pushed, and published as a draft to review first.
+Releases are built by `.github/workflows/release.yml`; see [Install](#install) for the channels.
 
 ## Run from source
 

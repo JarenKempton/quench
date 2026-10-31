@@ -57,16 +57,17 @@ jobs:
               packages/cli/src/main.ts --outfile dist/quench-$target
           done
           test "$(./dist/quench-linux-x64 --version)" = "quench $VERSION"
+          (cd dist && sha256sum quench-* > SHA256SUMS)
       - name: Publish nightly
         if: github.event_name == 'push'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly dist/quench-* --prerelease --latest=false --target "$GITHUB_SHA" \
+          gh release create nightly dist/quench-* dist/SHA256SUMS --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "Nightly $VERSION" --notes "Built from $GITHUB_SHA. Install with: quench update --channel nightly"
       - name: Publish stable
         if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "v$VERSION" dist/quench-* --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes
+        run: gh release create "v$VERSION" dist/quench-* dist/SHA256SUMS --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes
