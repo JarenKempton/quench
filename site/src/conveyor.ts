@@ -124,7 +124,9 @@ const ramBottom = (t: number) => {
 };
 
 const bagX = (t: number) =>
-  t < T.go[0] ? lerp(-110, LOAD_X, inOut(span(t, T.in[0], T.in[1]))) : lerp(LOAD_X, PRESS_X, inOut(span(t, T.go[0], T.go[1])));
+  t < T.go[0]
+    ? lerp(-110, LOAD_X, inOut(span(t, T.in[0], T.in[1])))
+    : lerp(LOAD_X, PRESS_X, inOut(span(t, T.go[0], T.go[1])));
 
 const sway = (t: number, [a, b]: number[], amp: number) => {
   if (t < a) return 0;
@@ -173,7 +175,10 @@ export function scene(time: number) {
   const sy = struck ? BAR_H / BAG.h : Math.min(1, (BELT - Math.max(ram, bagTop)) / BAG.h);
   const sx = 1 + (BAR_W / BAG.w - 1) * ((1 - sy) / (1 - BAR_H / BAG.h));
   const tilt = t < T.go[0] ? sway(t, T.in, 3) : sway(t, T.go, 4);
-  a.bag = { transform: `translate(${f(bx)} ${BELT}) rotate(${f(tilt)})`, opacity: struck ? "0" : "1" };
+  a.bag = {
+    transform: `translate(${f(bx)} ${BELT}) rotate(${f(tilt)})`,
+    opacity: struck ? "0" : "1",
+  };
   a["bag-s"] = { transform: `scale(${f(sx)} ${f(sy)})` };
 
   const spring = 1 + 0.06 * (1 - outBack(span(t, T.hit, T.hit + 0.32)));
@@ -183,8 +188,14 @@ export function scene(time: number) {
   };
   const flash = struck ? 1 - span(t, T.hit, T.hit + 0.28) : 0;
   const burst = easeOut(span(t, T.hit, T.hit + 0.28));
-  a["spark-l"] = { opacity: f(flash), transform: `translate(${f(BAR_L - 4 - 10 * burst)} ${BELT - BAR_H / 2})` };
-  a["spark-r"] = { opacity: f(flash), transform: `translate(${f(BAR_L + BAR_W + 4 + 10 * burst)} ${BELT - BAR_H / 2})` };
+  a["spark-l"] = {
+    opacity: f(flash),
+    transform: `translate(${f(BAR_L - 4 - 10 * burst)} ${BELT - BAR_H / 2})`,
+  };
+  a["spark-r"] = {
+    opacity: f(flash),
+    transform: `translate(${f(BAR_L + BAR_W + 4 + 10 * burst)} ${BELT - BAR_H / 2})`,
+  };
 
   const drawn = easeOut(span(t, T.dim[0], T.dim[1]));
   const markV = span(t, T.mark[0], T.mark[1]);
@@ -264,7 +275,9 @@ export function scene(time: number) {
       rot = 0;
     }
   }
-  a.keep = { transform: `translate(${f(kx - KEEP_C)} ${f(ky - BELT)}) rotate(${f(rot)} ${f(KEEP_C)} ${BELT})` };
+  a.keep = {
+    transform: `translate(${f(kx - KEEP_C)} ${f(ky - BELT)}) rotate(${f(rot)} ${f(KEEP_C)} ${BELT})`,
+  };
 
   a["note-cut"] = { style: `opacity:${f(span(t, T.note[0], T.note[1]))}` };
 

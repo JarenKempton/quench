@@ -25,7 +25,13 @@ export const layerChars = run.startingContext.parts.reduce((n, p) => n + p.chars
 
 export const layers = [...run.startingContext.parts]
   .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.chars - a.chars)
-  .map((p) => ({ kind: p.kind, name: name(p), chars: p.chars, share: p.chars / layerChars, mcp: p.kind === "mcp_tools" }));
+  .map((p) => ({
+    kind: p.kind,
+    name: name(p),
+    chars: p.chars,
+    share: p.chars / layerChars,
+    mcp: p.kind === "mcp_tools",
+  }));
 
 export const servers = run.startingContext.parts
   .filter((p) => p.kind === "mcp_tools")

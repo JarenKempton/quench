@@ -39,7 +39,13 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   background-color: var(--prussian-deep);
-  background: radial-gradient(110% 70% at 70% 0%, #11416a 0%, var(--prussian) 60%, var(--prussian-deep) 100%) fixed;
+  background: radial-gradient(
+      110% 70% at 70% 0%,
+      #11416a 0%,
+      var(--prussian) 60%,
+      var(--prussian-deep) 100%
+    )
+    fixed;
 }
 
 body::before {
