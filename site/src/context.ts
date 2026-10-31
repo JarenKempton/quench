@@ -2,9 +2,7 @@ import run from "./samples/run.json";
 
 type Part = (typeof run.startingContext.parts)[number];
 
-export const windowTokens = 1_000_000;
 export const startTokens = run.contextStart;
-export const peakTokens = run.contextPeak;
 export const requests = run.inferences;
 export const inputTokens = run.usage.input + run.usage.cacheRead + run.usage.cacheWrite;
 
