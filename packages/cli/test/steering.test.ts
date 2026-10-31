@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, readdir, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -42,7 +42,7 @@ async function entries(dir: string): Promise<string[]> {
 }
 
 async function fixture() {
-  const home = await mkdtemp(join(tmpdir(), "quench-steering-"));
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-steering-")));
   const project = join(home, "repo");
   await mkdir(join(project, ".git"), { recursive: true });
   await mkdir(join(project, "src"));
@@ -86,7 +86,9 @@ test("steering inventories current files offline, deduplicates content and retai
     scope: "ancestor",
   });
   expect(file.sources.filter((s: { harness: string }) => s.harness === "codex")).toHaveLength(2);
-  expect(file.sources.some((s: { path: string }) => s.path.includes("src/AGENTS.md"))).toBe(true);
+  expect(
+    file.sources.some((s: { path: string }) => s.path.includes(join("src", "AGENTS.md"))),
+  ).toBe(true);
   const globals = out.files.find(
     (f: { rules: { text: string }[] }) => f.rules[0]?.text === "Use concise replies.",
   );
@@ -114,6 +116,20 @@ test("steering inventories current files offline, deduplicates content and retai
   expect(rendered.stdout).toContain("Current steering inventory");
   expect(rendered.stdout).toContain(`${path}:6-7`);
   expect(rendered.stdout).toContain("historical loading: unknown");
+});
+
+test("steering lists a file once when another candidate name differs only by case", async () => {
+  const { home, project } = await fixture();
+  await Bun.write(join(project, "AGENTS.md"), "- Run tests.\n");
+  await symlink("AGENTS.md", join(project, "AGENTS.MD")).catch(() => {});
+  const result = await run(home, project, "--json");
+  expect(result.code).toBe(0);
+  const [file] = JSON.parse(result.stdout).files;
+  expect(
+    file.sources
+      .filter((s: { harness: string }) => s.harness === "pi")
+      .map((s: { path: string }) => s.path),
+  ).toEqual([join(project, "AGENTS.md")]);
 });
 
 test("steering requires an explicit existing directory and does not crawl descendants", async () => {

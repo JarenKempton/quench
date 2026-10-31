@@ -51,12 +51,13 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64; do
             bun build --compile --target=bun-$target \
               --define "process.env.QUENCH_VERSION=\"$VERSION\"" \
               packages/cli/src/main.ts --outfile dist/quench-$target
           done
           test "$(./dist/quench-linux-x64 --version)" = "quench $VERSION"
+          test -f dist/quench-windows-x64.exe
           (cd dist && sha256sum quench-* > SHA256SUMS)
       - name: Publish nightly
         if: github.event_name == 'push'
@@ -64,10 +65,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly dist/quench-* dist/SHA256SUMS --prerelease --latest=false --target "$GITHUB_SHA" \
+          gh release create nightly dist/quench-* dist/SHA256SUMS install.sh install.ps1 --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "Nightly $VERSION" --notes "Built from $GITHUB_SHA. Install with: quench update --channel nightly"
       - name: Publish stable
         if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "v$VERSION" dist/quench-* dist/SHA256SUMS --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes
+        run: gh release create "v$VERSION" dist/quench-* dist/SHA256SUMS install.sh install.ps1 --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes

@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, posix, resolve, win32 } from "node:path";
 
 export async function filesWithExt(dir: string, ext: string, depth: number): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -49,3 +49,11 @@ async function commonRoot(dotGit: string): Promise<string | null> {
   if (!common) return null;
   return basename(common) === ".git" ? dirname(common) : common;
 }
+
+export const pathParts = (path: string) => path.split(/[\\/]/).filter(Boolean);
+
+export const pathStyle = (path: string | null | undefined) =>
+  path && /^([A-Za-z]:[\\/]|\\\\)/.test(path) ? win32 : posix;
+
+export const isInside = (path: string, dir: string) =>
+  path.startsWith(`${dir}/`) || path.startsWith(`${dir}\\`);

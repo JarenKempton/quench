@@ -1,6 +1,7 @@
 import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { PlaceCache, SessionPlace } from "@quench/history";
+import { compiled } from "./version.ts";
 
 const FILE = ".quench/local/session-places.json";
 
@@ -37,7 +38,7 @@ export async function placeCache(homeDir: string): Promise<PlaceCache & { save()
 }
 
 async function buildStamp(): Promise<string> {
-  if (import.meta.path.startsWith("/$bunfs/")) {
+  if (compiled) {
     const info = await stat(process.execPath);
     return `binary:${info.size}:${info.mtimeMs}`;
   }

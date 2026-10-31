@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { isInside } from "./files.ts";
 
 export type Worktree = {
   path: string;
@@ -101,7 +102,7 @@ export function checkWorktrees(
 }
 
 export const usedIn = (path: string, directories: readonly string[]) =>
-  directories.some((d) => d === path || d.startsWith(`${path}/`));
+  directories.some((d) => d === path || isInside(d, path));
 
 function baseRef(root: string): string | null {
   const remote = git(

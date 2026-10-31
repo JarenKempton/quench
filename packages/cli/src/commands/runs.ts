@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import {
   discoverAll,
   harnessById,
+  isInside,
   readSessions,
   startingContext,
   type Home,
@@ -25,9 +26,12 @@ export async function runs(
     process.stderr.write(`${file} does not exist\n`);
     return 1;
   }
-  const refs = (await discoverAll(home)).filter(
-    (r) => r.path === path || r.path.startsWith(`${path.replace(/\.jsonl$/, "")}/`),
-  );
+  const refs = [];
+  for (const ref of await discoverAll(home)) {
+    const real = await realpath(ref.path).catch(() => ref.path);
+    if (real === path || isInside(real, path.replace(/\.jsonl$/, "")))
+      refs.push({ ...ref, path: real });
+  }
   const sessions: Session[] = [];
   for await (const outcome of readSessions(refs)) if (outcome.ok) sessions.push(outcome.session);
   const session = sessions.find((s) => s.path === path);
