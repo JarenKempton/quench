@@ -38,14 +38,11 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-  background-color: var(--prussian-deep);
-  background: radial-gradient(
-      110% 70% at 70% 0%,
-      #11416a 0%,
-      var(--prussian) 60%,
-      var(--prussian-deep) 100%
-    )
-    fixed;
+  isolation: isolate;
+  background:
+    radial-gradient(60% 520px at 50% 380px, rgb(90 169 210 / 0.22), transparent 70%),
+    radial-gradient(40% 360px at 50% 560px, rgb(255 179 107 / 0.06), transparent 70%),
+    linear-gradient(180deg, #0d3a60 0%, var(--prussian) 900px, var(--prussian-deep) 100%);
 }
 
 body::before {
@@ -55,11 +52,12 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(rgb(159 220 250 / 0.09) 1px, transparent 1px) -1px -1px / 96px 96px,
-    linear-gradient(90deg, rgb(159 220 250 / 0.09) 1px, transparent 1px) -1px -1px / 96px 96px,
-    linear-gradient(rgb(159 220 250 / 0.035) 1px, transparent 1px) -1px -1px / 24px 24px,
-    linear-gradient(90deg, rgb(159 220 250 / 0.035) 1px, transparent 1px) -1px -1px / 24px 24px;
-  mask-image: linear-gradient(90deg, #000 4%, rgb(0 0 0 / 0.2) 18%, rgb(0 0 0 / 0.2) 82%, #000 96%);
+    linear-gradient(rgb(159 220 250 / 0.11) 1px, transparent 1px) 0 0 / 120px 120px,
+    linear-gradient(90deg, rgb(159 220 250 / 0.11) 1px, transparent 1px) 0 0 / 120px 120px,
+    linear-gradient(rgb(159 220 250 / 0.045) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgb(159 220 250 / 0.045) 1px, transparent 1px) 0 0 / 24px 24px;
+  background-position: calc(50% + 0.5px) 0;
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 40%, rgb(0 0 0 / 0.35) 100%);
 }
 
 ::selection {
@@ -119,9 +117,8 @@ h2 em {
 
 .sheet {
   max-width: calc(var(--max) + 2 * var(--pad));
-  margin: 24px auto;
+  margin: 0 auto;
   padding: 0 var(--pad);
-  border: 1px solid var(--hair);
 }
 
 /* Header */
@@ -137,43 +134,18 @@ h2 em {
 .mark {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 500;
+  gap: 12px;
+  font-family: var(--sans);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
   color: var(--ink);
   text-decoration: none;
 }
 
-.mark-reticle {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--cyan);
-  border-radius: 50%;
-}
-
-.mark-reticle::before,
-.mark-reticle::after {
-  content: "";
-  position: absolute;
-  background: var(--cyan);
-}
-
-.mark-reticle::before {
-  left: 50%;
-  top: -4px;
-  bottom: -4px;
-  width: 1px;
-  transform: translateX(-0.5px);
-}
-
-.mark-reticle::after {
-  top: 50%;
-  left: -4px;
-  right: -4px;
-  height: 1px;
-  transform: translateY(-0.5px);
+.mark-icon {
+  width: 30px;
+  height: 30px;
 }
 
 .nav-cta {
