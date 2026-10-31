@@ -21,6 +21,7 @@ import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { skillUse } from "../profile/recorded-skills.ts";
+import { startSplit } from "../profile/recorded-start.ts";
 import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
 import { splitInstructions, splitSkills, type InstructionFile } from "../profile/setup.ts";
 
@@ -84,6 +85,7 @@ export async function profile(
     recordedSkills: skillUse(places),
     recordedMcp: mcpUse(places, [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)]),
     recordedFailures: repeatedFailures(found.placesByRoot),
+    recordedStart: startSplit(places),
     projects: profiled,
     missingDirectories: found.missing,
     limitations: [

@@ -16,7 +16,8 @@ export {
   type DiskComparison,
   type SessionSkills,
 } from "./recorded.ts";
-export { checkout, repositoryRoot } from "./files.ts";
+export { checkout, isInside, pathParts, repositoryRoot } from "./files.ts";
+export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export { failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";

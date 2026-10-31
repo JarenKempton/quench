@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, stat, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,7 +22,7 @@ async function quench(home: string, ...args: string[]) {
 }
 
 test("profile reuses cached session results until the session file changes", async () => {
-  const home = await mkdtemp(join(tmpdir(), "quench-cache-"));
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-cache-")));
   const project = join(home, "code/app");
   await mkdir(project, { recursive: true });
   const session = join(home, ".codex/sessions/2026/10/20/a.jsonl");
@@ -40,7 +40,7 @@ test("profile reuses cached session results until the session file changes", asy
   expect(await Bun.file(cacheFile).exists()).toBe(false);
 
   expect(await cwds()).toEqual([project]);
-  expect((await stat(cacheFile)).mode & 0o777).toBe(0o600);
+  expect((await stat(cacheFile)).mode & 0o777).toBe(process.platform === "win32" ? 0o666 : 0o600);
 
   const cached = await Bun.file(cacheFile).json();
   await mkdir(join(home, "from-cache"));

@@ -1,4 +1,5 @@
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, win32 } from "node:path";
+import { pathStyle } from "./files.ts";
 import { scriptAccesses } from "./scripts.ts";
 
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
@@ -209,11 +210,18 @@ function located(
   as: "cd" | null,
 ): { path: string; base: ShellReadBase } | null {
   if (word.dynamic || word.text === "-") return null;
-  if (isAbsolute(word.text)) return { path: resolve(word.text), base: as ?? "absolute" };
+  const style = pathStyle(word.text) === win32 ? win32 : pathStyle(dir?.path ?? home);
+  if (style.isAbsolute(word.text))
+    return {
+      path: dir ? style.resolve(dir.path, word.text) : style.resolve(word.text),
+      base: as ?? "absolute",
+    };
   if (word.text === "~" || word.text.startsWith("~/"))
-    return home ? { path: join(home, word.text.slice(1)), base: as ?? "home" } : null;
+    return home
+      ? { path: pathStyle(home).join(home, word.text.slice(1)), base: as ?? "home" }
+      : null;
   if (word.text.startsWith("~") || !dir) return null;
-  return { path: resolve(dir.path, word.text), base: as ?? dir.base };
+  return { path: style.resolve(dir.path, word.text), base: as ?? dir.base };
 }
 
 function operands(program: string, args: Word[]): Word[] | null {

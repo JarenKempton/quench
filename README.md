@@ -19,8 +19,28 @@ Claude Code
 
 ## Install
 
-Download the binary for your machine from the [releases](https://github.com/JarenKempton/quench/releases)
-(Linux and macOS, x64 and arm64) and put it on your `PATH`:
+macOS and Linux (x64, arm64):
+
+```sh
+curl -fsSL https://github.com/JarenKempton/quench/releases/latest/download/install.sh | sh
+```
+
+Windows x64, in PowerShell 5.1 or later:
+
+```powershell
+irm https://github.com/JarenKempton/quench/releases/latest/download/install.ps1 | iex
+```
+
+Each script picks the binary for your machine from the latest stable release, checks it against
+the release's `SHA256SUMS` and installs it to `~/.local/bin/quench` (Windows:
+`%LOCALAPPDATA%\Programs\quench\quench.exe`), printing the line to add it to your `PATH` if it
+isn't there. Set `QUENCH_RELEASE=nightly` or a tag such as `v0.2.0` for another release, and
+`QUENCH_INSTALL_DIR` for another folder.
+
+If a direct download is blocked, the scripts fall back to `gh release download` when the GitHub
+CLI is signed in (`gh auth login`).
+
+Or download a binary yourself and put it on your `PATH`:
 
 ```sh
 gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output ~/.local/bin/quench
@@ -28,9 +48,9 @@ chmod +x ~/.local/bin/quench
 quench --version
 ```
 
-Swap in `linux-arm64`, `darwin-x64` or `darwin-arm64`. `SHA256SUMS` in the release lists each
-binary's checksum. The macOS binaries are not signed; a copy downloaded with a browser needs
-`xattr -d com.apple.quarantine quench` before it runs.
+Swap in `linux-arm64`, `darwin-x64`, `darwin-arm64` or `windows-x64.exe`. `SHA256SUMS` in the
+release lists each binary's checksum. The macOS binaries are not signed; a copy downloaded with
+a browser needs `xattr -d com.apple.quarantine quench` before it runs.
 
 Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh auth login`).
 
@@ -148,9 +168,12 @@ quench profile --days 90 --scan ~/code --json
 ```
 
 `quench` with no arguments prints a one-screen summary: what every session starts with per
-agent, a few things worth a look (skills listed but never used, the failure that repeats most,
-a project whose instructions dwarf the rest, idle worktrees), the busiest projects, and the
-command to dig into each. `quench profile` prints every table below; `quench profile <section>`
+agent, where each agent's first request goes (system prompt, built-in tools, each MCP server's
+tools, deferred tools, MCP instructions, instructions, skills) as rounded shares of the
+characters it recorded sending, with any part a session did not record, a few things worth a
+look (skills listed but never used, the failure that repeats most, a project whose
+instructions dwarf the rest, idle worktrees), the busiest projects, and the command to dig
+into each. `quench profile` prints every table below; `quench profile <section>`
 prints one. `--json` is the same full result either way. Output is colored in a terminal and plain when piped,
 with `NO_COLOR` set, or on a `dumb` terminal; `FORCE_COLOR=1` forces color.
 
@@ -158,8 +181,8 @@ The first run reads every session in the window, with a progress line; later run
 per-session results kept in `~/.quench/local/session-places.json` (owner-only) and re-read only
 session files whose size or modified time changed. The cache holds what the profile derives
 per session (working folder, recorded instruction paths and sizes, skill names, MCP server
-names, failure kinds with a short error summary), not transcripts. It resets when the Quench
-build changes. `--no-cache` reads everything and writes nothing.
+names, failure kinds with a short error summary, the first request split by source), not
+transcripts. It resets when the Quench build changes. `--no-cache` reads everything and writes nothing.
 
 Needs no arguments. It finds each harness home at its default location or override, reads
 the sessions modified in the last `--days` (default 30) and takes each session's recorded
@@ -327,8 +350,7 @@ makes no model calls, reads no host database and writes no files or caches.
 ## Status
 
 Early and changing. Direction and scope: [#45](https://github.com/JarenKempton/quench/issues/45).
-Releases are built by `.github/workflows/release.yml` when a `v*` tag matching
-`packages/cli/package.json`'s version is pushed, and published as a draft to review first.
+Releases are built by `.github/workflows/release.yml`; see [Install](#install) for the channels.
 
 ## Run from source
 

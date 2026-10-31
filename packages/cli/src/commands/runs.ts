@@ -1,7 +1,15 @@
 import { realpath } from "node:fs/promises";
 import { basename } from "node:path";
-import { discoverAll, harnessById, readSessions, type Home, type Session } from "@quench/history";
-import { runs as runsOf, startingContext } from "@quench/insights";
+import {
+  discoverAll,
+  harnessById,
+  isInside,
+  readSessions,
+  startingContext,
+  type Home,
+  type Session,
+} from "@quench/history";
+import { runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
 import { latestSessionIn } from "../latest.ts";
 
@@ -18,9 +26,12 @@ export async function runs(
     process.stderr.write(`${file} does not exist\n`);
     return 1;
   }
-  const refs = (await discoverAll(home)).filter(
-    (r) => r.path === path || r.path.startsWith(`${path.replace(/\.jsonl$/, "")}/`),
-  );
+  const refs = [];
+  for (const ref of await discoverAll(home)) {
+    const real = await realpath(ref.path).catch(() => ref.path);
+    if (real === path || isInside(real, path.replace(/\.jsonl$/, "")))
+      refs.push({ ...ref, path: real });
+  }
   const sessions: Session[] = [];
   for await (const outcome of readSessions(refs)) if (outcome.ok) sessions.push(outcome.session);
   const session = sessions.find((s) => s.path === path);

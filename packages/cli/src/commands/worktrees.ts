@@ -8,7 +8,7 @@ import {
 } from "@quench/history";
 import { placeCache } from "../cache.ts";
 import { reading } from "../progress.ts";
-import { json, plural } from "../format.ts";
+import { json, plural, shortPath } from "../format.ts";
 
 export async function worktrees(
   home: Home,
@@ -45,8 +45,7 @@ export async function worktrees(
     process.stdout.write(json(result));
     return 0;
   }
-  const short = (path: string) =>
-    path === home.dir || path.startsWith(`${home.dir}/`) ? `~${path.slice(home.dir.length)}` : path;
+  const short = (path: string) => shortPath(path, home.dir);
   const shell = (path: string) => {
     const shown = short(path);
     return /^[\w@%+=:,./~-]+$/.test(shown) ? shown : `'${path.replaceAll("'", `'\\''`)}'`;

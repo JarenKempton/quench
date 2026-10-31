@@ -2,6 +2,7 @@ import { join } from "node:path";
 import {
   discoverAll,
   harnessById,
+  pathParts,
   readSessions,
   startedAt,
   type Home,
@@ -278,4 +279,4 @@ const example = (r: Reply) => ({
 
 const percent = (n: number, of: number) => `${((100 * n) / Math.max(of, 1)).toFixed(1)}%`;
 
-const folder = (cwd: string | null) => cwd?.split("/").filter(Boolean).pop() ?? null;
+const folder = (cwd: string | null) => (cwd ? (pathParts(cwd).at(-1) ?? null) : null);

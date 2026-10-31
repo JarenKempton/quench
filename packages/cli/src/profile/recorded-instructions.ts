@@ -1,9 +1,11 @@
 import { heading } from "../style.ts";
-import { dirname, relative } from "node:path";
+import { dirname, relative, sep } from "node:path";
 import {
   checkout,
   compareWithDisk,
   harnessById,
+  isInside,
+  pathParts,
   type DiskComparison,
   type HarnessId,
   type InjectedInstruction,
@@ -110,19 +112,21 @@ function fileLabel(
   if (r.combined)
     return r.root === null
       ? "combined block, directory not recorded"
-      : `${projectName(r.root, homeDir)}${r.file === "." ? "" : `/${r.file}`} (combined block)`;
-  if (r.root !== null) return `${projectName(r.root, homeDir)}/${r.file}`;
-  const memory = autoMemory(r.file, `${claudeHome}/projects/`, roots);
+      : `${projectName(r.root, homeDir)}${r.file === "." ? "" : `${sep}${r.file}`} (combined block)`;
+  if (r.root !== null) return `${projectName(r.root, homeDir)}${sep}${r.file}`;
+  const memory = autoMemory(r.file, claudeHome, roots);
   return memory
-    ? `${projectName(memory.root, homeDir)} auto memory/${memory.file}`
+    ? `${projectName(memory.root, homeDir)} auto memory${sep}${memory.file}`
     : shortPath(r.file, homeDir);
 }
 
-function autoMemory(path: string, projectsDir: string, roots: string[]) {
-  if (!path.startsWith(projectsDir)) return null;
-  const [slug, kind, ...rest] = path.slice(projectsDir.length).split("/");
+export function autoMemory(path: string, claudeHome: string, roots: string[]) {
+  if (!isInside(path, claudeHome)) return null;
+  const [projects, slug, kind, ...rest] = pathParts(path.slice(claudeHome.length));
   const root = roots.find((r) => r.replace(/[^A-Za-z0-9]/g, "-") === slug);
-  return root && kind === "memory" ? { root, file: rest.join("/") } : null;
+  return projects === "projects" && root && kind === "memory"
+    ? { root, file: rest.join(sep) }
+    : null;
 }
 
 function diskNow(file: RecordedFile): string {

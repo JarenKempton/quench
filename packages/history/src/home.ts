@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { HarnessHome } from "./harness.ts";
 
@@ -8,7 +9,7 @@ export class Home {
   ) {}
 
   static fromEnv(): Home | null {
-    const dir = process.env.HOME;
+    const dir = process.env.HOME || homedir();
     return dir ? new Home(dir, process.env) : null;
   }
 

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { filesWithExt } from "../files.ts";
+import { filesWithExt, pathStyle } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { repositoryRoot } from "../files.ts";
@@ -402,9 +402,9 @@ function skillListing(line: Line): EventKind | null {
     [...block.matchAll(/^- `(r\d+)` = `([^`]+)`$/gm)].map(([, id, path]) => [id!, path!]),
   );
   const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(([, name, file]) => {
-    const [root, ...rest] = file!.split("/");
+    const [root, ...rest] = file!.split(/[\\/]/);
     const base = roots.get(root!);
-    return { name: name!, path: base ? [base, ...rest].join("/") : file! };
+    return { name: name!, path: base ? pathStyle(base).join(base, ...rest) : file! };
   });
   return { type: "skills", listed, chars: block.length };
 }

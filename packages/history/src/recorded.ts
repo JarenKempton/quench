@@ -65,7 +65,10 @@ function namedSkills(
   return [...byPath]
     .filter(
       ([path]) =>
-        call.fileRead?.path === path || call.shell?.some((s) => s.command?.includes(path)),
+        call.fileRead?.path === path ||
+        call.shell?.some((s) =>
+          [path, path.replaceAll("\\", "/")].some((form) => s.command?.includes(form)),
+        ),
     )
     .map(([, name]) => ({ name, by: "model" }));
 }

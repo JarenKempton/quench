@@ -38,7 +38,7 @@ export async function skillInventory(home: Home, project: string) {
         }
         const name =
           root.layout === "commands"
-            ? relative(root.path, path).replace(/\.md$/, "").replaceAll("/", ":")
+            ? relative(root.path, path).replace(/\.md$/, "").replaceAll(/[\\/]/g, ":")
             : null;
         const skill = await readSkill(path, real, name).catch((error: Error) => {
           warnings.push(`${path}: ${error.message}`);

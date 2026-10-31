@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, rename, symlink, utimes } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rename, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -886,8 +886,8 @@ test("sources traces skill listings and the loads each harness recorded", async 
 });
 
 test("sources with no file reads the latest session in this repository, worktrees included", async () => {
-  const home = await mkdtemp(join(tmpdir(), "quench-sources-"));
-  const here = await mkdtemp(join(tmpdir(), "quench-here-"));
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-sources-")));
+  const here = await realpath(await mkdtemp(join(tmpdir(), "quench-here-")));
   const git = (...args: string[]) =>
     Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd: here });
   git("init", "-q");
@@ -930,7 +930,7 @@ test("sources with no file reads the latest session in this repository, worktree
   const found = await spawn(here);
   expect(found.code).toBe(0);
   expect(found.stderr).toContain(
-    "Latest Claude Code session in this repository, today: ~/.claude/projects/demo/old-here.jsonl",
+    `Latest Claude Code session in this repository, today: ${join("~", ".claude/projects/demo/old-here.jsonl")}`,
   );
   expect(JSON.parse(found.stdout).shell[0].path).toBe(join(worktree, "notes.md"));
   const none = await spawn(home);
