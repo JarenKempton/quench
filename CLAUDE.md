@@ -6,7 +6,7 @@ Shows what coding agents load, what it costs, and where they go wrong, from the 
 
 ### Issue tracker
 
-Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/quench`), operated via the `gh` CLI. The active direction is issue **#45** (the older `/wayfinder` map is #1). ⚠️ Prefix every `gh` call with `env -u GITHUB_TOKEN` in this environment (a stale token overrides auth). See `docs/agents/issue-tracker.md`.
+Issues and PRDs live in this repo's **GitHub Issues** (`JarenKempton/quench`), operated via the `gh` CLI. The active direction is issue **#45** (the older `/wayfinder` map is #1). See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
