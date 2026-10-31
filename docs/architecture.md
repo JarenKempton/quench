@@ -143,7 +143,11 @@ today; it uses `@typesafe-ai/sdk` with the user's key. `VerdictCache` stores eac
 judge id plus the exact input, so changing a question (and its id) re-asks cleanly.
 
 Who sent a reply comes from structure first: typed/scheduled harness origins, then optional
-host sender evidence. Everything else is inferred by the judge from the message alone. The
+host sender evidence, then fixed formats. T3 Code's PR-watch, server-restart and delegated-task
+notices (anchored to their fixed text) are host automation of kind `info`; a reply that is only a
+slash command is the person's `new_request` (harness source) unless evidence says automation.
+Neither reaches Jev; cached verdicts for them stay untouched. Everything else is inferred by the
+judge from the message alone. The
 output distinguishes harness evidence, host evidence, model inference and unresolved senders.
 The cached verdict remains the model's answer; resolving the effective sender never overwrites
 it, changes its key or re-asks it.

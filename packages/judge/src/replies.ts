@@ -34,10 +34,18 @@ export async function judgeReplies(
     session.runs.flatMap((run, i) =>
       run.reply === null
         ? []
-        : [{ session, position: i + 1, run, exchange: exchangeOf(run, run.reply) }],
+        : [
+            {
+              session,
+              position: i + 1,
+              run,
+              exchange: exchangeOf(run, run.reply),
+              preset: presetKind(run, run.reply),
+            },
+          ],
     ),
   );
-  const unknown = asked.map((a) => a.exchange).filter((e) => !cache.get(e));
+  const unknown = asked.flatMap((a) => (a.preset || cache.get(a.exchange) ? [] : [a.exchange]));
   const judgments = judge ? await judge.classify(unknown) : [];
   const fresh = unknown.flatMap((exchange, i) => {
     const judgment = judgments[i];
@@ -48,7 +56,7 @@ export async function judgeReplies(
     newlyJudged: fresh.length,
     pending: judge ? 0 : unknown.length,
     failures: judgments.filter((j) => j instanceof Error),
-    replies: asked.map(({ session, position, run, exchange }) => {
+    replies: asked.map(({ session, position, run, exchange, preset }) => {
       const verdict = cache.get(exchange);
       return {
         sessionId: session.id,
@@ -57,7 +65,7 @@ export async function judgeReplies(
         cwd: session.cwd,
         position,
         run,
-        kind: verdict?.kind ?? null,
+        kind: preset ?? verdict?.kind ?? null,
         ...senderOf(run, verdict),
       };
     }),
@@ -69,10 +77,33 @@ const exchangeOf = (run: Run, reply: string): Exchange => ({
   reply,
 });
 
+const t3Notices = [
+  /^Update on pull request #\d+ \(https:\/\/github\.com\/[^\s()]+\/pull\/\d+\), which T3 Code is watching for you:\n/,
+  /^Note: the T3 server restarted, and this background work was cancelled before it finished\. It will not report back(?: on its own, so resume or restart what you still need and wait for its result)?:(?:\n- [^\n]+)+(?:\n\nContinue where you left off\.)?$/,
+  /^Delegated task node:delegated-task:\S+(?: \(.*\))? \[(?:completed|failed|interrupted|cancelled)\]:\n/,
+  /^Delegated task (node:delegated-task:\S+) reached a terminal state\. Use task_status with taskId \1 to read the result\.$/,
+];
+
+const isT3Notice = (reply: string) => t3Notices.some((notice) => notice.test(reply));
+
+const isSlashCommand = (reply: string) => /^\/[a-z][\w:.-]*(?: [^\n]*)?$/.test(reply.trim());
+
+const fromAutomation = (run: Run) =>
+  run.replyOrigin === "scheduled" || run.replySender?.sender === "automation";
+
+function presetKind(run: Run, reply: string): ReplyKind | null {
+  if (isT3Notice(reply)) return "info";
+  if (isSlashCommand(reply) && !fromAutomation(run)) return "new_request";
+  return null;
+}
+
 function senderOf(run: Run, verdict: Verdict | undefined): Pick<Reply, "sender" | "senderSource"> {
   if (run.replyOrigin === "typed") return { sender: "person", senderSource: "harness" };
   if (run.replyOrigin === "scheduled") return { sender: "automation", senderSource: "harness" };
   if (run.replySender) return { sender: run.replySender.sender, senderSource: "host" };
+  const reply = run.reply ?? "";
+  if (isT3Notice(reply)) return { sender: "automation", senderSource: "host" };
+  if (isSlashCommand(reply)) return { sender: "person", senderSource: "harness" };
   return verdict
     ? { sender: verdict.sender, senderSource: "judge" }
     : { sender: null, senderSource: "unknown" };
