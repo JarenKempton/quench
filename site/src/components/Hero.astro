@@ -1,17 +1,9 @@
 ---
-import Command from "./Command.astro";
 import Conveyor from "./Conveyor.astro";
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <h1 id="hero-title">See what your coding agents load, what it costs, and where they go wrong.</h1>
-  <div class="hero-side">
-    <p class="lede">Reads the history Claude Code, Codex and Pi already keep.</p>
-    <div class="hero-actions">
-      <a class="btn" href="#install">Install</a>
-      <Command text="quench" />
-    </div>
-  </div>
   <div class="hero-scene">
     <Conveyor />
   </div>
@@ -20,63 +12,35 @@ import Conveyor from "./Conveyor.astro";
 <style>
   .hero {
     display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
-    gap: 24px clamp(32px, 4vw, 56px);
-    align-items: end;
+    gap: 32px;
     padding: clamp(28px, 3.5vw, 44px) 0 56px;
   }
 
   h1 {
     margin: 0;
+    max-width: 18em;
     font-size: clamp(34px, 4vw, 52px);
     line-height: 1.06;
     text-wrap: balance;
   }
 
-  .lede {
-    margin: 0 0 20px;
-    font-size: 18px;
-    line-height: 1.6;
-    color: var(--ink-2);
-  }
-
-  .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-  }
-
   .hero-scene {
-    grid-column: 1 / -1;
     margin-top: 8px;
   }
 
   h1,
-  .hero-side,
   .hero-scene {
     animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 
-  .hero-side {
-    animation-delay: 0.08s;
-  }
-
   .hero-scene {
-    animation-delay: 0.16s;
+    animation-delay: 0.08s;
   }
 
   @keyframes rise {
     from {
       opacity: 0;
       transform: translateY(10px);
-    }
-  }
-
-  @media (max-width: 860px) {
-    .hero {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 24px;
     }
   }
 
