@@ -1,59 +1,26 @@
 ---
-import { inputTokens, kilo, peakTokens, percent, requests, startTokens } from "../context.ts";
+import { inputTokens, kilo, percent, requests, startTokens } from "../context.ts";
 
-const width = 1000;
-const height = 200;
-const x0 = 60;
-const perK = 14;
-const x = (tokens: number) => x0 + (tokens / 1000) * perK;
-const breakAt = x(52000);
-const end = 940;
-const barTop = 120;
-const barBottom = 160;
-const ticks = [0, 10000, 20000, 30000, 40000, 50000];
-const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
+const resent = startTokens * requests;
+const fresh = inputTokens - resent;
+const columns = `repeat(${requests}, ${startTokens}fr) ${fresh}fr`;
 ---
 
 <figure class="card figure-card datum">
-  <p class="fig-head"><b>{percent((startTokens * requests) / inputTokens)}</b> of this run's input was that resend.</p>
-  <div class="datum-drawing" style={`aspect-ratio:${width}/${height}`}>
-    <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <defs>
-        <pattern id="datum-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="6" class="datum-hatch"></line>
-        </pattern>
-      </defs>
-
-      <rect class="start" x={x0} y={barTop} width={x(startTokens) - x0} height={barBottom - barTop} />
-      <rect class="grown" x={x(startTokens)} y={barTop} width={x(peakTokens) - x(startTokens)} height={barBottom - barTop} />
-      <path class="frame" d={`M${breakAt - 8},${barTop} H${x0} V${barBottom} H${breakAt - 8} M${breakAt + 14},${barTop} H${end} V${barBottom} H${breakAt + 14}`} />
-      <path class="break" d={`M${breakAt - 8},${barTop - 6} l6,12 l-6,12 l6,12 l-6,12 l6,8 M${breakAt + 14},${barTop - 6} l6,12 l-6,12 l6,12 l-6,12 l6,8`} />
-
-      <g class="dims">
-        <line x1={x0} y1="40" x2={end} y2="40" />
-        <line x1={x0} y1="72" x2={x(peakTokens)} y2="72" />
-        <line x1={x0} y1="100" x2={x(startTokens)} y2="100" />
-        {[x0, end].map((v) => <line x1={v} y1="32" x2={v} y2="48" />)}
-        {[x0, x(peakTokens)].map((v) => <line x1={v} y1="64" x2={v} y2="80" />)}
-        {[x0, x(startTokens)].map((v) => <line x1={v} y1="92" x2={v} y2="108" />)}
-      </g>
-
-      <g class="ticks">
-        {ticks.map((t) => <line x1={x(t)} y1={barBottom} x2={x(t)} y2={barBottom + 6} />)}
-        <line x1={end} y1={barBottom} x2={end} y2={barBottom + 6} />
-      </g>
-
-    </svg>
-
-    <ol class="tick-labels" aria-hidden="true">
-      {ticks.map((t) => <li style={`left:${pct(x(t), width)}`}>{t ? `${t / 1000}k` : "0"}</li>)}
-      <li style={`left:${pct(end, width)}`}>1M</li>
-    </ol>
-
-    <ul class="datum-labels">
-      <li class="window-label" style={`left:${pct(x0, width)};top:${pct(40, height)}`}>context window</li>
-      <li style={`left:${pct(x(peakTokens), width)};top:${pct(72, height)}`}><b>{kilo(peakTokens)}</b> peak</li>
-      <li style={`left:${pct(x(startTokens), width)};top:${pct(100, height)}`}>start</li>
-    </ul>
+  <p class="fig-head"><b>{percent(resent / inputTokens)}</b> of this run's input was that resend.</p>
+  <div class="resend" style={`grid-template-columns:${columns}`}>
+    {
+      Array.from({ length: requests }, (_, i) => (
+        <span class="resend-block">
+          <span>{i + 1}</span>
+        </span>
+      ))
+    }
+    <span class="resend-block resend-new"></span>
+    <p class="resend-label resend-label-start">
+      <b>{requests} × {kilo(startTokens)}</b> the same start, sent with every call
+    </p>
+    <p class="resend-label resend-label-new"><b>{kilo(fresh)}</b> new</p>
   </div>
+  <figcaption class="resend-total">{kilo(inputTokens)} input tokens in one run</figcaption>
 </figure>
