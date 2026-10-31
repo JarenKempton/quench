@@ -86,14 +86,12 @@ const t3Notices = [
 
 const isT3Notice = (reply: string) => t3Notices.some((notice) => notice.test(reply));
 
-const isSlashCommand = (reply: string) => /^\/[a-z][\w:.-]*(?: [^\n]*)?$/.test(reply.trim());
-
 const fromAutomation = (run: Run) =>
   run.replyOrigin === "scheduled" || run.replySender?.sender === "automation";
 
 function presetKind(run: Run, reply: string): ReplyKind | null {
   if (isT3Notice(reply)) return "info";
-  if (isSlashCommand(reply) && !fromAutomation(run)) return "new_request";
+  if (run.replyCommand && !fromAutomation(run)) return "new_request";
   return null;
 }
 
@@ -103,7 +101,7 @@ function senderOf(run: Run, verdict: Verdict | undefined): Pick<Reply, "sender" 
   if (run.replySender) return { sender: run.replySender.sender, senderSource: "host" };
   const reply = run.reply ?? "";
   if (isT3Notice(reply)) return { sender: "automation", senderSource: "host" };
-  if (isSlashCommand(reply)) return { sender: "person", senderSource: "harness" };
+  if (run.replyCommand) return { sender: "person", senderSource: "harness" };
   return verdict
     ? { sender: verdict.sender, senderSource: "judge" }
     : { sender: null, senderSource: "unknown" };
