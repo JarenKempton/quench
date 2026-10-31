@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { harnessById, isInside, pathParts } from "../src/index.ts";
 import { sessionRef } from "../src/harness.ts";
 import { describeServer } from "../src/mcp.ts";
+import { recordedSkills } from "../src/recorded.ts";
 import { shellReads } from "../src/shell.ts";
 
 test("path parts split on either separator", () => {
@@ -35,6 +36,7 @@ test("Codex skill listings resolve Windows roots and either separator", async ()
     "- plan: Plan (file: r0/plan/SKILL.md)",
     "</skills_instructions>",
   ].join("\n");
+  const command = "sed -n '1,80p' C:/Users/me/.codex/skills/notes/SKILL.md";
   const file = join(dir, "rollout.jsonl");
   await Bun.write(
     file,
@@ -48,6 +50,15 @@ test("Codex skill listings resolve Windows roots and either separator", async ()
           content: [{ type: "input_text", text: block }],
         },
       },
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "x",
+          input: `text(await tools.exec_command({cmd:"${command}"}))`,
+        },
+      },
     ]
       .map((line) => JSON.stringify(line))
       .join("\n") + "\n",
@@ -58,6 +69,7 @@ test("Codex skill listings resolve Windows roots and either separator", async ()
     { name: "notes", path: `${base}\\notes\\SKILL.md` },
     { name: "plan", path: `${base}\\plan\\SKILL.md` },
   ]);
+  expect(recordedSkills(session)?.used).toEqual([{ name: "notes", by: "model" }]);
   await rm(dir, { recursive: true });
 });
 
