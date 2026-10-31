@@ -1,0 +1,22 @@
+Recorded file reads · claude-code:orders
+Evidence: session history · ~/.claude/projects/…/orders.jsonl
+Native file-read tracing: supported · 3 attempts · 1 other tool calls without source attribution
+
+returned · ~/code/acme-api/src/orders/router.ts · call t1
+  ~/code/acme-api/src/orders/router.ts · reported lines 1–84 of 84
+  recorded tool text: 1000 characters
+
+returned · ~/code/acme-api/src/middleware/limit.ts · call t2
+  ~/code/acme-api/src/middleware/limit.ts · reported lines 1–31 of 31
+  recorded tool text: 780 characters
+
+failed · ~/code/acme-api/docs/runbook.md · call t8
+  The tool reported an error.
+
+Shell reads: 1 reads and 1 searches and 0 script file accesses from 6 recorded commands
+  ran · cat · ~/code/acme-api/package.json · relative to session folder · call t3
+  ran · rg search "rateLimit" · ~/code/acme-api/src · relative to session folder · call t4
+
+MCP calls: 2 to 1 servers
+  returned · tracker · get_issue · 240 characters · call t6
+  returned · tracker · add_comment · 2 characters · call t7

@@ -1,0 +1,39 @@
+---
+import "@fontsource-variable/geist/wght.css";
+import "@fontsource-variable/geist-mono/wght.css";
+import "../styles/global.css";
+import Header from "../components/Header.astro";
+import Hero from "../components/Hero.astro";
+import Problem from "../components/Problem.astro";
+import DriftSection from "../components/DriftSection.astro";
+import Features from "../components/Features.astro";
+import Install from "../components/Install.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quench: see what your coding agents load</title>
+    <meta
+      name="description"
+      content="Quench reads the session history Claude Code, Codex and Pi already keep, and shows what each session starts with, what it costs, and where agents go wrong."
+    />
+    <meta name="theme-color" content="#0b3355" />
+  </head>
+  <body>
+    <div class="sheet">
+      <Header />
+      <main>
+        <Hero />
+        <Install />
+        <Problem />
+        <DriftSection />
+        <Features />
+      </main>
+      <Footer />
+    </div>
+  </body>
+</html>

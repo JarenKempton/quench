@@ -1,0 +1,19 @@
+---
+import { calls } from "../context.ts";
+
+const firstFail = calls.findIndex((c) => !c.ok);
+---
+
+<figure class="card figure-card drift">
+  <ol class="sequence">
+    {
+      calls.map((c, i) => (
+        <li class:list={{ fail: !c.ok, first: i === firstFail }}>
+          <span class="step">{String(i + 1).padStart(2, "0")}</span>
+          <span class="tool">{c.tool}</span>
+          {c.why && <span class="why">{c.why}</span>}
+        </li>
+      ))
+    }
+  </ol>
+</figure>

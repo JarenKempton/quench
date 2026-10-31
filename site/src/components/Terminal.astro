@@ -1,0 +1,15 @@
+---
+import { ansiToHtml } from "../ansi.ts";
+
+interface Props {
+  command?: string;
+  output?: string;
+}
+
+const { command, output } = Astro.props;
+---
+
+<figure class="plate">
+  <i class="crop tl"></i><i class="crop br"></i>
+  <pre>{command && <><span class="prompt">$</span> {command}{"\n"}</>}{output && <Fragment set:html={ansiToHtml(output)} />}<slot /></pre>
+</figure>

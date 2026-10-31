@@ -1,0 +1,10 @@
+---
+import Terminal from "./Terminal.astro";
+import summary from "../samples/summary.ansi?raw";
+---
+
+<section class="features" id="features" aria-labelledby="features-title">
+  <h2 id="features-title" class="section-title">Run it on your own history.</h2>
+  <p class="section-line">Every number on this page is from a demo history.</p>
+  <Terminal command="quench" output={summary} />
+</section>

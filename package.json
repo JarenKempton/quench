@@ -4,7 +4,8 @@
   "private": true,
   "description": "See what your coding agents load, what it costs, and where they go wrong.",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "site"
   ],
   "type": "module",
   "devDependencies": {

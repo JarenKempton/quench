@@ -1,0 +1,11 @@
+---
+import Drift from "./Drift.astro";
+import { calls } from "../context.ts";
+
+const pushes = calls.filter((c) => c.why.startsWith("guard")).length;
+---
+
+<section class="drift-section" id="drift" aria-labelledby="drift-title">
+  <h2 id="drift-title" class="section-title">This run retried a blocked push {pushes} times.</h2>
+  <Drift />
+</section>
