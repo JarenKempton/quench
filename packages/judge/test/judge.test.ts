@@ -158,7 +158,7 @@ test("a rejected key stops the whole batch", async () => {
   ).toBeInstanceOf(KeyRejected);
 });
 
-test("T3 notices and recorded slash commands skip the judge; near misses and command-like text do not", async () => {
+test("host-marked and T3-formatted notices and recorded slash commands skip the judge; near misses and command-like text do not", async () => {
   const session = (reply: Event[]): SessionRuns => ({
     id: "s",
     path: "/unused",
@@ -228,6 +228,7 @@ test("T3 notices and recorded slash commands skip the judge; near misses and com
   const judged = await judgeReplies(
     [
       ...notices.map((text) => session(said(text))),
+      session(said("Background task completed.", { ...agent, notice: true })),
       ...commands.map((text) => session(command(text))),
       ...nearMisses.map((text) => session(said(text))),
       session(command("/compact", agent)),
@@ -238,6 +239,7 @@ test("T3 notices and recorded slash commands skip the judge; near misses and com
   expect(asked.map((e) => e.reply)).toEqual([...nearMisses, "/compact"]);
   expect(judged.replies.map((r) => `${r.kind} ${r.sender} ${r.senderSource}`)).toEqual([
     ...notices.map(() => "info automation host"),
+    "info automation host",
     ...commands.map(() => "new_request person harness"),
     ...nearMisses.map(() => "correction person judge"),
     "correction automation host",

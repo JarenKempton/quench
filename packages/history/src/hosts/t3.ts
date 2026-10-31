@@ -36,6 +36,10 @@ const Message = z.object({
   createdBy: z.string().optional(),
   /** `web` or `mobile` corroborates `user`; imported `server` records do not prove a person typed them. */
   creationSource: z.string().optional(),
+  /** Present on T3's own notices (PR watches, background work, restarts); never typed by a person. */
+  notification: z.unknown().optional(),
+  /** Present on T3's delegated-task results sent to the parent thread. */
+  delegatedCompletion: z.unknown().optional(),
 });
 
 const drivers: Readonly<Record<string, HarnessId>> = {
@@ -153,6 +157,8 @@ function enrichSession(
 }
 
 function senderOf(message: z.infer<typeof Message>): SenderEvidence | null {
+  if (message.notification !== undefined || message.delegatedCompletion !== undefined)
+    return { sender: "automation", source: "t3-code", messageId: message.id, notice: true };
   const sender =
     message.createdBy === "agent"
       ? "automation"

@@ -210,3 +210,44 @@ test("missing, incompatible, and malformed host storage never prevent reading a 
     }
   }
 });
+
+test("T3's notification and delegated-completion rows are host notices, whatever their text", async () => {
+  const path = await database([
+    message("Background task completed.", {
+      creationSource: "provider",
+      notification: { source: { kind: "background_task" }, outcome: "completed", summary: "done" },
+    }),
+    message("Review finished: approved", {
+      creationSource: "server",
+      delegatedCompletion: { parentRunId: "run", generation: 1, taskIds: ["t"] },
+    }),
+    message("plain agent message"),
+  ]);
+  const host = openT3History(path);
+  try {
+    const enriched = host.enrich(
+      session([
+        say("Background task completed."),
+        say("Review finished: approved"),
+        say("plain agent message"),
+      ]),
+    );
+    expect(enriched.events.map((e) => (e.type === "message" ? e.sender : undefined))).toEqual([
+      {
+        sender: "automation",
+        source: "t3-code",
+        messageId: "Background task completed.",
+        notice: true,
+      },
+      {
+        sender: "automation",
+        source: "t3-code",
+        messageId: "Review finished: approved",
+        notice: true,
+      },
+      { sender: "automation", source: "t3-code", messageId: "plain agent message" },
+    ]);
+  } finally {
+    host.close();
+  }
+});

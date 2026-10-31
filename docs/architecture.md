@@ -109,7 +109,8 @@ for processed Claude Code text or combined Codex blocks.
 
 A host delivers messages to a harness; it is not another harness. The CLI may supply a
 `SessionEnricher` between reading a session and deriving its runs. It adds generic
-`SenderEvidence` (person/automation, source, message id), without rewriting transport origin,
+`SenderEvidence` (person/automation, source, message id, and `notice` when the host itself
+generated the message), without rewriting transport origin,
 message text, authors or run boundaries. Insights and judge never import host adapters.
 
 `history/src/hosts/t3.ts` alone knows T3's SQLite projection format and native driver names.
@@ -143,8 +144,10 @@ today; it uses `@typesafe-ai/sdk` with the user's key. `VerdictCache` stores eac
 judge id plus the exact input, so changing a question (and its id) re-asks cleanly.
 
 Who sent a reply comes from structure first: typed/scheduled harness origins, then optional
-host sender evidence, then fixed formats. T3 Code's PR-watch, server-restart and delegated-task
-notices (anchored to their fixed text) are host automation of kind `info`; a reply the harness
+host sender evidence, then fixed formats. Host evidence marked `notice` (T3 rows with
+`notification` or `delegatedCompletion`) is automation of kind `info`. Notices the strict join
+cannot match fall back to T3's fixed PR-watch, server-restart and delegated-task text, anchored
+to the whole format. A reply the harness
 recorded as a user command (`invocation` by `user`, carried as `Run.replyCommand`) is the person's
 `new_request` (harness source) unless evidence says automation. Only Claude Code records one;
 leading `/` text is never parsed as a command.

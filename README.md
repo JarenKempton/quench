@@ -81,8 +81,11 @@ before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a repl
 `--dry-run` shows how many replies would be sent without sending anything.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
-formats third, and Jev's guess otherwise. T3 Code's PR-watch, restart and delegated-task notices
-count as host automation with kind `info`; a reply the harness recorded as a slash command
+formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or
+delegated-task results (`notification` / `delegatedCompletion`) count as host automation with kind
+`info`. A notice that can't be joined to host history (delivered over 60 seconds after T3 created
+it, repeated text, or not hosted) falls back to its fixed PR-watch, restart or delegated-task
+text. A reply the harness recorded as a slash command
 (Claude Code's `<command-name>`) counts as a person's `new_request` (harness source) unless
 harness or host evidence says automation. Neither is sent to Jev. Text that merely starts with
 `/` is not treated as a command: Codex and Pi record no command marker, so their replies are
