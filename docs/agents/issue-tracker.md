@@ -13,10 +13,6 @@ Issues and PRDs for this repo live as GitHub issues on `JarenKempton/quench`. Us
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
-## ⚠️ This environment: gh auth workaround
-
-A stale `GITHUB_TOKEN` is baked into the shell environment (was exported from `~/.zshrc`, now commented out) and overrides the working keyring login, making `gh` fail with `invalid character '<'` (an HTML error page). **Prefix every `gh` call with `env -u GITHUB_TOKEN`**, and retry a few times — the sandbox network intermittently returns HTML (`<!DOCTYPE`) for otherwise-valid calls. The old token should be revoked at github.com/settings/tokens.
-
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests.)_
