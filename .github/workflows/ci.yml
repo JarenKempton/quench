@@ -22,7 +22,7 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bunx vp check
-      - run: bunx vp run test
       - run: bunx vp run compile
       - run: ./dist/quench --help
       - run: ./dist/quench --version
+      - run: bunx vp run test
