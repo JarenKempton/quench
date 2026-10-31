@@ -1,5 +1,5 @@
 import { heading } from "../style.ts";
-import { dirname, relative } from "node:path";
+import { dirname, relative, sep } from "node:path";
 import {
   checkout,
   compareWithDisk,
@@ -112,11 +112,11 @@ function fileLabel(
   if (r.combined)
     return r.root === null
       ? "combined block, directory not recorded"
-      : `${projectName(r.root, homeDir)}${r.file === "." ? "" : `/${r.file}`} (combined block)`;
-  if (r.root !== null) return `${projectName(r.root, homeDir)}/${r.file}`;
+      : `${projectName(r.root, homeDir)}${r.file === "." ? "" : `${sep}${r.file}`} (combined block)`;
+  if (r.root !== null) return `${projectName(r.root, homeDir)}${sep}${r.file}`;
   const memory = autoMemory(r.file, claudeHome, roots);
   return memory
-    ? `${projectName(memory.root, homeDir)} auto memory/${memory.file}`
+    ? `${projectName(memory.root, homeDir)} auto memory${sep}${memory.file}`
     : shortPath(r.file, homeDir);
 }
 
@@ -125,7 +125,7 @@ export function autoMemory(path: string, claudeHome: string, roots: string[]) {
   const [projects, slug, kind, ...rest] = pathParts(path.slice(claudeHome.length));
   const root = roots.find((r) => r.replace(/[^A-Za-z0-9]/g, "-") === slug);
   return projects === "projects" && root && kind === "memory"
-    ? { root, file: rest.join("/") }
+    ? { root, file: rest.join(sep) }
     : null;
 }
 

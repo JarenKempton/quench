@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { Home, skillInventory } from "@quench/history";
 
 const main = join(import.meta.dir, "../src/main.ts");
+const p = (path: string) => path.replaceAll("/", sep);
 
 async function quench(home: string, ...args: string[]) {
   const proc = Bun.spawn(["bun", main, ...args], {
@@ -113,21 +114,21 @@ test("profile with no arguments finds projects from session directories and grou
       " QUENCH   Profile · last 30 days · 5 sessions · instruction files as they are on disk now",
       "",
       "  Agent        Sessions  Skills  MCP  Home",
-      "  Claude Code         0  0         0  ~/.claude",
-      "  Codex               5  0         0  ~/.codex",
-      "  Pi                  —  —         —  ~/.pi/agent not found; set --pi-home",
+      `  Claude Code         0  0         0  ${p("~/.claude")}`,
+      `  Codex               5  0         0  ${p("~/.codex")}`,
+      `  Pi                  —  —         —  ${p("~/.pi/agent")} not found; set --pi-home`,
       "",
       "▍Global instructions · every project, before project files",
-      "  ~/.claude/CLAUDE.md  25 B  Claude Code",
-      "  ~/.codex/AGENTS.md   21 B  Codex",
+      `  ${p("~/.claude/CLAUDE.md")}  25 B  Claude Code`,
+      `  ${p("~/.codex/AGENTS.md")}   21 B  Codex`,
       "",
       "▍Projects · 1 git repository · project instruction size per agent",
       "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
-      "  app             3  today             22 B   22 B                 —       —    —  AGENTS.md          1 · 0 idle  ~/code/app",
+      `  app             3  today             22 B   22 B                 —       —    —  AGENTS.md          1 · 0 idle  ${p("~/code/app")}`,
       "",
       "▍Other folders · 1 folder outside git · 1 session",
       "  Project  Sessions  Last used   Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Path",
-      "  scratch         1  2 days ago            —      —                 —       —    —  none               ~/scratch",
+      `  scratch         1  2 days ago            —      —                 —       —    —  none               ${p("~/scratch")}`,
       "",
       "1 session folder no longer exists; its sessions are not listed.",
       "",
@@ -239,18 +240,20 @@ test("worktrees lists idle worktrees safe to remove and why others are kept, wit
   expect(profile.stdout).toContain("6 · 4 idle");
   expect(profile.stdout).toContain("`quench worktrees` shows which are safe to remove.");
 
+  const arg = (path: string) =>
+    sep === "/" ? `~${path.slice(home.length)}` : `'${path.replaceAll("'", `'\\''`)}'`;
   const text = await quench(home, "worktrees");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain(
     [
-      "~/code/app · 6 linked worktrees · 1 active · 4 idle · base main",
+      `${p("~/code/app")} · 6 linked worktrees · 1 active · 4 idle · base main`,
       "  Safe to remove (1):",
-      "    git -C ~/code/app worktree remove ~/wt/merged   # merged",
+      `    git -C ${arg(repo)} worktree remove ${arg(wt("merged"))}   # merged`,
       "  Idle but kept (3):",
-      "    ~/wt/dirty   # dirty · uncommitted or untracked changes",
-      "    ~/wt/locked   # locked · locked",
-      "    ~/wt/unmerged   # unmerged · branch not merged into main",
-      "  Folders already gone (1): git -C ~/code/app worktree prune",
+      `    ${p("~/wt/dirty")}   # dirty · uncommitted or untracked changes`,
+      `    ${p("~/wt/locked")}   # locked · locked`,
+      `    ${p("~/wt/unmerged")}   # unmerged · branch not merged into main`,
+      `  Folders already gone (1): git -C ${arg(repo)} worktree prune`,
     ].join("\n"),
   );
 
@@ -371,19 +374,23 @@ test("profile shows the instructions sessions recorded loading and whether disk 
   expect(stdout).toContain(
     [
       "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
-      "  app             4  today             22 B      —          35 chars       —    —  CLAUDE.md          1 · 0 idle  ~/code/app",
+      `  app             4  today             22 B      —          35 chars       —    —  CLAUDE.md          1 · 0 idle  ${p("~/code/app")}`,
     ].join("\n"),
   );
   expect(stdout).toContain(
     [
       "▍Recorded instructions · what session histories logged loading · worktrees folded",
       "  File                       Agents       Sessions  Last recorded      Size  Disk now",
-      "  ~/.claude/CLAUDE.md        Claude Code         2  today          24 chars  same",
-      "  app/CLAUDE.md              Claude Code         2  today          21 chars  1 same, 1 differs",
+      `  ${p("~/.claude/CLAUDE.md")}        Claude Code         2  today          24 chars  same`,
+      `  ${p("app/CLAUDE.md")}              Claude Code         2  today          21 chars  1 same, 1 differs`,
       "  app (combined block)       Codex               1  today          20 chars  not comparable",
-      "  app auto memory/MEMORY.md  Claude Code         1  today          24 chars  same",
-      "  app/admin/CLAUDE.md        Claude Code         1  today          22 chars  not comparable",
     ].join("\n"),
+  );
+  expect(stdout).toContain(
+    `  ${p("app auto memory/MEMORY.md")}  Claude Code         1  today          24 chars  same`,
+  );
+  expect(stdout).toContain(
+    `  ${p("app/admin/CLAUDE.md")}        Claude Code         1  today          22 chars  not comparable`,
   );
   const out = JSON.parse((await quench(home, "--json")).stdout);
   expect(
@@ -461,7 +468,7 @@ test("profile lists skills and MCP servers each agent finds, without reading out
       "[mcp_servers.old]",
       'command = "old-mcp"',
       "enabled = false",
-      `[projects."${repo}"]`,
+      `[projects.'${repo}']`,
       'trust_level = "trusted"',
     ].join("\n"),
   );
@@ -483,9 +490,9 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   expect(stdout).toContain(
     [
       "  Agent        Sessions  Skills        MCP  Home",
-      "  Claude Code         1  3 · 59 chars    1  ~/.claude",
-      "  Codex               1  2 · 28 chars    2  ~/.codex",
-      "  Pi                  —  —               —  ~/.pi/agent not found; set --pi-home",
+      `  Claude Code         1  3 · 59 chars    1  ${p("~/.claude")}`,
+      `  Codex               1  2 · 28 chars    2  ${p("~/.codex")}`,
+      `  Pi                  —  —               —  ${p("~/.pi/agent")} not found; set --pi-home`,
     ].join("\n"),
   );
   expect(stdout).toContain(
@@ -589,7 +596,7 @@ test("profile shows which recorded skills sessions listed and used", async () =>
           type: "custom_tool_call",
           name: "exec",
           call_id: "x",
-          input: `text(await tools.exec_command({cmd:"sed -n '1,80p' ${home}/.agents/skills/notes/SKILL.md"}))`,
+          input: `text(await tools.exec_command({cmd:"sed -n '1,80p' ${home.replaceAll(sep, "/")}/.agents/skills/notes/SKILL.md"}))`,
         },
       },
       {
@@ -633,8 +640,8 @@ test("profile shows which recorded skills sessions listed and used", async () =>
       "▍Recorded skills · what session histories listed and used · last 30 days",
       "  Agent        Sessions  Listed  Listing size  Used  Never used",
       "  Claude Code         2       3      63 chars     2           1",
-      "  Codex               1       2     207 chars     1           1",
-      "  Pi                  1       2     370 chars     1           1",
+      `  Codex               1       2     ${180 + home.length} chars     1           1`,
+      `  Pi                  1       2     ${316 + 2 * home.length} chars     1           1`,
       "  Most used · Claude Code: review 2, deploy 1",
       "  Listed, never used · Claude Code: notes",
       "  Most used · Codex: notes 1",
@@ -797,7 +804,7 @@ test("profile lists failures that repeat in a project, by kind and what failed",
       "▍Repeated failures · tool calls that failed the same way · last 30 days",
       "  Project  Kind             What                         Failures  Sessions  In a row     Output  Agents",
       "  work     rejected         guard: blocked — force push         3         1         3  225 chars  Claude Code",
-      "  work     no such file     docs/setup.md                       3         2         2   60 chars  Claude Code",
+      `  work     no such file     ${p("docs/setup.md")}                       3         2         2   60 chars  Claude Code`,
       "  work     no such command  pytest                              2         2         1  218 chars  Codex",
       "  9 failed tool calls in all, returning 545 chars of output.",
     ].join("\n"),

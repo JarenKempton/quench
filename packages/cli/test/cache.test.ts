@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, stat, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,7 +22,7 @@ async function quench(home: string, ...args: string[]) {
 }
 
 test("profile reuses cached session results until the session file changes", async () => {
-  const home = await mkdtemp(join(tmpdir(), "quench-cache-"));
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-cache-")));
   const project = join(home, "code/app");
   await mkdir(project, { recursive: true });
   const session = join(home, ".codex/sessions/2026/10/20/a.jsonl");
