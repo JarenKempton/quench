@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { harnessById, isInside, pathParts } from "../src/index.ts";
 import { sessionRef } from "../src/harness.ts";
 import { describeServer } from "../src/mcp.ts";
+import { shellReads } from "../src/shell.ts";
 
 test("path parts split on either separator", () => {
   expect(pathParts("C:\\Users\\me\\code\\app")).toEqual(["C:", "Users", "me", "code", "app"]);
@@ -54,8 +55,23 @@ test("Codex skill listings resolve Windows roots and either separator", async ()
   const session = await harnessById.codex.read(await sessionRef("codex", file));
   const listing = session.events.find((e) => e.type === "skills");
   expect(listing?.type === "skills" && listing.listed).toEqual([
-    { name: "notes", path: join(base, "notes", "SKILL.md") },
-    { name: "plan", path: join(base, "plan", "SKILL.md") },
+    { name: "notes", path: `${base}\\notes\\SKILL.md` },
+    { name: "plan", path: `${base}\\plan\\SKILL.md` },
   ]);
   await rm(dir, { recursive: true });
+});
+
+test("recorded shell paths resolve in the style of the session, not the machine reading it", () => {
+  const read = (command: string, sessionFolder: string, home: string) =>
+    shellReads(command, { workdir: null, sessionFolder, home }).map((r) => r.path);
+  expect(read("cat src/a.ts /etc/hosts ~/n.md", "/repo", "/home/me")).toEqual([
+    "/repo/src/a.ts",
+    "/etc/hosts",
+    "/home/me/n.md",
+  ]);
+  expect(read("cat src/a.ts C:/x/b.md ~/n.md", "C:\\repo", "C:\\Users\\me")).toEqual([
+    "C:\\repo\\src\\a.ts",
+    "C:\\x\\b.md",
+    "C:\\Users\\me\\n.md",
+  ]);
 });
