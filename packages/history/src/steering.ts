@@ -153,7 +153,11 @@ export async function steeringInventory(home: Home, directory: string) {
         file &&
         !file.sources.some(
           (source) =>
-            source.harness === harness && source.path === root.path && source.scope === root.scope,
+            source.harness === harness &&
+            source.scope === root.scope &&
+            (source.path === root.path ||
+              (source.realPath === canonical &&
+                source.path.toLowerCase() === root.path.toLowerCase())),
         )
       )
         file.sources.push({ harness, path: root.path, realPath: canonical, scope: root.scope });
