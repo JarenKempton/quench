@@ -53,6 +53,12 @@ retired with it and live in git history.
   taxonomy. Counts and source evidence are local; recurrence requires multiple native sessions.
   Quotations remain quotations, unclear stays ungrouped, and missing/failed sequential decisions
   block dependent work. No claim about ignored or unwritten rules is made without steering evidence.
+- **Corrections are read behaviour-first.** A correction is a symptom, and the reply classifier
+  was right only about half the time on real history. What the agent did comes from its log first:
+  typed, model-free signals with evidence (repeated failures, invalid tool input, long or costly
+  runs). A model is asked why only for replies already classified as corrections, never for every
+  reply; there is no full re-judge. Signals the log cannot support (rework on the same files,
+  claiming done too early) are left out rather than guessed from text.
 - **Human correction and agent supervision are separate outcome signals.** Both can contribute
   to a corrective theme, with their own counts, sessions, recurrence and attributed examples.
   Unknown senders remain separate. Coordination is not automatically correction; agent-only

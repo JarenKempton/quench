@@ -18,7 +18,7 @@ export {
 } from "./recorded.ts";
 export { checkout, isInside, pathParts, repositoryRoot } from "./files.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
-export { failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
+export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export {

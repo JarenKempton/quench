@@ -9,7 +9,7 @@ import {
   type SessionEnricher,
 } from "@quench/history";
 import { openT3History } from "@quench/history/hosts/t3";
-import { linkSubagents, runs } from "@quench/insights";
+import { behaviour, behaviourLabel, linkSubagents, runs, type Behaviour } from "@quench/insights";
 import {
   Jev,
   JevThemes,
@@ -27,7 +27,7 @@ import {
   type Themes,
 } from "@quench/judge";
 import { reading } from "../progress.ts";
-import { json, quote, runFacts } from "../format.ts";
+import { duration, json, quote, runFacts, tokens as tokenCount } from "../format.ts";
 
 const MIN_BUCKET = 15;
 
@@ -233,6 +233,7 @@ function render(
   lines.push(
     "",
     `Buckets under ${MIN_BUCKET} replies are hidden. These are correlations, not causes.`,
+    "Behaviour rows come from the run's own log: repeated failures, invalid tool input, time and tokens.",
   );
   for (const [label, latest] of [
     ["people", summary.latest],
@@ -246,6 +247,8 @@ function render(
         `      ${r.senderSource} attribution · ${r.path} run ${r.position}`,
         `      after: ${runFacts(r.run)}`,
       );
+      const found = behaviour(r.run);
+      if (found.length) lines.push(`      behaviour: ${found.map(describe).join(" · ")}`);
     }
   }
   if (judged.pending) {
@@ -275,7 +278,22 @@ const example = (r: Reply) => ({
   sender: r.sender,
   senderSource: r.senderSource,
   run: r.run,
+  behaviour: behaviour(r.run),
 });
+
+function describe(b: Behaviour): string {
+  const label = behaviourLabel[b.kind].toLowerCase();
+  switch (b.kind) {
+    case "retry-loop":
+      return `${label} (${b.failure} ×${b.calls.length}: ${b.what ?? b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
+    case "bad-tool-input":
+      return `${label} (${b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
+    case "long-run":
+      return `${label} (${duration(b.seconds)})`;
+    case "costly-run":
+      return `${label} (${tokenCount(b.tokens)})`;
+  }
+}
 
 const percent = (n: number, of: number) => `${((100 * n) / Math.max(of, 1)).toFixed(1)}%`;
 

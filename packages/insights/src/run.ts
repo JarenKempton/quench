@@ -1,7 +1,10 @@
 import {
   contextOf,
+  failedCall,
   startedAt,
   unhandled,
+  type Event,
+  type FailureKind,
   type Origin,
   type SenderEvidence,
   type Session,
@@ -15,6 +18,7 @@ export type ToolCall = {
   resultChars: number | null;
   inScript: boolean;
   loadedTools?: string[];
+  failure?: { kind: FailureKind; what: string | null };
 };
 
 export type Run = {
@@ -78,6 +82,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
   const segments: Run[] = [emptyRun()];
   let run = segments[0] as Run;
   const byId = new Map<string, ToolCall>();
+  const recorded = new Map<string, Extract<Event, { type: "tool_call" }>>();
   const mcpById = new Map<string, { server: string; tool: string }>();
   for (const e of session.events)
     if (e.type === "mcp_call" && e.id !== null && !e.inScript && !mcpById.has(e.id))
@@ -125,7 +130,10 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
         };
         run.toolCalls += 1;
         run.calls.push(call);
-        if (event.id !== null) byId.set(event.id, call);
+        if (event.id !== null) {
+          byId.set(event.id, call);
+          recorded.set(event.id, event);
+        }
         break;
       }
       case "mcp_call":
@@ -145,6 +153,8 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
           call.ok = event.isError === null ? null : !event.isError;
           call.resultChars = event.chars;
           if (event.loadedTools) call.loadedTools = event.loadedTools;
+          const failed = event.failure && failedCall(event.failure, recorded.get(event.callId!));
+          if (failed) call.failure = failed;
         }
         break;
       }
