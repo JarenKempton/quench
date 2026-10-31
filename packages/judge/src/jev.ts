@@ -6,6 +6,7 @@ import {
   type Fetch,
   type Usage,
 } from "@typesafe-ai/sdk";
+import type { CauseInput, CauseJudge } from "./causes.ts";
 import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
   ReplyKind,
@@ -129,6 +130,45 @@ export class JevThemes implements ThemeJudge {
     this.tokens.input += result.usage.input_tokens ?? 0;
     this.tokens.output += result.usage.output_tokens ?? 0;
     return { choice: result.answers.theme.choice, model: result.model };
+  }
+}
+
+export class JevCauses implements CauseJudge {
+  static readonly id = `jev/${MODEL}/causes-v1`;
+  readonly id = JevCauses.id;
+  readonly tokens = { input: 0, output: 0 };
+  readonly #client: TypeSafeClient;
+
+  constructor(apiKey: string, fetch: Fetch = globalThis.fetch) {
+    this.#client = new TypeSafeClient({
+      apiKey,
+      fetch: withStreamedBody(fetch),
+      defaultModel: MODEL,
+      logLevel: "off",
+      retry: { maxRetries: 0 },
+      timeout: 10_000,
+    });
+  }
+
+  static fromEnv(env: Record<string, string | undefined> = process.env): JevCauses | null {
+    const key = env.TYPESAFE_API_KEY?.trim();
+    return key ? new JevCauses(key) : null;
+  }
+
+  async cause(input: CauseInput): Promise<ThemeDecision> {
+    try {
+      const result = await this.#client.systemOne({
+        state: input.state,
+        questions: { cause: choice(input.question, input.choices) },
+      });
+      this.tokens.input += result.usage.input_tokens ?? 0;
+      this.tokens.output += result.usage.output_tokens ?? 0;
+      return { choice: result.answers.cause.choice, model: result.model };
+    } catch (error) {
+      if (error instanceof AuthenticationError || error instanceof PermissionDeniedError)
+        throw new KeyRejected(error.status, { cause: error });
+      throw error;
+    }
   }
 }
 

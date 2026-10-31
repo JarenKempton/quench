@@ -1,5 +1,5 @@
 import { isInside, pathParts } from "@quench/history";
-import { durationSeconds, type Run } from "@quench/insights";
+import { behaviourLabel, durationSeconds, type Behaviour, type Run } from "@quench/insights";
 
 export function tokens(n: number): string {
   if (n < 1_000) return String(n);
@@ -83,4 +83,18 @@ export function median(values: number[]): number | null {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)]!;
+}
+
+export function describe(b: Behaviour): string {
+  const label = behaviourLabel[b.kind].toLowerCase();
+  switch (b.kind) {
+    case "retry-loop":
+      return `${label} (${b.failure} ×${b.calls.length}: ${b.what}; calls ${b.calls.join(", ")})`;
+    case "bad-tool-input":
+      return `${label} (${b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
+    case "long-run":
+      return `${label} (${duration(b.seconds)})`;
+    case "costly-run":
+      return `${label} (${tokens(b.tokens)})`;
+  }
 }

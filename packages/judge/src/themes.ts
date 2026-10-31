@@ -102,14 +102,7 @@ export async function groupCorrections(
       continue;
     }
     const first = members[0]!;
-    const exchange = {
-      assistantSaid: Array.from(first.run.assistantSaid ?? "")
-        .slice(-500)
-        .join(""),
-      reply: Array.from(first.run.reply ?? "")
-        .slice(0, 1000)
-        .join(""),
-    };
+    const exchange = clipped(first);
     const input = themeInput(exchange, groups);
     let decision = cache.get(input);
     if (decision) cacheHits += 1;
@@ -192,6 +185,15 @@ export async function groupCorrections(
 
 /** The whole resolved grouping report, including coverage and processing statistics; not Theme[]. */
 export type Themes = Awaited<ReturnType<typeof groupCorrections>>;
+
+export const clipped = (reply: Reply): Exchange => ({
+  assistantSaid: Array.from(reply.run.assistantSaid ?? "")
+    .slice(-500)
+    .join(""),
+  reply: Array.from(reply.run.reply ?? "")
+    .slice(0, 1000)
+    .join(""),
+});
 
 function themeInput(exchange: Exchange, groups: readonly Group[]): ThemeInput {
   return {

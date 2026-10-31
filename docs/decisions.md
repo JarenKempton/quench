@@ -59,6 +59,9 @@ retired with it and live in git history.
   runs). A model is asked why only for replies already classified as corrections, never for every
   reply; there is no full re-judge. Signals the log cannot support (rework on the same files,
   claiming done too early) are left out rather than guessed from text.
+  `corrections --causes` adds the one cause question as an opt-in section beside `--themes`, with
+  its own judge id and cache. It is not a new command, because it reads the same classified
+  replies and sender split.
 - **Human correction and agent supervision are separate outcome signals.** Both can contribute
   to a corrective theme, with their own counts, sessions, recurrence and attributed examples.
   Unknown senders remain separate. Coordination is not automatically correction; agent-only

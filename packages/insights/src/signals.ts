@@ -75,6 +75,9 @@ const SIGNALS: [string, (s: Sample) => Placed | null][] = [
   ),
 ];
 
+export const labelIn = (name: string, sample: Sample): string | null =>
+  SIGNALS.find(([n]) => n === name)?.[1](sample)?.[1] ?? null;
+
 export const signals = (samples: readonly Sample[]): Signal[] =>
   SIGNALS.map(([name, place]) => ({ name, buckets: bucket(samples, place) }));
 

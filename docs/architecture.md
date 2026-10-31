@@ -204,6 +204,16 @@ exemplar, not all-pairs equivalence or evidence of what steering instructions we
 session IDs are not independent occurrences: inherited conversation prefixes in forks are not
 identified and may inflate evidence; both terminal and JSON expose this limitation.
 
+### Correction causes
+
+`judgeCauses` in judge selects replies already classified as corrections and asks a separate typed
+`CauseJudge` one choice per unique clipped exchange (the themes clipping, no source metadata). The
+answers use the theme cache's format in their own `causes.jsonl`, keyed by judge id and the exact
+input, so changing the question or its id re-asks cleanly. A missing judge leaves inputs pending.
+Failures and answers outside the choices are reported per correction and never cached, and a
+rejected key stops the batch. Aggregates join each cause to `behaviour(run)` of the preceding run
+and to the Model, Effort and Harness reply buckets, separately for people and automation.
+
 ## Reading at scale
 
 `readSessions` streams one session at a time with a small concurrency limit, and each

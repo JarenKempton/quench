@@ -9,10 +9,13 @@ import {
   type SessionEnricher,
 } from "@quench/history";
 import { openT3History } from "@quench/history/hosts/t3";
-import { behaviour, behaviourLabel, linkSubagents, runs, type Behaviour } from "@quench/insights";
+import { behaviour, linkSubagents, runs } from "@quench/insights";
 import {
   Jev,
+  JevCauses,
   JevThemes,
+  judgeCauses,
+  type CauseInput,
   groupCorrections,
   ThemeCache,
   judgeReplies,
@@ -27,7 +30,8 @@ import {
   type Themes,
 } from "@quench/judge";
 import { reading } from "../progress.ts";
-import { duration, json, quote, runFacts, tokens as tokenCount } from "../format.ts";
+import { renderCauses } from "./causes.ts";
+import { describe, json, quote, runFacts } from "../format.ts";
 
 const MIN_BUCKET = 15;
 
@@ -45,11 +49,13 @@ type Options = {
   hostHistory?: string | false;
   themes: boolean;
   themeLimit: number;
+  causes: boolean;
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
   const replyJudge = options.dryRun ? null : Jev.fromEnv();
-  if (!options.dryRun && !options.themes && !replyJudge) {
+  const optIn = options.themes || options.causes;
+  if (!options.dryRun && !optIn && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
   }
@@ -89,6 +95,24 @@ export async function corrections(home: Home, options: Options): Promise<number>
         { limit: options.themeLimit, examples: options.examples, since },
       )
     : null;
+  const causeJudge = options.causes && !options.dryRun ? JevCauses.fromEnv() : null;
+  let causes = null;
+  try {
+    causes = options.causes
+      ? await judgeCauses(
+          judged.replies,
+          await ThemeCache.open<CauseInput>(
+            join(home.dir, ".quench/local/causes.jsonl"),
+            JevCauses.id,
+          ),
+          causeJudge,
+        )
+      : null;
+  } catch (error) {
+    if (!(error instanceof KeyRejected)) throw error;
+    process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
+    return 1;
+  }
   const tokens = replyJudge?.tokens ?? null;
   process.stdout.write(
     options.json
@@ -102,17 +126,31 @@ export async function corrections(home: Home, options: Options): Promise<number>
           warnings,
           ...summary,
           ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
+          ...(causes
+            ? {
+                causes: {
+                  ...causes,
+                  tokens: causeJudge?.tokens ?? null,
+                  caused: causes.caused.map((c) => ({ ...example(c.reply), cause: c.cause })),
+                },
+              }
+            : {}),
           latest: summary.latest.map(example),
           latestAutomation: summary.latestAutomation.map(example),
         })
-      : themes
-        ? renderThemes(themes, judged, options.days)
-        : render(summary, judged, options.days, cache.judge, tokens),
+      : (themes
+          ? renderThemes(themes, judged, options.days)
+          : render(summary, judged, options.days, cache.judge, tokens)) +
+          (causes ? renderCauses(causes, options.examples) : ""),
   );
-  if (themes && (themes.failed || judged.failures.length)) return 1;
-  if (themes && !options.dryRun && !replyJudge && (judged.pending || themes.pending)) {
+  if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
+  if (
+    optIn &&
+    !options.dryRun &&
+    (judged.pending || themes?.pending || themes?.blocked || causes?.pending)
+  ) {
     process.stderr.write(
-      "Classifying missing replies and grouping corrections use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview both stages.\n",
+      "Classifying missing replies, grouping and asking causes use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview each stage.\n",
     );
     return 2;
   }
@@ -280,20 +318,6 @@ const example = (r: Reply) => ({
   run: r.run,
   behaviour: behaviour(r.run),
 });
-
-function describe(b: Behaviour): string {
-  const label = behaviourLabel[b.kind].toLowerCase();
-  switch (b.kind) {
-    case "retry-loop":
-      return `${label} (${b.failure} ×${b.calls.length}: ${b.what}; calls ${b.calls.join(", ")})`;
-    case "bad-tool-input":
-      return `${label} (${b.tools.join(", ")}; calls ${b.calls.join(", ")})`;
-    case "long-run":
-      return `${label} (${duration(b.seconds)})`;
-    case "costly-run":
-      return `${label} (${tokenCount(b.tokens)})`;
-  }
-}
 
 const percent = (n: number, of: number) => `${((100 * n) / Math.max(of, 1)).toFixed(1)}%`;
 
