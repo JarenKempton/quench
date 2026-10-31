@@ -19,8 +19,37 @@ Claude Code
 
 ## Install
 
-Download the binary for your machine from the [releases](https://github.com/JarenKempton/quench/releases)
-(Linux and macOS, x64 and arm64) and put it on your `PATH`:
+macOS and Linux (x64, arm64):
+
+```sh
+curl -fsSL https://github.com/JarenKempton/quench/releases/latest/download/install.sh | sh
+```
+
+Windows x64, in PowerShell 5.1 or later:
+
+```powershell
+irm https://github.com/JarenKempton/quench/releases/latest/download/install.ps1 | iex
+```
+
+Each script picks the binary for your machine from the latest stable release, checks it against
+the release's `SHA256SUMS` and installs it to `~/.local/bin/quench` (Windows:
+`%LOCALAPPDATA%\Programs\quench\quench.exe`), printing the line to add it to your `PATH` if it
+isn't there. Set `QUENCH_RELEASE=nightly` or a tag such as `v0.2.0` for another release, and
+`QUENCH_INSTALL_DIR` for another folder.
+
+**The repository is private for now, so these URLs only work for people with access.** Signed in
+with the GitHub CLI (`gh auth login`), fetch the script with `gh` and run it; it falls back to
+`gh release download` when the direct download is refused:
+
+```sh
+gh release download --repo JarenKempton/quench --pattern install.sh --output - | sh
+```
+
+```powershell
+gh release download --repo JarenKempton/quench --pattern install.ps1 --output - | Out-String | iex
+```
+
+Or download a binary yourself and put it on your `PATH`:
 
 ```sh
 gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output ~/.local/bin/quench
@@ -28,9 +57,9 @@ chmod +x ~/.local/bin/quench
 quench --version
 ```
 
-Swap in `linux-arm64`, `darwin-x64` or `darwin-arm64`. `SHA256SUMS` in the release lists each
-binary's checksum. The macOS binaries are not signed; a copy downloaded with a browser needs
-`xattr -d com.apple.quarantine quench` before it runs.
+Swap in `linux-arm64`, `darwin-x64`, `darwin-arm64` or `windows-x64.exe`. `SHA256SUMS` in the
+release lists each binary's checksum. The macOS binaries are not signed; a copy downloaded with
+a browser needs `xattr -d com.apple.quarantine quench` before it runs.
 
 Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh auth login`).
 
