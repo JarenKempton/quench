@@ -93,7 +93,7 @@ JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAu
 `fromUnknown`. Examples include the history path, session, run and sender evidence.
 
 Each run also gets behaviour signals read from its own log, with no model call: the same failure
-(kind and what failed) 3 or more times, invalid tool input 2 or more times, 15 minutes or more of
+(kind and what failed, or kind and tool when the log doesn't say what failed) 3 or more times, invalid tool input 2 or more times, 15 minutes or more of
 agent time, and 10M or more tokens processed. They appear as yes/no rows in the "what came before"
 tables and on each example, with the call positions behind them (`behaviour` in JSON). Rework and
 early "done" claims are not detected: edit targets and completion claims are not recorded

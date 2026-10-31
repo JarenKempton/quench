@@ -7,7 +7,13 @@ export const LONG_RUN_SECONDS = 900;
 export const COSTLY_RUN_TOKENS = 10_000_000;
 
 export type Behaviour =
-  | { kind: "retry-loop"; failure: FailureKind; what: string; tools: string[]; calls: number[] }
+  | {
+      kind: "retry-loop";
+      failure: FailureKind;
+      what: string | null;
+      tools: string[];
+      calls: number[];
+    }
   | { kind: "bad-tool-input"; tools: string[]; calls: number[] }
   | { kind: "long-run"; seconds: number }
   | { kind: "costly-run"; tokens: number };
@@ -37,11 +43,15 @@ export function behaviour(run: Run): Behaviour[] {
 }
 
 function retryLoops(run: Run): Behaviour[] {
-  const repeats = new Map<string, { failure: FailureKind; what: string; calls: number[] }>();
+  const repeats = new Map<string, { failure: FailureKind; what: string | null; calls: number[] }>();
   run.calls.forEach((call, i) => {
     const failure = call.failure;
-    if (!failure || failure.what === null) return;
-    const key = JSON.stringify([failure.kind, failure.what]);
+    if (!failure) return;
+    const key = JSON.stringify([
+      failure.kind,
+      failure.what,
+      failure.what === null ? call.tool : null,
+    ]);
     const seen = repeats.get(key) ?? { failure: failure.kind, what: failure.what, calls: [] };
     seen.calls.push(i + 1);
     repeats.set(key, seen);

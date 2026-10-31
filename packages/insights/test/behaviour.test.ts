@@ -74,7 +74,7 @@ test("the same failure three times in one run is a retry loop with its call posi
   ]);
 });
 
-test("two repeats, different errors and unnamed exit codes are not retry loops", () => {
+test("two repeats, different errors and unnamed failures on different tools are not retry loops", () => {
   const exit: Failure = { kind: "exit-code", detail: null, exitCode: 2 };
   expect(
     behaviour(run([...failing("Read", missing("a.ts")), ...failing("Read", missing("a.ts"))])),
@@ -88,7 +88,9 @@ test("two repeats, different errors and unnamed exit codes are not retry loops",
       ]),
     ),
   ).toEqual([]);
-  expect(behaviour(run([1, 2, 3].flatMap(() => failing("Bash", exit))))).toEqual([]);
+  expect(
+    behaviour(run([...failing("Bash", exit), ...failing("Shell", exit), ...failing("Bash", exit)])),
+  ).toEqual([]);
   const nothingFound: Failure = { kind: "exit-code", detail: null, exitCode: 1 };
   expect(behaviour(run([1, 2, 3].flatMap(() => failing("Bash", nothingFound, "rg x"))))).toEqual(
     [],
@@ -100,6 +102,13 @@ test("one shell command failing three times is a retry loop", () => {
   expect(behaviour(run([1, 2, 3].flatMap(() => failing("Bash", exit, "bun test")))).at(0)).toEqual(
     expect.objectContaining({ kind: "retry-loop", what: "bun test", calls: [1, 2, 3] }),
   );
+});
+
+test("unnamed failures fall back to the failing tool as the key", () => {
+  const exit: Failure = { kind: "exit-code", detail: null, exitCode: 2 };
+  expect(behaviour(run([1, 2, 3].flatMap(() => failing("Bash", exit))))).toEqual([
+    { kind: "retry-loop", failure: "exit-code", what: null, tools: ["Bash"], calls: [1, 2, 3] },
+  ]);
 });
 
 test("invalid tool input fires from two calls, not one", () => {
