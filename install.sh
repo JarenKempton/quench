@@ -52,7 +52,7 @@ elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
   gh release download $tag --repo "$repo" --pattern "$asset" --pattern SHA256SUMS --dir "$tmp" --clobber ||
     fail "gh couldn't download $asset from the $release release"
 else
-  fail "couldn't download $url/$asset. The repository is private for now: install gh and run gh auth login, then try again"
+  fail "couldn't download $url/$asset. Check your connection, or install gh and run gh auth login, then try again"
 fi
 
 [ -f "$tmp/SHA256SUMS" ] || fail "the $release release has no SHA256SUMS"

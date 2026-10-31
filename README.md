@@ -37,17 +37,8 @@ the release's `SHA256SUMS` and installs it to `~/.local/bin/quench` (Windows:
 isn't there. Set `QUENCH_RELEASE=nightly` or a tag such as `v0.2.0` for another release, and
 `QUENCH_INSTALL_DIR` for another folder.
 
-**The repository is private for now, so these URLs only work for people with access.** Signed in
-with the GitHub CLI (`gh auth login`), fetch the script with `gh` and run it; it falls back to
-`gh release download` when the direct download is refused:
-
-```sh
-gh release download --repo JarenKempton/quench --pattern install.sh --output - | sh
-```
-
-```powershell
-gh release download --repo JarenKempton/quench --pattern install.ps1 --output - | Out-String | iex
-```
+If a direct download is blocked, the scripts fall back to `gh release download` when the GitHub
+CLI is signed in (`gh auth login`).
 
 Or download a binary yourself and put it on your `PATH`:
 

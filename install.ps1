@@ -32,7 +32,7 @@ try {
     }
   } catch {
     $gh = Get-Command gh -ErrorAction SilentlyContinue
-    if (-not $gh) { Fail "couldn't download $url/$asset. The repository is private for now: install gh and run gh auth login, then try again" }
+    if (-not $gh) { Fail "couldn't download $url/$asset. Check your connection, or install gh and run gh auth login, then try again" }
     & gh auth status *> $null
     if ($LASTEXITCODE -ne 0) { Fail "couldn't download $url/$asset, and gh is not signed in: run gh auth login, then try again" }
     [Console]::Error.WriteLine('Direct download failed; using gh release download.')
