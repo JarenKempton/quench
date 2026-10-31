@@ -43,7 +43,7 @@ CLI is signed in (`gh auth login`).
 Or download a binary yourself and put it on your `PATH`:
 
 ```sh
-gh release download --repo JarenKempton/quench --pattern "quench-linux-x64" --output ~/.local/bin/quench
+curl -fsSL --create-dirs -o ~/.local/bin/quench https://github.com/JarenKempton/quench/releases/latest/download/quench-linux-x64
 chmod +x ~/.local/bin/quench
 quench --version
 ```
