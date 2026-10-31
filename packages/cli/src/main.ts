@@ -32,6 +32,7 @@ Usage:
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
+    --cached-only                     use cached reply verdicts only; never classify new replies
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 
@@ -51,6 +52,7 @@ const { positionals, values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     themes: { type: "boolean", default: false },
     causes: { type: "boolean", default: false },
+    "cached-only": { type: "boolean", default: false },
     "theme-limit": { type: "string" },
     "host-history": { type: "string" },
     "no-host-history": { type: "boolean", default: false },
@@ -104,6 +106,10 @@ if (values.themes && command !== "corrections") {
 }
 if (values.causes && command !== "corrections") {
   process.stderr.write("--causes is only available for corrections\n");
+  process.exit(1);
+}
+if (values["cached-only"] && command !== "corrections") {
+  process.stderr.write("--cached-only is only available for corrections\n");
   process.exit(1);
 }
 if (values["theme-limit"] !== undefined && !values.themes) {
@@ -183,6 +189,7 @@ switch (command) {
       dryRun: values["dry-run"],
       themes: values.themes,
       causes: values.causes,
+      cachedOnly: values["cached-only"],
       themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
