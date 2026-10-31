@@ -155,3 +155,76 @@ test("a rejected key stops the whole batch", async () => {
     await jev.classify([exchange("a"), exchange("b")]).catch((e: unknown) => e),
   ).toBeInstanceOf(KeyRejected);
 });
+
+test("T3 notices and the person's slash commands skip the judge; near misses and agent commands do not", async () => {
+  const [base] = runs({
+    id: "s",
+    harness: "codex",
+    path: "/unused",
+    cwd: null,
+    parent: null,
+    diagnostics: { lines: 3, unparsed: 0 },
+    events: [
+      { type: "message", author: "user", origin: "unknown", text: "build", at: null },
+      { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
+      { type: "message", author: "user", origin: "unknown", text: "next", at: null },
+    ],
+  });
+  const replies = [
+    "Update on pull request #7 (https://github.com/acme/app/pull/7), which T3 Code is watching for you:\n- All 2 checks passed on abc1234.\n\nLook into each item and act on it as your task requires.",
+    "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back on its own, so resume or restart what you still need and wait for its result:\n- shell: Wait for the build (id abc)\n\nContinue where you left off.",
+    "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back:\n- subagent: Review the fix (id def)",
+    "Delegated task node:delegated-task:command%3Amcp%3Aabc%3Adelegate-task%3Areview-r1 (Review (round 1)) [completed]:\nVERDICT: APPROVED",
+    "Delegated task node:delegated-task:command%3Amcp%3Aabc%3Adelegate-task%3Afix [failed]:\nTimed out",
+    "Delegated task node:delegated-task:x%3Ay reached a terminal state. Use task_status with taskId node:delegated-task:x%3Ay to read the result.",
+    "/compact",
+    "/model gpt-test",
+    "  /review-pr https://github.com/acme/app/pull/7 ",
+  ];
+  const nearMisses = [
+    "update on pull request #7 (https://github.com/acme/app/pull/7), which T3 Code is watching for you:\n- no, that is wrong",
+    "Here is my update on pull request #7, which T3 Code is watching for you: you broke the build.",
+    "Note: the T3 server restarted, and this background work was cancelled before it finished. It will not report back:\n- shell: build\n\nUser message:\nno, use the other branch",
+    "Delegated task node:delegated-task:x (review) [completed] was wrong, redo it",
+    "/usr/local/bin is the wrong path",
+    "/compact\nthen fix the test you broke",
+    "the /compact lost my context",
+  ];
+  const asked: Exchange[] = [];
+  const judge = {
+    id: "judge/v1",
+    classify: async (exchanges: readonly Exchange[]) => {
+      asked.push(...exchanges);
+      return exchanges.map(() => verdict);
+    },
+  };
+  const judged = await judgeReplies(
+    [
+      {
+        id: "s",
+        path: "/unused",
+        harness: "codex",
+        cwd: null,
+        runs: [
+          ...[...replies, ...nearMisses].map((reply) => ({ ...base!, reply })),
+          {
+            ...base!,
+            reply: "/tmp is full",
+            replySender: { sender: "automation", source: "t3", messageId: "m" },
+          },
+        ],
+      },
+    ],
+    await VerdictCache.open(await cachePath(), judge.id),
+    judge,
+  );
+  expect(asked.map((e) => e.reply)).toEqual([...nearMisses, "/tmp is full"]);
+  expect(judged.replies.map((r) => `${r.kind} ${r.sender} ${r.senderSource}`)).toEqual([
+    ...replies.slice(0, 6).map(() => "info automation host"),
+    ...replies.slice(6).map(() => "new_request person harness"),
+    ...nearMisses.map(() => "correction person judge"),
+    "correction automation host",
+  ]);
+  const summary = summarize(judged.replies, 10);
+  expect([summary.fromAutomation.kinds.correction, summary.fromUnknown.replies]).toEqual([1, 0]);
+});

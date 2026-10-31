@@ -62,7 +62,7 @@ test("runs --session finds a session by id in any harness home", async () => {
   expect(missing.stderr).toContain("No session with id nope");
 });
 
-test("corrections asks for a key before sending anything, and a dry run counts what it would send", async () => {
+test("corrections asks for a key before sending anything, and a dry run never counts a slash command", async () => {
   const noKey = await quench("corrections");
   expect(noKey.code).toBe(2);
   expect(noKey.stderr).toContain("Set TYPESAFE_API_KEY to opt in");
@@ -70,7 +70,8 @@ test("corrections asks for a key before sending anything, and a dry run counts w
   const dry = await quench("corrections", "--days", "36500", "--dry-run", "--json");
   expect(dry.code).toBe(0);
   const out = JSON.parse(dry.stdout);
-  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([1, 0, null]);
+  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([0, 0, null]);
+  expect([out.senderSources.harness, out.fromPeople.kinds.new_request]).toEqual([1, 1]);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
 });
 
