@@ -21,10 +21,12 @@ export type Run = {
   prompt: string | null;
   promptOrigin: Origin | null;
   promptSender: SenderEvidence | null;
+  promptCommand: boolean;
   reply: string | null;
   replyAt: Date | null;
   replyOrigin: Origin | null;
   replySender: SenderEvidence | null;
+  replyCommand: boolean;
   assistantSaid: string | null;
   startedAt: Date | null;
   endedAt: Date | null;
@@ -45,10 +47,12 @@ const emptyRun = (): Run => ({
   prompt: null,
   promptOrigin: null,
   promptSender: null,
+  promptCommand: false,
   reply: null,
   replyAt: null,
   replyOrigin: null,
   replySender: null,
+  replyCommand: false,
   assistantSaid: null,
   startedAt: null,
   endedAt: null,
@@ -147,9 +151,11 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
       case "compaction":
         run.compactions += 1;
         break;
+      case "invocation":
+        run.promptCommand ||= event.by === "user";
+        continue;
       case "instructions":
       case "skills":
-      case "invocation":
       case "prompt":
       case "deferred_tools":
       case "mcp_instructions":
@@ -165,6 +171,7 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
     segment.reply = next?.prompt ?? null;
     segment.replyOrigin = next?.promptOrigin ?? null;
     segment.replySender = next?.promptSender ?? null;
+    segment.replyCommand = next?.promptCommand ?? false;
   });
   return linkSubagents(
     segments.filter((s) => s.inferences > 0),
