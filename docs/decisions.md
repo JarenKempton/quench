@@ -82,6 +82,7 @@ retired with it and live in git history.
 - **Run records may list tool names; analysis may not depend on them.** `runs --json` lists
   each call's recorded name, MCP server, outcome and result size as raw data. Patterns and
   rankings still use structural fields only, because hosts rename tools.
+- **`runs --all` folds a prompt sent mid-turn into the run as `steering`; corrections still split per prompt.**
 - **Releases run on two channels, nightly and stable.** Every merge to `main` replaces one
   rolling `nightly` pre-release; a maintainer cuts stable by choosing patch, minor or major.
   The version is stamped at build time, never committed. `quench update` downloads with `gh`.

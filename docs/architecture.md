@@ -131,6 +131,14 @@ remain unverified. This is deliberately incomplete, not a claim of universal sen
 - A **run** is everything the agent did between two user messages: model, effort,
   context at start and peak, tool calls and errors, compactions, subagents, duration, and
   the reply that came next.
+- A **run record** (`runs --all`) follows the agent's turn instead: a prompt sent while the
+  agent is still working, within 10 minutes, joins the run as `steering`; a 10-minute gap
+  starts a new run. Its `outcome` is the last assistant message after the last tool call, so
+  progress lines are skipped, and `null` when the turn never finished. A run is `open` only
+  while it is the session's last and was active in the last 10 minutes; once closed, later
+  history cannot change it, so `<session>:<n>` ids are stable. Records add the session's folder
+  and branch, commands with their folders, failures, files read and PR links in commands.
+  `--history <dir>` reads each folder as one machine's home and tags runs with its name.
 - A **report** totals runs and sessions per harness.
 
 Insights never branch on harness and never look at tool or server names, because hosts

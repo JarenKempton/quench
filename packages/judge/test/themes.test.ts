@@ -28,6 +28,7 @@ const reply = (sessionId: string, text: string, extra: Partial<Reply> = {}): Rep
     harness: "codex",
     path: "/unused",
     cwd: null,
+    branch: null,
     parent: null,
     diagnostics: { lines: 4, unparsed: 0 },
     events: [

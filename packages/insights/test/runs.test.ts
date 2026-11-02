@@ -30,6 +30,7 @@ const session = (id: string, parent: string | null, events: Event[]): Session =>
   harness: "claude-code",
   path: "/dev/null",
   cwd: null,
+  branch: null,
   parent,
   events,
   diagnostics: { lines: events.length, unparsed: 0 },

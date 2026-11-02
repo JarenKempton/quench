@@ -85,7 +85,7 @@ test("sources traces recorded document reads without consulting today's source f
     {
       program: "cat",
       path: "/historical/project/README.md",
-      base: "session folder",
+      base: "workdir",
       status: "ran",
       outputChars: 8,
     },
@@ -109,7 +109,7 @@ test("sources traces recorded document reads without consulting today's source f
   expect(text.stdout).toContain(source);
   expect(text.stdout).toContain("reported lines 5–5 of 20");
   expect(text.stdout).toContain(
-    "ran · cat · /historical/project/README.md · relative to session folder · call shell",
+    "ran · cat · /historical/project/README.md · relative to workdir · call shell",
   );
   expect(text.stdout).toContain("MCP calls are listed by server and tool");
   expect(await Bun.file(path).text()).toBe(before);

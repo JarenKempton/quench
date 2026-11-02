@@ -108,6 +108,7 @@ export type Session = {
   harness: HarnessId;
   path: string;
   cwd: string | null;
+  branch: string | null;
   parent: string | null;
   events: Event[];
   diagnostics: Diagnostics;

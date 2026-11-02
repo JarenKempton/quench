@@ -8,6 +8,7 @@ import {
   type Origin,
   type SenderEvidence,
   type Session,
+  type ShellCommand,
   type Usage,
 } from "@quench/history";
 
@@ -32,6 +33,10 @@ export type Run = {
   replySender: SenderEvidence | null;
   replyCommand: boolean;
   assistantSaid: string | null;
+  outcome: string | null;
+  steering: string[];
+  commands: ShellCommand[];
+  filesRead: string[];
   startedAt: Date | null;
   endedAt: Date | null;
   model: string | null;
@@ -58,6 +63,10 @@ const emptyRun = (): Run => ({
   replySender: null,
   replyCommand: false,
   assistantSaid: null,
+  outcome: null,
+  steering: [],
+  commands: [],
+  filesRead: [],
   startedAt: null,
   endedAt: null,
   model: null,
@@ -78,7 +87,20 @@ export const durationSeconds = (r: Run): number | null =>
     ? Math.round((r.endedAt.getTime() - r.startedAt.getTime()) / 1000)
     : null;
 
-export function runs(session: Session, children: readonly Session[] = []): Run[] {
+export const IDLE_MS = 10 * 60 * 1000;
+
+export function runs(
+  session: Session,
+  children: readonly Session[] = [],
+  options: { turns?: boolean } = {},
+): Run[] {
+  return linkSubagents(
+    splitRuns(session, options.turns ?? false).filter((s) => s.inferences > 0),
+    children.map(startedAt),
+  );
+}
+
+export function splitRuns(session: Session, turns: boolean): Run[] {
   const segments: Run[] = [emptyRun()];
   let run = segments[0] as Run;
   const byId = new Map<string, ToolCall>();
@@ -87,10 +109,26 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
   for (const e of session.events)
     if (e.type === "mcp_call" && e.id !== null && !e.inScript && !mcpById.has(e.id))
       mcpById.set(e.id, { server: e.server, tool: e.tool });
+  const idle = (at: Date | null) =>
+    at !== null && run.endedAt !== null && at.getTime() - run.endedAt.getTime() >= IDLE_MS;
   for (const event of session.events) {
+    if (turns && idle(event.at) && !(event.type === "message" && event.author === "user")) {
+      run = { ...emptyRun(), startedAt: event.at };
+      segments.push(run);
+      byId.clear();
+      recorded.clear();
+    }
     switch (event.type) {
       case "message":
-        if (event.author === "user") {
+        if (
+          event.author === "user" &&
+          turns &&
+          run.prompt !== null &&
+          run.outcome === null &&
+          !idle(event.at)
+        ) {
+          run.steering.push(event.text);
+        } else if (event.author === "user") {
           run.replyAt = event.at;
           run = {
             ...emptyRun(),
@@ -100,8 +138,13 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
             startedAt: event.at,
           };
           segments.push(run);
+          if (turns) {
+            byId.clear();
+            recorded.clear();
+          }
         } else if (event.author === "assistant") {
           run.assistantSaid = event.text;
+          if (event.text.trim()) run.outcome = event.text;
         }
         break;
       case "inference": {
@@ -130,6 +173,9 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
         };
         run.toolCalls += 1;
         run.calls.push(call);
+        run.outcome = null;
+        run.commands.push(...(event.shell ?? []));
+        if (event.fileRead) run.filesRead.push(event.fileRead.path);
         if (event.id !== null) {
           byId.set(event.id, call);
           recorded.set(event.id, event);
@@ -183,13 +229,13 @@ export function runs(session: Session, children: readonly Session[] = []): Run[]
     segment.replySender = next?.promptSender ?? null;
     segment.replyCommand = next?.promptCommand ?? false;
   });
-  return linkSubagents(
-    segments.filter((s) => s.inferences > 0),
-    children.map(startedAt),
-  );
+  return segments;
 }
 
-export function linkSubagents(list: Run[], childStarts: readonly (Date | null)[]): Run[] {
+export function linkSubagents<R extends Run>(
+  list: R[],
+  childStarts: readonly (Date | null)[],
+): R[] {
   for (const run of list) run.subagents = childStarts.filter((at) => within(at, run)).length;
   return list;
 }

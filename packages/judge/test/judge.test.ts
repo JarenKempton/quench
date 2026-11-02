@@ -43,6 +43,7 @@ test("generic sender evidence overrides cached guesses without changing verdicts
     harness: "codex",
     path: "/unused",
     cwd: null,
+    branch: null,
     parent: null,
     diagnostics: { lines: 4, unparsed: 0 },
     events: [
@@ -169,6 +170,7 @@ test("host-marked and T3-formatted notices and recorded slash commands skip the 
       harness: "claude-code",
       path: "/unused",
       cwd: null,
+      branch: null,
       parent: null,
       diagnostics: { lines: 0, unparsed: 0 },
       events: [

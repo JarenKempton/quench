@@ -5,7 +5,7 @@ import { THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
 import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
-import { runs } from "./commands/runs.ts";
+import { allRuns, runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
 import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
@@ -25,6 +25,9 @@ Usage:
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
   quench runs [session-file | --session <id>] [--json]
                                        one session as prompt → what the agent did → your reply
+  quench runs --all --json [--history <dir>]
+                                       every run of every session, one JSON object per line
+    --history <dir>                    read <dir> as one machine's home, tagged with its folder name (repeatable)
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
@@ -65,6 +68,8 @@ const { positionals, values } = parseArgs({
     version: { type: "boolean", short: "v", default: false },
     "no-cache": { type: "boolean", default: false },
     session: { type: "string" },
+    all: { type: "boolean", default: false },
+    history: { type: "string", multiple: true, default: [] },
     channel: { type: "string" },
   },
 });
@@ -123,6 +128,18 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
 
 if (values.session !== undefined && command !== "runs") {
   process.stderr.write("--session is only available for runs\n");
+  process.exit(1);
+}
+if ((values.all || values.history.length) && command !== "runs") {
+  process.stderr.write("--all and --history are only available for runs\n");
+  process.exit(1);
+}
+if (values.history.length && !values.all) {
+  process.stderr.write("--history requires --all\n");
+  process.exit(1);
+}
+if (values.all && (!values.json || values.session !== undefined || rest.length)) {
+  process.stderr.write("--all takes no session and needs --json\n");
   process.exit(1);
 }
 if (values.channel !== undefined && command !== "update") {
@@ -202,6 +219,10 @@ switch (command) {
     process.exitCode = await update(version, values.channel);
     break;
   case "runs":
+    if (values.all) {
+      process.exitCode = await allRuns(home, values.history);
+      break;
+    }
     process.exitCode = await runs(home, rest[0], {
       json: values.json,
       ...(values.session ? { session: values.session } : {}),
