@@ -66,6 +66,7 @@ test("runs --all reads several machine folders and tags each run with its machin
   const history = await mkdtemp(join(tmpdir(), "quench-history-"));
   await cp(join(home, ".claude"), join(history, "goliath/.claude"), { recursive: true });
   await cp(join(home, ".codex"), join(history, "sb1/.codex"), { recursive: true });
+  await cp(join(home, ".claude"), join(history, "sb1/.claude"), { recursive: true });
   const { stdout, code } = await quench(
     "runs",
     "--all",
@@ -82,10 +83,19 @@ test("runs --all reads several machine folders and tags each run with its machin
     .map((line) => JSON.parse(line));
   const top = lines.filter((r) => r.parentSession === null);
   expect(new Set(top.map((r) => `${r.machine} ${r.harness} ${r.cwd}`))).toEqual(
-    new Set(["goliath claude-code /work/demo", "sb1 codex /work/demo"]),
+    new Set([
+      "goliath claude-code /work/demo",
+      "sb1 claude-code /work/demo",
+      "sb1 codex /work/demo",
+    ]),
   );
   expect(new Set(lines.map((r) => r.id)).size).toBe(lines.length);
-  const parent = lines.find((r) => r.session === "s1" && r.prompt?.includes("health check"));
+  expect(lines.find((r) => r.machine === "sb1" && r.session === "s1")?.id).toStartWith(
+    "sb1:claude-code:s1:",
+  );
+  const parent = lines.find(
+    (r) => r.machine === "goliath" && r.session === "s1" && r.prompt?.includes("health check"),
+  );
   expect(parent).toMatchObject({ subagents: 1, open: false, parentSession: null });
   expect(lines.some((r) => r.parentSession === "s1")).toBe(true);
   expect((await quench("runs", "--all")).code).toBe(1);

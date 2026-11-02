@@ -100,7 +100,9 @@ export async function allRuns(home: Home, history: readonly string[]): Promise<n
       );
       if (records.length)
         process.stdout.write(
-          records.map((r) => JSON.stringify({ machine, ...r })).join("\n") + "\n",
+          records
+            .map((r) => JSON.stringify({ machine, ...r, id: `${machine}:${r.harness}:${r.id}` }))
+            .join("\n") + "\n",
         );
     }
   }

@@ -94,10 +94,13 @@ export function runs(
   children: readonly Session[] = [],
   options: { turns?: boolean } = {},
 ): Run[] {
-  return linkSubagents(segment(session, options.turns ?? false), children.map(startedAt));
+  return linkSubagents(
+    splitRuns(session, options.turns ?? false).filter((s) => s.inferences > 0),
+    children.map(startedAt),
+  );
 }
 
-function segment(session: Session, turns: boolean): Run[] {
+export function splitRuns(session: Session, turns: boolean): Run[] {
   const segments: Run[] = [emptyRun()];
   let run = segments[0] as Run;
   const byId = new Map<string, ToolCall>();
@@ -112,6 +115,8 @@ function segment(session: Session, turns: boolean): Run[] {
     if (turns && idle(event.at) && !(event.type === "message" && event.author === "user")) {
       run = { ...emptyRun(), startedAt: event.at };
       segments.push(run);
+      byId.clear();
+      recorded.clear();
     }
     switch (event.type) {
       case "message":
@@ -133,6 +138,10 @@ function segment(session: Session, turns: boolean): Run[] {
             startedAt: event.at,
           };
           segments.push(run);
+          if (turns) {
+            byId.clear();
+            recorded.clear();
+          }
         } else if (event.author === "assistant") {
           run.assistantSaid = event.text;
           if (event.text.trim()) run.outcome = event.text;
@@ -220,7 +229,7 @@ function segment(session: Session, turns: boolean): Run[] {
     segment.replySender = next?.promptSender ?? null;
     segment.replyCommand = next?.promptCommand ?? false;
   });
-  return segments.filter((s) => s.inferences > 0);
+  return segments;
 }
 
 export function linkSubagents<R extends Run>(

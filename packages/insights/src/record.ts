@@ -7,7 +7,7 @@ import {
   type ShellCommand,
   type Usage,
 } from "@quench/history";
-import { IDLE_MS, linkSubagents, runs, type Run } from "./run.ts";
+import { IDLE_MS, linkSubagents, splitRuns, type Run } from "./run.ts";
 
 export type RunRecord = {
   id: string;
@@ -47,7 +47,12 @@ export function runRecords(
   childStarts: readonly (Date | null)[],
   now: Date,
 ): RunRecord[] {
-  const list = linkSubagents(runs(session, [], { turns: true }), childStarts);
+  const all = splitRuns(session, true);
+  const last = all.at(-1);
+  const list = linkSubagents(
+    all.filter((s) => s.inferences > 0),
+    childStarts,
+  );
   return list.map((run, i) => ({
     id: `${session.id}:${i + 1}`,
     session: session.id,
@@ -58,7 +63,7 @@ export function runRecords(
     branch: session.branch,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
-    open: i === list.length - 1 && !closedByIdle(run, now),
+    open: run === last && !closedByIdle(run, now),
     prompt: run.prompt,
     promptOrigin: run.promptOrigin,
     steering: run.steering,

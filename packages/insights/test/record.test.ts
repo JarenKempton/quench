@@ -109,3 +109,29 @@ test("a run closes after ten idle minutes and later activity starts another run"
   expect(runRecords(session(events.slice(0, 4)), [], at(800))[0]?.open).toBe(false);
   expect(runRecords(session(events.slice(0, 4)), [], at(100))[0]?.open).toBe(true);
 });
+
+test("a prompt the agent has not answered yet closes the run before it", () => {
+  const events = [
+    say(0, "user", "build"),
+    think(1),
+    say(2, "assistant", "Built."),
+    say(30, "user", "ship it"),
+  ];
+  expect(runRecords(session(events), [], at(40)).map((r) => [r.prompt, r.open])).toEqual([
+    ["build", false],
+  ]);
+});
+
+test("a tool result after ten idle minutes leaves the closed run unchanged", () => {
+  const [call, result] = shell(2, "a", "cat later.md", true);
+  const events = [
+    say(0, "user", "build"),
+    think(1),
+    call!,
+    { ...result!, at: at(700) },
+    think(701),
+  ];
+  const [closed, late] = runRecords(session(events), [], at(800));
+  expect(closed).toMatchObject({ toolErrors: 0, failures: [] });
+  expect(late).toMatchObject({ prompt: null, toolErrors: 1 });
+});
