@@ -1,15 +1,18 @@
 import { realpath } from "node:fs/promises";
-import { basename } from "node:path";
+import { hostname } from "node:os";
+import { basename, resolve } from "node:path";
 import {
   discoverAll,
   harnessById,
   isInside,
   readSessions,
+  startedAt,
   startingContext,
-  type Home,
+  Home,
   type Session,
+  type SessionRef,
 } from "@quench/history";
-import { runs as runsOf } from "@quench/insights";
+import { runRecords, runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
 import { latestSessionIn } from "../latest.ts";
 
@@ -67,4 +70,40 @@ async function sessionFile(home: Home, id: string): Promise<string | null> {
     if (outcome.ok && outcome.session.id === id) return outcome.session.path;
   process.stderr.write(`No session with id ${id} in any harness home\n`);
   return null;
+}
+
+export async function allRuns(home: Home, history: readonly string[]): Promise<number> {
+  const machines = history.length
+    ? history.map((dir) => ({ machine: basename(resolve(dir)), home: new Home(resolve(dir)) }))
+    : [{ machine: hostname(), home }];
+  const now = new Date();
+  let failed = 0;
+  for (const { machine, home } of machines) {
+    const refs = await discoverAll(home);
+    const children = refs.filter((r) => r.parent !== null);
+    const childStarts = new Map<string, (Date | null)[]>();
+    const ordered: SessionRef[] = [...children, ...refs.filter((r) => r.parent === null)];
+    for await (const outcome of readSessions(ordered)) {
+      if (!outcome.ok) {
+        failed++;
+        continue;
+      }
+      const session = outcome.session;
+      if (session.parent !== null) {
+        const key = `${session.harness}:${session.parent}`;
+        childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(session)]);
+      }
+      const records = runRecords(
+        session,
+        childStarts.get(`${session.harness}:${session.id}`) ?? [],
+        now,
+      );
+      if (records.length)
+        process.stdout.write(
+          records.map((r) => JSON.stringify({ machine, ...r })).join("\n") + "\n",
+        );
+    }
+  }
+  if (failed) process.stderr.write(`${failed} session files could not be read\n`);
+  return 0;
 }

@@ -53,8 +53,10 @@ const Line = z.looseObject({
   uuid: z.string().nullish(),
   /** ISO 8601 time the line was written. */
   timestamp: z.string().nullish(),
-  /** Working directory the session ran in. */
+  /** Working directory when the line was written; follows `cd` in the shell. */
   cwd: z.string().nullish(),
+  /** Git branch checked out in the working directory, when it is a repository; `HEAD` when detached. */
+  gitBranch: z.string().nullish(),
   /** True when Claude Code injected the user line itself (reminders, command output), not the person. */
   isMeta: z.boolean().nullish(),
   /** True on the user line that carries the summary written after a compaction. */
@@ -298,8 +300,10 @@ export const claudeCode: Harness<"claude-code"> = {
     const inferenceAt = new Map<string, number>();
     const attachments = new Set<string>();
     let cwd: string | null = null;
+    let branch: string | null = null;
     for await (const line of jsonlLines(r.path, Line, diagnostics)) {
       cwd ??= line.cwd ?? null;
+      branch ??= line.gitBranch && line.gitBranch !== "HEAD" ? line.gitBranch : null;
       if (line.type === "attachment" && line.uuid) {
         if (attachments.has(line.uuid)) continue;
         attachments.add(line.uuid);
@@ -321,6 +325,7 @@ export const claudeCode: Harness<"claude-code"> = {
       harness: "claude-code",
       path: r.path,
       cwd,
+      branch,
       parent: r.parent,
       events,
       diagnostics,
@@ -475,7 +480,9 @@ function assistant(line: Line): EventKind[] {
         type: "tool_call",
         id: block.id ?? null,
         name: block.name ?? "",
-        ...(shell?.success ? { shell: [{ command: shell.data.command, workdir: null }] } : {}),
+        ...(shell?.success
+          ? { shell: [{ command: shell.data.command, workdir: line.cwd ?? null }] }
+          : {}),
         ...(input?.success
           ? {
               fileRead: {

@@ -42,6 +42,7 @@ const reply = (text: string, extra: Partial<Reply> = {}, body: Event[] = []): Re
     harness: "codex",
     path: "/unused",
     cwd: null,
+    branch: null,
     parent: null,
     diagnostics: { lines: 0, unparsed: 0 },
     events: [

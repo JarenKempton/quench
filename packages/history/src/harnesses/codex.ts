@@ -40,6 +40,8 @@ const Line = z.looseObject({
       id: z.string().nullish(),
       /** Working directory, on `session_meta` and `turn_context`. */
       cwd: z.string().nullish(),
+      /** Repository state when the session started, on `session_meta`. */
+      git: z.looseObject({ branch: z.string().nullish() }).nullish(),
       /** Model for the turns that follow, on `turn_context`. */
       model: z.string().nullish(),
       /** Reasoning effort for the turns that follow, on `turn_context`. */
@@ -196,6 +198,7 @@ export const codex: Harness<"codex"> = {
       harness: "codex",
       path: r.path,
       cwd: meta.cwd ?? null,
+      branch: meta.git?.branch ?? null,
       parent: null,
       events: hasRecords ? events.filter((e) => !fallbackUsage.has(e)) : events,
       diagnostics,

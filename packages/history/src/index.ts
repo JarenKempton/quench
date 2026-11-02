@@ -7,6 +7,7 @@ export { discoverAll, readSessions, type Progress, type ReadOutcome } from "./re
 export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
+export { shellReads } from "./shell.ts";
 export type { SkillListing, SkillLoad } from "./skill-loads.ts";
 export {
   compareWithDisk,

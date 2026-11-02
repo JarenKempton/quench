@@ -159,6 +159,7 @@ export const pi: Harness<"pi"> = {
       harness: "pi",
       path: r.path,
       cwd: header.cwd ?? null,
+      branch: null,
       parent: null,
       events,
       diagnostics,

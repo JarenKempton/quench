@@ -35,6 +35,7 @@ const run = (body: Event[], end = 5, tokens = 1_000) => {
     harness: "claude-code",
     path: "/dev/null",
     cwd: null,
+    branch: null,
     parent: null,
     diagnostics: { lines: 0, unparsed: 0 },
     events: [

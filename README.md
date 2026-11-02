@@ -71,6 +71,7 @@ history.
 | `quench worktrees [--days 30] [--json]`        | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
 | `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here     |
+| `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`         |
 | `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]`       | Current instruction-file inventory and source rule candidates; offline                |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
