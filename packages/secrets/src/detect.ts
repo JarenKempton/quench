@@ -1,6 +1,7 @@
+import { issuerOf } from "./issuer.ts";
 import { globalAllow, rules, type Allow } from "./rules.ts";
 
-export type Detection = { rule: string; provider: string; value: string };
+export type Detection = { rule: string; provider: string; value: string; issuer: string | null };
 
 const MIN_ENTROPY = 3;
 
@@ -33,29 +34,40 @@ const SECRET_NAME =
 
 const REFERENCE = /^(?:\$|<|%|op:|https?:|env:|true$|false$|null$|none$)/i;
 
-export function detect(text: string): Detection[] {
+export function detect(text: string, path?: string): Detection[] {
   const present = keywordsIn(text);
   const found = new Map<string, Detection>();
+  const file = path?.replaceAll("\\", "/");
   for (const rule of ordered) {
+    if (rule.path && !(file && rule.path.test(file))) continue;
     if (rule.keywords.length && !rule.keywords.some((word) => present.has(word))) continue;
     for (const match of text.matchAll(rule.regex)) {
       const value = secretOf(match, rule.secretGroup);
       if (!value || found.has(value) || overlaps(found, value)) continue;
       if (entropy(value) < (rule.entropy ?? MIN_ENTROPY)) continue;
-      const parts = { secret: value, match: matchOf(text, match), line: lineAt(text, match.index) };
+      const parts = {
+        secret: value,
+        match: matchOf(text, match),
+        line: lineAt(text, match.index, match.index),
+      };
       if ([globalAllow, ...rule.allow].some((allow) => allowed(allow, parts))) continue;
-      found.set(value, { rule: rule.id, provider: providerOf(rule.id), value });
+      found.set(value, {
+        rule: rule.id,
+        provider: providerOf(rule.id),
+        value,
+        issuer: issuerOf(rule.id, value, lineAt(text, match.index, match.index + match[0].length)),
+      });
     }
   }
   return [...found.values()];
 }
 
-export function detectInFile(text: string): Detection[] {
-  const found = detect(text);
+export function detectInFile(text: string, path?: string): Detection[] {
+  const found = detect(text, path);
   for (const [, , value] of text.matchAll(SECRET_NAME)) {
     if (!value || REFERENCE.test(value) || entropy(value) < MIN_ENTROPY) continue;
     if (found.some((d) => d.value.includes(value) || value.includes(d.value))) continue;
-    found.push({ rule: "secret-named-value", provider: "plaintext", value });
+    found.push({ rule: "secret-named-value", provider: "plaintext", value, issuer: null });
   }
   return found;
 }
@@ -83,9 +95,9 @@ function matchOf(text: string, match: RegExpExecArray): string {
   return text.slice(start, match.index) + match[0];
 }
 
-function lineAt(text: string, index: number): string {
-  const start = text.lastIndexOf("\n", index) + 1;
-  const end = text.indexOf("\n", index);
+function lineAt(text: string, from: number, to: number): string {
+  const start = text.lastIndexOf("\n", from) + 1;
+  const end = text.indexOf("\n", to);
   return text.slice(start, end === -1 ? undefined : end);
 }
 

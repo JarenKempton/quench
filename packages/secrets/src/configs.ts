@@ -38,9 +38,8 @@ export async function scanConfigs(home: Home, projects: readonly string[], mask:
       }
       const text = await textOf(config.path);
       if (text === null) continue;
-      const secrets = (config.kind === "prompts" ? detect(text) : detectInFile(text)).map((found) =>
-        secretOf(found, mask),
-      );
+      const scan = config.kind === "prompts" ? detect : detectInFile;
+      const secrets = scan(text, config.path).map((found) => secretOf(found, mask, config.path));
       if (!secrets.length) continue;
       files.push({
         path: config.path,

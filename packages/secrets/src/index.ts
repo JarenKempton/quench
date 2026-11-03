@@ -5,14 +5,17 @@ import { wormFootprints } from "./footprints.ts";
 import { credentialFiles } from "./harvest.ts";
 import { scanHistory } from "./history.ts";
 import { scanInstructions } from "./instructions.ts";
+import { locations } from "./locations.ts";
 import { machineKey, masker } from "./mask.ts";
 
 export { detect, detectInFile, entropy, type Detection } from "./detect.ts";
+export { printable } from "./issuer.ts";
 export { machineKey, masker, type Masker } from "./mask.ts";
 export { sshKeyEncrypted, toolConfigFiles, type CredentialFile } from "./harvest.ts";
 export type { FileSecrets } from "./configs.ts";
 export type { Footprint } from "./footprints.ts";
 export type { Exposure, HistorySecret } from "./history.ts";
+export type { Location } from "./locations.ts";
 export type { Secret } from "./secret.ts";
 
 export async function secretsReport(
@@ -45,6 +48,13 @@ export async function secretsReport(
     instructions: { scanned: instructions.scanned, files: instructions.files },
     credentialFiles: files,
     footprints,
+    locations: locations({
+      history: history.secrets,
+      sessionsOf: history.sessionsOf,
+      files: [...configs.files, ...instructions.files, ...files],
+      env: process.env,
+      mask,
+    }),
     warnings: [...configs.warnings, ...instructions.warnings],
     limitations: [
       "Everything runs on this machine. No secret, excerpt or finding is sent to Jev, a model or the network.",
@@ -52,7 +62,8 @@ export async function secretsReport(
       "Lower confidence means the generic gitleaks rule or a secret-named value: often real, but also code and test values. They are not counted in the headline or rotate list.",
       "Detection uses the gitleaks ruleset plus an entropy check, so unusual formats can be missed and test values can be reported.",
       "Known projects are the git repositories your sessions ran in; .env files and worm footprints are checked at their top level only.",
-      `New install scripts are dependency preinstall, install or postinstall scripts whose package was written in the last ${options.days} days.`,
+      `New install scripts are dependency preinstall, install or postinstall scripts whose package was written in the last ${options.days} days. Known-benign scripts, matched by package name and script hash, are skipped.`,
+      "Locations group each value by its tag across files, environment variable names and sessions; lower confidence values seen only in sessions are left out.",
       "Agent read means a session recorded reading that exact path; printed means a value from the file appears in session history.",
       "Nothing is changed or redacted.",
     ],

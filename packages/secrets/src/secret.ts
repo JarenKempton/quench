@@ -3,27 +3,34 @@ import type { Masker } from "./mask.ts";
 import { rotateAt } from "./rotate.ts";
 
 export type Secret = {
+  id: string;
   tag: string;
   masked: string;
   rule: string;
   provider: string;
   confidence: "high" | "low";
+  issuer: string | null;
   rotate: string | null;
 };
 
 const LOW_CONFIDENCE = new Set(["generic-api-key", "secret-named-value"]);
 
-export const secretOf = (found: Detection, mask: Masker): Secret => {
+export const secretOf = (found: Detection, mask: Masker, where: string): Secret => {
   const low = LOW_CONFIDENCE.has(found.rule);
   return {
+    id: findingId(mask, where, found.value),
     tag: mask.tag(found.value),
     masked: mask.masked(found.value),
     rule: found.rule,
     provider: found.provider,
     confidence: low ? "low" : "high",
+    issuer: found.issuer,
     rotate: low ? null : rotateAt(found.provider),
   };
 };
+
+export const findingId = (mask: Masker, ...parts: string[]) =>
+  mask.id(parts.join("\0")).slice(0, 16);
 
 export async function textOf(path: string): Promise<string | null> {
   const file = Bun.file(path);

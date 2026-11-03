@@ -115,3 +115,41 @@ test("recognises unencrypted and encrypted OpenSSH keys", () => {
   expect(sshKeyEncrypted(key("aes256-ctr"))).toBe(true);
   expect(sshKeyEncrypted("-----BEGIN ENCRYPTED PRIVATE KEY-----\n")).toBe(true);
 });
+
+test("rules with a gitleaks path filter only match files on that path", () => {
+  const text = 'admin_password = "fakequenchpw42"\n';
+  const rule = (path?: string) => detect(text, path).map((d) => d.rule);
+  expect(rule()).not.toContain("hashicorp-tf-password");
+  expect(rule("/repo/notes.md")).not.toContain("hashicorp-tf-password");
+  expect(rule("/repo/main.tf")).toContain("hashicorp-tf-password");
+  expect(rule("C:\\repo\\vars.HCL")).toContain("hashicorp-tf-password");
+});
+
+const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+
+test("a jwt names its issuer and an http-auth header names its host", () => {
+  const jwt = [
+    base64url({ alg: "HS256", typ: "JWT" }),
+    base64url({ iss: "https://auth.example.test", sub: "fake-quench-user" }),
+    "FakeQuenchSignature0123456789",
+  ].join(".");
+  expect(detect(`token: ${jwt}\n`).map((d) => [d.rule, d.issuer])).toEqual([
+    ["jwt", "https://auth.example.test"],
+  ]);
+  const curl =
+    'curl -H "Authorization: Bearer FakeQuenchBearer0123456789" https://API.example.test/v1';
+  expect(detect(curl).map((d) => [d.provider, d.issuer])).toEqual([
+    ["http-auth", "api.example.test"],
+  ]);
+});
+
+test("a jwt issuer loses control characters", () => {
+  const jwt = [
+    base64url({ alg: "HS256", typ: "JWT" }),
+    base64url({ iss: "\u001b[2Jhttps://auth.example.test\r\nFAKE", sub: "fake-quench-user" }),
+    "FakeQuenchSignature0123456789",
+  ].join(".");
+  expect(detect(`token: ${jwt}\n`).map((d) => d.issuer)).toEqual([
+    "[2Jhttps://auth.example.testFAKE",
+  ]);
+});
