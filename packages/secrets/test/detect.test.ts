@@ -55,6 +55,12 @@ test("scrubbed commands mask short passwords", () => {
     ["sshpass -p 'Fake#Pw42x' ssh deploy@host", "Fake#Pw42x"],
     ["mysql -pFakePw_2026 -u root", "FakePw_2026"],
     ["PGPASSWORD=FakePg_77 psql", "FakePg_77"],
+    ['mysql -p "Spaced Secret99" -u root', "Spaced Secret99"],
+    ["mysqldump --password 'Long Pass Phrase 1' db", "Long Pass Phrase 1"],
+    ["psql postgresql://u:PgUrlPw9@h/db", "PgUrlPw9"],
+    ["redis-cli -h cache -a RedisPw_31 ping", "RedisPw_31"],
+    ["htpasswd -b .htpasswd admin HtPw_4411", "HtPw_4411"],
+    ["htpasswd -nb admin HtPwN_552", "HtPwN_552"],
   ]) {
     const shown = mask.scrubbed(command!);
     expect(shown).not.toContain(password!);

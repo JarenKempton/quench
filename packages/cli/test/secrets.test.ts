@@ -15,7 +15,23 @@ const FAKE = {
   pypi: "Quench-fake-pass-42",
 };
 
-const PROBES = [FAKE.sshpass, FAKE.mysql];
+const SPACED = [
+  'mysql -p "Spaced Secret99" -e "select 1"',
+  "mysqldump --password 'Long Pass Phrase 1' db",
+  "psql postgresql://u:PgUrlPw9@h/db",
+  "redis-cli -h cache -a RedisPw_31 ping",
+  "htpasswd -b .htpasswd admin HtPw_4411",
+];
+
+const PROBES = [
+  FAKE.sshpass,
+  FAKE.mysql,
+  "Spaced Secret99",
+  "Long Pass Phrase 1",
+  "PgUrlPw9",
+  "RedisPw_31",
+  "HtPw_4411",
+];
 
 const line = (value: unknown) => JSON.stringify(value);
 
@@ -85,6 +101,12 @@ async function fakeHome() {
               name: "Bash",
               input: { command: `mysql -p${FAKE.mysql} -e "select 1"` },
             },
+            ...SPACED.map((command, i) => ({
+              type: "tool_use",
+              id: `p${i}`,
+              name: "Bash",
+              input: { command },
+            })),
           ],
           usage: { input_tokens: 1, output_tokens: 1 },
         },
@@ -102,6 +124,11 @@ async function fakeHome() {
             },
             { type: "tool_result", tool_use_id: "t2", content: `password = ${FAKE.pypi}` },
             { type: "tool_result", tool_use_id: "t3", content: "1" },
+            ...SPACED.map((_, i) => ({
+              type: "tool_result",
+              tool_use_id: `p${i}`,
+              content: `password = QuenchFakePass${i}_x9Zq`,
+            })),
           ],
         },
       }),
@@ -150,12 +177,25 @@ test("secrets reports history, configs, permissions, files and footprints withou
     ["npm", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
   ]);
   expect(report.history.secrets[0].rotate).toBe("https://github.com/settings/tokens");
+  const shown = report.history.lowConfidence.map(
+    (s: { exposures: { by: string }[] }) => s.exposures[0]!.by,
+  );
+  for (const command of [
+    'mysql -p "Spac…',
+    "--password 'Long…",
+    "u:PgUr…",
+    "-a Redi…",
+    "admin HtPw…",
+  ])
+    expect(shown.some((by: string) => by.includes(command))).toBe(true);
   expect(
-    report.history.lowConfidence.map((s: Record<string, unknown>) => [
-      s.rule,
-      s.rotate,
-      (s.exposures as { by: string }[])[0]!.by,
-    ]),
+    report.history.lowConfidence
+      .filter((s: { exposures: { by: string }[] }) => s.exposures[0]!.by.includes("sshpass"))
+      .map((s: Record<string, unknown>) => [
+        s.rule,
+        s.rotate,
+        (s.exposures as { by: string }[])[0]!.by,
+      ]),
   ).toEqual([
     ["secret-named-value", null, expect.stringMatching(/^Bash: sshpass -p 'Fake…[0-9a-f]{8}' ssh/)],
   ]);
