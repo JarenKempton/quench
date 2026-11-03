@@ -40,7 +40,9 @@ export function locations({ history, sessionsOf, files, env, mask }: Sources): L
     byTag.set(secret.tag, known);
     return known;
   };
-  for (const file of files) for (const secret of file.secrets) add(at(secret).files, file.path);
+  for (const file of files)
+    for (const secret of "values" in file ? file.values : file.secrets)
+      add(at(secret).files, file.path);
   for (const [name, value] of Object.entries(env))
     if (value)
       for (const found of detectInFile(`${name}=${value}`))

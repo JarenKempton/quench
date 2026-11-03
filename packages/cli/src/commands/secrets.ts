@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { Home } from "@quench/history";
 import {
+  printable,
   secretsReport,
   type CredentialFile,
   type FileSecrets,
@@ -71,7 +72,7 @@ function render(report: SecretsReport, homeDir: string): string[] {
       ...history.secrets,
       ...report.configs.flatMap((f) => f.secrets),
       ...report.instructions.files.flatMap((f) => f.secrets),
-      ...report.credentialFiles.flatMap((f) => f.secrets),
+      ...report.credentialFiles.flatMap((f) => f.values),
     ]),
   );
   lines.push("", ...report.limitations);
@@ -84,7 +85,7 @@ function rotation(found: Secret[]): string[] {
   for (const s of found.filter((s) => s.confidence === "high"))
     rows.set(`${s.provider}\n${s.issuer ?? ""}`, [
       s.provider,
-      s.issuer ?? "",
+      printable(s.issuer ?? "") ?? "",
       s.rotate ?? "no rotate link known, rotate it where it was issued",
     ]);
   if (!rows.size) return [];

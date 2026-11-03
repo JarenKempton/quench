@@ -142,3 +142,14 @@ test("a jwt names its issuer and an http-auth header names its host", () => {
     ["http-auth", "api.example.test"],
   ]);
 });
+
+test("a jwt issuer loses control characters", () => {
+  const jwt = [
+    base64url({ alg: "HS256", typ: "JWT" }),
+    base64url({ iss: "\u001b[2Jhttps://auth.example.test\r\nFAKE", sub: "fake-quench-user" }),
+    "FakeQuenchSignature0123456789",
+  ].join(".");
+  expect(detect(`token: ${jwt}\n`).map((d) => d.issuer)).toEqual([
+    "[2Jhttps://auth.example.testFAKE",
+  ]);
+});

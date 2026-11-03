@@ -1,13 +1,15 @@
-import { createHash } from "node:crypto";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { pathParts, type Home } from "@quench/history";
+import { knownInstall } from "./known-install.ts";
 import type { Masker } from "./mask.ts";
 import { findingId, textOf, tracked } from "./secret.ts";
 
 export type Footprint = {
   id: string;
+  kind: "workflow" | "install-payload" | "new-install-script" | "harvest-list" | "shutdown-line";
+  script: string | null;
   path: string;
   project: string | null;
   reason: string;
@@ -29,15 +31,6 @@ const INSTALL_MARKERS: [RegExp, string][] = [
 
 const INSTALL_SCRIPTS = ["preinstall", "install", "postinstall"];
 
-const KNOWN_INSTALL = new Set([
-  "esbuild postinstall 912d4d8f507b7b392ae422a459f98da94669a742e4cc43cfe061e630ee2846fe",
-]);
-
-const installHash = (command: string) => createHash("sha256").update(command).digest("hex");
-
-const knownInstall = (name: unknown, script: string, command: string) =>
-  KNOWN_INSTALL.has(`${String(name)} ${script} ${installHash(command)}`);
-
 type Found = Omit<Footprint, "id">;
 
 export async function wormFootprints(
@@ -57,14 +50,30 @@ export async function wormFootprints(
   for (const name of ["inventory.txt", "inventory.txt.bak"]) {
     const path = join(tmpdir(), name);
     if ((await textOf(path)) !== null)
-      found.push({ path, project: null, reason: "s1ngularity harvest list", tracked: null });
+      found.push({
+        kind: "harvest-list",
+        script: null,
+        path,
+        project: null,
+        reason: "s1ngularity harvest list",
+        tracked: null,
+      });
   }
   for (const name of [".bashrc", ".zshrc"]) {
     const path = join(home.dir, name);
     if (/shutdown -h 0/.test((await textOf(path)) ?? ""))
-      found.push({ path, project: null, reason: "s1ngularity shutdown line", tracked: null });
+      found.push({
+        kind: "shutdown-line",
+        script: null,
+        path,
+        project: null,
+        reason: "s1ngularity shutdown line",
+        tracked: null,
+      });
   }
-  return found.map((f): Footprint => ({ id: findingId(mask, f.path, f.reason), ...f }));
+  return found.map(
+    (f): Footprint => ({ id: findingId(mask, f.path, f.kind, f.script ?? f.reason), ...f }),
+  );
 }
 
 async function workflows(project: string): Promise<Found[]> {
@@ -77,6 +86,8 @@ async function workflows(project: string): Promise<Found[]> {
     for (const [marker, reason] of WORKFLOW_MARKERS)
       if (marker.test(text))
         found.push({
+          kind: "workflow",
+          script: null,
           path,
           project,
           reason,
@@ -102,6 +113,7 @@ async function installScripts(
   const found: Found[] = [];
   for (const dir of packages) {
     if (!pathParts(await realpath(dir).catch(() => dir)).includes("node_modules")) continue;
+    const name = relative(modules, dir).split(sep).join("/");
     const path = join(dir, "package.json");
     const manifest = parse(await textOf(path));
     const written = (await stat(path).catch(() => null))?.ctimeMs ?? 0;
@@ -109,9 +121,19 @@ async function installScripts(
       const command = manifest?.scripts?.[script];
       if (typeof command !== "string") continue;
       const payload = INSTALL_MARKERS.find(([marker]) => marker.test(command));
-      if (payload) found.push({ path, project, reason: `${script} ${payload[1]}`, tracked: null });
-      else if (written >= recent.since && !knownInstall(manifest?.name, script, command))
+      if (payload)
         found.push({
+          kind: "install-payload",
+          script,
+          path,
+          project,
+          reason: `${script} ${payload[1]}`,
+          tracked: null,
+        });
+      else if (written >= recent.since && !(await knownInstall(name, dir, script, command)))
+        found.push({
+          kind: "new-install-script",
+          script,
           path,
           project,
           reason: `${script} added in the last ${recent.days} days: ${recent.mask.scrubbed(command, 60)}`,
@@ -122,7 +144,7 @@ async function installScripts(
   return found;
 }
 
-type Manifest = { name?: unknown; scripts?: Record<string, unknown> };
+type Manifest = { scripts?: Record<string, unknown> };
 
 function parse(text: string | null): Manifest | null {
   try {

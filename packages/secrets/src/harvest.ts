@@ -14,7 +14,8 @@ export type CredentialFile = {
   mode: string | null;
   othersCanRead: boolean | null;
   tracked: boolean | null;
-  secrets: Secret[];
+  secrets: number;
+  values: Secret[];
   readInSessions: number;
   printedInSessions: boolean;
 };
@@ -88,7 +89,8 @@ async function inspect(path: string, label: string, seen: Seen): Promise<Credent
     plaintext: text === null ? null : found.length > 0,
     ...modeOf(info?.mode),
     tracked: label === ".env" && found.length ? await tracked(basename(path), dirname(path)) : null,
-    secrets: found.map((d) => secretOf(d, seen.mask, path)),
+    secrets: found.length,
+    values: found.map((d) => secretOf(d, seen.mask, path)),
     readInSessions: seen.reads.get(path)?.size ?? 0,
     printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
   };
@@ -111,7 +113,8 @@ async function sshKeys(dir: string, seen: Seen): Promise<CredentialFile[]> {
       plaintext: sshKeyEncrypted(text) === false,
       ...modeOf(info.mode),
       tracked: null,
-      secrets: found.map((d) => secretOf(d, seen.mask, path)),
+      secrets: found.length,
+      values: found.map((d) => secretOf(d, seen.mask, path)),
       readInSessions: seen.reads.get(path)?.size ?? 0,
       printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
     });

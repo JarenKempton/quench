@@ -7,12 +7,15 @@ export function issuerOf(rule: string, value: string, context: string): string |
   return null;
 }
 
+export const printable = (text: string): string | null =>
+  text.replace(/[\p{Cc}\p{Cf}]/gu, "").slice(0, 200) || null;
+
 function claim(token: string): string | null {
   const payload = token.split(".")[1];
   if (!payload) return null;
   try {
     const { iss } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { iss?: unknown };
-    return typeof iss === "string" && iss ? iss.slice(0, 200) : null;
+    return typeof iss === "string" ? printable(iss) : null;
   } catch {
     return null;
   }
