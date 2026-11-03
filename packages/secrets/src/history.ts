@@ -49,7 +49,7 @@ export async function scanHistory(
   let unreadable = 0;
   const record = (found: Detection, exposure: Exposure) => {
     const id = mask.id(found.value);
-    const secret = secretOf(found, mask);
+    const secret = secretOf(found, mask, "history");
     const known = secrets.get(id) ?? {
       ...secret,
       sessions: 0,
@@ -110,6 +110,7 @@ export async function scanHistory(
         });
     }
   const printed = new Set(secrets.keys());
+  const sessionsOf = new Map([...secrets.values()].map((s) => [s.tag, [...s.seenIn].sort()]));
   const listed = [...secrets.values()].map(({ seenIn, ...secret }) => ({
     ...secret,
     sessions: seenIn.size,
@@ -122,6 +123,7 @@ export async function scanHistory(
     unreadable,
     hostMessages,
     printed,
+    sessionsOf,
     secrets: listed.sort((a, b) => b.sessions - a.sessions || a.provider.localeCompare(b.provider)),
     reads,
     cwds,

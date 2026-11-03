@@ -305,8 +305,11 @@ quench secrets
 Finds credentials in the session history of Claude Code, Codex and Pi and in T3's local messages,
 in harness and MCP configs, and in skills and instruction files. Each secret shows its provider,
 the first 4 characters and a hash of its value, the sessions it appears in, the command or message
-that exposed it, when it was first and last seen, and where to rotate it. `.mcp.json` files with
-plaintext tokens are flagged when git tracks them. Risky permissions are bypass or full-access
+that exposed it, when it was first and last seen, and where to rotate it; a JWT names its `iss`
+issuer and an HTTP auth header its host, and a secret with no known rotate link says so.
+`.mcp.json` and `.env*` files with plaintext tokens are flagged when git tracks them. In `--json`
+every finding has an id that stays the same across runs on this machine, and `locations` groups
+each value by its tag across files, environment variable names and sessions. Risky permissions are bypass or full-access
 defaults, wildcard shell allowlists and auto-approved MCP servers.
 
 It also checks the files worms harvest (`~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.netrc`,
@@ -314,7 +317,11 @@ GitHub CLI, AWS, gcloud, Azure, kube and Docker credentials, unencrypted SSH key
 agent logins and `.env*` files in your projects): present or absent, plaintext or not, file mode,
 and whether a session read the file or printed one of its values. In the git repositories your
 sessions used, it flags workflows that dump or send secrets and dependency install scripts that
-run known worm payloads (Shai-Hulud, Nx s1ngularity).
+run known worm payloads (Shai-Hulud, Nx s1ngularity) or are new, skipping known-benign scripts
+matched by package name and script hash (esbuild's `postinstall`).
+
+Rules that gitleaks limits to a file path, such as `hashicorp-tf-password` for `.tf` and `.hcl`,
+only run on files with that path, never on session text.
 
 Detection uses the [gitleaks](https://github.com/gitleaks/gitleaks) ruleset (MIT, vendored in
 `packages/secrets/vendor`) plus an entropy check. Everything runs locally: no secret, excerpt or

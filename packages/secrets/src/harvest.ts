@@ -1,18 +1,20 @@
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { ConfigFile, Home } from "@quench/history";
 import { detectInFile } from "./detect.ts";
 import type { Masker } from "./mask.ts";
-import { textOf } from "./secret.ts";
+import { findingId, secretOf, textOf, tracked, type Secret } from "./secret.ts";
 
 export type CredentialFile = {
+  id: string;
   path: string;
   label: string;
   present: boolean;
   plaintext: boolean | null;
   mode: string | null;
   othersCanRead: boolean | null;
-  secrets: number;
+  tracked: boolean | null;
+  secrets: Secret[];
   readInSessions: number;
   printedInSessions: boolean;
 };
@@ -77,14 +79,16 @@ export async function credentialFiles(
 async function inspect(path: string, label: string, seen: Seen): Promise<CredentialFile> {
   const info = await stat(path).catch(() => null);
   const text = info?.isFile() ? await textOf(path) : null;
-  const found = text === null ? [] : detectInFile(text);
+  const found = text === null ? [] : detectInFile(text, path);
   return {
+    id: findingId(seen.mask, path),
     path,
     label,
     present: info !== null,
     plaintext: text === null ? null : found.length > 0,
     ...modeOf(info?.mode),
-    secrets: found.length,
+    tracked: label === ".env" && found.length ? await tracked(basename(path), dirname(path)) : null,
+    secrets: found.map((d) => secretOf(d, seen.mask, path)),
     readInSessions: seen.reads.get(path)?.size ?? 0,
     printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
   };
@@ -98,14 +102,16 @@ async function sshKeys(dir: string, seen: Seen): Promise<CredentialFile[]> {
     if (info.size > 65_536) continue;
     const text = await textOf(path);
     if (!text?.includes("PRIVATE KEY-----")) continue;
-    const found = detectInFile(text);
+    const found = detectInFile(text, path);
     keys.push({
+      id: findingId(seen.mask, path),
       path,
       label: "SSH key",
       present: true,
       plaintext: sshKeyEncrypted(text) === false,
       ...modeOf(info.mode),
-      secrets: found.length,
+      tracked: null,
+      secrets: found.map((d) => secretOf(d, seen.mask, path)),
       readInSessions: seen.reads.get(path)?.size ?? 0,
       printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
     });

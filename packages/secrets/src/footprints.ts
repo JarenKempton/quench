@@ -1,11 +1,13 @@
+import { createHash } from "node:crypto";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { pathParts, type Home } from "@quench/history";
 import type { Masker } from "./mask.ts";
-import { textOf, tracked } from "./secret.ts";
+import { findingId, textOf, tracked } from "./secret.ts";
 
 export type Footprint = {
+  id: string;
   path: string;
   project: string | null;
   reason: string;
@@ -27,6 +29,17 @@ const INSTALL_MARKERS: [RegExp, string][] = [
 
 const INSTALL_SCRIPTS = ["preinstall", "install", "postinstall"];
 
+const KNOWN_INSTALL = new Set([
+  "esbuild postinstall 912d4d8f507b7b392ae422a459f98da94669a742e4cc43cfe061e630ee2846fe",
+]);
+
+const installHash = (command: string) => createHash("sha256").update(command).digest("hex");
+
+const knownInstall = (name: unknown, script: string, command: string) =>
+  KNOWN_INSTALL.has(`${String(name)} ${script} ${installHash(command)}`);
+
+type Found = Omit<Footprint, "id">;
+
 export async function wormFootprints(
   home: Home,
   projects: readonly string[],
@@ -34,7 +47,7 @@ export async function wormFootprints(
   days: number,
 ) {
   const since = Date.now() - days * 86_400_000;
-  const found: Footprint[] = [];
+  const found: Found[] = [];
   for (const project of projects) {
     found.push(
       ...(await workflows(project)),
@@ -51,12 +64,12 @@ export async function wormFootprints(
     if (/shutdown -h 0/.test((await textOf(path)) ?? ""))
       found.push({ path, project: null, reason: "s1ngularity shutdown line", tracked: null });
   }
-  return found;
+  return found.map((f): Footprint => ({ id: findingId(mask, f.path, f.reason), ...f }));
 }
 
-async function workflows(project: string): Promise<Footprint[]> {
+async function workflows(project: string): Promise<Found[]> {
   const dir = join(project, ".github/workflows");
-  const found: Footprint[] = [];
+  const found: Found[] = [];
   for (const name of await names(dir)) {
     if (!/\.ya?ml$/.test(name)) continue;
     const path = join(dir, name);
@@ -76,7 +89,7 @@ async function workflows(project: string): Promise<Footprint[]> {
 async function installScripts(
   project: string,
   recent: { mask: Masker; since: number; days: number },
-): Promise<Footprint[]> {
+): Promise<Found[]> {
   const modules = join(project, "node_modules");
   const packages: string[] = [];
   for (const name of await names(modules)) {
@@ -86,7 +99,7 @@ async function installScripts(
         packages.push(join(modules, name, scoped));
     else packages.push(join(modules, name));
   }
-  const found: Footprint[] = [];
+  const found: Found[] = [];
   for (const dir of packages) {
     if (!pathParts(await realpath(dir).catch(() => dir)).includes("node_modules")) continue;
     const path = join(dir, "package.json");
@@ -97,7 +110,7 @@ async function installScripts(
       if (typeof command !== "string") continue;
       const payload = INSTALL_MARKERS.find(([marker]) => marker.test(command));
       if (payload) found.push({ path, project, reason: `${script} ${payload[1]}`, tracked: null });
-      else if (written >= recent.since)
+      else if (written >= recent.since && !knownInstall(manifest?.name, script, command))
         found.push({
           path,
           project,
@@ -109,9 +122,11 @@ async function installScripts(
   return found;
 }
 
-function parse(text: string | null): { scripts?: Record<string, unknown> } | null {
+type Manifest = { name?: unknown; scripts?: Record<string, unknown> };
+
+function parse(text: string | null): Manifest | null {
   try {
-    return text ? (JSON.parse(text) as { scripts?: Record<string, unknown> }) : null;
+    return text ? (JSON.parse(text) as Manifest) : null;
   } catch {
     return null;
   }

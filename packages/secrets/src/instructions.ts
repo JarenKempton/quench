@@ -20,7 +20,7 @@ export async function scanInstructions(home: Home, projects: readonly string[], 
   const files: FileSecrets[] = [];
   for (const [path, kind] of candidates) {
     const text = await textOf(path);
-    const secrets = text ? detect(text).map((found) => secretOf(found, mask)) : [];
+    const secrets = text ? detect(text, path).map((found) => secretOf(found, mask, path)) : [];
     if (secrets.length)
       files.push({ path, harness: null, kind, scope: null, tracked: null, secrets });
   }

@@ -30,6 +30,7 @@ const ROTATE: Record<string, string> = {
   sentry: "https://sentry.io/settings/account/api/auth-tokens/",
   shopify: "https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens",
   slack: "https://api.slack.com/apps",
+  sourcegraph: "https://sourcegraph.com/user/settings/tokens",
   stripe: "https://dashboard.stripe.com/apikeys",
   telegram: "https://core.telegram.org/bots/features#botfather",
   twilio: "https://console.twilio.com/us1/account/keys-credentials/api-keys",

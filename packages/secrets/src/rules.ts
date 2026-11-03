@@ -11,6 +11,7 @@ type Allowlist = {
 type GitleaksRule = {
   id: string;
   regex?: string;
+  path?: string;
   secretGroup?: number;
   entropy?: number;
   keywords?: string[];
@@ -26,6 +27,7 @@ export type Allow = {
 export type Rule = {
   id: string;
   regex: RegExp;
+  path: RegExp | null;
   secretGroup: number;
   entropy: number | null;
   keywords: string[];
@@ -55,6 +57,7 @@ export const rules: Rule[] = config.rules.flatMap((rule) =>
         {
           id: rule.id,
           regex: goRegex(withoutPrefix(rule.regex), "g"),
+          path: rule.path ? goRegex(rule.path, "") : null,
           secretGroup: rule.secretGroup ?? 0,
           entropy: rule.entropy ?? null,
           keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),

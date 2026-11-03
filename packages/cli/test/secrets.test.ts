@@ -13,7 +13,16 @@ const FAKE = {
   sshpass: "Fake#Pw42x",
   mysql: "FakePw_2026",
   pypi: "Quench-fake-pass-42",
+  example: "ghp_" + "FakeQuenchExampleValue0123456789abc",
+  signature: "FakeQuenchSignature0123456789",
 };
+
+const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const JWT = [
+  base64url({ alg: "HS256", typ: "JWT" }),
+  base64url({ iss: "https://auth.example.test", sub: "fake-quench-user" }),
+  FAKE.signature,
+].join(".");
 
 const SPACED = [
   'mysql -p "Spaced Secret99" -e "select 1"',
@@ -42,6 +51,8 @@ async function fakeHome() {
   await mkdir(join(project, ".github/workflows"), { recursive: true });
   await Bun.spawn(["git", "init", "-q", project]).exited;
   await Bun.write(join(project, ".env"), `GITHUB_TOKEN=${FAKE.github}\n`);
+  await Bun.write(join(project, ".env.example"), `GITHUB_TOKEN=${FAKE.example}\n`);
+  await Bun.spawn(["git", "-C", project, "add", ".env.example"]).exited;
   await Bun.write(
     join(project, ".mcp.json"),
     line({ mcpServers: { gh: { command: "gh-mcp", env: { GITHUB_TOKEN: FAKE.mcp } } } }),
@@ -54,6 +65,14 @@ async function fakeHome() {
   await Bun.write(
     join(project, "node_modules/left-pad/package.json"),
     line({ name: "left-pad", scripts: { postinstall: "node bundle.js" } }),
+  );
+  await Bun.write(
+    join(project, "node_modules/esbuild/package.json"),
+    line({ name: "esbuild", scripts: { postinstall: "node install.js" } }),
+  );
+  await Bun.write(
+    join(project, "node_modules/esbuild-fork/package.json"),
+    line({ name: "esbuild", scripts: { postinstall: "node install.js && node x.js" } }),
   );
   await Bun.write(
     join(project, "node_modules/fresh-dep/package.json"),
@@ -123,7 +142,7 @@ async function fakeHome() {
               content: `GITHUB_TOKEN=${FAKE.github}\n//registry.npmjs.org/:_authToken=${FAKE.npm}`,
             },
             { type: "tool_result", tool_use_id: "t2", content: `password = ${FAKE.pypi}` },
-            { type: "tool_result", tool_use_id: "t3", content: "1" },
+            { type: "tool_result", tool_use_id: "t3", content: `session ${JWT}\n` },
             ...SPACED.map((_, i) => ({
               type: "tool_result",
               tool_use_id: `p${i}`,
@@ -143,6 +162,7 @@ async function run(home: string, ...args: string[]) {
       ...process.env,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
       HOME: home,
+      QUENCH_FAKE_GH: FAKE.github,
       CLAUDE_CONFIG_DIR: "",
       CODEX_HOME: "",
       PI_CODING_AGENT_DIR: "",
@@ -174,8 +194,18 @@ test("secrets reports history, configs, permissions, files and footprints withou
   ]);
   expect(exposed).toEqual([
     ["github", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
+    [
+      "jwt",
+      1,
+      "2026-10-01T10:00:06.000Z",
+      expect.stringMatching(/^Bash: mysql -pFake…[0-9a-f]{8} /),
+    ],
     ["npm", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
   ]);
+  expect(report.history.secrets[1]).toMatchObject({
+    issuer: "https://auth.example.test",
+    rotate: null,
+  });
   expect(report.history.secrets[0].rotate).toBe("https://github.com/settings/tokens");
   const shown = report.history.lowConfidence.map(
     (s: { exposures: { by: string }[] }) => s.exposures[0]!.by,
@@ -224,15 +254,52 @@ test("secrets reports history, configs, permissions, files and footprints withou
     printedInSessions: true,
     ...(process.platform === "win32" ? {} : { mode: "644", othersCanRead: true }),
   });
-  expect(file(join(project, ".env"))).toMatchObject({ plaintext: true, printedInSessions: true });
+  expect(file(join(project, ".env"))).toMatchObject({
+    plaintext: true,
+    printedInSessions: true,
+    tracked: false,
+  });
+  expect(file(join(project, ".env.example"))).toMatchObject({ plaintext: true, tracked: true });
   expect(file(join(home, ".aws/credentials"))).toMatchObject({ present: false });
   expect(file(join(home, ".pypirc"))).toMatchObject({ plaintext: true, printedInSessions: true });
 
   expect(report.footprints.map((f: { reason: string }) => f.reason).sort()).toEqual([
     "dumps every repository secret with toJSON(secrets)",
+    "postinstall added in the last 30 days: node install.js && node x.js",
     "postinstall runs bundle.js, the Shai-Hulud payload",
     "preinstall added in the last 30 days: node scripts/setup.js",
   ]);
+});
+
+test("findings keep their ids across runs and each value lists where it lives", async () => {
+  const { home, project } = await fakeHome();
+  const ids = async () => {
+    const report = JSON.parse((await run(home, "--json")).stdout);
+    return {
+      report,
+      ids: [
+        ...report.history.secrets,
+        ...report.history.lowConfidence,
+        ...report.configs.flatMap((f: { secrets: unknown[] }) => f.secrets),
+        ...report.credentialFiles,
+        ...report.footprints,
+      ].map((f: { id: string }) => f.id),
+    };
+  };
+  const first = await ids();
+  const second = await ids();
+  expect(first.ids.every((id) => /^[0-9a-f]{16}$/.test(id))).toBe(true);
+  expect(new Set(first.ids).size).toBe(first.ids.length);
+  expect(second.ids).toEqual(first.ids);
+
+  const github = first.report.history.secrets[0].tag;
+  const where = first.report.locations.find((l: { tag: string }) => l.tag === github);
+  expect(where).toMatchObject({
+    provider: "github",
+    files: [join(project, ".env")],
+    envVars: ["QUENCH_FAKE_GH"],
+  });
+  expect(where.sessions).toHaveLength(1);
 });
 
 test("secrets text output masks every value", async () => {
@@ -242,4 +309,7 @@ test("secrets text output masks every value", async () => {
   neverRaw(stdout);
   expect(stdout).toContain("ghp_…");
   expect(stdout).toContain("https://github.com/settings/tokens");
+  expect(stdout).toMatch(/jwt +https:\/\/auth\.example\.test +no rotate link known/);
+  expect(stdout).toContain(".env, tracked by git");
+  expect(stdout).toContain("Values found in more than one place");
 });
