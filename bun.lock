@@ -20,6 +20,7 @@
         "@quench/history": "workspace:*",
         "@quench/insights": "workspace:*",
         "@quench/judge": "workspace:*",
+        "@quench/secrets": "workspace:*",
       },
     },
     "packages/history": {
@@ -47,6 +48,14 @@
         "@quench/history": "workspace:*",
         "@quench/insights": "workspace:*",
         "@typesafe-ai/sdk": "^0.7.0",
+        "zod": "^4.1.0",
+      },
+    },
+    "packages/secrets": {
+      "name": "@quench/secrets",
+      "version": "0.0.0",
+      "dependencies": {
+        "@quench/history": "workspace:*",
         "zod": "^4.1.0",
       },
     },
@@ -380,6 +389,8 @@
     "@quench/insights": ["@quench/insights@workspace:packages/insights"],
 
     "@quench/judge": ["@quench/judge@workspace:packages/judge"],
+
+    "@quench/secrets": ["@quench/secrets@workspace:packages/secrets"],
 
     "@quench/site": ["@quench/site@workspace:site"],
 

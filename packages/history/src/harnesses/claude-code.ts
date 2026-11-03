@@ -6,6 +6,7 @@ import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
 import { checkout, repositoryRoot } from "../files.ts";
 import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
+import { listOf, type ConfigFile, type RiskyPermission } from "../settings.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -176,6 +177,20 @@ const ReadResult = z.object({
 
 const HOME = { variable: "CLAUDE_CONFIG_DIR", fallback: ".claude" };
 
+const globalConfigOf = (home: Home) => {
+  const configDir = home.of(HOME);
+  return configDir === join(home.dir, ".claude")
+    ? join(home.dir, ".claude.json")
+    : join(configDir, ".claude.json");
+};
+
+const settingsFiles = (configDir: string, project: string): ConfigFile[] => [
+  { path: join(configDir, "settings.json"), scope: "user", kind: "settings" },
+  { path: join(configDir, "settings.local.json"), scope: "user", kind: "settings" },
+  { path: join(project, ".claude/settings.json"), scope: "project", kind: "settings" },
+  { path: join(project, ".claude/settings.local.json"), scope: "local", kind: "settings" },
+];
+
 export const claudeCode: Harness<"claude-code"> = {
   id: "claude-code",
   label: "Claude Code",
@@ -230,10 +245,7 @@ export const claudeCode: Harness<"claude-code"> = {
 
   async mcp(home, project) {
     const configDir = home.of(HOME);
-    const globalConfig =
-      configDir === join(home.dir, ".claude")
-        ? join(home.dir, ".claude.json")
-        : join(configDir, ".claude.json");
+    const globalConfig = globalConfigOf(home);
     const global = record(await readJson(globalConfig));
     const key = (await repositoryRoot(project)) ?? project;
     const settings = await Promise.all(
@@ -277,6 +289,45 @@ export const claudeCode: Harness<"claude-code"> = {
     }
     add(record(record(global.projects)[key]).mcpServers, "local", globalConfig, () => true);
     return [...servers.values()];
+  },
+
+  async configs(home, project) {
+    const configDir = home.of(HOME);
+    const mcpFiles = (await ancestorDirs(project)).map(
+      (dir): ConfigFile => ({ path: join(dir, ".mcp.json"), scope: "project", kind: "mcp" }),
+    );
+    return [
+      { path: globalConfigOf(home), scope: "user", kind: "mcp" },
+      { path: join(configDir, ".credentials.json"), scope: "user", kind: "credentials" },
+      { path: join(configDir, "history.jsonl"), scope: "user", kind: "prompts" },
+      ...settingsFiles(configDir, project),
+      ...mcpFiles,
+    ];
+  },
+
+  async permissions(home, project) {
+    const found: RiskyPermission[] = [];
+    for (const { path } of settingsFiles(home.of(HOME), project)) {
+      const settings = record(await readJson(path).catch(() => null));
+      const permissions = record(settings.permissions);
+      const add = (kind: RiskyPermission["kind"], setting: string) =>
+        found.push({ source: path, kind, setting });
+      if (permissions.defaultMode === "bypassPermissions")
+        add("bypass", "permissions.defaultMode = bypassPermissions");
+      if (settings.skipDangerousModePermissionPrompt === true)
+        add("bypass", "skipDangerousModePermissionPrompt = true");
+      for (const rule of listOf(permissions.allow)) {
+        if (typeof rule !== "string") continue;
+        if (/^Bash(\((\*|:\*)\))?$/.test(rule)) add("wildcard-shell", `permissions.allow ${rule}`);
+        if (/^mcp__(?:(?!__).)+(?:__\*)?$|^mcp__\*$/.test(rule))
+          add("auto-approved-mcp", `permissions.allow ${rule}`);
+      }
+      if (settings.enableAllProjectMcpServers === true)
+        add("auto-approved-mcp", "enableAllProjectMcpServers = true");
+      for (const name of listOf(settings.enabledMcpjsonServers))
+        if (typeof name === "string") add("auto-approved-mcp", `enabledMcpjsonServers ${name}`);
+    }
+    return found;
   },
 
   async discover(home: Home): Promise<SessionRef[]> {

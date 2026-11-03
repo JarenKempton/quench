@@ -5,6 +5,7 @@ import { NotASession, sessionRef, type Harness, type SessionRef } from "../harne
 import type { Home } from "../home.ts";
 import { repositoryRoot } from "../files.ts";
 import { describeServer, record, type McpEntry } from "../mcp.ts";
+import type { ConfigFile, RiskyPermission } from "../settings.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -147,6 +148,39 @@ export const codex: Harness<"codex"> = {
         if (path !== user) add(path, await readToml(path), "project");
       }
     return [...servers.values()];
+  },
+
+  async configs(home, project) {
+    return [
+      { path: join(home.of(HOME), "auth.json"), scope: "user", kind: "credentials" },
+      { path: join(home.of(HOME), "history.jsonl"), scope: "user", kind: "prompts" },
+      ...(await configFiles(home, project)),
+    ];
+  },
+
+  async permissions(home, project) {
+    const found: RiskyPermission[] = [];
+    for (const { path } of await configFiles(home, project)) {
+      const config = await readToml(path);
+      const layers = [
+        { prefix: "", values: config },
+        ...Object.entries(record(config.profiles)).map(([name, values]) => ({
+          prefix: `profiles.${name}.`,
+          values: record(values),
+        })),
+      ];
+      for (const { prefix, values } of layers) {
+        if (values.approval_policy === "never")
+          found.push({ source: path, kind: "bypass", setting: `${prefix}approval_policy = never` });
+        if (values.sandbox_mode === "danger-full-access")
+          found.push({
+            source: path,
+            kind: "full-access",
+            setting: `${prefix}sandbox_mode = danger-full-access`,
+          });
+      }
+    }
+    return found;
   },
 
   async steering(home, project) {
@@ -456,6 +490,17 @@ async function readToml(path: string): Promise<Record<string, unknown>> {
     .text()
     .catch(() => null);
   return text === null ? {} : record(Bun.TOML.parse(text));
+}
+
+async function configFiles(home: Home, project: string): Promise<ConfigFile[]> {
+  const user = join(home.of(HOME), "config.toml");
+  const files: ConfigFile[] = [{ path: user, scope: "user", kind: "mcp" }];
+  if (await trustedProject(home, project))
+    for (const dir of await ancestorDirs(project, true)) {
+      const path = join(dir, ".codex/config.toml");
+      if (path !== user) files.push({ path, scope: "project", kind: "mcp" });
+    }
+  return files;
 }
 
 async function trustedProject(home: Home, project: string): Promise<boolean> {

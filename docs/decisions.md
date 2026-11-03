@@ -21,6 +21,8 @@ retired with it and live in git history.
   loaded, the profile reports that, and compares it with disk only by exact hash.
 - **Worktree cleanup is report-only.** Quench lists idle worktrees and the command to remove
   each safe one; an opt-in purge with confirmation may follow once the list is trusted.
+- **Secrets are detect-and-report only** ([#111](https://github.com/JarenKempton/quench/issues/111)).
+  Detection is local with the gitleaks ruleset, values are masked, and redaction is a later opt-in.
 - **Users bring their own compute.** Model-backed analysis uses the user's own key, so
   running Quench costs its maintainers nothing per user.
 

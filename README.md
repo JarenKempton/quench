@@ -75,6 +75,7 @@ history.
 | `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]`       | Current instruction-file inventory and source rule candidates; offline                |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
+| `quench secrets [--json]`                      | Credentials your agents exposed, risky permissions, files worms harvest; offline      |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
@@ -294,6 +295,30 @@ changes, and its branch or commit is merged into the base branch (`origin/HEAD`,
 `git worktree remove` command; the rest show why they are kept, and folders already gone get
 `git worktree prune`. `git worktree remove` keeps the branch but deletes ignored files such as
 `.env`. Quench runs only read-only git commands and removes nothing.
+
+## Exposed secrets
+
+```sh
+quench secrets
+```
+
+Finds credentials in the session history of Claude Code, Codex and Pi and in T3's local messages,
+in harness and MCP configs, and in skills and instruction files. Each secret shows its provider,
+the first 4 characters and a hash of its value, the sessions it appears in, the command or message
+that exposed it, when it was first and last seen, and where to rotate it. `.mcp.json` files with
+plaintext tokens are flagged when git tracks them. Risky permissions are bypass or full-access
+defaults, wildcard shell allowlists and auto-approved MCP servers.
+
+It also checks the files worms harvest (`~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.netrc`,
+GitHub CLI, AWS, gcloud, Azure, kube and Docker credentials, unencrypted SSH keys, shell history,
+agent logins and `.env*` files in your projects): present or absent, plaintext or not, file mode,
+and whether a session read the file or printed one of its values. In the git repositories your
+sessions used, it flags workflows that dump or send secrets and dependency install scripts that
+run known worm payloads (Shai-Hulud, Nx s1ngularity).
+
+Detection uses the [gitleaks](https://github.com/gitleaks/gitleaks) ruleset (MIT, vendored in
+`packages/secrets/vendor`) plus an entropy check. Everything runs locally: no secret, excerpt or
+finding is sent to Jev, a model or the network. Nothing is changed or redacted.
 
 ## Current steering inventory
 
