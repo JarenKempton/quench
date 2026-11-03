@@ -6,6 +6,7 @@ Quench is a TypeScript monorepo on Bun. Each package depends only on the package
 packages/history    reads each harness's session files into one Session model
 packages/insights   pure functions over sessions: runs, reports, signals
 packages/judge      opt-in model judgments about runs, behind the Judge interface
+packages/secrets    offline credential detection over history, configs and files on disk
 packages/cli        the `quench` command; composition and formatting
 ```
 
@@ -34,7 +35,9 @@ Subagent sessions point at their parent with `parent`.
 An adapter implements `Harness`: `home` names its data directory and override variable, `discover(home)` lists session files, `read(ref)`
 turns one into a `Session`, `steering(home, project)` lists candidate instruction
 locations, `skills(home, project)` lists skill directories and `mcp(home, project)` reads
-configured MCP servers as name, scope, transport and command name or URL host only. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
+configured MCP servers as name, scope, transport and command name or URL host only,
+`configs(home, project)` lists its config, login and prompt-history files and
+`permissions(home, project)` reports risky approval settings. It is the only code that knows a harness's paths and file format. Rules every adapter follows:
 
 - **Validate each line with zod.** Lines that don't fit are counted in
   `diagnostics.unparsed` and shown in the report, so a format change is visible instead
@@ -225,6 +228,16 @@ input, so changing the question or its id re-asks cleanly. A missing judge leave
 Failures and answers outside the choices are reported per correction and never cached, and a
 rejected key stops the batch. Aggregates join each cause to `behaviour(run)` of the preceding run
 and to the Model, Effort and Harness reply buckets, separately for people and automation.
+
+## Secrets
+
+`packages/secrets` runs the vendored gitleaks rules (translated from Go to JavaScript regex
+syntax, keyword-prefiltered) plus an entropy floor over every string in each session line, T3's
+local messages, adapter-listed configs, skills, instruction files and known credential files. A
+finding keeps only a fingerprint (SHA-256 prefix) and a mask of the first 4 characters; raw values
+never leave the function that found them. The exposing command comes from the call id recorded on
+the same line, joined to the session's normalized tool calls. It never writes, redacts or calls a
+model or the network.
 
 ## Reading at scale
 

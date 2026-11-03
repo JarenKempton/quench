@@ -18,9 +18,11 @@ export {
   type SessionSkills,
 } from "./recorded.ts";
 export { checkout, isInside, pathParts, repositoryRoot } from "./files.ts";
+export { ancestorDirs } from "./steering.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
+export { harnessSettings, type ConfigFile, type RiskyPermission } from "./settings.ts";
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export {
   projects,

@@ -9,6 +9,7 @@
   "dependencies": {
     "@quench/history": "workspace:*",
     "@quench/insights": "workspace:*",
-    "@quench/judge": "workspace:*"
+    "@quench/judge": "workspace:*",
+    "@quench/secrets": "workspace:*"
   }
 }

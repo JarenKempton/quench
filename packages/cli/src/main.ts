@@ -9,6 +9,7 @@ import { allRuns, runs } from "./commands/runs.ts";
 import { steering } from "./commands/steering.ts";
 import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
+import { secrets } from "./commands/secrets.ts";
 import { update } from "./commands/update.ts";
 import { version } from "./version.ts";
 
@@ -28,6 +29,8 @@ Usage:
   quench runs --all --json [--history <dir>]
                                        every run of every session, one JSON object per line
     --history <dir>                    read <dir> as one machine's home, tagged with its folder name (repeatable)
+  quench secrets [--json] [--host-history <sqlite-file> | --no-host-history]
+                                       credentials exposed in histories, configs and files worms harvest (offline)
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
@@ -208,6 +211,16 @@ switch (command) {
       causes: values.causes,
       cachedOnly: values["cached-only"],
       themeLimit,
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
+    });
+    break;
+  case "secrets":
+    process.exitCode = await secrets(home, {
+      json: values.json,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
         : values["host-history"]

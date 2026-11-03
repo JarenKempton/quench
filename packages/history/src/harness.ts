@@ -2,6 +2,7 @@ import { modified } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, Session } from "./model.ts";
 import type { McpEntry } from "./mcp.ts";
+import type { ConfigFile, RiskyPermission } from "./settings.ts";
 import type { SkillRoot } from "./skills.ts";
 import type { SteeringRoot } from "./steering.ts";
 
@@ -26,6 +27,8 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   steering(home: Home, project: string): Promise<SteeringRoot[]>;
   skills(home: Home, project: string): Promise<SkillRoot[]>;
   mcp(home: Home, project: string): Promise<McpEntry[]>;
+  configs(home: Home, project: string): Promise<ConfigFile[]>;
+  permissions(home: Home, project: string): Promise<RiskyPermission[]>;
 }
 
 export async function sessionRef(

@@ -2,10 +2,10 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   fmt: {
-    ignorePatterns: ["packages/*/test/fixtures/**"],
+    ignorePatterns: ["packages/*/test/fixtures/**", "packages/secrets/vendor/**"],
   },
   lint: {
-    ignorePatterns: ["packages/*/test/fixtures/**"],
+    ignorePatterns: ["packages/*/test/fixtures/**", "packages/secrets/vendor/**"],
     options: { typeAware: true, typeCheck: true },
   },
   run: {

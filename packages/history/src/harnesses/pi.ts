@@ -117,6 +117,20 @@ export const pi: Harness<"pi"> = {
     return [];
   },
 
+  async configs(home, project) {
+    const user = home.of(HOME);
+    return [
+      { path: join(user, "auth.json"), scope: "user", kind: "credentials" },
+      { path: join(user, "models.json"), scope: "user", kind: "settings" },
+      { path: join(user, "settings.json"), scope: "user", kind: "settings" },
+      { path: join(project, ".pi/settings.json"), scope: "project", kind: "settings" },
+    ];
+  },
+
+  async permissions() {
+    return [];
+  },
+
   async steering(home, project) {
     const user = home.of(HOME);
     const roots: SteeringRoot[] = [];

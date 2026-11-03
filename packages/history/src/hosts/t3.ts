@@ -168,3 +168,32 @@ function senderOf(message: z.infer<typeof Message>): SenderEvidence | null {
         : null;
   return sender ? { sender, source: "t3-code", messageId: message.id } : null;
 }
+
+export type HostMessage = { thread: string; role: string; text: string; at: Date | null };
+
+export function* t3Messages(path: string): Generator<HostMessage> {
+  try {
+    statSync(path);
+  } catch {
+    return;
+  }
+  const db = new Database(path, { readonly: true });
+  try {
+    const rows = db.query<{ payload_json: string }, []>(
+      "SELECT payload_json FROM orchestration_v2_projection_messages",
+    );
+    for (const row of rows.iterate()) {
+      const message = Message.safeParse(JSON.parse(row.payload_json));
+      if (!message.success) continue;
+      const at = new Date(message.data.createdAt);
+      yield {
+        thread: message.data.threadId,
+        role: message.data.role,
+        text: message.data.text,
+        at: Number.isNaN(at.getTime()) ? null : at,
+      };
+    }
+  } finally {
+    db.close();
+  }
+}
