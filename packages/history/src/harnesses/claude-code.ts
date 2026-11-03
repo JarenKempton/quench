@@ -7,6 +7,7 @@ import type { Home } from "../home.ts";
 import { checkout, repositoryRoot } from "../files.ts";
 import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
 import { listOf, type ConfigFile, type RiskyPermission } from "../settings.ts";
+import { pluginSourceSpec, type SkillSource } from "../skill-sources.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -289,6 +290,38 @@ export const claudeCode: Harness<"claude-code"> = {
     }
     add(record(record(global.projects)[key]).mcpServers, "local", globalConfig, () => true);
     return [...servers.values()];
+  },
+
+  async skillSources(home, project) {
+    const configDir = home.of(HOME);
+    const knownPath = join(configDir, "plugins/known_marketplaces.json");
+    const known = record(await readJson(knownPath).catch(() => null));
+    const sources = new Map<string, SkillSource>();
+    const add = (kind: SkillSource["kind"], name: string, source: string, value: unknown) => {
+      const spec = pluginSourceSpec(value);
+      if (spec) sources.set(`${kind}:${name}`, { name, kind, source, ...spec });
+    };
+    for (const [name, entry] of Object.entries(known))
+      add("marketplace", name, knownPath, record(entry).source);
+    for (const path of [
+      join(configDir, "settings.json"),
+      join(project, ".claude/settings.json"),
+      join(project, ".claude/settings.local.json"),
+    ]) {
+      const settings = record(await readJson(path).catch(() => null));
+      for (const [name, entry] of Object.entries(record(settings.extraKnownMarketplaces)))
+        add("marketplace", name, path, record(entry).source);
+      for (const [id, on] of Object.entries(record(settings.enabledPlugins))) {
+        const [plugin, market] = id.split("@");
+        const location = record(known[market ?? ""]).installLocation;
+        if (on !== true || !plugin || typeof location !== "string") continue;
+        const manifest = join(location, ".claude-plugin/marketplace.json");
+        const listed = listOf(record(await readJson(manifest).catch(() => null)).plugins);
+        const entry = listed.map(record).find((p) => p.name === plugin);
+        if (entry) add("plugin", id, manifest, entry.source);
+      }
+    }
+    return [...sources.values()];
   },
 
   async configs(home, project) {

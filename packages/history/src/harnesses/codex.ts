@@ -150,6 +150,10 @@ export const codex: Harness<"codex"> = {
     return [...servers.values()];
   },
 
+  async skillSources() {
+    return [];
+  },
+
   async configs(home, project) {
     return [
       { path: join(home.of(HOME), "auth.json"), scope: "user", kind: "credentials" },

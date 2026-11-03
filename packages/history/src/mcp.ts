@@ -1,6 +1,7 @@
 import { pathParts } from "./files.ts";
 import { harnesses } from "./harnesses/index.ts";
 import type { Home } from "./home.ts";
+import { launchOf, type Launch } from "./launch.ts";
 import type { HarnessId } from "./model.ts";
 
 export type McpServer = {
@@ -11,6 +12,7 @@ export type McpServer = {
   transport: string;
   target: string | null;
   enabled: boolean | null;
+  launch: Launch | null;
 };
 
 export type McpEntry = Omit<McpServer, "harness">;
@@ -28,14 +30,22 @@ export async function mcpInventory(home: Home, project: string) {
   return { servers, warnings };
 }
 
-export function describeServer(config: unknown): Pick<McpServer, "transport" | "target"> {
+export function describeServer(
+  config: unknown,
+): Pick<McpServer, "transport" | "target" | "launch"> {
   const entry = (config && typeof config === "object" ? config : {}) as Record<string, unknown>;
   const url = typeof entry.url === "string" ? entry.url : null;
   const command = typeof entry.command === "string" ? entry.command : null;
   const type = typeof entry.type === "string" ? entry.type : null;
-  if (url) return { transport: type ?? "http", target: host(url) };
-  if (command) return { transport: type ?? "stdio", target: pathParts(command).at(-1) ?? null };
-  return { transport: type ?? "unknown", target: null };
+  const args = Array.isArray(entry.args) ? entry.args.filter((a) => typeof a === "string") : [];
+  if (url) return { transport: type ?? "http", target: host(url), launch: null };
+  if (command)
+    return {
+      transport: type ?? "stdio",
+      target: pathParts(command).at(-1) ?? null,
+      launch: launchOf(command, args),
+    };
+  return { transport: type ?? "unknown", target: null, launch: null };
 }
 
 const host = (url: string) => {

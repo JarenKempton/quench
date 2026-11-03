@@ -239,6 +239,12 @@ never leave the function that found them. The exposing command comes from the ca
 the same line, joined to the session's normalized tool calls. It never writes, redacts or calls a
 model or the network.
 
+Supply-chain checks read MCP launch commands and skill sources (Claude Code marketplaces and
+plugins, Pi packages) through each adapter's `mcp` and `skillSources`, and judge pinning from the
+spec alone; versions to pin to come from the local npx cache. Git hooks come from
+`git rev-parse --git-path hooks` in each known project. `--repo-history` streams
+`git log --all -p -U0` per known project and runs the same detection over added lines.
+
 ## Reading at scale
 
 `readSessions` streams one session at a time with a small concurrency limit, and each
