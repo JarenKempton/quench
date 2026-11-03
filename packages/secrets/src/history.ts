@@ -12,8 +12,8 @@ import {
   type SessionRef,
 } from "@quench/history";
 import { t3Messages } from "@quench/history/hosts/t3";
-import { detect, type Detection } from "./detect.ts";
-import { scrubbed } from "./mask.ts";
+import { detectInFile, type Detection } from "./detect.ts";
+import type { Masker } from "./mask.ts";
 import { secretOf, type Secret } from "./secret.ts";
 
 export type Exposure = {
@@ -39,6 +39,7 @@ const SHOWN_EXPOSURES = 5;
 
 export async function scanHistory(
   home: Home,
+  mask: Masker,
   options: { hostHistory: string | false; onRead?: Progress },
 ) {
   const refs = await discoverAll(home);
@@ -47,8 +48,9 @@ export async function scanHistory(
   const cwds = new Set<string>();
   let unreadable = 0;
   const record = (found: Detection, exposure: Exposure) => {
-    const secret = secretOf(found);
-    const known = secrets.get(secret.fingerprint) ?? {
+    const id = mask.id(found.value);
+    const secret = secretOf(found, mask);
+    const known = secrets.get(id) ?? {
       ...secret,
       sessions: 0,
       occurrences: 0,
@@ -57,7 +59,7 @@ export async function scanHistory(
       exposures: [],
       seenIn: new Set<string>(),
     };
-    secrets.set(secret.fingerprint, known);
+    secrets.set(id, known);
     known.occurrences++;
     const key = `${exposure.source}:${exposure.session}`;
     if (!known.seenIn.has(key)) {
@@ -83,7 +85,7 @@ export async function scanHistory(
       const seen = reads.get(path) ?? new Set<string>();
       reads.set(path, seen.add(`${session.harness}:${session.id}`));
     }
-    const calls = callsOf(session);
+    const calls = callsOf(session, mask);
     const fallback = ref.modified?.toISOString() ?? null;
     for (const hit of hits)
       record(hit.found, {
@@ -98,7 +100,7 @@ export async function scanHistory(
   if (options.hostHistory)
     for (const message of t3Messages(options.hostHistory)) {
       hostMessages++;
-      for (const found of detect(message.text))
+      for (const found of detectInFile(message.text))
         record(found, {
           source: "t3",
           session: message.thread,
@@ -107,6 +109,7 @@ export async function scanHistory(
           at: message.at?.toISOString() ?? null,
         });
     }
+  const printed = new Set(secrets.keys());
   const listed = [...secrets.values()].map(({ seenIn, ...secret }) => ({
     ...secret,
     sessions: seenIn.size,
@@ -118,6 +121,7 @@ export async function scanHistory(
     sessions: refs.length - unreadable,
     unreadable,
     hostMessages,
+    printed,
     secrets: listed.sort((a, b) => b.sessions - a.sessions || a.provider.localeCompare(b.provider)),
     reads,
     cwds,
@@ -128,32 +132,36 @@ async function scanSession(ref: SessionRef): Promise<{ session: Session; hits: H
   const hits: Hit[] = [];
   for await (const line of jsonlLines(ref.path, z.unknown(), { lines: 0, unparsed: 0 })) {
     const context = contextOf(line);
-    for (const text of context.strings)
+    for (const { text, ids } of context.strings)
       if (text.length >= 8)
-        for (const found of detect(text))
-          hits.push({ found, ids: context.ids, role: context.role, at: context.at });
+        for (const found of detectInFile(text))
+          hits.push({ found, ids, role: context.role, at: context.at });
   }
   return { session: await harnessById[ref.harness].read(ref), hits };
 }
 
 function contextOf(line: unknown) {
-  const strings: string[] = [];
-  const ids: string[] = [];
+  const strings: { text: string; ids: string[] }[] = [];
   let role: string | null = null;
   let at: string | null = null;
-  const walk = (value: unknown, key: string) => {
+  const walk = (value: unknown, key: string, ids: string[]) => {
     if (typeof value === "string") {
-      if (ID_KEYS.has(key)) ids.push(value);
-      else if (key === "role") role ??= value;
+      if (key === "role") role ??= value;
       else if (key === "timestamp") at ??= value;
-      else strings.push(value);
-    } else if (Array.isArray(value)) for (const item of value) walk(item, key);
-    else if (value && typeof value === "object")
-      for (const [name, item] of Object.entries(value)) walk(item, name);
+      else if (!ID_KEYS.has(key)) strings.push({ text: value, ids });
+    } else if (Array.isArray(value)) for (const item of value) walk(item, key, ids);
+    else if (value && typeof value === "object") {
+      const entries = Object.entries(value);
+      const own = entries.flatMap(([name, item]) =>
+        ID_KEYS.has(name) && typeof item === "string" ? [item] : [],
+      );
+      const scoped = own.length ? [...own, ...ids] : ids;
+      for (const [name, item] of entries) walk(item, name, scoped);
+    }
   };
-  walk(line, "");
+  walk(line, "", []);
   const type = (line as { type?: unknown } | null)?.type;
-  return { strings, ids, role: role ?? (typeof type === "string" ? type : null), at: iso(at) };
+  return { strings, role: role ?? (typeof type === "string" ? type : null), at: iso(at) };
 }
 
 const iso = (value: string | null) => {
@@ -161,20 +169,20 @@ const iso = (value: string | null) => {
   return date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
 };
 
-function callsOf(session: Session): Map<string, string> {
+function callsOf(session: Session, mask: Masker): Map<string, string> {
   const calls = new Map<string, string>();
   for (const event of session.events) {
     if (event.type === "mcp_call" && event.id)
       calls.set(event.id, `${event.server} MCP ${event.tool}`);
     if (event.type === "tool_call" && event.id && !calls.has(event.id))
-      calls.set(event.id, describeCall(event));
+      calls.set(event.id, describeCall(event, mask));
   }
   return calls;
 }
 
-function describeCall(call: Extract<Event, { type: "tool_call" }>): string {
+function describeCall(call: Extract<Event, { type: "tool_call" }>, mask: Masker): string {
   const command = call.shell?.find((shell) => shell.command)?.command;
-  if (command) return `${call.name}: ${scrubbed(command)}`;
+  if (command) return `${call.name}: ${mask.scrubbed(command)}`;
   if (call.fileRead) return `${call.name} ${call.fileRead.path}`;
   return call.name;
 }

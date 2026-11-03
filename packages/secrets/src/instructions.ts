@@ -1,9 +1,10 @@
 import { skillInventory, steeringInventory, type Home } from "@quench/history";
 import type { FileSecrets } from "./configs.ts";
 import { detect } from "./detect.ts";
+import type { Masker } from "./mask.ts";
 import { secretOf, textOf } from "./secret.ts";
 
-export async function scanInstructions(home: Home, projects: readonly string[]) {
+export async function scanInstructions(home: Home, projects: readonly string[], mask: Masker) {
   const candidates = new Map<string, "skill" | "instructions">();
   const warnings: string[] = [];
   for (const project of [home.dir, ...projects]) {
@@ -19,7 +20,7 @@ export async function scanInstructions(home: Home, projects: readonly string[]) 
   const files: FileSecrets[] = [];
   for (const [path, kind] of candidates) {
     const text = await textOf(path);
-    const secrets = text ? detect(text).map(secretOf) : [];
+    const secrets = text ? detect(text).map((found) => secretOf(found, mask)) : [];
     if (secrets.length)
       files.push({ path, harness: null, kind, scope: null, tracked: null, secrets });
   }

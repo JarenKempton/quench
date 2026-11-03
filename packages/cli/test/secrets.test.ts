@@ -10,7 +10,12 @@ const FAKE = {
   npm: "npm_" + "FakeQuenchTestValue0123456789abcdefg",
   mcp: "ghp_" + "FakeQuenchMcpValue0123456789abcdefgh",
   skill: "ghp_" + "FakeQuenchSkillValue0123456789abcdef",
+  sshpass: "Fake#Pw42x",
+  mysql: "FakePw_2026",
+  pypi: "Quench-fake-pass-42",
 };
+
+const PROBES = [FAKE.sshpass, FAKE.mysql];
 
 const line = (value: unknown) => JSON.stringify(value);
 
@@ -34,6 +39,11 @@ async function fakeHome() {
     join(project, "node_modules/left-pad/package.json"),
     line({ name: "left-pad", scripts: { postinstall: "node bundle.js" } }),
   );
+  await Bun.write(
+    join(project, "node_modules/fresh-dep/package.json"),
+    line({ name: "fresh-dep", scripts: { preinstall: "node scripts/setup.js" } }),
+  );
+  await Bun.write(join(home, ".pypirc"), `[pypi]\npassword = ${FAKE.pypi}\n`);
   await Bun.write(
     join(claude, "settings.json"),
     line({ permissions: { defaultMode: "bypassPermissions", allow: ["Bash", "mcp__gh"] } }),
@@ -63,6 +73,18 @@ async function fakeHome() {
           model: "claude-opus-5-5",
           content: [
             { type: "tool_use", id: "t1", name: "Bash", input: { command: "cat .env ~/.npmrc" } },
+            {
+              type: "tool_use",
+              id: "t2",
+              name: "Bash",
+              input: { command: `sshpass -p '${FAKE.sshpass}' ssh deploy@host cat .pypirc` },
+            },
+            {
+              type: "tool_use",
+              id: "t3",
+              name: "Bash",
+              input: { command: `mysql -p${FAKE.mysql} -e "select 1"` },
+            },
           ],
           usage: { input_tokens: 1, output_tokens: 1 },
         },
@@ -78,6 +100,8 @@ async function fakeHome() {
               tool_use_id: "t1",
               content: `GITHUB_TOKEN=${FAKE.github}\n//registry.npmjs.org/:_authToken=${FAKE.npm}`,
             },
+            { type: "tool_result", tool_use_id: "t2", content: `password = ${FAKE.pypi}` },
+            { type: "tool_result", tool_use_id: "t3", content: "1" },
           ],
         },
       }),
@@ -105,6 +129,7 @@ async function run(home: string, ...args: string[]) {
 
 const neverRaw = (output: string) => {
   for (const value of Object.values(FAKE)) expect(output).not.toContain(value.slice(4, 16));
+  for (const probe of PROBES) expect(output).not.toContain(probe);
 };
 
 test("secrets reports history, configs, permissions, files and footprints without raw values", async () => {
@@ -125,6 +150,15 @@ test("secrets reports history, configs, permissions, files and footprints withou
     ["npm", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
   ]);
   expect(report.history.secrets[0].rotate).toBe("https://github.com/settings/tokens");
+  expect(
+    report.history.lowConfidence.map((s: Record<string, unknown>) => [
+      s.rule,
+      s.rotate,
+      (s.exposures as { by: string }[])[0]!.by,
+    ]),
+  ).toEqual([
+    ["secret-named-value", null, expect.stringMatching(/^Bash: sshpass -p 'Fake…[0-9a-f]{8}' ssh/)],
+  ]);
 
   const mcp = report.configs.find((f: { path: string }) => f.path === join(project, ".mcp.json"));
   expect(mcp.tracked).toBe(true);
@@ -152,10 +186,12 @@ test("secrets reports history, configs, permissions, files and footprints withou
   });
   expect(file(join(project, ".env"))).toMatchObject({ plaintext: true, printedInSessions: true });
   expect(file(join(home, ".aws/credentials"))).toMatchObject({ present: false });
+  expect(file(join(home, ".pypirc"))).toMatchObject({ plaintext: true, printedInSessions: true });
 
   expect(report.footprints.map((f: { reason: string }) => f.reason).sort()).toEqual([
     "dumps every repository secret with toJSON(secrets)",
     "postinstall runs bundle.js, the Shai-Hulud payload",
+    "preinstall added in the last 30 days: node scripts/setup.js",
   ]);
 });
 

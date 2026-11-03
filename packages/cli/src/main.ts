@@ -29,7 +29,7 @@ Usage:
   quench runs --all --json [--history <dir>]
                                        every run of every session, one JSON object per line
     --history <dir>                    read <dir> as one machine's home, tagged with its folder name (repeatable)
-  quench secrets [--json] [--host-history <sqlite-file> | --no-host-history]
+  quench secrets [--days 30] [--json] [--host-history <sqlite-file> | --no-host-history]
                                        credentials exposed in histories, configs and files worms harvest (offline)
   quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
@@ -221,6 +221,7 @@ switch (command) {
   case "secrets":
     process.exitCode = await secrets(home, {
       json: values.json,
+      days,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
         : values["host-history"]

@@ -4,6 +4,7 @@ import {
   secretsReport,
   type CredentialFile,
   type FileSecrets,
+  type HistorySecret,
   type SecretsReport,
 } from "@quench/secrets";
 import { count, json, plural, shortPath, table } from "../format.ts";
@@ -11,9 +12,10 @@ import { reading } from "../progress.ts";
 
 export async function secrets(
   home: Home,
-  options: { json: boolean; hostHistory?: string | false },
+  options: { json: boolean; days: number; hostHistory?: string | false },
 ): Promise<number> {
   const report = await secretsReport(home, {
+    days: options.days,
     hostHistory: options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"),
     onRead: reading(),
   });
@@ -26,24 +28,16 @@ function render(report: SecretsReport, homeDir: string): string[] {
   const day = (iso: string | null) => iso?.slice(0, 10) ?? "unknown";
   const { history } = report;
   const lines = [
-    "Quench secrets · local only, nothing is sent anywhere · values show their first 4 characters and a hash",
+    "Quench secrets · local only, nothing is sent anywhere · values show their first 4 characters and a keyed tag",
     "",
     `Session history · ${plural(history.secrets.length, "secret")} in ${count(history.sessions)} sessions${history.hostMessages ? ` and ${count(history.hostMessages)} T3 messages` : ""}`,
   ];
-  if (history.secrets.length)
-    lines.push(
-      ...table([
-        ["Provider", "Value", "Sessions", "First seen", "Last seen", "Exposed by"],
-        ...history.secrets.map((s) => [
-          s.provider,
-          s.masked,
-          count(s.sessions),
-          day(s.firstSeen),
-          day(s.lastSeen),
-          s.exposures[0]?.by ?? "",
-        ]),
-      ]),
-    );
+  lines.push(...exposed(history.secrets, day));
+  lines.push(
+    "",
+    `Lower confidence (generic rule or secret-named value) · ${plural(history.lowConfidence.length, "value")}`,
+  );
+  lines.push(...exposed(history.lowConfidence, day));
   lines.push(
     "",
     `Harness and MCP configs · ${plural(report.configs.length, "file")} with plaintext secrets`,
@@ -85,6 +79,21 @@ function render(report: SecretsReport, homeDir: string): string[] {
   lines.push("", ...report.limitations);
   for (const warning of report.warnings) lines.push(`Warning: ${warning}`);
   return lines;
+}
+
+function exposed(found: HistorySecret[], day: (iso: string | null) => string): string[] {
+  if (!found.length) return [];
+  return table([
+    ["Provider", "Value", "Sessions", "First seen", "Last seen", "Exposed by"],
+    ...found.map((s) => [
+      s.provider,
+      s.masked,
+      count(s.sessions),
+      day(s.firstSeen),
+      day(s.lastSeen),
+      s.exposures[0]?.by ?? "",
+    ]),
+  ]);
 }
 
 function files(found: FileSecrets[], short: (path: string) => string): string[] {

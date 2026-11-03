@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ConfigFile, Home } from "@quench/history";
 import { detectInFile } from "./detect.ts";
-import { fingerprint } from "./mask.ts";
+import type { Masker } from "./mask.ts";
 import { textOf } from "./secret.ts";
 
 export type CredentialFile = {
@@ -22,9 +22,7 @@ const HOME_FILES: [string, string][] = [
   [".pypirc", "PyPI"],
   [".git-credentials", "git credentials"],
   [".netrc", "netrc"],
-  [".config/gh/hosts.yml", "GitHub CLI"],
   [".aws/credentials", "AWS"],
-  [".config/gcloud/application_default_credentials.json", "gcloud ADC"],
   [".kube/config", "kubeconfig"],
   [".docker/config.json", "Docker"],
   [".bash_history", "shell history"],
@@ -32,7 +30,27 @@ const HOME_FILES: [string, string][] = [
   [".local/share/fish/fish_history", "shell history"],
 ];
 
-type Seen = { reads: Map<string, Set<string>>; printed: Set<string> };
+type Env = Record<string, string | undefined>;
+
+export function toolConfigFiles(
+  homeDir: string,
+  platform: NodeJS.Platform,
+  env: Env,
+): [string, string][] {
+  const appData = env.APPDATA || join(homeDir, "AppData", "Roaming");
+  const config = env.XDG_CONFIG_HOME || join(homeDir, ".config");
+  const gh =
+    env.GH_CONFIG_DIR || (platform === "win32" ? join(appData, "GitHub CLI") : join(config, "gh"));
+  const gcloud =
+    env.CLOUDSDK_CONFIG ||
+    (platform === "win32" ? join(appData, "gcloud") : join(config, "gcloud"));
+  return [
+    [join(gh, "hosts.yml"), "GitHub CLI"],
+    [join(gcloud, "application_default_credentials.json"), "gcloud ADC"],
+  ];
+}
+
+type Seen = { reads: Map<string, Set<string>>; printed: Set<string>; mask: Masker };
 
 export async function credentialFiles(
   home: Home,
@@ -42,6 +60,7 @@ export async function credentialFiles(
 ): Promise<CredentialFile[]> {
   const candidates: [string, string][] = [
     ...HOME_FILES.map(([path, label]): [string, string] => [join(home.dir, path), label]),
+    ...toolConfigFiles(home.dir, process.platform, process.env),
     ...harnessFiles.map((file): [string, string] => [file.path, "agent login"]),
     ...(await filesIn(join(home.dir, ".azure"), (name) => name.endsWith(".json"))).map(
       (path): [string, string] => [path, "Azure"],
@@ -67,7 +86,7 @@ async function inspect(path: string, label: string, seen: Seen): Promise<Credent
     ...modeOf(info?.mode),
     secrets: found.length,
     readInSessions: seen.reads.get(path)?.size ?? 0,
-    printedInSessions: found.some((d) => seen.printed.has(fingerprint(d.value))),
+    printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
   };
 }
 
@@ -88,7 +107,7 @@ async function sshKeys(dir: string, seen: Seen): Promise<CredentialFile[]> {
       ...modeOf(info.mode),
       secrets: found.length,
       readInSessions: seen.reads.get(path)?.size ?? 0,
-      printedInSessions: found.some((d) => seen.printed.has(fingerprint(d.value))),
+      printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
     });
   }
   return keys;

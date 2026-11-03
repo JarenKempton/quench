@@ -1,7 +1,8 @@
-import { readdir } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import type { Home } from "@quench/history";
+import { pathParts, type Home } from "@quench/history";
+import type { Masker } from "./mask.ts";
 import { textOf, tracked } from "./secret.ts";
 
 export type Footprint = {
@@ -26,10 +27,19 @@ const INSTALL_MARKERS: [RegExp, string][] = [
 
 const INSTALL_SCRIPTS = ["preinstall", "install", "postinstall"];
 
-export async function wormFootprints(home: Home, projects: readonly string[]) {
+export async function wormFootprints(
+  home: Home,
+  projects: readonly string[],
+  mask: Masker,
+  days: number,
+) {
+  const since = Date.now() - days * 86_400_000;
   const found: Footprint[] = [];
   for (const project of projects) {
-    found.push(...(await workflows(project)), ...(await installScripts(project)));
+    found.push(
+      ...(await workflows(project)),
+      ...(await installScripts(project, { mask, since, days })),
+    );
   }
   for (const name of ["inventory.txt", "inventory.txt.bak"]) {
     const path = join(tmpdir(), name);
@@ -63,7 +73,10 @@ async function workflows(project: string): Promise<Footprint[]> {
   return found;
 }
 
-async function installScripts(project: string): Promise<Footprint[]> {
+async function installScripts(
+  project: string,
+  recent: { mask: Masker; since: number; days: number },
+): Promise<Footprint[]> {
   const modules = join(project, "node_modules");
   const packages: string[] = [];
   for (const name of await names(modules)) {
@@ -75,14 +88,22 @@ async function installScripts(project: string): Promise<Footprint[]> {
   }
   const found: Footprint[] = [];
   for (const dir of packages) {
+    if (!pathParts(await realpath(dir).catch(() => dir)).includes("node_modules")) continue;
     const path = join(dir, "package.json");
     const manifest = parse(await textOf(path));
+    const written = (await stat(path).catch(() => null))?.ctimeMs ?? 0;
     for (const script of INSTALL_SCRIPTS) {
       const command = manifest?.scripts?.[script];
       if (typeof command !== "string") continue;
-      for (const [marker, reason] of INSTALL_MARKERS)
-        if (marker.test(command))
-          found.push({ path, project, reason: `${script} ${reason}`, tracked: null });
+      const payload = INSTALL_MARKERS.find(([marker]) => marker.test(command));
+      if (payload) found.push({ path, project, reason: `${script} ${payload[1]}`, tracked: null });
+      else if (written >= recent.since)
+        found.push({
+          path,
+          project,
+          reason: `${script} added in the last ${recent.days} days: ${recent.mask.scrubbed(command, 60)}`,
+          tracked: null,
+        });
     }
   }
   return found;

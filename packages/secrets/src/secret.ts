@@ -1,22 +1,29 @@
 import type { Detection } from "./detect.ts";
-import { fingerprint, masked } from "./mask.ts";
+import type { Masker } from "./mask.ts";
 import { rotateAt } from "./rotate.ts";
 
 export type Secret = {
-  fingerprint: string;
+  tag: string;
   masked: string;
   rule: string;
   provider: string;
+  confidence: "high" | "low";
   rotate: string | null;
 };
 
-export const secretOf = (found: Detection): Secret => ({
-  fingerprint: fingerprint(found.value),
-  masked: masked(found.value),
-  rule: found.rule,
-  provider: found.provider,
-  rotate: rotateAt(found.provider),
-});
+const LOW_CONFIDENCE = new Set(["generic-api-key", "secret-named-value"]);
+
+export const secretOf = (found: Detection, mask: Masker): Secret => {
+  const low = LOW_CONFIDENCE.has(found.rule);
+  return {
+    tag: mask.tag(found.value),
+    masked: mask.masked(found.value),
+    rule: found.rule,
+    provider: found.provider,
+    confidence: low ? "low" : "high",
+    rotate: low ? null : rotateAt(found.provider),
+  };
+};
 
 export async function textOf(path: string): Promise<string | null> {
   const file = Bun.file(path);

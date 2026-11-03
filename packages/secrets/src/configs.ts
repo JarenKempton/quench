@@ -7,6 +7,7 @@ import {
   type RiskyPermission,
 } from "@quench/history";
 import { detect, detectInFile } from "./detect.ts";
+import type { Masker } from "./mask.ts";
 import { secretOf, textOf, tracked, type Secret } from "./secret.ts";
 
 export type FileSecrets = {
@@ -18,7 +19,7 @@ export type FileSecrets = {
   secrets: Secret[];
 };
 
-export async function scanConfigs(home: Home, projects: readonly string[]) {
+export async function scanConfigs(home: Home, projects: readonly string[], mask: Masker) {
   const seen = new Set<string>();
   const files: FileSecrets[] = [];
   const permissions = new Map<string, RiskyPermission & { harness: HarnessId }>();
@@ -37,7 +38,9 @@ export async function scanConfigs(home: Home, projects: readonly string[]) {
       }
       const text = await textOf(config.path);
       if (text === null) continue;
-      const secrets = (config.kind === "prompts" ? detect(text) : detectInFile(text)).map(secretOf);
+      const secrets = (config.kind === "prompts" ? detect(text) : detectInFile(text)).map((found) =>
+        secretOf(found, mask),
+      );
       if (!secrets.length) continue;
       files.push({
         path: config.path,
