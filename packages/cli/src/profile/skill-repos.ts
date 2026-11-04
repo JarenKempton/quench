@@ -1,4 +1,3 @@
-import { stat } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { checkout } from "@quench/history";
 
@@ -44,20 +43,31 @@ async function trackedFiles(top: string, paths: string[]): Promise<string[]> {
   return code === 0 ? out.split("\0").filter(Boolean) : [];
 }
 
-export async function workTreeTops(paths: Iterable<string>): Promise<Map<string, string>> {
-  const found = new Map<string, string>();
-  const all = [...new Set(paths)];
+export async function gitDiscovery(dirs: Iterable<string>): Promise<Map<string, string | null>> {
+  const found = new Map<string, string | null>();
+  const all = [...new Set(dirs)];
   for (let i = 0; i < all.length; i += BATCH)
     await Promise.all(
-      all.slice(i, i + BATCH).map(async (path) => {
-        const dir = (await stat(path).catch(() => null))?.isDirectory() ? path : dirname(path);
-        const proc = Bun.spawn(["git", "-C", dir, "rev-parse", "--show-toplevel"], {
-          stdout: "pipe",
-          stderr: "ignore",
-        });
-        const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-        if (code === 0 && out.trim()) found.set(path, out.trim());
+      all.slice(i, i + BATCH).map(async (dir) => {
+        const result = await discover(dir).catch(() => undefined);
+        if (result !== undefined) found.set(dir, result);
       }),
     );
   return found;
+}
+
+async function discover(dir: string): Promise<string | null | undefined> {
+  const proc = Bun.spawn(["git", "-C", dir, "rev-parse", "--show-toplevel"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, LC_ALL: "C", LANGUAGE: "C" },
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code === 0 && out.trim()) return out.trim();
+  if (code === 128 && /^fatal: not a git repository/m.test(err)) return null;
+  return undefined;
 }

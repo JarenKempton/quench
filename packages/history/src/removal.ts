@@ -15,11 +15,6 @@ export function quoteArg(value: string, shell: Shell, always = false): string {
     : `'${value.replace(/['\u2018\u2019\u201A\u201B]/g, (quote) => quote + quote)}'`;
 }
 
-export const removeFolder = (path: string, shell: Shell) =>
-  shell === "posix"
-    ? `rm -r -- ${quoteArg(path, shell)}`
-    : `Remove-Item -Recurse -LiteralPath ${quoteArg(path, shell)}`;
-
 export const removeLink = (path: string, shell: Shell) =>
   shell === "posix"
     ? `rm -- ${quoteArg(path, shell)}`

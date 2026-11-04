@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { quoteArg, shellFor } from "@quench/history";
 
 import { lines, quench } from "./run.ts";
 
@@ -95,10 +94,7 @@ async function fixture() {
   return home;
 }
 
-const rm = (home: string, path: string) =>
-  shellFor() === "posix"
-    ? `rm -r -- ~/${path}`
-    : `Remove-Item -Recurse -LiteralPath ${quoteArg(join(home, path), "powershell")}`;
+const rm = (home: string, path: string) => `remove ${join(home, path)}`;
 
 test("profile skills names each skill's source and ranks a cut list with commands", async () => {
   const home = await fixture();
@@ -125,7 +121,7 @@ test("profile skills names each skill's source and ranks a cut list with command
     "102 chars | 1 | Codex | pages@openai-curated-remote | plugin, installed by default | installed by default; Codex refuses to uninstall it. Turn it off in codex → /plugins",
     "98 chars | 1 | Codex | vercel@openai-curated-remote | plugin | codex plugin remove vercel@openai-curated-remote · if Codex refuses with 403 (installed by default), turn it off in codex → /plugins",
     "75 chars | 1 | Codex | sample@debug | plugin | codex plugin remove sample@debug",
-    "54 chars | 2 | Claude Code | acme@tools | plugin | claude plugin disable acme@tools",
+    "54 chars | 2 | Claude Code | acme@tools | plugin | disable acme@tools from /plugin in Claude Code",
     `42 chars | 2 | Claude Code | deploy | project folder | ${rm(home, "work/.claude/skills/deploy")}`,
     `40 chars | 1 | Codex | tidy | user folder | ${rm(home, ".codex/skills/tidy")}`,
     `38 chars | 2 | Claude Code | notes | user folder | ${rm(home, ".claude/skills/notes")}`,

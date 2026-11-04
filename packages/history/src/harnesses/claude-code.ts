@@ -326,7 +326,7 @@ export const claudeCode: Harness<"claude-code"> = {
   },
 
   skillOrigins: (home) => claudeSkillOrigins(home.of(HOME)),
-  skillCut: (origin, context) => claudeSkillCut(origin, context, HOME),
+  skillCut: claudeSkillCut,
 
   async configs(home, project) {
     const configDir = home.of(HOME);

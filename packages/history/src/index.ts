@@ -35,7 +35,7 @@ export { harnessSettings, type ConfigFile, type RiskyPermission } from "./settin
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export type { CutContext, OriginOf, SkillCut, SkillOrigin } from "./skill-origin.ts";
 export { skillFolder } from "./skill-origin.ts";
-export { quoteArg, removeFolder, removeLink, shellFor, withEnv, type Shell } from "./removal.ts";
+export { quoteArg, removeLink, shellFor, withEnv, type Shell } from "./removal.ts";
 export {
   projects,
   sessionPlaces,

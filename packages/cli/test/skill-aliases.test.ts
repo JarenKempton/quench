@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, symlink, utimes } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { quoteArg, shellFor } from "@quench/history";
-import { lines, quench } from "./run.ts";
+import { lines, quench, quenchWith } from "./run.ts";
 
 const skill = (dir: string) =>
   Bun.write(join(dir, "SKILL.md"), `---\nname: ${basename(dir)}\ndescription: d\n---\n`);
@@ -38,7 +38,8 @@ const posix = shellFor() === "posix";
 const gitTop = (dir: string) =>
   Bun.spawnSync(["git", "-C", dir, "rev-parse", "--show-toplevel"]).stdout.toString().trim();
 
-const inside = (dir: string) => `inside a git repo (${gitTop(dir)}): remove it there`;
+const inside = (path: string, real = path) =>
+  `remove ${path} · inside a git repo (${gitTop(real)})`;
 
 const commit = (cwd: string, ...args: string[]) =>
   Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd });
@@ -250,7 +251,7 @@ test("a skill reached through a symlink into another worktree gets no delete com
   await symlink(join(wt, "shared"), join(home, ".agents/skills"), "dir");
   await codexListing(home, join(home, ".agents/skills"), ["borrowed"]);
   expect(await guardedRows(home)).toEqual([
-    `49 chars | 1 | Codex | borrowed | user folder | ${inside(join(wt, "shared/borrowed"))}`,
+    `49 chars | 1 | Codex | borrowed | user folder | ${inside(join(home, ".agents/skills/borrowed"), join(wt, "shared/borrowed"))}`,
   ]);
 });
 
@@ -264,3 +265,31 @@ test("a skill folder that is itself a git checkout gets no delete command", asyn
     `37 chars | 1 | Codex | tool | user folder | ${inside(tool)}`,
   ]);
 });
+
+test.skipIf(process.platform === "win32")(
+  "a git error such as dubious ownership leaves a link without a removal command",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-s13-")));
+    const bin = join(home, "bin");
+    await Bun.write(
+      join(bin, "git"),
+      "#!/bin/sh\necho \"fatal: detected dubious ownership in repository at '$PWD'\" >&2\nexit 128\n",
+    );
+    await chmod(join(bin, "git"), 0o755);
+    await skill(join(home, "shared/memo"));
+    await mkdir(join(home, ".agents/skills"), { recursive: true });
+    await symlink(join(home, "shared/memo"), join(home, ".agents/skills/memo"), "dir");
+    await codexListing(home, join(home, ".agents/skills"), ["memo"]);
+    const { stdout, code } = await quenchWith(
+      { PATH: `${bin}:${process.env.PATH}` },
+      home,
+      "profile",
+      "skills",
+    );
+    expect(code).toBe(0);
+    const memo = join(home, ".agents/skills/memo");
+    expect(cutRows(stdout)).toEqual([
+      `37 chars | 1 | Codex | memo | user folder | git could not check ${join(home, ".agents/skills")}: remove the link ${memo} there`,
+    ]);
+  },
+);
