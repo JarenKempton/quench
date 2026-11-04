@@ -59,7 +59,7 @@ export type Failure = {
   kind: FailureKind;
   detail: string | null;
   exitCode: number | null;
-  error?: string | null;
+  line?: string | null;
 };
 
 export type ListedSkill = { name: string; path: string | null; chars: number | null };

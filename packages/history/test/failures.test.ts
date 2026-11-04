@@ -53,7 +53,7 @@ test("failures are classified from the error text", () => {
 });
 
 test("a nonzero exit keeps the first line of its output, masked, from either harness", () => {
-  const error = (text: string) => failureSummary(failureOf(text, null)?.error ?? "");
+  const error = (text: string) => failureSummary(failureOf(text, null)?.line ?? "");
   expect(error("Exit code 255\nssh: connect to host box port 22: Connection refused")).toBe(
     "ssh: connect to host box port N: Connection refused",
   );
@@ -66,7 +66,7 @@ test("a nonzero exit keeps the first line of its output, masked, from either har
 });
 
 test("quoted, spaced and bare paths to the same file give one error line", () => {
-  const error = (text: string) => failureOf(text, null)?.error;
+  const error = (text: string) => failureOf(text, null)?.line;
   const lines = [
     'Exit code 1\nerror: "C:\\Program Files\\app\\main.ts" not found',
     "Exit code 1\nerror: 'C:\\Program Files\\app\\main.ts' not found",

@@ -135,3 +135,34 @@ test("a tool result after ten idle minutes leaves the closed run unchanged", () 
   expect(closed).toMatchObject({ toolErrors: 0, failures: [] });
   expect(late).toMatchObject({ prompt: null, toolErrors: 1 });
 });
+
+test("a failed command's credentials never reach the run record", () => {
+  const command = "curl -u user:review-canary https://example.test";
+  const [record] = runRecords(
+    session([
+      say(0, "user", "fetch it"),
+      think(1),
+      {
+        type: "tool_call",
+        id: "c",
+        name: "Bash",
+        shell: [{ command, workdir: "/repo" }],
+        at: at(2),
+      },
+      {
+        type: "tool_result",
+        callId: "c",
+        isError: true,
+        chars: 1,
+        failure: { kind: "exit-code", detail: null, exitCode: 22, line: null },
+        at: at(3),
+      },
+      say(4, "assistant", "Failed."),
+    ]),
+    [],
+    at(30),
+  );
+  expect(record!.failures).toEqual([
+    { tool: "Bash", server: null, kind: "exit-code", what: "curl" },
+  ]);
+});

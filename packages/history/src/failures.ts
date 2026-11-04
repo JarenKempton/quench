@@ -3,6 +3,7 @@ import {
   errorLineOf,
   exitCodeOf,
   failureSummary,
+  firstLineOf,
   mentionsInvalidInput,
   mentionsMissingPath,
   missingPathOf,
@@ -36,10 +37,13 @@ export function failureOf(
   const exitCode = exitCodeOf(head);
   if (isError !== true && !exitCode) return null;
 
-  if (denial === "blocked") return { kind: "blocked", detail: failureSummary(head), exitCode };
-  if (mentionsInvalidInput(head))
-    return { kind: "invalid-input", detail: failureSummary(head), exitCode };
-  if (denial === "rejected") return { kind: "rejected", detail: failureSummary(head), exitCode };
+  const summarised = (kind: Failure["kind"]): Failure => {
+    const line = firstLineOf(head);
+    return { kind, detail: line && failureSummary(line), exitCode, line };
+  };
+  if (denial === "blocked") return summarised("blocked");
+  if (mentionsInvalidInput(head)) return summarised("invalid-input");
+  if (denial === "rejected") return summarised("rejected");
 
   const missingProgram = missingProgramOf(head);
   if (missingProgram !== null || exitCode === 127)
@@ -49,8 +53,8 @@ export function failureOf(
   if (missingPath !== null || mentionsMissingPath(head))
     return { kind: "missing-path", detail: missingPath, exitCode };
 
-  if (exitCode) return { kind: "exit-code", detail: null, exitCode, error: errorLineOf(head) };
-  return { kind: "error", detail: failureSummary(head), exitCode };
+  if (exitCode) return { kind: "exit-code", detail: null, exitCode, line: errorLineOf(head) };
+  return summarised("error");
 }
 
 export type Scrub = (text: string) => string;
@@ -83,8 +87,7 @@ export function recordedFailures(session: Session, scrub: Scrub): SessionFailure
     }
 
     const { what } = failed;
-    const raw = event.failure.error;
-    const error = raw ? failureSummary(scrub(raw)) : null;
+    const error = event.failure.kind === "exit-code" ? scrubbedLine(event.failure, scrub) : null;
     const key = `${event.failure.kind}\0${what}\0${error}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
@@ -104,8 +107,12 @@ export function failedCall(
 ): { kind: Failure["kind"]; what: string | null } | null {
   const signature = shellSignatureOf(call, scrub);
   if (isNothingFound(failure, signature)) return null;
-  const what = whatFailed(failure, call, signature);
+  const what = whatFailed(failure, call, signature, scrub);
   return { kind: failure.kind, what: what && scrub(what) };
+}
+
+function scrubbedLine(failure: Failure, scrub: Scrub): string | null {
+  return failure.line ? failureSummary(scrub(failure.line)) : null;
 }
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
@@ -132,7 +139,9 @@ function whatFailed(
   failure: Failure,
   call: ToolCall | undefined,
   signature: string | null,
+  scrub: Scrub,
 ): string | null {
+  if (failure.kind !== "exit-code" && failure.line) return scrubbedLine(failure, scrub);
   if (failure.detail !== null) return failure.detail;
   if (failure.kind === "missing-path" && call?.fileRead) return call.fileRead.path;
   if (signature !== null) return signature;

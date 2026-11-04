@@ -55,7 +55,7 @@ export function failureSummary(text: string): string | null {
     .replace(/[.:]$/, "");
 }
 
-function firstLineOf(text: string): string | null {
+export function firstLineOf(text: string): string | null {
   const unwrapped = text
     .replace(/<\/?[a-z_]+>/g, "")
     .replace(/^\s*[\w:]+ hook error:\s*/i, "")

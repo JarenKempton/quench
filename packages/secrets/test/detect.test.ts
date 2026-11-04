@@ -8,10 +8,12 @@ import {
   detectInFile,
   machineKey,
   masker,
+  redacted,
   sshKeyEncrypted,
   toolConfigFiles,
 } from "../src/index.ts";
 import { goRegex } from "../src/go-regex.ts";
+import { passwords } from "../src/mask.ts";
 import { rules } from "../src/rules.ts";
 
 const FAKE_BODY = "FakeQuenchTestValue0123456789abcdefg";
@@ -152,4 +154,20 @@ test("a jwt issuer loses control characters", () => {
   expect(detect(`token: ${jwt}\n`).map((d) => d.issuer)).toEqual([
     "[2Jhttps://auth.example.testFAKE",
   ]);
+});
+
+test("credential flags are masked whatever their length, without new findings", () => {
+  for (const [text, value] of [
+    ["deploy --token=shortpw", "shortpw"],
+    ["deploy --api-key zzzzzzzzzzzz", "zzzzzzzzzzzz"],
+    ["deploy --client-secret 'ab'", "ab"],
+    ["refused: Authorization: Bearer cnry", "cnry"],
+  ]) {
+    expect(detectInFile(text!)).toEqual([]);
+    expect(passwords(text!)).toEqual([]);
+    expect(redacted(text!)).not.toContain(value!);
+    expect(redacted(text!)).toContain("‹secret›");
+    expect(mask.scrubbed(text!)).not.toContain(value!);
+  }
+  expect(redacted("--password=p --force")).toBe("--password=‹secret› --force");
 });

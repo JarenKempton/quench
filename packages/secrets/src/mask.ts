@@ -21,7 +21,9 @@ const PASSWORDS = [
   /:\/\/[^\s:@/]+:([^\s@/]+)@/g,
 ];
 const AUTH_HEADER =
-  /\b(?:authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)?|bearer)\s+([^\s"',;]{8,})/gi;
+  /(\b(?:authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)?|bearer)\s+)([^\s"',;]+)/gi;
+const CREDENTIAL_FLAG =
+  /((?:^|\s)--?[\w-]*(?:token|passw(?:or)?d|pass|secret|api[_-]?key|access[_-]?key|auth|credential)[\w-]*(?:=|\s+))(?:'([^']*)'|"([^"]*)"|([^\s'"-][^\s'"]*))/gi;
 const HTPASSWD = /\bhtpasswd((?:\s+(?:'[^']*'|"[^"]*"|[^\s|;&]+))+)/g;
 const WORD = new RegExp(VALUE, "g");
 
@@ -43,7 +45,7 @@ export function masker(key: Buffer): Masker {
   const tag = (value: string) => id(value).slice(0, 8);
   const masked = (value: string) => `${value.slice(0, 4)}…${tag(value)}`;
   const scrubbed = (text: string, width = 80) => {
-    let safe = text;
+    let safe = flagsMasked(text, (value) => (value.length > 8 ? masked(value) : `…${tag(value)}`));
     for (const value of secretValues(text)) safe = safe.replaceAll(value, masked(value));
     safe = safe.replace(LONG_WORD, (word) => (entropy(word) >= 3.5 ? masked(word) : word));
     const line = safe.split(/\s+/).filter(Boolean).join(" ");
@@ -53,16 +55,30 @@ export function masker(key: Buffer): Masker {
 }
 
 export function redacted(text: string): string {
-  let safe = text;
-  for (const value of secretValues(text)) safe = safe.replaceAll(value, "‹secret›");
+  let safe = flagsMasked(text, () => SECRET);
+  for (const value of secretValues(text)) safe = safe.replaceAll(value, SECRET);
   return safe;
+}
+
+const SECRET = "‹secret›";
+
+function flagsMasked(text: string, mask: (value: string) => string): string {
+  return text
+    .replace(AUTH_HEADER, (_, header: string, value: string) => `${header}${mask(value)}`)
+    .replace(
+      CREDENTIAL_FLAG,
+      (_, flag: string, single?: string, double?: string, bare?: string) => {
+        if (single !== undefined) return `${flag}'${mask(single)}'`;
+        if (double !== undefined) return `${flag}"${mask(double)}"`;
+        return `${flag}${mask(bare!)}`;
+      },
+    );
 }
 
 function secretValues(text: string): string[] {
   const values = new Set(detectInFile(text).map((d) => d.value));
   for (const value of passwords(text)) values.add(value);
-  for (const [, value] of text.matchAll(AUTH_HEADER)) values.add(value!);
-  return [...values].sort((a, b) => b.length - a.length);
+  return [...values].filter((v) => v.length >= 4).sort((a, b) => b.length - a.length);
 }
 
 export function passwords(text: string): string[] {
