@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { ConfigFile, Home } from "@quench/history";
 import { detectInFile } from "./detect.ts";
 import type { Masker } from "./mask.ts";
+import { pathKey } from "./path-key.ts";
 import { findingId, secretOf, textOf, tracked, type Secret } from "./secret.ts";
 
 export type CredentialFile = {
@@ -46,7 +47,7 @@ export function toolConfigFiles(
     env.GH_CONFIG_DIR || (platform === "win32" ? join(appData, "GitHub CLI") : join(config, "gh"));
   const gcloud =
     env.CLOUDSDK_CONFIG ||
-    (platform === "win32" ? join(appData, "gcloud") : join(config, "gcloud"));
+    (platform === "win32" ? join(appData, "gcloud") : join(homeDir, ".config", "gcloud"));
   return [
     [join(gh, "hosts.yml"), "GitHub CLI"],
     [join(gcloud, "application_default_credentials.json"), "gcloud ADC"],
@@ -67,6 +68,9 @@ export async function credentialFiles(
     ...harnessFiles.map((file): [string, string] => [file.path, "agent login"]),
     ...(await filesIn(join(home.dir, ".azure"), (name) => name.endsWith(".json"))).map(
       (path): [string, string] => [path, "Azure"],
+    ),
+    ...(await filesIn(join(home.dir, ".zsh_sessions"), (name) => name.endsWith(".history"))).map(
+      (path): [string, string] => [path, "shell history"],
     ),
   ];
   for (const project of projects)
@@ -91,7 +95,7 @@ async function inspect(path: string, label: string, seen: Seen): Promise<Credent
     tracked: label === ".env" && found.length ? await tracked(basename(path), dirname(path)) : null,
     secrets: found.length,
     values: found.map((d) => secretOf(d, seen.mask, path)),
-    readInSessions: seen.reads.get(path)?.size ?? 0,
+    readInSessions: seen.reads.get(pathKey(path))?.size ?? 0,
     printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
   };
 }
@@ -115,7 +119,7 @@ async function sshKeys(dir: string, seen: Seen): Promise<CredentialFile[]> {
       tracked: null,
       secrets: found.length,
       values: found.map((d) => secretOf(d, seen.mask, path)),
-      readInSessions: seen.reads.get(path)?.size ?? 0,
+      readInSessions: seen.reads.get(pathKey(path))?.size ?? 0,
       printedInSessions: found.some((d) => seen.printed.has(seen.mask.id(d.value))),
     });
   }

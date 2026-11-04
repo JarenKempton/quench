@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { statSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
+import type { Home } from "../home.ts";
 import type { HarnessId, SenderEvidence, Session, SessionEnricher } from "../model.ts";
 
 /** T3's projected link between a host conversation and a harness-native session. */
@@ -49,6 +51,8 @@ const drivers: Readonly<Record<string, HarnessId>> = {
 };
 
 const MAX_DELIVERY_MS = 60_000;
+
+export const t3State = (home: Home) => join(home.dir, ".t3", "userdata", "statev2.sqlite");
 
 export function openT3History(path: string): {
   enrich: SessionEnricher;

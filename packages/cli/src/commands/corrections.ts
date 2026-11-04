@@ -8,7 +8,7 @@ import {
   type Home,
   type SessionEnricher,
 } from "@quench/history";
-import { openT3History } from "@quench/history/hosts/t3";
+import { openT3History, t3State } from "@quench/history/hosts/t3";
 import { behaviour, linkSubagents, runs } from "@quench/insights";
 import {
   Jev,
@@ -66,9 +66,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
     replyJudge === null,
   );
   const host =
-    options.hostHistory === false
-      ? null
-      : openT3History(options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"));
+    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
   let sessions: SessionRuns[];
   const since = new Date(Date.now() - options.days * 86_400_000);
   try {

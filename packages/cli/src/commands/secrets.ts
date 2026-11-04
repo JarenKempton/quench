@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import type { Home } from "@quench/history";
+import { t3State } from "@quench/history/hosts/t3";
 import {
   printable,
   secretsReport,
@@ -22,7 +22,7 @@ export async function secrets(
 ): Promise<number> {
   const report = await secretsReport(home, {
     days: options.days,
-    hostHistory: options.hostHistory ?? join(home.dir, ".t3/userdata/statev2.sqlite"),
+    hostHistory: options.hostHistory ?? t3State(home),
     repoHistory: options.repoHistory ?? false,
     onRead: reading(),
     onRepo: reading("repositories"),
