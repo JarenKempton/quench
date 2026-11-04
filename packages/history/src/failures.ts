@@ -107,8 +107,7 @@ export function failedCall(
 ): { kind: Failure["kind"]; what: string | null } | null {
   const signature = shellSignatureOf(call, scrub);
   if (isNothingFound(failure, signature)) return null;
-  const what = whatFailed(failure, call, signature, scrub);
-  return { kind: failure.kind, what: what && scrub(what) };
+  return { kind: failure.kind, what: whatFailed(failure, call, signature, scrub) };
 }
 
 function scrubbedLine(failure: Failure, scrub: Scrub): string | null {
@@ -142,8 +141,8 @@ function whatFailed(
   scrub: Scrub,
 ): string | null {
   if (failure.kind !== "exit-code" && failure.line) return scrubbedLine(failure, scrub);
-  if (failure.detail !== null) return failure.detail;
-  if (failure.kind === "missing-path" && call?.fileRead) return call.fileRead.path;
+  if (failure.detail !== null) return scrub(failure.detail);
+  if (failure.kind === "missing-path" && call?.fileRead) return scrub(call.fileRead.path);
   if (signature !== null) return signature;
   if (failure.kind === "exit-code" || failure.kind === "missing-program") return null;
   return call?.name ?? null;

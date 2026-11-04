@@ -163,6 +163,6 @@ test("a failed command's credentials never reach the run record", () => {
     at(30),
   );
   expect(record!.failures).toEqual([
-    { tool: "Bash", server: null, kind: "exit-code", what: "curl" },
+    { tool: "Bash", server: null, kind: "exit-code", what: "curl -u" },
   ]);
 });

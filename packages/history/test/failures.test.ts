@@ -84,8 +84,14 @@ test("a command signature names one program, or none for several", () => {
   expect(commandSignature("C:\\Git\\bin\\git.exe push origin main")).toBe("git push");
   expect(commandSignature(".\\tools\\build.cmd release")).toBe("build release");
   expect(commandSignature("make my\\ target")).toBe("make");
-  expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe("bun test");
-  expect(commandSignature("python3 -c 'print(1)'")).toBe("python3");
+  expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe(
+    "bun test --watch",
+  );
+  expect(commandSignature("python3 -c 'print(1)'")).toBe("python3 -c");
+  expect(commandSignature("curl -u a:b --header=x https://example.test")).toBe("curl -u --header");
+  expect(commandSignature("deploy -uadmin:pw --token=-canary --token z user:pw")).toBe(
+    "deploy -u --token",
+  );
   expect(commandSignature("git status && npm test")).toBeNull();
   expect(commandSignature("sleep 5; echo hi")).toBeNull();
 });

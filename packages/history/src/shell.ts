@@ -129,14 +129,18 @@ export function commandSignature(command: string): string | null {
         ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
         : null;
     if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
-    const sub = words.slice(1).find((w) => !w.text.startsWith("-"));
-    return [
-      program && sub && !sub.dynamic && /^[a-z][a-z0-9:_-]*$/.test(sub.text)
-        ? `${program} ${sub.text}`
-        : program,
-    ];
+    const next = words[1];
+    const sub = next && !next.dynamic && /^[a-z][a-z0-9_-]*$/.test(next.text) ? next.text : null;
+    const flags = new Set(words.slice(1).flatMap((w) => flagName(w.text)));
+    return [program && [program, ...(sub ? [sub] : []), ...flags].join(" ")];
   });
   return signatures.length === 1 ? signatures[0]! : null;
+}
+
+function flagName(word: string): string[] {
+  const long = /^--[A-Za-z][A-Za-z0-9-]*/.exec(word)?.[0];
+  if (long) return [long];
+  return /^-[A-Za-z]/.test(word) ? [word.slice(0, 2)] : [];
 }
 
 function searchOf(
