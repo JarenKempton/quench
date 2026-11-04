@@ -414,8 +414,16 @@ test("steering sums every recorded file a session loaded, even when two share th
   ]);
   await claudeSession(home, "b", project, []);
   const out = JSON.parse((await run(home, project, "--json")).stdout);
-  expect(out.ranked).toHaveLength(1);
-  expect(out.ranked[0]).toMatchObject({ sessions: 1, loadedChars: 2 * text.length });
+  expect(
+    out.ranked.map((r: { path: string; sessions: number; loadedChars: number }) => [
+      r.path,
+      r.sessions,
+      r.loadedChars,
+    ]),
+  ).toEqual([
+    [global, 1, text.length],
+    [local, 1, text.length],
+  ]);
   expect(out.coverage).toEqual({ sessions: 2, unrecorded: 0, combinedOnly: 0 });
 });
 
@@ -517,4 +525,44 @@ test("steering recognises drive-letter paths when checking for stale files", asy
   expect(out.stale.map((rule: { missing: object[] }) => rule.missing)).toEqual([
     [{ name: "C:\\quench-missing\\gone.md", kind: "file" }],
   ]);
+});
+
+test("steering keeps ranking totals per file path after a file's text changes to match another", async () => {
+  const { home, project } = await fixture();
+  const text = "- Be brief.";
+  const global = join(home, "claude-config/CLAUDE.md");
+  const local = join(project, "CLAUDE.md");
+  for (const path of [global, local]) await Bun.write(path, `${text}\n`);
+  await claudeSession(home, "a", project, [
+    [global, text],
+    [local, "x".repeat(100_000)],
+  ]);
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(
+    out.ranked.map((r: { path: string; scope: string; loadedChars: number }) => [
+      r.path,
+      r.scope,
+      r.loadedChars,
+    ]),
+  ).toEqual([
+    [local, "project", 100_000],
+    [global, "global", text.length],
+  ]);
+});
+
+test("steering compares conflicts per scoped location when global and project files are identical", async () => {
+  const { home, project } = await fixture();
+  const never = "- Never deploy on a Friday afternoon.\n";
+  const global = join(home, "claude-config/CLAUDE.md");
+  const local = join(project, "CLAUDE.md");
+  await Bun.write(local, never);
+  await Bun.write(join(home, "claude-config/rules/same.md"), never);
+  await Bun.write(global, "- Always deploy on a Friday afternoon.\n");
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(
+    out.conflicts.map((c: { global: { path: string }; project: { path: string } }) => [
+      c.global.path,
+      c.project.path,
+    ]),
+  ).toEqual([[global, local]]);
 });

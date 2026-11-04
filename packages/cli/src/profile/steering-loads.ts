@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { checkout, type SessionPlace, type SteeringFile } from "@quench/history";
+import { fileLocations, fold } from "./steering-findings.ts";
 
 export type RankedItem = {
   id: string;
@@ -12,9 +13,6 @@ export type RankedItem = {
 };
 
 export type LoadCoverage = { sessions: number; unrecorded: number; combinedOnly: number };
-
-const fold = (path: string) =>
-  process.platform === "darwin" || process.platform === "win32" ? path.toLowerCase() : path;
 
 export async function rankedItems(
   files: SteeringFile[],
@@ -32,10 +30,13 @@ export async function rankedItems(
     const real = await realpath(dir).catch(() => dir);
     return fold((await checkoutOf(real))?.root ?? real);
   };
-  const byKey = new Map<string, SteeringFile>();
-  for (const file of files)
-    for (const source of file.sources)
-      for (const path of [source.path, source.realPath]) byKey.set(await keyOf(path), file);
+  const located = files.flatMap((file) =>
+    fileLocations(file).map((location) => ({ ...location, file, id: fold(location.realPath) })),
+  );
+  const byKey = new Map<string, (typeof located)[number]>();
+  for (const location of located)
+    for (const source of location.file.sources.filter((s) => fold(s.realPath) === location.id))
+      for (const path of [source.path, source.realPath]) byKey.set(await keyOf(path), location);
   const root = await rootOf(project);
   const loads = new Map<string, { sessions: number; chars: number }>();
   const coverage: LoadCoverage = { sessions: 0, unrecorded: 0, combinedOnly: 0 };
@@ -53,29 +54,27 @@ export async function rankedItems(
     for (const record of place.instructions) {
       if (!record.path) continue;
       const key = await keyOf(record.path);
-      const file =
+      const location =
         byKey.get(key) ??
         byKey.get(await keyOf(await realpath(record.path).catch(() => record.path!)));
       const identity = `${key}\0${record.label ?? ""}`;
-      if (!file || records.has(identity)) continue;
+      if (!location || records.has(identity)) continue;
       records.add(identity);
-      const load = loads.get(file.id) ?? { sessions: 0, chars: 0 };
-      loads.set(file.id, {
-        sessions: load.sessions + (counted.has(file.id) ? 0 : 1),
+      const load = loads.get(location.id) ?? { sessions: 0, chars: 0 };
+      loads.set(location.id, {
+        sessions: load.sessions + (counted.has(location.id) ? 0 : 1),
         chars: load.chars + record.textChars,
       });
-      counted.add(file.id);
+      counted.add(location.id);
     }
   }
-  const items = files.map((file) => {
-    const load = loads.get(file.id) ?? { sessions: 0, chars: 0 };
+  const items = located.map((location) => {
+    const load = loads.get(location.id) ?? { sessions: 0, chars: 0 };
     return {
-      id: file.id,
-      path: file.sources[0]!.path,
-      scope: file.sources.some((s) => s.scope === "user")
-        ? ("global" as const)
-        : ("project" as const),
-      chars: file.chars,
+      id: location.file.id,
+      path: location.path,
+      scope: location.global ? ("global" as const) : ("project" as const),
+      chars: location.file.chars,
       sessions: load.sessions,
       loadedChars: load.chars,
     };

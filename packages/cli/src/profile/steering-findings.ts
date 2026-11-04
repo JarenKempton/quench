@@ -34,16 +34,34 @@ const isGlobal = (file: SteeringFile) => file.sources.some((s) => s.scope === "u
 const located = (file: SteeringFile) =>
   file.rules.map((rule) => ({ ...rule, path: file.sources[0]!.realPath }));
 
-const everyLocation = (file: SteeringFile) =>
-  [...new Map(file.sources.map((s) => [fold(s.realPath), s.realPath])).values()].flatMap((path) =>
-    file.rules.map((rule) => ({ ...rule, path })),
-  );
-
-const fold = (path: string) =>
+export const fold = (path: string) =>
   process.platform === "darwin" || process.platform === "win32" ? path.toLowerCase() : path;
+
+export type FileLocation = { realPath: string; path: string; global: boolean };
+
+export function fileLocations(file: SteeringFile): FileLocation[] {
+  const locations = new Map<string, FileLocation>();
+  for (const source of file.sources) {
+    const key = fold(source.realPath);
+    const known = locations.get(key);
+    locations.set(key, {
+      realPath: source.realPath,
+      path: known?.path ?? source.path,
+      global: (known?.global ?? false) || source.scope === "user",
+    });
+  }
+  return [...locations.values()];
+}
+
+const everyLocation = (file: SteeringFile) =>
+  fileLocations(file).flatMap((location) =>
+    file.rules.map((rule) => ({ ...rule, path: location.realPath, global: location.global })),
+  );
 
 const codeSpans = (text: string) =>
   [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+
+const at = ({ global: _, ...rule }: RuleAt & { global: boolean }): RuleAt => rule;
 
 export function duplicateRules(files: SteeringFile[]): RuleAt[][] {
   const groups = new Map<string, { paths: Set<string>; rules: RuleAt[] }>();
@@ -53,14 +71,15 @@ export function duplicateRules(files: SteeringFile[]): RuleAt[][] {
       if (key.length < MIN_CHARS) continue;
       const group = groups.get(key) ?? groups.set(key, { paths: new Set(), rules: [] }).get(key)!;
       group.paths.add(fold(rule.path));
-      group.rules.push(rule);
+      group.rules.push(at(rule));
     }
   return [...groups.values()].filter((g) => g.paths.size > 1).map((g) => g.rules);
 }
 
 export function conflictingRules(files: SteeringFile[]): { global: RuleAt; project: RuleAt }[] {
-  const global = files.filter(isGlobal).flatMap(located);
-  const project = files.filter((f) => !isGlobal(f)).flatMap(located);
+  const rules = files.flatMap(everyLocation);
+  const global = rules.filter((r) => r.global);
+  const project = rules.filter((r) => !r.global);
   const negated = (rule: RuleAt) => NEGATION.test(normal(rule.text));
   const core = (rule: RuleAt) => normal(rule.text).replace(MODAL, " ").replace(/\s+/g, " ").trim();
   return global.flatMap((g) =>
@@ -71,7 +90,7 @@ export function conflictingRules(files: SteeringFile[]): { global: RuleAt; proje
           core(g).split(" ").length >= MIN_ACTION_WORDS &&
           core(g) === core(p),
       )
-      .map((p) => ({ global: g, project: p })),
+      .map((p) => ({ global: at(g), project: at(p) })),
   );
 }
 
