@@ -41,7 +41,8 @@ export type Occurrence = {
 export type PlaceOrigin = (place: SessionPlace, skill: ListedSkill) => SkillOrigin;
 
 export function targetOf(harness: HarnessId, origin: SkillOrigin, name: string): string {
-  if (origin.kind === "folder") return `folder:${origin.path}`;
+  if (origin.kind === "folder")
+    return origin.link ? `link:${origin.path}` : `folder:${origin.realPath}`;
   if (origin.kind === "plugin") return `plugin:${harness}:${origin.plugin}`;
   return `${origin.kind}:${harness}:${name}`;
 }

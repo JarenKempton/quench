@@ -12,6 +12,7 @@ export type Cut = {
   sessions: number;
   listedChars: number;
   unsizedSessions: number;
+  size: "exact" | "lower bound" | "unknown";
   command: string | null;
   note: string | null;
 };
@@ -43,6 +44,7 @@ type Target = {
   harnesses: Set<HarnessId>;
   sessions: Set<number>;
   unsized: Set<number>;
+  sized: number;
   chars: number;
   names: Set<string>;
   listings: Map<string, string>;
@@ -56,6 +58,7 @@ export function skillCuts(
   cutOf: CutOf,
 ): SkillCuts {
   const targets = new Map<string, Target>();
+  const realUses = new Map<string, Map<string, number>>();
   for (const o of occurrences) {
     const t =
       targets.get(o.target) ??
@@ -65,6 +68,7 @@ export function skillCuts(
           harnesses: new Set(),
           sessions: new Set(),
           unsized: new Set(),
+          sized: 0,
           chars: 0,
           names: new Set(),
           listings: new Map(),
@@ -78,11 +82,17 @@ export function skillCuts(
     const listing = `${o.harness}\0${o.name}`;
     t.listings.set(listing, o.name);
     if (o.chars === null) t.unsized.add(o.session);
-    else t.chars += o.chars;
+    else {
+      t.sized++;
+      t.chars += o.chars;
+    }
     if (!o.used) continue;
     const user = `${harnessById[o.harness].label} ${o.name}`;
     t.usedListings.add(listing);
     t.uses.set(user, (t.uses.get(user) ?? 0) + 1);
+    if (o.origin.kind !== "folder") continue;
+    const real = realUses.get(o.origin.realPath) ?? new Map<string, number>();
+    realUses.set(o.origin.realPath, real.set(user, (real.get(user) ?? 0) + 1));
   }
   const cuts: Cut[] = [];
   const notOnDisk = new Map<HarnessId, string[]>();
@@ -98,12 +108,15 @@ export function skillCuts(
       continue;
     }
     const unknown = [...t.harnesses].filter((h) => !useRecorded(h));
-    cuts.push(cutFrom(t, unused, cutOf(recorded[0]!, t.origin), unknown));
+    const shared =
+      t.origin.kind === "folder" && !t.origin.link ? realUses.get(t.origin.realPath) : undefined;
+    const guarded = shared ? { ...t, uses: shared } : t;
+    cuts.push(cutFrom(guarded, unused, cutOf(recorded[0]!, t.origin), unknown));
   }
   return {
     cuts: cuts.sort(
       (a, b) =>
-        Number(a.unsizedSessions === a.sessions) - Number(b.unsizedSessions === b.sessions) ||
+        Number(a.size === "unknown") - Number(b.size === "unknown") ||
         b.listedChars - a.listedChars ||
         a.what.localeCompare(b.what),
     ),
@@ -130,6 +143,7 @@ function cutFrom(t: Target, unused: string[], cut: SkillCut, unknown: HarnessId[
     sessions: t.sessions.size,
     listedChars: t.chars,
     unsizedSessions: t.unsized.size,
+    size: !t.sized ? "unknown" : t.unsized.size ? "lower bound" : "exact",
     command: withheld ? null : cut.command,
     note: withheld ? `no command, ${withheld}` : cut.note,
   };
@@ -157,7 +171,7 @@ export function renderCuts({ cuts, notOnDisk }: SkillCuts, homeDir: string): str
       `  Not on disk now, nothing to cut · ${harnessById[harness].label}: ${list(skills)}`,
     );
   lines.push(
-    `  ${dim("Listed: each skill's own entry in the recorded listings, summed over the sessions that listed it; ≥ when some sessions recorded no per-skill text, unknown when none did.")}`,
+    `  ${dim("Listed: each skill's own entry in the recorded listings, summed over the sessions that listed it; ≥ when some entries recorded no per-skill text, unknown when none did.")}`,
   );
   return lines;
 }
@@ -166,9 +180,9 @@ function row(cut: Cut, homeDir: string): string[] {
   const what =
     cut.skills.length > 1 ? `${cut.what} (${plural(cut.skills.length, "skill")})` : cut.what;
   return [
-    cut.unsizedSessions === cut.sessions
+    cut.size === "unknown"
       ? "unknown"
-      : `${cut.unsizedSessions ? "≥" : ""}${chars(cut.listedChars)}`,
+      : `${cut.size === "lower bound" ? "≥" : ""}${chars(cut.listedChars)}`,
     count(cut.sessions),
     cut.agents.map((h) => harnessById[h].label).join(", "),
     what,

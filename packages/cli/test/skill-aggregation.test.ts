@@ -16,7 +16,13 @@ const place = (harness: SessionPlace["harness"], cwd: string, listed: Listed[]) 
     },
   }) as unknown as SessionPlace;
 
-const folder = (path: string): SkillOrigin => ({ kind: "folder", scope: "project", path });
+const folder = (path: string, realPath = path, link = false): SkillOrigin => ({
+  kind: "folder",
+  scope: "project",
+  path,
+  realPath,
+  link,
+});
 
 function cuts(places: SessionPlace[], originOf: PlaceOrigin) {
   const { occurrences } = skillUse(places, originOf);
@@ -105,4 +111,20 @@ test("a plugin row counts every session that listed any of its skills", () => {
       plugin,
     ).map(brief),
   ).toEqual([["p@m", 3, "remove plugin"]]);
+});
+
+test("a plugin with sized and unsized skills shows the known size as a lower bound", () => {
+  const plugin: PlaceOrigin = () => ({ kind: "plugin", plugin: "p@m", installedByDefault: false });
+  const [cut] = cuts(
+    [
+      place("codex", "/w", [
+        ["p:a", 40],
+        ["p:b", null],
+      ]),
+    ],
+    plugin,
+  );
+  expect([cut!.size, cut!.listedChars]).toEqual(["lower bound", 40]);
+  const [unknown] = cuts([place("codex", "/w", [["p:b", null]])], plugin);
+  expect(unknown!.size).toBe("unknown");
 });

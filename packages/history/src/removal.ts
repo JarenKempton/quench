@@ -20,6 +20,11 @@ export const removeFolder = (path: string, shell: Shell) =>
     ? `rm -r -- ${quoteArg(path, shell)}`
     : `Remove-Item -Recurse -LiteralPath ${quoteArg(path, shell)}`;
 
+export const removeLink = (path: string, shell: Shell) =>
+  shell === "posix"
+    ? `rm -- ${quoteArg(path, shell)}`
+    : `(Get-Item -LiteralPath ${quoteArg(path, shell)}).Delete()`;
+
 export function withEnv(variable: string, value: string | null, command: string, shell: Shell) {
   if (value === null) return command;
   return shell === "posix"

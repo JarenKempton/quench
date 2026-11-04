@@ -4,27 +4,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { quoteArg, shellFor } from "@quench/history";
 
-const main = join(import.meta.dir, "../src/main.ts");
+import { lines, quench } from "./run.ts";
 
-async function quench(home: string, ...args: string[]) {
-  const proc = Bun.spawn(["bun", main, ...args], {
-    env: {
-      ...process.env,
-      HOME: home,
-      CLAUDE_CONFIG_DIR: "",
-      CODEX_HOME: "",
-      PI_CODING_AGENT_DIR: "",
-      TYPESAFE_API_KEY: "must-not-be-used",
-      TYPESAFE_BASE_URL: "http://127.0.0.1:1",
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  return { stdout, code };
-}
-
-const lines = (records: object[]) => records.map((r) => JSON.stringify(r)).join("\n") + "\n";
 const skill = (dir: string) =>
   Bun.write(join(dir, "SKILL.md"), `---\nname: ${basename(dir)}\ndescription: d\n---\n`);
 
@@ -162,6 +143,8 @@ test("profile --json carries each skill's origin and each cut's sessions and siz
     kind: "folder",
     scope: "user",
     path: join(home, ".claude/skills/notes"),
+    realPath: join(home, ".claude/skills/notes"),
+    link: false,
   });
   expect(origin.simplify).toEqual({ kind: "built-in" });
   expect(origin["acme:lint"]).toEqual({

@@ -74,10 +74,7 @@ export async function profile(
       globalMcp.set(`${server.harness}\0${server.name}`, server);
     profiled.push(shared.project);
   }
-  const skills = skillUse(
-    places,
-    await placeOrigins(home, found.placesByRoot, profiled, globalSkills),
-  );
+  const skills = skillUse(places, await placeOrigins(home, places, globalSkills));
   const configuredMcp = [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)];
   const result: Profile & { observedAt: string; limitations: string[] } = {
     observedAt: new Date().toISOString(),
@@ -124,19 +121,29 @@ export async function profile(
 
 async function placeOrigins(
   home: Home,
-  placesByRoot: Map<string, SessionPlace[]>,
-  profiled: ProfiledProject[],
+  places: readonly SessionPlace[],
   globalSkills: Map<string, Skill>,
 ): Promise<PlaceOrigin> {
   const origins = new Map(
     await Promise.all(harnesses.map(async (h) => [h.id, await h.skillOrigins(home)] as const)),
   );
+  const global = [...globalSkills.values()];
+  const byDirectory = new Map<string, Promise<Skill[]>>();
+  const inventory = (cwd: string) =>
+    byDirectory.get(cwd) ??
+    byDirectory
+      .set(
+        cwd,
+        stat(cwd).then(
+          () => skillInventory(home, cwd).then((found) => found.skills),
+          () => global,
+        ),
+      )
+      .get(cwd)!;
   const onDisk = new Map<SessionPlace, Skill[]>();
-  for (const project of profiled)
-    for (const place of placesByRoot.get(project.root) ?? [])
-      onDisk.set(place, [...globalSkills.values(), ...project.skills]);
-  return (place, skill) =>
-    origins.get(place.harness)!(skill, onDisk.get(place) ?? [...globalSkills.values()]);
+  for (const place of places)
+    if (place.skills) onDisk.set(place, place.cwd ? await inventory(place.cwd) : global);
+  return (place, skill) => origins.get(place.harness)!(skill, onDisk.get(place) ?? global);
 }
 
 async function profileProject(home: Home, project: Project, places: SessionPlace[]) {
