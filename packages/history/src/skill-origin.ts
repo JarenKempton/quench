@@ -1,8 +1,8 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import type { Home } from "./home.ts";
 import type { HarnessId, ListedSkill } from "./model.ts";
-import { quoteArg, removeFolder, removeLink, type Shell } from "./removal.ts";
+import { removeFolder, removeLink, type Shell } from "./removal.ts";
 import type { Skill, SkillRoot } from "./skills.ts";
 
 export type SkillOrigin =
@@ -57,8 +57,8 @@ export function notFound(skill: ListedSkill, plugin: string | null = null): Skil
 export function folderCut(origin: SkillOrigin, shell: Shell): SkillCut | null {
   if (origin.kind === "folder" && origin.repo)
     return {
-      command: `git -C ${quoteArg(origin.repo.root, shell)} rm -r -- ${quoteArg(origin.repo.path, shell)}`,
-      note: "tracked in the repo: commit the removal, and every worktree drops it as it updates",
+      command: null,
+      note: `tracked in ${basename(origin.repo.root)}: remove ${origin.repo.path} in a PR`,
     };
   if (origin.kind === "folder")
     return {

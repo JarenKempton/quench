@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { quoteArg, shellFor } from "@quench/history";
+import { quoteArg, removeFolder, shellFor } from "@quench/history";
 import { lines, quench } from "./run.ts";
 
 const skill = (dir: string) =>
@@ -126,13 +126,11 @@ test("a skill tracked in a repo is one row across worktrees, removed from the re
   );
   const { stdout, code } = await quench(home, "profile", "skills");
   expect(code).toBe(0);
-  const repo = (rel: string) => `git -C ${quoteArg(main, shellFor())} rm -r -- ${rel}`;
-  const note = "tracked in the repo: commit the removal, and every worktree drops it as it updates";
   const scratch = join(other, ".claude/skills/scratch");
   expect(cutRows(stdout)).toEqual([
-    `30 chars | 2 | Claude Code | foo | tracked in repo | ${repo(".claude/skills/foo")} · ${note}`,
+    "30 chars | 2 | Claude Code | foo | tracked in repo | tracked in repo: remove .claude/skills/foo in a PR",
     `23 chars | 1 | Claude Code | scratch | project folder | ${posix ? "rm -r -- ~/repo-wt/.claude/skills/scratch" : `Remove-Item -Recurse -LiteralPath ${quoteArg(scratch, "powershell")}`}`,
-    `15 chars | 1 | Claude Code | foo | tracked in repo | ${repo("b/.claude/skills/foo")} · ${note}`,
+    "15 chars | 1 | Claude Code | foo | tracked in repo | tracked in repo: remove b/.claude/skills/foo in a PR",
   ]);
 });
 
@@ -158,7 +156,35 @@ test.skipIf(process.platform === "win32")(
     );
     const { stdout } = await quench(home, "profile", "skills");
     expect(cutRows(stdout)).toEqual([
-      `42 chars | 2 | Claude Code | linked | tracked in repo | git -C ${main} rm -r -- .claude/skills/linked · tracked in the repo: commit the removal, and every worktree drops it as it updates`,
+      "42 chars | 2 | Claude Code | linked | tracked in repo | tracked in repo: remove .claude/skills/linked in a PR",
     ]);
   },
 );
+
+test("tracking checks are literal and need the skill's own entrypoint", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-literal-")));
+  const repo = join(home, "repo");
+  const skills = join(repo, ".claude/skills");
+  await mkdir(repo, { recursive: true });
+  const git = (...args: string[]) =>
+    Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd: repo });
+  git("init", "-q");
+  await skill(join(skills, "cutx"));
+  await Bun.write(join(skills, "half/README.md"), "notes\n");
+  git("add", ".");
+  git("commit", "-q", "-m", "skills");
+  await skill(join(skills, "cut[x]"));
+  await skill(join(skills, "half"));
+  await Bun.write(
+    join(home, ".claude/projects/p/s.jsonl"),
+    lines(listing(repo, ["cutx", "cut[x]", "half"], ["cutx"])),
+  );
+  const { stdout, code } = await quench(home, "profile", "skills");
+  expect(code).toBe(0);
+  const rm = (name: string) =>
+    removeFolder(join(skills, name), shellFor()).replace(` -- ${home}/`, " -- ~/");
+  expect(cutRows(stdout)).toEqual([
+    `21 chars | 1 | Claude Code | cut[x] | project folder | ${rm("cut[x]")}`,
+    `17 chars | 1 | Claude Code | half | project folder | ${rm("half")}`,
+  ]);
+});

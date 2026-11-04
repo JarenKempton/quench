@@ -21,20 +21,24 @@ export async function trackedInRepo(folders: Iterable<string>): Promise<Map<stri
   for (let i = 0; i < tops.length; i += BATCH)
     await Promise.all(
       tops.slice(i, i + BATCH).map(async ([top, { root, rels }]) => {
-        for (const tracked of await trackedFiles(top, [...rels.keys()]))
-          for (const [rel, folder] of rels)
-            if (tracked === rel || tracked.startsWith(`${rel}/`))
-              found.set(folder, { root, path: rel });
+        const entries = [...rels.keys()].flatMap((rel) => [rel, `${rel}/SKILL.md`]);
+        const tracked = new Set(await trackedFiles(top, entries));
+        for (const [rel, folder] of rels)
+          if (tracked.has(rel) || tracked.has(`${rel}/SKILL.md`))
+            found.set(folder, { root, path: rel });
       }),
     );
   return found;
 }
 
-async function trackedFiles(top: string, rels: string[]): Promise<string[]> {
-  const proc = Bun.spawn(["git", "-C", top, "ls-files", "-z", "--", ...rels], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+async function trackedFiles(top: string, paths: string[]): Promise<string[]> {
+  const proc = Bun.spawn(
+    ["git", "--literal-pathspecs", "-C", top, "ls-files", "-z", "--", ...paths],
+    {
+      stdout: "pipe",
+      stderr: "ignore",
+    },
+  );
   const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   return code === 0 ? out.split("\0").filter(Boolean) : [];
 }
