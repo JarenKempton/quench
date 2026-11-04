@@ -1,3 +1,4 @@
+import { mcpToolLoads, type McpToolLoad } from "./mcp-tools.ts";
 import { contextOf, type PromptTool, type Session } from "./model.ts";
 
 export type StartPart =
@@ -13,6 +14,7 @@ export type StartingContext = {
   tokens: number | null;
   parts: StartPart[];
   unrecorded: StartPart["kind"][];
+  mcp: McpToolLoad[];
 };
 
 export function startingContext(session: Session): StartingContext {
@@ -74,6 +76,7 @@ export function startingContext(session: Session): StartingContext {
       ...(system === null ? (["system"] as const) : []),
       ...(tools === null ? (["tools", "mcp_tools"] as const) : []),
     ],
+    mcp: mcpToolLoads(tools, deferred),
   };
 }
 

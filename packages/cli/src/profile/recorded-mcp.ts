@@ -48,7 +48,7 @@ export function mcpUse(places: readonly SessionPlace[], configured: McpServer[])
     .sort((a, b) => b.calls - a.calls || a.server.localeCompare(b.server));
 }
 
-const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+export const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "_");
 
 export function renderMcpUse(uses: McpUse[], days: number): string[] {
   if (!uses.length) return [];
