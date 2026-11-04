@@ -72,7 +72,7 @@ history.
 | `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort |
 | `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here     |
 | `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`         |
-| `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in              |
+| `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`   |
 | `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline      |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
 | `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
@@ -81,6 +81,27 @@ history.
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
 before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a reply is paid for once.
 `--dry-run` shows how many replies would be sent without sending anything.
+
+Without a TypeSafe key, `--judge claude` or `--judge codex` classifies each reply through the CLI
+you already use, signed in as you: one `claude -p` (Haiku) or `codex exec` (its default model, low
+effort) call per reply, with the prompt on stdin. It sends the same clipped text Jev receives, and
+`--dry-run --judge claude` counts the calls first. The output names the judge that ran, and its
+verdicts are cached in `~/.quench/local/judgments-claude.jsonl` or `judgments-codex.jsonl` under
+their own judge id, so they never mix with or replace Jev's.
+
+|              | Jev                                    | `--judge claude` / `--judge codex`                                  |
+| ------------ | -------------------------------------- | ------------------------------------------------------------------- |
+| Cost         | Two small Jev requests per reply       | One full agent call per reply on your Claude or ChatGPT plan or key |
+| Speed        | 12 replies at a time                   | 4 replies at a time, seconds each                                   |
+| Data goes to | TypeSafe                               | Anthropic or OpenAI, under your account's data terms                |
+| Accuracy     | A fixed-choice classifier per question | A general model following a prompt; unmeasured against Jev          |
+
+Each call runs in an empty temporary folder and saves no session: Claude with
+`--no-session-persistence`, no tools, no MCP servers, and hooks and auto-memory off; Codex with `--ephemeral`, a
+read-only sandbox, and your `config.toml` and exec rules ignored (sign-in still comes from
+`CODEX_HOME`). A call that times out, exits non-zero or answers with something other than a verdict
+is counted as failed and retried on the next run; after one non-zero exit the remaining replies are
+not attempted. `--themes` and `--causes` still use Jev.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or
