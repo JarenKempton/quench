@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { failureOf } from "../src/failures.ts";
+import { failureOf, type Denial } from "../src/failures.ts";
 import { commandSignature } from "../src/shell.ts";
 
 test("failures are classified from the error text", () => {
-  const kind = (text: string, isError: boolean | null = true, rejected = false) => {
-    const f = failureOf(text, isError, rejected);
+  const kind = (text: string, isError: boolean | null = true, denial: Denial = null) => {
+    const f = failureOf(text, isError, denial);
     return f && [f.kind, f.detail, f.exitCode];
   };
   expect(kind("ok", false)).toBeNull();
@@ -34,15 +34,15 @@ test("failures are classified from the error text", () => {
     null,
   ]);
   expect(
-    kind("<tool_use_error>Blocked: sleep 60 followed by: ls</tool_use_error>", true, true),
+    kind("<tool_use_error>Blocked: sleep 60 followed by: ls</tool_use_error>", true, "rejected"),
   ).toEqual(["rejected", "Blocked: sleep N followed by: ls", null]);
   expect(
     kind(
       "PreToolUse:Bash hook error: [/home/me/hooks/guard.sh]: guard: blocked — force push. Ask first.",
       true,
-      true,
+      "blocked",
     ),
-  ).toEqual(["rejected", "guard: blocked — force push", null]);
+  ).toEqual(["blocked", "guard: blocked — force push", null]);
   expect(kind("Exit code 3\nsomething broke")).toEqual(["exit-code", null, 3]);
   expect(kind("Request timed out after 5000ms")).toEqual([
     "error",
@@ -51,7 +51,23 @@ test("failures are classified from the error text", () => {
   ]);
 });
 
+test("a nonzero exit keeps the first line of its output, masked, from either harness", () => {
+  const error = (text: string) => failureOf(text, null)?.error;
+  expect(error("Exit code 255\nssh: connect to host box port 22: Connection refused")).toBe(
+    "ssh: connect to host box port N: Connection refused",
+  );
+  expect(
+    error('{"chunk_id":"a1","exit_code":1,"output":"\\nfatal: not a git repository\\n"}'),
+  ).toBe("fatal: not a git repository");
+  expect(error("Exit code 1\nerror: C:\\Users\\me\\app\\main.ts not found")).toBe(
+    "error: main.ts not found",
+  );
+});
+
 test("a command signature names one program, or none for several", () => {
+  expect(commandSignature('"C:\\Program Files\\Git\\bin\\git.exe" push origin main')).toBe(
+    "git push",
+  );
   expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe("bun test");
   expect(commandSignature("python3 -c 'print(1)'")).toBe("python3");
   expect(commandSignature("git status && npm test")).toBeNull();

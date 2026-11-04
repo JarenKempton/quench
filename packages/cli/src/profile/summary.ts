@@ -94,6 +94,16 @@ function worthALook(result: Profile, homeDir: string): string[] {
       detail: `${never.map((u) => `${u.label} ${u.n}`).join(" · ")} — ranked cut list with a command for each`,
       command: "quench profile skills",
     });
+  const blocked = result.recordedFailures.blocked[0];
+  if (blocked)
+    items.push({
+      headline: `"${blocked.pattern}" blocked ${count(blocked.blocks)}×`,
+      detail: `${plural(blocked.sessions, "session")} · ${blocked.projects
+        .slice(0, 3)
+        .map((p) => projectName(p.root, homeDir))
+        .join(", ")}`,
+      command: "quench profile failures",
+    });
   const top = result.recordedFailures.repeated[0];
   if (top)
     items.push({

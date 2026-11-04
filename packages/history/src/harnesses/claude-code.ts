@@ -11,7 +11,7 @@ import { pluginSourceSpec, type SkillSource } from "../skill-sources.ts";
 import { claudeSkillCut, claudeSkillOrigins } from "./claude-code-skills.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { failureOf } from "../failures.ts";
+import { failureOf, type Denial } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
@@ -99,6 +99,12 @@ const Line = z.looseObject({
     })
     .nullish(),
   toolUseResult: z.unknown().optional(),
+  /** On a tool result line: how the call was allowed or refused; `source` is `hook`, `config`, `user_abort`, `user_reject`… */
+  permissionDecision: z
+    .looseObject({ decision: z.string().nullish(), source: z.string().nullish() })
+    .nullish(),
+  /** On a refused tool result line in older versions: `permission-rule`, `automode-blocked`, `user-rejected`, `interrupted`… */
+  toolDenialKind: z.string().nullish(),
 });
 type Line = z.infer<typeof Line>;
 
@@ -622,6 +628,18 @@ const rejected = (text: string) =>
     text.slice(0, 400),
   );
 
+const BLOCKED_BY = new Set(["hook", "config"]);
+const BLOCKED_KINDS = new Set(["permission-rule", "automode-blocked"]);
+
+function denial(line: Line, text: string, single: boolean): Denial {
+  const decision = line.permissionDecision;
+  const blocked = decision
+    ? decision.decision === "reject" && BLOCKED_BY.has(decision.source ?? "")
+    : BLOCKED_KINDS.has(line.toolDenialKind ?? "");
+  if (single && blocked) return "blocked";
+  return rejected(text) ? "rejected" : null;
+}
+
 const ToolReference = z.object({ type: z.literal("tool_reference"), tool_name: z.string() });
 
 function referencedTools(content: unknown): { loadedTools?: string[] } {
@@ -645,7 +663,7 @@ function user(line: Line): EventKind[] {
         (typeof b.content === "string" || text.length > 0)
           ? readResult(line.toolUseResult, text)
           : null;
-      const failure = failureOf(text, b.is_error ?? null, rejected(text));
+      const failure = failureOf(text, b.is_error ?? null, denial(line, text, results.length === 1));
       return {
         type: "tool_result",
         callId: b.tool_use_id ?? null,

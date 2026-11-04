@@ -566,3 +566,55 @@ test("steering compares conflicts per scoped location when global and project fi
     ]),
   ).toEqual([[global, local]]);
 });
+
+test("steering lists the rules hooks keep blocking in this project, not elsewhere", async () => {
+  const { home, project } = await fixture();
+  const blockedPush = (cwd: string, n: number) => [
+    {
+      type: "assistant",
+      cwd,
+      message: {
+        content: [{ type: "tool_use", id: `h${n}`, name: "Bash", input: { command: "git push" } }],
+      },
+    },
+    {
+      type: "user",
+      cwd,
+      permissionDecision: { decision: "reject", source: "hook" },
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: `h${n}`,
+            is_error: true,
+            content: "PreToolUse:Bash hook error: [guard.sh]: guard: blocked — push to main. Ask.",
+          },
+        ],
+      },
+    },
+  ];
+  const write = (id: string, records: object[]) =>
+    Bun.write(
+      join(home, "claude-config/projects/sessions", `${id}.jsonl`),
+      records.map((r) => JSON.stringify(r)).join("\n") + "\n",
+    );
+  await write("here", [...blockedPush(project, 1), ...blockedPush(project, 2)]);
+  await write("away", blockedPush(join(home, "elsewhere"), 3));
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(out.blocked).toEqual([
+    {
+      pattern: "guard: blocked — push to main",
+      blocks: 2,
+      sessions: 1,
+      projects: [{ root: project, blocks: 2 }],
+      harnesses: ["claude-code"],
+      example: "here",
+    },
+  ]);
+  expect((await run(home, project)).stdout).toContain(
+    [
+      "Rules agents keep hitting · calls blocked by a hook or permission rule here (1)",
+      '  2× in 1 session  "guard: blocked — push to main"  e.g. session here',
+    ].join("\n"),
+  );
+});

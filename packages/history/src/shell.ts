@@ -124,7 +124,10 @@ const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee
 export function commandSignature(command: string): string | null {
   const signatures = segments(command).flatMap((segment) => {
     const words = segment.words.filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w.text));
-    const program = words[0] && !words[0].dynamic ? basename(words[0].text) : null;
+    const program =
+      words[0] && !words[0].dynamic
+        ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
+        : null;
     if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
     const sub = words.slice(1).find((w) => !w.text.startsWith("-"));
     return [

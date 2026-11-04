@@ -14,6 +14,7 @@ import {
 } from "./recorded.ts";
 
 export type SessionPlace = {
+  session: string;
   cwd: string | null;
   harness: HarnessId;
   at: Date | null;
@@ -72,6 +73,7 @@ export async function sessionPlaces(
       continue;
     }
     const place: SessionPlace = {
+      session: outcome.session.id,
       cwd: outcome.session.cwd,
       harness: outcome.session.harness,
       at: modified.get(outcome.session.path) ?? null,

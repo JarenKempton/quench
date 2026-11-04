@@ -47,6 +47,7 @@ export type InjectedInstruction = {
 export type ShellCommand = { command: string | null; workdir: string | null };
 
 export type FailureKind =
+  | "blocked"
   | "rejected"
   | "invalid-input"
   | "missing-program"
@@ -54,7 +55,12 @@ export type FailureKind =
   | "exit-code"
   | "error";
 
-export type Failure = { kind: FailureKind; detail: string | null; exitCode: number | null };
+export type Failure = {
+  kind: FailureKind;
+  detail: string | null;
+  exitCode: number | null;
+  error?: string | null;
+};
 
 export type ListedSkill = { name: string; path: string | null; chars: number | null };
 

@@ -1,5 +1,6 @@
 import type { Event, Failure, Session } from "./model.ts";
 import {
+  errorLineOf,
   exitCodeOf,
   failureSummary,
   mentionsInvalidInput,
@@ -13,6 +14,7 @@ import { commandSignature } from "./shell.ts";
 export type SessionFailure = {
   kind: Failure["kind"];
   what: string | null;
+  error: string | null;
   failures: number;
   longestRun: number;
   chars: number;
@@ -23,14 +25,21 @@ type ToolResult = Extract<Event, { type: "tool_result" }>;
 
 const SCANNED = 4000;
 
-export function failureOf(text: string, isError: boolean | null, rejected = false): Failure | null {
+export type Denial = "blocked" | "rejected" | null;
+
+export function failureOf(
+  text: string,
+  isError: boolean | null,
+  denial: Denial = null,
+): Failure | null {
   const head = text.slice(0, SCANNED);
   const exitCode = exitCodeOf(head);
   if (isError !== true && !exitCode) return null;
 
+  if (denial === "blocked") return { kind: "blocked", detail: failureSummary(head), exitCode };
   if (mentionsInvalidInput(head))
     return { kind: "invalid-input", detail: failureSummary(head), exitCode };
-  if (rejected) return { kind: "rejected", detail: failureSummary(head), exitCode };
+  if (denial === "rejected") return { kind: "rejected", detail: failureSummary(head), exitCode };
 
   const missingProgram = missingProgramOf(head);
   if (missingProgram !== null || exitCode === 127)
@@ -40,7 +49,7 @@ export function failureOf(text: string, isError: boolean | null, rejected = fals
   if (missingPath !== null || mentionsMissingPath(head))
     return { kind: "missing-path", detail: missingPath, exitCode };
 
-  if (exitCode) return { kind: "exit-code", detail: null, exitCode };
+  if (exitCode) return { kind: "exit-code", detail: null, exitCode, error: errorLineOf(head) };
   return { kind: "error", detail: failureSummary(head), exitCode };
 }
 
@@ -72,11 +81,12 @@ export function recordedFailures(session: Session): SessionFailure[] {
     }
 
     const { what } = failed;
-    const key = `${event.failure.kind}\0${what}`;
+    const error = event.failure.error ?? null;
+    const key = `${event.failure.kind}\0${what}\0${error}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
 
-    const row = rowFor(rows, key, event.failure.kind, what);
+    const row = rowFor(rows, key, event.failure.kind, what, error);
     row.failures++;
     row.longestRun = Math.max(row.longestRun, runLength);
     row.chars += event.chars;
@@ -130,12 +140,14 @@ function rowFor(
   key: string,
   kind: Failure["kind"],
   what: string | null,
+  error: string | null,
 ): SessionFailure {
   const existing = rows.get(key);
   if (existing) return existing;
   const row: SessionFailure = {
     kind,
     what: what && intern(what),
+    error: error && intern(error),
     failures: 0,
     longestRun: 0,
     chars: 0,

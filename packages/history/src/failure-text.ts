@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { win32 } from "node:path";
 
 const EXIT_CODE_PATTERNS = [
   /^Exit code (-?\d+)/gm,
@@ -37,6 +37,13 @@ export function mentionsMissingPath(text: string): boolean {
   return /No such file or directory|File does not exist|ENOENT/i.test(text);
 }
 
+export function errorLineOf(text: string): string | null {
+  const output = /"output"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text)?.[1];
+  return failureSummary(output === undefined ? text : output.replace(/\\(.)/g, unescaped));
+}
+
+const unescaped = (_: string, c: string) => ({ n: "\n", t: "\t", r: "\r" })[c] ?? c;
+
 export function failureSummary(text: string): string | null {
   const line = firstLineOf(text);
   if (!line) return null;
@@ -59,7 +66,7 @@ function firstLineOf(text: string): string | null {
 }
 
 function shortenPaths(line: string): string {
-  return line.replace(/\S*\/\S*/g, (token) => basename(token.replace(/[\]:,.]+$/, "")));
+  return line.replace(/\S*[\\/]\S*/g, (token) => win32.basename(token.replace(/[\]:,.]+$/, "")));
 }
 
 function maskVolatile(line: string): string {
