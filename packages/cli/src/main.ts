@@ -31,7 +31,9 @@ Usage:
     --history <dir>                    read <dir> as one machine's home, tagged with its folder name (repeatable)
   quench secrets [--days 30] [--json] [--repo-history] [--host-history <sqlite-file> | --no-host-history]
                                        credentials exposed in histories, configs and files worms harvest (offline)
-  quench steering <project-dir> [--json]  current instruction files and rule candidates (offline)
+  quench steering <project-dir> [--days 30] [--rules] [--json]
+                                       instruction items ranked by recorded load; duplicates, conflicts, stale entries (offline)
+    --rules                            also list every bullet and paragraph of each file
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
@@ -73,6 +75,7 @@ const { positionals, values } = parseArgs({
     "no-cache": { type: "boolean", default: false },
     session: { type: "string" },
     all: { type: "boolean", default: false },
+    rules: { type: "boolean", default: false },
     history: { type: "string", multiple: true, default: [] },
     channel: { type: "string" },
   },
@@ -190,7 +193,12 @@ switch (command) {
     process.exitCode = await sources(home, rest, { json: values.json });
     break;
   case "steering":
-    process.exitCode = await steering(home, rest, { json: values.json });
+    process.exitCode = await steering(home, rest, {
+      json: values.json,
+      days,
+      rules: values.rules,
+      cache: !values["no-cache"],
+    });
     break;
   case "worktrees":
     process.exitCode = await worktrees(home, {

@@ -1,6 +1,7 @@
 import { harnessById } from "@quench/history";
 import { ago, chars, count, plural, projectName, size, table, tokens } from "../format.ts";
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
+import { fileLabel } from "./recorded-instructions.ts";
 import { renderStartSplit } from "./recorded-start.ts";
 import { neverUsed } from "./skill-cuts.ts";
 import { renderNextSteps } from "./next-steps.ts";
@@ -15,7 +16,7 @@ export function summary(result: Profile, homeDir: string): string[] {
   const sessions = found.reduce((n, h) => n + h.sessions, 0);
   return [
     `${title("QUENCH")}  ${bold(`last ${result.days} days`)} ${dim("·")} ${count(sessions)} sessions ${dim(found.map((h) => `· ${harnessById[h.harness].label} ${count(h.sessions)}`).join(" "))}`,
-    ...startingLoad(result),
+    ...startingLoad(result, homeDir),
     ...renderStartSplit(result.recordedStart),
     ...worthALook(result, homeDir),
     ...busiest(result, homeDir),
@@ -27,16 +28,27 @@ export function summary(result: Profile, homeDir: string): string[] {
   ];
 }
 
-function startingLoad(result: Profile): string[] {
+function startingLoad(result: Profile, homeDir: string): string[] {
+  const context = {
+    homeDir,
+    claudeHome: result.homes.find((h) => h.harness === "claude-code")!.path,
+    roots: result.projects.map((p) => p.root),
+  };
   const rows = result.homes
     .filter((h) => h.found && h.sessions)
     .map((h) => {
       const global = result.globalInstructions
         .filter((f) => f.sources.some((s) => s.harness === h.harness))
         .reduce((n, f) => n + f.bytes, 0);
+      const largest = result.recordedInstructions
+        .flatMap((file) =>
+          file.loads.filter((l) => l.harness === h.harness).map((load) => ({ file, load })),
+        )
+        .sort((a, b) => b.load.chars - a.load.chars)[0];
       return {
         label: harnessById[h.harness].label,
         global,
+        largest,
         skills: result.recordedSkills.find((u) => u.harness === h.harness),
       };
     });
@@ -56,6 +68,13 @@ function startingLoad(result: Profile): string[] {
       ]),
     ),
     `  ${dim("Projects add their own instruction files on top.")}`,
+    ...rows.flatMap((r) =>
+      r.largest
+        ? [
+            `  ${dim(`${r.label} instructions, largest: ${fileLabel(r.largest.file, context)} · ${chars(r.largest.load.chars)} over ${plural(r.largest.load.sessions, "session")}`)}`,
+          ]
+        : [],
+    ),
   ];
 }
 

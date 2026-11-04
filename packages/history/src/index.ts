@@ -1,6 +1,7 @@
 export type { Harness, HarnessHome, SessionRef } from "./harness.ts";
 export { NotASession } from "./harness.ts";
 export { harnessById, harnesses } from "./harnesses/index.ts";
+export { claudeProjectSlug } from "./harnesses/claude-code.ts";
 export { Home } from "./home.ts";
 export * from "./model.ts";
 export { discoverAll, readSessions, type Progress, type ReadOutcome } from "./read.ts";

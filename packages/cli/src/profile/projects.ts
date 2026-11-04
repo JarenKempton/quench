@@ -1,13 +1,15 @@
 import { heading } from "../style.ts";
-import { relative } from "node:path";
+import { relative, sep } from "node:path";
 import { harnessById, type HarnessId } from "@quench/history";
 import { ago, chars, count, plural, projectName, shortPath, size, table } from "../format.ts";
+import { autoMemory } from "./recorded-instructions.ts";
 import type { Profile, ProfiledProject } from "./render.ts";
 
 const OTHER_FOLDERS_SHOWN = 5;
 
 export function projectTables(result: Profile, homeDir: string): string[] {
   const agents = result.homes.filter((h) => h.found).map((h) => h.harness);
+  const claudeHome = result.homes.find((h) => h.harness === "claude-code")!.path;
   const header = [
     "Project",
     "Sessions",
@@ -29,7 +31,7 @@ export function projectTables(result: Profile, homeDir: string): string[] {
     p.recordedLoad.medianChars === null ? "—" : chars(p.recordedLoad.medianChars),
     p.skills.length ? count(p.skills.length) : "—",
     p.mcpServers.length ? count(p.mcpServers.length) : "—",
-    instructionNames(p),
+    instructionNames(p, claudeHome),
     p.worktrees?.linked ? `${count(p.worktrees.linked)} · ${count(p.worktrees.idle)} idle` : "—",
     shortPath(p.root, homeDir),
   ];
@@ -66,9 +68,14 @@ function instructionSize(p: ProfiledProject, harness: HarnessId): string {
   return bytes ? size(bytes) : "—";
 }
 
-function instructionNames(p: ProfiledProject): string {
+function instructionNames(p: ProfiledProject, claudeHome: string): string {
   const names = p.instructions.files.flatMap((f) =>
-    f.sources.map((s) => relative(p.instructions.directory, s.path)),
+    f.sources.map((s) => {
+      const memory = autoMemory(s.path, claudeHome, [p.root]);
+      return memory
+        ? `auto memory${sep}${memory.file}`
+        : relative(p.instructions.directory, s.path);
+    }),
   );
   return [...new Set(names)].join(", ") || "none";
 }

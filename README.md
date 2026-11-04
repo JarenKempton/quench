@@ -73,7 +73,7 @@ history.
 | `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here     |
 | `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`         |
 | `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in              |
-| `quench steering <project-dir> [--json]`       | Current instruction-file inventory and source rule candidates; offline                |
+| `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline      |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
 | `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
 
@@ -349,6 +349,7 @@ Requires an explicit existing directory. The Claude Code, Codex and Pi adapters 
 built-in instruction filenames in their user locations and the directory's ancestor chain;
 Codex stops at the nearest `.git` directory or worktree marker, or checks only the selected
 directory outside a repository. Claude Code also scans ancestor/user `.claude/rules` trees.
+Claude Code's auto memory `MEMORY.md` for the directory and its main checkout is included.
 Harness directory environment overrides work just as they do for session discovery.
 Candidate names follow [Claude Code's memory docs](https://code.claude.com/docs/en/memory),
 [Codex's AGENTS.md docs](https://learn.chatgpt.com/docs/agent-configuration/agents-md), and
@@ -361,14 +362,24 @@ across worktree paths; other worktrees are not searched. Rule candidates are ori
 or paragraphs with line ranges, not semantic judgments. Headings, frontmatter and fenced code
 are omitted; scope conditions remain in the source file and are not interpreted.
 
-**This is current-disk evidence, not an effective or historical load report.** Both ordinary
+Items are ranked by characters × sessions loaded: for each session in this project in the last
+`--days` (default 30), the characters its history recorded injecting each file. Codex records
+combined blocks without file boundaries, so they are counted as coverage, not attributed. Below
+the ranking come duplicate rules across files (same wording ignoring case, punctuation and list
+markers), possible global-vs-project conflicts (the same action, one rule negated and one not)
+and possibly stale entries (a backticked file not on disk, command not on `PATH`, or
+package script missing from the file's nearest `package.json`), each citing every location. Conflicts and stale entries are
+heuristics. `--rules` adds every bullet and paragraph with its line range.
+
+**The inventory is current-disk evidence; only the ranking uses recorded loads.** Both ordinary
 and override candidates remain visible: precedence, settings, imports, custom fallback names,
-managed policy, auto memory and runtime overrides are not resolved. Descendant instruction
+managed policy and runtime overrides are not resolved. Descendant instruction
 files are not searched. No result establishes an ignored rule or a preference never written.
 Unreadable/oversized sources, cycles and exhausted limits produce warnings. Reads are bounded
 to 256 KiB per file, 256 files, 256 physical rule directories and 1,024 directory paths
-(including symlink aliases). The command makes no model calls,
-reads no session/host history, and writes no files or caches, even when a key is configured.
+(including symlink aliases). The command makes no model calls, reads session history (and the
+session cache, if present) but no host history, and writes no files or caches, even when a key
+is configured.
 
 ## Recorded session sources
 

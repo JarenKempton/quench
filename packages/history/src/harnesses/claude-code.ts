@@ -179,6 +179,16 @@ const ReadResult = z.object({
 
 const HOME = { variable: "CLAUDE_CONFIG_DIR", fallback: ".claude" };
 
+const SLUG_LIMIT = 200;
+
+export function claudeProjectSlug(path: string): string {
+  const slug = path.replace(/[^A-Za-z0-9]/g, "-");
+  if (slug.length <= SLUG_LIMIT) return slug;
+  let hash = 0;
+  for (let i = 0; i < path.length; i++) hash = ((hash << 5) - hash + path.charCodeAt(i)) | 0;
+  return `${slug.slice(0, SLUG_LIMIT)}-${Math.abs(hash).toString(36)}`;
+}
+
 const globalConfigOf = (home: Home) => {
   const configDir = home.of(HOME);
   return configDir === join(home.dir, ".claude")
@@ -219,6 +229,12 @@ export const claudeCode: Harness<"claude-code"> = {
         roots.push({ path: join(dir, name), scope });
       roots.push({ path: join(dir, ".claude/rules"), scope, directory: true });
     }
+    const repo = await checkout(project);
+    for (const dir of new Set([repo?.root ?? project, project]))
+      roots.push({
+        path: join(user, "projects", claudeProjectSlug(dir), "memory", "MEMORY.md"),
+        scope: "project",
+      });
     return roots;
   },
 

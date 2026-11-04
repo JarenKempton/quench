@@ -73,6 +73,10 @@ retired with it and live in git history.
   paths, scopes and bullet/paragraph locations. Candidate presence does not prove effective
   loading. Precedence, conditions, imports and historical snapshots are not resolved, so no
   ignored-rule or never-written claim follows. Inventory never writes or calls a model.
+- **Steering ranks by recorded loads, and its findings are labelled heuristics** ([#104](https://github.com/JarenKempton/quench/issues/104)).
+  An item's cost is the characters sessions recorded injecting it, never size × an assumed
+  session count. Duplicates, conflicts and stale names cite every location; the flat rule list
+  needs `--rules`.
 - **Observed instructions come from what the harness recorded, not from today's files.**
   Per-file and combined coverage stay distinct, sessions without records are flagged rather than
   read as "none loaded", and missing evidence is never filled in from the current inventory.

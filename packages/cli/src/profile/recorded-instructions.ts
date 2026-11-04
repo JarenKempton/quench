@@ -2,6 +2,7 @@ import { heading } from "../style.ts";
 import { dirname, relative, sep } from "node:path";
 import {
   checkout,
+  claudeProjectSlug,
   compareWithDisk,
   harnessById,
   isInside,
@@ -23,6 +24,7 @@ export type RecordedFile = {
   textChars: number;
   recordedChars: number;
   textSha256: string;
+  loads: { harness: HarnessId; sessions: number; chars: number }[];
   checkouts: { path: string; lastRecorded: string | null; disk: DiskComparison }[];
 };
 
@@ -33,6 +35,7 @@ type Row = {
   file: string;
   places: SessionPlace[];
   copies: Map<string, Copy>;
+  loads: Map<HarnessId, { sessions: number; chars: number }>;
   chars: number;
 };
 
@@ -53,9 +56,23 @@ export async function recordedFiles(places: readonly SessionPlace[]): Promise<Re
       const row =
         rows.get(key) ??
         rows
-          .set(key, { root: repo?.root ?? null, file, places: [], copies: new Map(), chars: 0 })
+          .set(key, {
+            root: repo?.root ?? null,
+            file,
+            places: [],
+            copies: new Map(),
+            loads: new Map(),
+            chars: 0,
+          })
           .get(key)!;
-      if (row.places.at(-1) !== place) row.places.push(place);
+      if (row.places.at(-1) !== place) {
+        row.places.push(place);
+        const load = row.loads.get(place.harness) ?? { sessions: 0, chars: 0 };
+        row.loads.set(place.harness, {
+          sessions: load.sessions + 1,
+          chars: load.chars + record.textChars,
+        });
+      }
       row.chars += record.textChars;
       const copy = target ?? "unknown";
       if ((at ?? "") >= (row.copies.get(copy)?.at ?? "")) row.copies.set(copy, { at, record });
@@ -78,6 +95,7 @@ async function summarize(row: Row): Promise<RecordedFile> {
     textChars: newest.record.textChars,
     recordedChars: row.chars,
     textSha256: newest.record.textSha256,
+    loads: [...row.loads].map(([harness, load]) => ({ harness, ...load })),
     checkouts: await Promise.all(
       copies.map(async ([path, { at, record }]) => ({
         path,
@@ -116,7 +134,7 @@ export function renderRecordedFiles(
   return lines;
 }
 
-function fileLabel(
+export function fileLabel(
   r: RecordedFile,
   { homeDir, claudeHome, roots }: { homeDir: string; claudeHome: string; roots: string[] },
 ): string {
@@ -134,7 +152,7 @@ function fileLabel(
 export function autoMemory(path: string, claudeHome: string, roots: string[]) {
   if (!isInside(path, claudeHome)) return null;
   const [projects, slug, kind, ...rest] = pathParts(path.slice(claudeHome.length));
-  const root = roots.find((r) => r.replace(/[^A-Za-z0-9]/g, "-") === slug);
+  const root = roots.find((r) => claudeProjectSlug(r) === slug);
   return projects === "projects" && root && kind === "memory"
     ? { root, file: rest.join(sep) }
     : null;
