@@ -42,19 +42,21 @@ const message = (text: string, extra: Record<string, unknown> = {}) => ({
 async function database(messages: Record<string, unknown>[], threads: unknown[] = [thread()]) {
   const path = join(await mkdtemp(join(tmpdir(), "quench-host-")), "history.sqlite");
   const db = new Database(path);
-  db.exec(`
-    CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
-    CREATE TABLE orchestration_v2_projection_messages (thread_id TEXT, role TEXT, payload_json TEXT);
-  `);
-  for (const t of threads)
-    db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
-      JSON.stringify(t),
-    );
-  for (const m of messages)
-    db.query("INSERT INTO orchestration_v2_projection_messages VALUES (?, 'user', ?)").run(
-      typeof m.threadId === "string" ? m.threadId : "thread",
-      JSON.stringify(m),
-    );
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
+      CREATE TABLE orchestration_v2_projection_messages (thread_id TEXT, role TEXT, payload_json TEXT);
+    `);
+    for (const t of threads)
+      db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
+        JSON.stringify(t),
+      );
+    for (const m of messages)
+      db.query("INSERT INTO orchestration_v2_projection_messages VALUES (?, 'user', ?)").run(
+        typeof m.threadId === "string" ? m.threadId : "thread",
+        JSON.stringify(m),
+      );
+  })();
   db.close();
   return path;
 }
