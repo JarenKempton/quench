@@ -105,7 +105,7 @@ export function renderRecordedFiles(
   return lines;
 }
 
-function fileLabel(
+export function fileLabel(
   r: RecordedFile,
   { homeDir, claudeHome, roots }: { homeDir: string; claudeHome: string; roots: string[] },
 ): string {

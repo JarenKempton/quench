@@ -373,8 +373,8 @@ test("profile shows the instructions sessions recorded loading and whether disk 
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
-      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files  Worktrees   Path",
-      `  app             4  today             22 B      —          35 chars       —    —  CLAUDE.md          1 · 0 idle  ${p("~/code/app")}`,
+      "  Project  Sessions  Last used  Claude Code  Codex  Recorded/session  Skills  MCP  Instruction files                 Worktrees   Path",
+      `  app             4  today             47 B      —          35 chars       —    —  ${p("CLAUDE.md, auto memory/MEMORY.md")}  1 · 0 idle  ${p("~/code/app")}`,
     ].join("\n"),
   );
   expect(stdout).toContain(

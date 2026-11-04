@@ -76,8 +76,11 @@ of candidates, not a resolution of native precedence, settings, imports or load 
 Rule candidates retain source line ranges for bullets/paragraphs, skipping headings,
 frontmatter and fenced code. They are not semantic rules; source files remain authoritative
 for conditions. Missing files are normal, unreadable sources and coverage limits warn.
-There are no model calls, host/session reads or writes. Historical attribution remains a
-separate future step; unmatched themes cannot be called unwritten preferences.
+`quench steering` ranks those files by recorded loads: session histories in the same
+checkout, matched by repository-relative path so worktrees fold, summing the characters each
+session recorded. Duplicate, conflict and stale findings are text heuristics over rule
+candidates and current disk. There are no model calls, host reads or writes; unmatched themes
+cannot be called unwritten preferences.
 
 ## Recorded source evidence
 

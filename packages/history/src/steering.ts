@@ -21,6 +21,7 @@ export type RuleCandidate = {
 export type SteeringFile = {
   id: string;
   bytes: number;
+  chars: number;
   sources: {
     harness: HarnessId;
     path: string;
@@ -74,8 +75,8 @@ export async function steeringInventory(home: Home, directory: string) {
     warnings,
     limitations: [
       "Current files are not proof of instructions loaded in a past session, an ignored rule, or a preference never written.",
-      "This is a candidate inventory, not an effective instruction chain: precedence, settings, exclusions, trust, imports, managed policy, auto memory and runtime overrides are not resolved.",
-      "Only built-in instruction filenames on the selected directory's ancestor chain, user locations and recognized rule directories are scanned; descendants, other worktrees and custom fallback filenames are not searched.",
+      "This is a candidate inventory, not an effective instruction chain: precedence, settings, exclusions, trust, imports, managed policy and runtime overrides are not resolved.",
+      "Only built-in instruction filenames on the selected directory's ancestor chain, user locations, Claude Code auto memory (MEMORY.md only) and recognized rule directories are scanned; descendants, other worktrees and custom fallback filenames are not searched.",
       "Rule candidates are source bullets or paragraphs, not semantic rules; headings, frontmatter and fenced code are omitted. Conditions and imports are not interpreted.",
       "Identical file bytes share a content ID across paths and worktrees; this does not prove equivalent scope or that a harness deduplicates its context.",
       `Reads are bounded to ${MAX_BYTES} bytes per file, ${MAX_FILES} files, ${MAX_DIRECTORIES} rule directories and ${MAX_DIRECTORY_PATHS} directory paths; skipped or unreadable sources produce warnings.`,
@@ -140,11 +141,13 @@ export async function steeringInventory(home: Home, directory: string) {
           .bytes();
         if (bytes.length > MAX_BYTES) throw new Error(`exceeds ${MAX_BYTES} byte file limit`);
         const id = createHash("sha256").update(bytes).digest("hex");
+        const text = new TextDecoder().decode(bytes);
         file = files.get(id) ?? {
           id,
           bytes: bytes.length,
+          chars: text.length,
           sources: [],
-          rules: ruleCandidates(new TextDecoder().decode(bytes)),
+          rules: ruleCandidates(text),
         };
         files.set(id, file);
         physical.set(canonical, file);

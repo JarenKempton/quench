@@ -219,6 +219,12 @@ export const claudeCode: Harness<"claude-code"> = {
         roots.push({ path: join(dir, name), scope });
       roots.push({ path: join(dir, ".claude/rules"), scope, directory: true });
     }
+    const repo = await checkout(project);
+    for (const dir of new Set([repo?.root ?? project, project]))
+      roots.push({
+        path: join(user, "projects", dir.replace(/[^A-Za-z0-9]/g, "-"), "memory", "MEMORY.md"),
+        scope: "project",
+      });
     return roots;
   },
 
