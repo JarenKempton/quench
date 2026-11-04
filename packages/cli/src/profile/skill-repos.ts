@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { checkout } from "@quench/history";
 
@@ -41,4 +42,22 @@ async function trackedFiles(top: string, paths: string[]): Promise<string[]> {
   );
   const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   return code === 0 ? out.split("\0").filter(Boolean) : [];
+}
+
+export async function workTreeTops(paths: Iterable<string>): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  const all = [...new Set(paths)];
+  for (let i = 0; i < all.length; i += BATCH)
+    await Promise.all(
+      all.slice(i, i + BATCH).map(async (path) => {
+        const dir = (await stat(path).catch(() => null))?.isDirectory() ? path : dirname(path);
+        const proc = Bun.spawn(["git", "-C", dir, "rev-parse", "--show-toplevel"], {
+          stdout: "pipe",
+          stderr: "ignore",
+        });
+        const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+        if (code === 0 && out.trim()) found.set(path, out.trim());
+      }),
+    );
+  return found;
 }
