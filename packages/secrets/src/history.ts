@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
+import { pathKey } from "./path-key.ts";
 import {
   discoverAll,
   harnessById,
@@ -81,7 +82,7 @@ export async function scanHistory(
     }
     const { session, hits } = scanned;
     if (session.cwd) cwds.add(session.cwd);
-    for (const path of readPaths(session, home.dir)) {
+    for (const path of readPaths(session, home.dir).map((read) => pathKey(read))) {
       const seen = reads.get(path) ?? new Set<string>();
       reads.set(path, seen.add(`${session.harness}:${session.id}`));
     }
