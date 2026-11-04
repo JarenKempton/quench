@@ -11,6 +11,7 @@ import { projectTables } from "./projects.ts";
 import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
 import type { McpDuplicate } from "./mcp-duplicates.ts";
+import type { NextStep } from "./next-steps.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderMcpTools, type McpToolRecord } from "./recorded-mcp-tools.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
@@ -45,6 +46,7 @@ export type Profile = {
   recordedStart: StartSplit[];
   projects: ProfiledProject[];
   missingDirectories: string[];
+  nextSteps: NextStep[];
 };
 
 export const HOME_FLAGS = {

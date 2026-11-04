@@ -23,6 +23,7 @@ import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
+import { nextSteps } from "../profile/next-steps.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { mcpToolRecords } from "../profile/recorded-mcp-tools.ts";
 import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
@@ -46,6 +47,7 @@ const LIMITATIONS = [
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
   "Repeated failures are tool results a session recorded as errors, grouped per project by kind and by what failed: the missing path or command named in the error text, the read path, or the command's program and subcommand. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.",
   "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Duplicates are servers of one agent, in effect for the same project, with the same URL (ignoring query) or the same command and arguments, compared by fingerprint. Plugin and managed servers are not read.",
+  "Do this next lists at most 5 measured cuts, ranked by characters × sessions: never-used skill targets with a known listing size and no use, duplicate MCP servers when sessions recorded both loading schemas up front, and the largest recorded instruction file. A cut's characters per session is its listed total over the sessions that listed it; an instruction file saves up to its recorded size. A command is shown only where one is safe, otherwise only what to remove. Repeated hook blocks are not measured yet, so they never appear.",
   "MCP tool definitions are what session history recorded at the first request: tool count and the JSON size of each schema, per server, from the latest session that recorded it. Up front means the request carried the schemas; deferred means the harness listed the tools by name for tool search, so schemas load on demand and are not starting load, and Claude Code records no schema for them. A server no session recorded is not recorded, never estimated; servers are matched to config by name, ignoring case and punctuation.",
 ];
 
@@ -78,7 +80,7 @@ export async function profile(
   }
   const skills = skillUse(places, await placeOrigins(home, places, globalSkills));
   const configuredMcp = [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)];
-  const result: Profile & { observedAt: string; limitations: string[] } = {
+  const result: Omit<Profile, "nextSteps"> & { observedAt: string; limitations: string[] } = {
     observedAt: new Date().toISOString(),
     days: options.days,
     homes: await Promise.all(
@@ -115,8 +117,21 @@ export async function profile(
       ...LIMITATIONS,
     ],
   };
+  const full = {
+    ...result,
+    nextSteps: nextSteps(
+      {
+        cuts: result.recordedSkillCuts.cuts,
+        duplicates: result.duplicateMcpServers,
+        configured: configuredMcp,
+        tools: result.recordedMcpTools,
+        instructions: result.recordedInstructions,
+      },
+      home.dir,
+    ),
+  };
   process.stdout.write(
-    options.json ? json(result) : render(result, home.dir, options.view).join("\n") + "\n",
+    options.json ? json(full) : render(full, home.dir, options.view).join("\n") + "\n",
   );
   return 0;
 }
