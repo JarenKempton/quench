@@ -5,6 +5,7 @@ import { NotASession, sessionRef, type Harness, type SessionRef } from "../harne
 import type { Home } from "../home.ts";
 import { readJson } from "../mcp.ts";
 import { piPackageSpec, type SkillSource } from "../skill-sources.ts";
+import { folderCut, folderOrigin, notFound } from "../skill-origin.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -130,6 +131,12 @@ export const pi: Harness<"pi"> = {
     }
     return sources;
   },
+
+  async skillOrigins() {
+    return (skill, onDisk) => folderOrigin("pi", skill, onDisk) ?? notFound(skill);
+  },
+
+  skillCut: (origin) => folderCut(origin) ?? { command: null, note: null },
 
   async configs(home, project) {
     const user = home.of(HOME);
@@ -288,8 +295,10 @@ function skillListing(sections: Message["sections"]): EventKind[] {
   const index = sections?.skills;
   if (!index) return [];
   const listed = [
-    ...index.matchAll(/<skill>[\s\S]*?<name>([^<]*)<\/name>[\s\S]*?<location>([^<]*)<\/location>/g),
-  ].map(([, name, path]) => ({ name: name!.trim(), path: path!.trim() }));
+    ...index.matchAll(
+      /<skill>[\s\S]*?<name>([^<]*)<\/name>[\s\S]*?<location>([^<]*)<\/location>[\s\S]*?<\/skill>/g,
+    ),
+  ].map(([entry, name, path]) => ({ name: name!.trim(), path: path!.trim(), chars: entry.length }));
   return [{ type: "skills", listed, chars: index.length }];
 }
 

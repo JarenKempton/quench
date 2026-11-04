@@ -27,6 +27,7 @@ export function recordedSkills(session: Session): SessionSkills | null {
     listed: [...listed.values()].map((skill) => ({
       name: intern(skill.name),
       path: skill.path && intern(skill.path),
+      chars: skill.chars,
     })),
     upFront: { count: listings[0]!.listed.length, chars: listings[0]!.chars },
     used: [...used].map(([name, by]) => ({ name: intern(name), by })),

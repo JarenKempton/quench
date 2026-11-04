@@ -33,6 +33,9 @@ export {
 } from "./skill-sources.ts";
 export { harnessSettings, type ConfigFile, type RiskyPermission } from "./settings.ts";
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
+export type { CutContext, OriginOf, SkillCut, SkillOrigin } from "./skill-origin.ts";
+export { skillFolder } from "./skill-origin.ts";
+export { quoteArg, shellFor, withEnv, type Shell } from "./removal.ts";
 export {
   projects,
   sessionPlaces,

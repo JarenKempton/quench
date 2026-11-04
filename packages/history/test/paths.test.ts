@@ -66,8 +66,8 @@ test("Codex skill listings resolve Windows roots and either separator", async ()
   const session = await harnessById.codex.read(await sessionRef("codex", file));
   const listing = session.events.find((e) => e.type === "skills");
   expect(listing?.type === "skills" && listing.listed).toEqual([
-    { name: "notes", path: `${base}\\notes\\SKILL.md` },
-    { name: "plan", path: `${base}\\plan\\SKILL.md` },
+    { name: "notes", path: `${base}\\notes\\SKILL.md`, chars: 45 },
+    { name: "plan", path: `${base}\\plan\\SKILL.md`, chars: 37 },
   ]);
   expect(recordedSkills(session)?.used).toEqual([{ name: "notes", by: "model" }]);
   await rm(dir, { recursive: true });

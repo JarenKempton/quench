@@ -8,6 +8,7 @@ import { checkout, repositoryRoot } from "../files.ts";
 import { describeServer, readJson, record, type McpEntry } from "../mcp.ts";
 import { listOf, type ConfigFile, type RiskyPermission } from "../settings.ts";
 import { pluginSourceSpec, type SkillSource } from "../skill-sources.ts";
+import { claudeSkillCut, claudeSkillOrigins } from "./claude-code-skills.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -324,6 +325,9 @@ export const claudeCode: Harness<"claude-code"> = {
     return [...sources.values()];
   },
 
+  skillOrigins: (home) => claudeSkillOrigins(home.of(HOME)),
+  skillCut: claudeSkillCut,
+
   async configs(home, project) {
     const configDir = home.of(HOME);
     const mcpFiles = (await ancestorDirs(project)).map(
@@ -479,14 +483,29 @@ function skillListing(raw: unknown): EventKind[] {
   const attachment = Attachment.safeParse(raw);
   if (!attachment.success || attachment.data.type !== "skill_listing" || !attachment.data.names)
     return [];
-  const content = attachment.data.content;
+  const content = typeof attachment.data.content === "string" ? attachment.data.content : "";
+  const chars = entryChars(content, attachment.data.names);
   return [
     {
       type: "skills",
-      listed: attachment.data.names.map((name) => ({ name, path: null })),
-      chars: typeof content === "string" ? content.length : 0,
+      listed: attachment.data.names.map((name) => ({
+        name,
+        path: null,
+        chars: chars.get(name) ?? null,
+      })),
+      chars: content.length,
     },
   ];
+}
+
+function entryChars(content: string, names: string[]): Map<string, number> {
+  const longestFirst = [...names].sort((a, b) => b.length - a.length);
+  const chars = new Map<string, number>();
+  for (const entry of content.split(/\n(?=- )/)) {
+    const name = longestFirst.find((n) => entry.startsWith(`- ${n}:`));
+    if (name && !chars.has(name)) chars.set(name, entry.length);
+  }
+  return chars;
 }
 
 function instructions(raw: unknown): EventKind[] {

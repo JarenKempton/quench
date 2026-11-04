@@ -56,7 +56,7 @@ export type FailureKind =
 
 export type Failure = { kind: FailureKind; detail: string | null; exitCode: number | null };
 
-export type ListedSkill = { name: string; path: string | null };
+export type ListedSkill = { name: string; path: string | null; chars: number | null };
 
 export type PromptTool = { name: string; server: string | null; chars: number; deferred: boolean };
 

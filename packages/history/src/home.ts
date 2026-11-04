@@ -17,6 +17,10 @@ export class Home {
     return new Home(this.dir, { ...this.env, [key]: value });
   }
 
+  override({ variable }: HarnessHome): string | null {
+    return this.env[variable] || null;
+  }
+
   of({ variable, fallback }: HarnessHome): string {
     const value = this.env[variable];
     return value ? value : join(this.dir, fallback);
