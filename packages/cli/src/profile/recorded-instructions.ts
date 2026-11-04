@@ -22,6 +22,7 @@ export type RecordedFile = {
   sessions: number;
   lastRecorded: string | null;
   textChars: number;
+  recordedChars: number;
   textSha256: string;
   loads: { harness: HarnessId; sessions: number; chars: number }[];
   checkouts: { path: string; lastRecorded: string | null; disk: DiskComparison }[];
@@ -35,6 +36,7 @@ type Row = {
   places: SessionPlace[];
   copies: Map<string, Copy>;
   loads: Map<HarnessId, { sessions: number; chars: number }>;
+  chars: number;
 };
 
 const SHOWN = 15;
@@ -60,6 +62,7 @@ export async function recordedFiles(places: readonly SessionPlace[]): Promise<Re
             places: [],
             copies: new Map(),
             loads: new Map(),
+            chars: 0,
           })
           .get(key)!;
       if (row.places.at(-1) !== place) {
@@ -70,6 +73,7 @@ export async function recordedFiles(places: readonly SessionPlace[]): Promise<Re
           chars: load.chars + record.textChars,
         });
       }
+      row.chars += record.textChars;
       const copy = target ?? "unknown";
       if ((at ?? "") >= (row.copies.get(copy)?.at ?? "")) row.copies.set(copy, { at, record });
     }
@@ -89,6 +93,7 @@ async function summarize(row: Row): Promise<RecordedFile> {
     sessions: row.places.length,
     lastRecorded: newest.at,
     textChars: newest.record.textChars,
+    recordedChars: row.chars,
     textSha256: newest.record.textSha256,
     loads: [...row.loads].map(([harness, load]) => ({ harness, ...load })),
     checkouts: await Promise.all(
