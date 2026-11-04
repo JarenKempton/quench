@@ -25,4 +25,5 @@ jobs:
       - run: bunx vp run compile
       - run: ./dist/quench --help
       - run: ./dist/quench --version
-      - run: bunx vp run test
+      - run: bunx vp run test && bunx vp run test
+      - run: bun -e "const fs = require('node:fs'); const d = require('node:os').tmpdir(); const left = fs.readdirSync(d).filter((n) => n.startsWith('quench-')); console.log(d, left); if (left.length) process.exit(1)"

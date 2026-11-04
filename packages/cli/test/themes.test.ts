@@ -30,6 +30,14 @@ async function run(home: string, flags: string[], env: Record<string, string> = 
   return { stdout, stderr, code };
 }
 
+const jev = (answer: (request: Request) => Response | Promise<Response>) =>
+  Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    routes: { "/v1/systemone": { POST: answer } },
+    fetch: () => new Response("not found", { status: 404 }),
+  });
+
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "quench-cli-themes-"));
   const sessions = join(home, ".claude/projects/demo");
@@ -196,43 +204,38 @@ test("themes classifies missing replies before grouping, then replays both cache
   expect(noKey.stderr).toContain("TYPESAFE_API_KEY");
   const calls: string[] = [];
   let grouping = 0;
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch: async (request) => {
-      const body = (await request.json()) as {
-        questions: Record<string, unknown>;
-        state: Record<string, unknown>;
-      };
-      const question = Object.keys(body.questions)[0]!;
-      expect(Object.keys(body.questions)).toEqual([question]);
-      expect(["kind", "sender", "theme"]).toContain(question);
-      if (question === "kind")
-        expect(body.state).toEqual({ assistant_said: "done", user_reply: "Have you tested it?" });
-      else if (question === "sender")
-        expect(body.state).toEqual({ message: "Have you tested it?" });
-      else expect(Object.keys(body.state)).toEqual(["correction", "exemplars"]);
-      calls.push(question);
-      return Response.json({
-        model: "local-test-model",
-        answers: {
-          [question]: {
-            type: "choice",
-            choice:
-              question === "kind"
-                ? "correction"
-                : question === "sender"
-                  ? "person"
-                  : grouping++ === 0
-                    ? "new"
-                    : "t0",
-            confidence: 1,
-            probabilities: {},
-          },
+  const server = jev(async (request) => {
+    const body = (await request.json()) as {
+      questions: Record<string, unknown>;
+      state: Record<string, unknown>;
+    };
+    const question = Object.keys(body.questions)[0]!;
+    expect(Object.keys(body.questions)).toEqual([question]);
+    expect(["kind", "sender", "theme"]).toContain(question);
+    if (question === "kind")
+      expect(body.state).toEqual({ assistant_said: "done", user_reply: "Have you tested it?" });
+    else if (question === "sender") expect(body.state).toEqual({ message: "Have you tested it?" });
+    else expect(Object.keys(body.state)).toEqual(["correction", "exemplars"]);
+    calls.push(question);
+    return Response.json({
+      model: "local-test-model",
+      answers: {
+        [question]: {
+          type: "choice",
+          choice:
+            question === "kind"
+              ? "correction"
+              : question === "sender"
+                ? "person"
+                : grouping++ === 0
+                  ? "new"
+                  : "t0",
+          confidence: 1,
+          probabilities: {},
         },
-        usage: { input_tokens: 10, output_tokens: 2 },
-      });
-    },
+      },
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
   });
   try {
     const env = { TYPESAFE_API_KEY: "local-test-only", TYPESAFE_BASE_URL: server.url.toString() };
@@ -321,33 +324,29 @@ test("classification failures remain visible even when known themes group succes
   const before = await Bun.file(cacheFile).text();
   const calls: string[] = [];
   let grouping = 0;
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch: async (request) => {
-      const body = (await request.json()) as { questions: Record<string, unknown> };
-      const question = Object.keys(body.questions)[0]!;
-      calls.push(question);
-      return Response.json({
-        model: "local-test-model",
-        answers: {
-          [question]: {
-            type: "choice",
-            choice:
-              question === "kind"
-                ? "praise"
-                : question === "sender"
-                  ? "person"
-                  : grouping++ === 0
-                    ? "new"
-                    : "t0",
-            confidence: 1,
-            probabilities: {},
-          },
+  const server = jev(async (request) => {
+    const body = (await request.json()) as { questions: Record<string, unknown> };
+    const question = Object.keys(body.questions)[0]!;
+    calls.push(question);
+    return Response.json({
+      model: "local-test-model",
+      answers: {
+        [question]: {
+          type: "choice",
+          choice:
+            question === "kind"
+              ? "praise"
+              : question === "sender"
+                ? "person"
+                : grouping++ === 0
+                  ? "new"
+                  : "t0",
+          confidence: 1,
+          probabilities: {},
         },
-        usage: { input_tokens: 10, output_tokens: 2 },
-      });
-    },
+      },
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
   });
   try {
     const failed = await run(home, args, {
@@ -396,13 +395,9 @@ test("a grouping service failure is reported without reclassifying replies or as
   ]);
   const before = await Bun.file(cacheFile).text();
   let calls = 0;
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch: () => {
-      calls += 1;
-      return Response.json({ error: "unavailable" }, { status: 500 });
-    },
+  const server = jev(() => {
+    calls += 1;
+    return Response.json({ error: "unavailable" }, { status: 500 });
   });
   try {
     const failed = await run(home, args, {
