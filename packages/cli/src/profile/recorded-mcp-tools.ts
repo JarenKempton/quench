@@ -26,28 +26,31 @@ export function mcpToolRecords(
   configured: readonly McpServer[],
 ): McpToolRecord[] {
   const latestFirst = [...places].sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
-  const seen = new Map<string, McpToolRecord>();
-  const recorded = new Set<string>();
+  const seen = new Map<string, McpToolRecord[]>();
   for (const place of latestFirst) {
-    for (const load of place.start.mcp) {
-      const server = `${place.harness}\0${normalize(load.server)}`;
-      const key = `${server}\0${load.loading}`;
-      recorded.add(server);
-      const known = seen.get(key);
-      if (known) known.sessions++;
+    const servers = Map.groupBy(
+      place.start.mcp,
+      (load) => `${place.harness}\0${normalize(load.server)}`,
+    );
+    for (const [key, loads] of servers) {
+      const newest = seen.get(key);
+      if (newest) for (const record of newest) record.sessions++;
       else
-        seen.set(key, {
-          harness: place.harness,
-          ...load,
-          sessions: 1,
-          source: load.chars === null ? "deferred tool list" : "request",
-        });
+        seen.set(
+          key,
+          loads.map((load) => ({
+            harness: place.harness,
+            ...load,
+            sessions: 1,
+            source: load.chars === null ? "deferred tool list" : "request",
+          })),
+        );
     }
   }
   const missing = new Map<string, McpToolRecord>();
   for (const server of configured) {
     const key = `${server.harness}\0${normalize(server.name)}`;
-    if (server.enabled === false || recorded.has(key) || missing.has(key)) continue;
+    if (server.enabled === false || seen.has(key) || missing.has(key)) continue;
     missing.set(key, {
       harness: server.harness,
       server: server.name,
@@ -58,7 +61,7 @@ export function mcpToolRecords(
       source: null,
     });
   }
-  return [...[...seen.values()].sort(byLoad), ...[...missing.values()].sort(byName)];
+  return [...[...seen.values()].flat().sort(byLoad), ...[...missing.values()].sort(byName)];
 }
 
 const rank = (r: McpToolRecord) => (r.loading === "up front" ? 0 : 1);

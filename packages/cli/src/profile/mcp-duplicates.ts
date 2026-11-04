@@ -14,12 +14,17 @@ export function mcpDuplicates(
   return [
     ...duplicatesIn(global, "all projects", () => true),
     ...projects.flatMap((p) =>
-      duplicatesIn([...global, ...p.mcpServers], p.name, (group) =>
-        group.some((s) => s.scope !== "user"),
+      duplicatesIn(
+        [...global.filter((g) => !overridden(g, p.mcpServers)), ...p.mcpServers],
+        p.name,
+        (group) => group.some((s) => s.scope !== "user"),
       ),
     ),
   ];
 }
+
+const overridden = (server: McpServer, local: readonly McpServer[]) =>
+  local.some((s) => s.harness === server.harness && s.name === server.name);
 
 function duplicatesIn(
   servers: readonly McpServer[],

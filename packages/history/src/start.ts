@@ -33,8 +33,8 @@ export function startingContext(session: Session): StartingContext {
       system = event.system ?? system;
       tools = event.tools ?? tools;
     } else if (event.type === "deferred_tools") {
-      deferred = event.names;
-      deferredChars = event.chars;
+      deferred = [...new Set([...deferred, ...event.names])];
+      deferredChars += event.chars;
     } else if (event.type === "mcp_instructions") {
       parts.push({ kind: "mcp_instructions", servers: event.servers, chars: event.chars });
     } else if (event.type === "instructions") {

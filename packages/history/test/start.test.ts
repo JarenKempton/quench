@@ -71,3 +71,18 @@ test("starting context splits what the first request carried, by source", () => 
 test("a session without a recorded request says which parts are missing", () => {
   expect(startingContext(session([])).unrecorded).toEqual(["system", "tools", "mcp_tools"]);
 });
+
+test("deferred tool lists before the first request add up", () => {
+  const start = startingContext(
+    session([
+      { type: "deferred_tools", names: ["mcp__docs__a"], chars: 12, at: null },
+      { type: "deferred_tools", names: ["mcp__search__q", "mcp__docs__a"], chars: 14, at: null },
+      { type: "prompt", system: 1, tools: [], at: null },
+    ]),
+  );
+  expect(start.mcp).toEqual([
+    { server: "docs", loading: "deferred", tools: 1, chars: null },
+    { server: "search", loading: "deferred", tools: 1, chars: null },
+  ]);
+  expect(start.parts).toContainEqual({ kind: "deferred_tools", count: 2, chars: 26 });
+});

@@ -67,7 +67,7 @@ const parsed = (url: string) => {
 
 const address = (url: string) => {
   const found = parsed(url);
-  return found ? `${found.origin}${found.pathname.replace(/\/+$/, "")}` : url;
+  return found ? `${found.origin}${found.pathname.replace(/\/+$/, "")}${found.search}` : url;
 };
 
 const fingerprint = (text: string) => sha256(text).slice(0, 16);

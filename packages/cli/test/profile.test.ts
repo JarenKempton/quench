@@ -873,14 +873,14 @@ test("profile shows each MCP server's recorded tool schemas, how they load, and 
     JSON.stringify({
       mcpServers: {
         docs: { type: "http", url: "https://docs.example.com/mcp" },
-        "docs-copy": { type: "http", url: "https://docs.example.com/mcp/?token=SECRET" },
+        "docs-copy": { type: "http", url: "https://docs.example.com/mcp/" },
         search: { command: "search-mcp", args: ["--key", "SECRET"] },
       },
     }),
   );
   await Bun.write(
     join(home, ".codex/config.toml"),
-    '[mcp_servers.github]\ncommand = "gh-mcp"\n\n[mcp_servers.idle]\nurl = "https://idle.example.com"\n',
+    '[mcp_servers.github]\ncommand = "gh-mcp"\n\n[mcp_servers.idle]\nurl = "https://idle.example.com/mcp?token=SECRET"\n',
   );
   await Bun.write(
     join(home, ".claude/projects/-x/a.jsonl"),
