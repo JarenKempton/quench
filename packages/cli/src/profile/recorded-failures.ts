@@ -1,5 +1,5 @@
 import { heading } from "../style.ts";
-import { harnessById, isInside, type HarnessId, type SessionPlace } from "@quench/history";
+import { harnessById, type HarnessId, type SessionPlace } from "@quench/history";
 import { chars, count, projectName, table } from "../format.ts";
 
 const SHOWN = 15;
@@ -18,7 +18,8 @@ export type RepeatedFailure = {
 };
 
 export type BlockedRule = {
-  pattern: string;
+  guard: string;
+  command: string | null;
   blocks: number;
   sessions: number;
   projects: { root: string; blocks: number }[];
@@ -52,7 +53,7 @@ export function repeatedFailures(placesByRoot: Map<string, SessionPlace[]>): Fai
         failures += f.failures;
         total += f.chars;
         if (f.what === null || f.kind === "blocked") continue;
-        const what = isInside(f.what, root) ? f.what.slice(root.length + 1) : f.what;
+        const what = f.what;
         const key = `${root}\0${f.kind}\0${what}\0${f.error}`;
         const row =
           rows.get(key) ??
@@ -90,12 +91,14 @@ export function blockedRules(places: [root: string, places: SessionPlace[]][]): 
   for (const [root, here] of places)
     for (const place of here)
       for (const f of place.failures) {
-        if (f.kind !== "blocked" || f.what === null) continue;
+        if (f.kind !== "blocked" || f.guard === null) continue;
+        const key = `${f.guard}\0${f.what}`;
         const rule =
-          rules.get(f.what) ??
+          rules.get(key) ??
           rules
-            .set(f.what, {
-              pattern: f.what,
+            .set(key, {
+              guard: f.guard,
+              command: f.what,
               blocks: 0,
               sessions: 0,
               projects: [],
@@ -103,7 +106,7 @@ export function blockedRules(places: [root: string, places: SessionPlace[]][]): 
               example: place.session,
               most: 0,
             })
-            .get(f.what)!;
+            .get(key)!;
         rule.blocks += f.failures;
         rule.sessions++;
         const project =
@@ -118,7 +121,7 @@ export function blockedRules(places: [root: string, places: SessionPlace[]][]): 
       ...rule,
       projects: rule.projects.sort((a, b) => b.blocks - a.blocks),
     }))
-    .sort((a, b) => b.blocks - a.blocks || a.pattern.localeCompare(b.pattern));
+    .sort((a, b) => b.blocks - a.blocks || a.guard.localeCompare(b.guard));
 }
 
 const clip = (text: string, width: number) =>
@@ -136,9 +139,10 @@ export function renderBlocked(
     heading(title),
     ...table(
       [
-        ["Blocked", "Blocks", "Sessions", "Projects", "Agents", "Example session"],
+        ["Guard", "Command", "Blocks", "Sessions", "Projects", "Agents", "Example session"],
         ...shown.map((r) => [
-          clip(r.pattern, 60),
+          r.guard,
+          r.command ?? "—",
           count(r.blocks),
           count(r.sessions),
           clip(
@@ -149,7 +153,7 @@ export function renderBlocked(
           r.example,
         ]),
       ],
-      [1, 2],
+      [2, 3],
     ),
   ];
   if (rules.length > shown.length) lines.push(`  … ${rules.length - shown.length} more in --json`);
@@ -172,8 +176,8 @@ export function renderFailures(summary: FailureSummary, days: number, homeDir: s
         [
           "Project",
           "Kind",
-          "What",
-          "First error line",
+          "Command or tool",
+          "Error",
           "Failures",
           "Sessions",
           "In a row",
@@ -184,8 +188,8 @@ export function renderFailures(summary: FailureSummary, days: number, homeDir: s
         ...shown.map((r) => [
           projectName(r.root, homeDir),
           KINDS[r.kind] ?? r.kind,
-          clip(r.what, 50),
-          clip(r.error ?? "", 50),
+          r.what,
+          r.error ?? "",
           count(r.failures),
           count(r.sessions),
           count(r.longestRun),

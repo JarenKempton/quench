@@ -1,5 +1,6 @@
 import type { Event, Failure, Session } from "./model.ts";
 import {
+  errorClassOf,
   errorLineOf,
   exitCodeOf,
   failureSummary,
@@ -16,6 +17,7 @@ export type SessionFailure = {
   kind: Failure["kind"];
   what: string | null;
   error: string | null;
+  guard: string | null;
   failures: number;
   longestRun: number;
   chars: number;
@@ -26,7 +28,7 @@ type ToolResult = Extract<Event, { type: "tool_result" }>;
 
 const SCANNED = 4000;
 
-export type Denial = "blocked" | "rejected" | null;
+export type Denial = { guard: string } | "rejected" | null;
 
 export function failureOf(
   text: string,
@@ -36,12 +38,16 @@ export function failureOf(
   const head = text.slice(0, SCANNED);
   const exitCode = exitCodeOf(head);
   if (isError !== true && !exitCode) return null;
+  const failure = classified(head, exitCode, denial);
+  return { ...failure, errorClass: errorClassOf(head, exitCode) };
+}
 
+function classified(head: string, exitCode: number | null, denial: Denial): Failure {
   const summarised = (kind: Failure["kind"]): Failure => {
     const line = firstLineOf(head);
     return { kind, detail: line && failureSummary(line), exitCode, line };
   };
-  if (denial === "blocked") return summarised("blocked");
+  if (denial && denial !== "rejected") return { kind: "blocked", detail: denial.guard, exitCode };
   if (mentionsInvalidInput(head)) return summarised("invalid-input");
   if (denial === "rejected") return summarised("rejected");
 
@@ -59,7 +65,7 @@ export function failureOf(
 
 export type Scrub = (text: string) => string;
 
-export function recordedFailures(session: Session, scrub: Scrub): SessionFailure[] {
+export function recordedFailures(session: Session): SessionFailure[] {
   const callsById = new Map<string, ToolCall>();
   const countedResults = new Set<string>();
   const rows = new Map<string, SessionFailure>();
@@ -80,19 +86,17 @@ export function recordedFailures(session: Session, scrub: Scrub): SessionFailure
     }
 
     const call = event.callId === null ? undefined : callsById.get(event.callId);
-    const failed = failedCall(event.failure, call, scrub);
-    if (!failed) {
+    const keyed = failureKey(event.failure, call);
+    if (!keyed) {
       breakRun();
       continue;
     }
 
-    const { what } = failed;
-    const error = event.failure.kind === "exit-code" ? scrubbedLine(event.failure, scrub) : null;
-    const key = `${event.failure.kind}\0${what}\0${error}`;
+    const key = `${event.failure.kind}\0${keyed.what}\0${keyed.error}\0${keyed.guard}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
 
-    const row = rowFor(rows, key, event.failure.kind, what, error);
+    const row = rowFor(rows, key, event.failure.kind, keyed);
     row.failures++;
     row.longestRun = Math.max(row.longestRun, runLength);
     row.chars += event.chars;
@@ -108,6 +112,21 @@ export function failedCall(
   const signature = shellSignatureOf(call, scrub);
   if (isNothingFound(failure, signature)) return null;
   return { kind: failure.kind, what: whatFailed(failure, call, signature, scrub) };
+}
+
+function failureKey(
+  failure: Failure,
+  call: ToolCall | undefined,
+): { what: string | null; error: string | null; guard: string | null } | null {
+  const signature = shellSignatureOf(call, (text) => text);
+  if (isNothingFound(failure, signature)) return null;
+  const blocked = failure.kind === "blocked";
+  const chained = blocked && signature === null && call?.shell?.length;
+  return {
+    what: chained ? "several commands" : (signature ?? (call?.shell ? null : (call?.name ?? null))),
+    error: blocked ? null : (failure.errorClass ?? "other"),
+    guard: blocked ? failure.detail : null,
+  };
 }
 
 function scrubbedLine(failure: Failure, scrub: Scrub): string | null {
@@ -152,15 +171,15 @@ function rowFor(
   rows: Map<string, SessionFailure>,
   key: string,
   kind: Failure["kind"],
-  what: string | null,
-  error: string | null,
+  keyed: { what: string | null; error: string | null; guard: string | null },
 ): SessionFailure {
   const existing = rows.get(key);
   if (existing) return existing;
   const row: SessionFailure = {
     kind,
-    what: what && intern(what),
-    error: error && intern(error),
+    what: keyed.what && intern(keyed.what),
+    error: keyed.error && intern(keyed.error),
+    guard: keyed.guard && intern(keyed.guard),
     failures: 0,
     longestRun: 0,
     chars: 0,

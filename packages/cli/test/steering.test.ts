@@ -603,7 +603,8 @@ test("steering lists the rules hooks keep blocking in this project, not elsewher
   const out = JSON.parse((await run(home, project, "--json")).stdout);
   expect(out.blocked).toEqual([
     {
-      pattern: "guard: blocked — push to main",
+      guard: "PreToolUse:Bash hook guard.sh",
+      command: "git push",
       blocks: 2,
       sessions: 1,
       projects: [{ root: project, blocks: 2 }],
@@ -614,7 +615,7 @@ test("steering lists the rules hooks keep blocking in this project, not elsewher
   expect((await run(home, project)).stdout).toContain(
     [
       "Rules agents keep hitting · calls blocked by a hook or permission rule here (1)",
-      '  2× in 1 session  "guard: blocked — push to main"  e.g. session here',
+      "  2× in 1 session  PreToolUse:Bash hook guard.sh · git push  e.g. session here",
     ].join("\n"),
   );
 });

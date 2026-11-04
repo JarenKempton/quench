@@ -783,7 +783,7 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
       call("o", "Bash", { command: "git push --force" }),
       result("o", "PreToolUse:Bash hook error: [/hooks/guard.sh]: guard: blocked — force push."),
       ...ssh("s1", "ssh: connect to host box port 22: Connection refused"),
-      ...ssh("s2", "ssh: Could not resolve hostname box: Name or service not known"),
+      ...ssh("s2", "git@box: Permission denied (publickey)."),
     ]),
   );
   await Bun.write(
@@ -791,7 +791,7 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
     lines([
       ...missingRead("r3"),
       ...ssh("s3", "ssh: connect to host box port 22: Connection refused"),
-      ...ssh("s4", "ssh: Could not resolve hostname box: Name or service not known"),
+      ...ssh("s4", "git@box: Permission denied (publickey)."),
       call("w", "WebFetch", { url: "https://example.com" }),
       blocked(
         "w",
@@ -839,25 +839,27 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   expect(stdout).toContain(
     [
       "▍Blocked by hooks and permissions · rules agents keep hitting · last 30 days",
-      "  Blocked                                                       Blocks  Sessions  Projects  Agents       Example session",
-      "  guard: blocked — force push                                        3         1  work 3    Claude Code  one",
-      "  Claude requested permissions to use WebFetch, but you haven…       1         1  work 1    Claude Code  two",
+      "  Guard                          Command           Blocks  Sessions  Projects  Agents       Example session",
+      "  PreToolUse:Bash hook guard.sh  git push --force       3         1  work 3    Claude Code  one",
+      "  permission rule                WebFetch               1         1  work 1    Claude Code  two",
       "",
       "▍Repeated failures · tool calls that failed the same way · last 30 days",
-      "  Project  Kind             What           First error line                                    Failures  Sessions  In a row     Output  Agents       Example session",
-      `  work     no such file     ${p("docs/setup.md")}                                                             3         2         2   60 chars  Claude Code  one`,
-      "  work     no such command  pytest                                                                    2         2         1  218 chars  Codex        c1",
-      "  work     exit code        ssh box        ssh: Could not resolve hostname box: Name or serv…         2         2         1  152 chars  Claude Code  one",
-      "  work     exit code        ssh box        ssh: connect to host box port N: Connection refus…         2         2         1  132 chars  Claude Code  one",
-      "  15 failed tool calls in all, returning 981 chars of output.",
+      "  Project  Kind             Command or tool  Error        Failures  Sessions  In a row     Output  Agents       Example session",
+      "  work     no such file     Read             not found           3         2         2   60 chars  Claude Code  one",
+      "  work     no such command  pytest -q        not found           2         2         1  218 chars  Codex        c1",
+      "  work     exit code        ssh              network             2         2         1  132 chars  Claude Code  one",
+      "  work     exit code        ssh              auth failed         2         2         1  106 chars  Claude Code  one",
+      "  15 failed tool calls in all, returning 935 chars of output.",
     ].join("\n"),
   );
   expect(stdout).not.toContain("grep");
   expect(stdout).not.toContain("npm");
+  expect(stdout).not.toContain("force push");
   const json = JSON.parse((await quench(home, "--json")).stdout);
   expect(json.recordedFailures.failures).toBe(15);
   expect(json.recordedFailures.blocked[0]).toEqual({
-    pattern: "guard: blocked — force push",
+    guard: "PreToolUse:Bash hook guard.sh",
+    command: "git push --force",
     blocks: 3,
     sessions: 1,
     projects: [{ root: project, blocks: 3 }],
@@ -872,11 +874,12 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   expect((await quench(home)).stdout).toContain(
     [
       "▍Worth a look",
-      '  1. "guard: blocked — force push" blocked 3×',
+      '  1. PreToolUse:Bash hook guard.sh blocked "git push --force" 3×',
       "     1 session · work",
       "     → quench profile failures",
       "",
-      `  2. "${p("docs/setup.md")}" failed 3× in work`,
+      '  2. "Read" failed 3× in work',
+      "     not found · 2 sessions · 60 chars of output",
     ].join("\n"),
   );
   const unknown = await quench(home, "profile", "nope");

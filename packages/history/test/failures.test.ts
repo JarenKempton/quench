@@ -41,9 +41,9 @@ test("failures are classified from the error text", () => {
     kind(
       "PreToolUse:Bash hook error: [/home/me/hooks/guard.sh]: guard: blocked — force push. Ask first.",
       true,
-      "blocked",
+      { guard: "PreToolUse:Bash hook guard.sh" },
     ),
-  ).toEqual(["blocked", "guard: blocked — force push", null]);
+  ).toEqual(["blocked", "PreToolUse:Bash hook guard.sh", null]);
   expect(kind("Exit code 3\nsomething broke")).toEqual(["exit-code", null, 3]);
   expect(kind("Request timed out after 5000ms")).toEqual([
     "error",
@@ -77,12 +77,33 @@ test("quoted, spaced and bare paths to the same file give one error line", () =>
   expect(new Set(lines)).toEqual(new Set(["error: main.ts not found"]));
 });
 
+test("errors are classed from a fixed list, never kept as text", () => {
+  const error = (text: string, isError: boolean | null = true) =>
+    failureOf(text, isError)?.errorClass;
+  expect(error("Exit code 128\nremote: Invalid username or token. Authentication failed")).toBe(
+    "auth failed",
+  );
+  expect(error("Exit code 1\nbash: ./x: Permission denied")).toBe("permission denied");
+  expect(error("Request timed out after 5000ms")).toBe("timeout");
+  expect(error("Exit code 6\ncurl: (6) Could not resolve host: example.test")).toBe("network");
+  expect(error("Exit code 1\ncat: a: No such file or directory")).toBe("not found");
+  expect(error("Exit code 1\n! [rejected] main -> main (non-fast-forward)")).toBe("conflict");
+  expect(error("Exit code 3\nsomething broke")).toBe("exit code 3");
+  expect(error("something broke")).toBe("other");
+});
+
 test("a command signature names one program, or none for several", () => {
   expect(commandSignature('"C:\\Program Files\\Git\\bin\\git.exe" push origin main')).toBe(
     "git push",
   );
   expect(commandSignature("C:\\Git\\bin\\git.exe push origin main")).toBe("git push");
-  expect(commandSignature(".\\tools\\build.cmd release")).toBe("build release");
+  expect(commandSignature(".\\tools\\build.cmd release")).toBe("build");
+  expect(commandSignature("git -C some/dir push --force origin main")).toBe("git -C --force");
+  expect(commandSignature("gh api repos/o/r --jq .x")).toBe("gh api --jq");
+  expect(commandSignature("npm run deadbeef")).toBe("npm run");
+  expect(commandSignature("oathtool deadbeef")).toBe("oathtool");
+  expect(commandSignature("git deadbeef")).toBe("git");
+  expect(commandSignature("ssh box uptime")).toBe("ssh");
   expect(commandSignature("make my\\ target")).toBe("make");
   expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe(
     "bun test --watch",
@@ -92,6 +113,12 @@ test("a command signature names one program, or none for several", () => {
   expect(commandSignature("deploy -uadmin:pw --token=-canary --token z user:pw")).toBe(
     "deploy -u --token",
   );
+  expect(commandSignature("env -u GITHUB_TOKEN A=1 gh pr merge 12 --squash")).toBe(
+    "gh pr --squash",
+  );
   expect(commandSignature("git status && npm test")).toBeNull();
+  expect(commandSignature("cd app && git push --force origin main | tail")).toBe(
+    "git push --force",
+  );
   expect(commandSignature("sleep 5; echo hi")).toBeNull();
 });

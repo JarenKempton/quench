@@ -1,6 +1,7 @@
 import { basename, win32 } from "node:path";
 import { pathStyle } from "./files.ts";
 import { scriptAccesses } from "./scripts.ts";
+import { knownSubcommand } from "./subcommands.ts";
 
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
 
@@ -122,23 +123,42 @@ const SETUP = new Set(["cd", "export", "source", ".", "set", "sleep", "true", "e
 const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee", "column", "jq"]);
 
 export function commandSignature(command: string): string | null {
-  const signatures = segments(command).flatMap((segment) => {
-    const words = segment.words.filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w.text));
-    const program =
-      words[0] && !words[0].dynamic
-        ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
-        : null;
-    if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
-    const next = words[1];
-    const sub = next && !next.dynamic && /^[a-z][a-z0-9_-]*$/.test(next.text) ? next.text : null;
-    const flags = new Set(words.slice(1).flatMap((w) => flagName(w.text)));
-    return [program && [program, ...(sub ? [sub] : []), ...flags].join(" ")];
-  });
-  return signatures.length === 1 ? signatures[0]! : null;
+  const keys = segmentKeys(command);
+  return keys.length === 1 ? keys[0]! : null;
+}
+
+function segmentKeys(command: string): string[] {
+  return segments(command)
+    .flatMap((segment) => {
+      const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
+      const name =
+        words[0] && !words[0].dynamic
+          ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
+          : null;
+      const program = name && /^[A-Za-z0-9._+-]{1,40}$/.test(name) ? name : null;
+      if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
+      const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
+      const sub =
+        program && !positional?.dynamic ? knownSubcommand(program, positional?.text) : null;
+      const flags = new Set(words.slice(1).flatMap((w) => flagName(w.text)));
+      return [program ? [program, ...(sub ? [sub] : []), ...flags].join(" ") : null];
+    })
+    .filter((key): key is string => key !== null);
+}
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const ENV_VALUED = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]);
+
+function unwrapped(words: Word[]): Word[] {
+  if (words[0]?.text !== "env") return words;
+  let i = 1;
+  while (words[i] && (words[i]!.text.startsWith("-") || ASSIGNMENT.test(words[i]!.text)))
+    i += ENV_VALUED.has(words[i]!.text) ? 2 : 1;
+  return words.slice(i);
 }
 
 function flagName(word: string): string[] {
-  const long = /^--[A-Za-z][A-Za-z0-9-]*/.exec(word)?.[0];
+  const long = /^--[a-z][a-z0-9-]{0,30}(?==|$)/.exec(word)?.[0];
   if (long) return [long];
   return /^-[A-Za-z]/.test(word) ? [word.slice(0, 2)] : [];
 }
