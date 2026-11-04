@@ -69,9 +69,9 @@ export async function credentialFiles(
     ...(await filesIn(join(home.dir, ".azure"), (name) => name.endsWith(".json"))).map(
       (path): [string, string] => [path, "Azure"],
     ),
-    ...(await filesIn(join(home.dir, ".zsh_sessions"), (name) => name.endsWith(".history"))).map(
-      (path): [string, string] => [path, "shell history"],
-    ),
+    ...(
+      await filesIn(join(home.dir, ".zsh_sessions"), (name) => /\.history(new)?$/.test(name))
+    ).map((path): [string, string] => [path, "shell history"]),
   ];
   for (const project of projects)
     for (const path of await filesIn(project, (name) => /^\.env(\..+)?$/.test(name)))

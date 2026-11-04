@@ -36,9 +36,11 @@ test("credential files report their mode, macOS zsh session history and reads in
   const dir = await realpath(await mkdtemp(join(tmpdir(), "quench-platform-")));
   const aws = join(dir, ".aws", "credentials");
   const zsh = join(dir, ".zsh_sessions", "8FE05490.history");
+  const pending = join(dir, ".zsh_sessions", "8FE05490.historynew");
   await Bun.write(aws, `aws_secret_access_key = ${TOKEN}\n`);
   await chmod(aws, 0o600);
   await Bun.write(zsh, `export GITHUB_TOKEN=${TOKEN}\n`);
+  await Bun.write(pending, `export GITHUB_TOKEN=${TOKEN}\n`);
   await Bun.write(join(dir, ".zsh_sessions", "8FE05490.session"), "echo restored\n");
   const reads = new Map([[pathKey(aws.toUpperCase()), new Set(["claude-code:s1"])]]);
   const files = await credentialFiles(new Home(dir), [], [], {
@@ -52,6 +54,7 @@ test("credential files report their mode, macOS zsh session history and reads in
     readInSessions: process.platform === "linux" ? 0 : 1,
     ...(process.platform === "win32" ? {} : { mode: "600", othersCanRead: false }),
   });
-  expect(file(zsh)).toMatchObject({ label: "shell history", plaintext: true, secrets: 1 });
+  for (const path of [zsh, pending])
+    expect(file(path)).toMatchObject({ label: "shell history", plaintext: true, secrets: 1 });
   expect(files.filter((f) => f.path.endsWith(".session"))).toEqual([]);
 });

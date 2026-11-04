@@ -79,7 +79,8 @@ jobs:
         run: |
           chmod +x dist/quench-darwin-arm64
           test "$(./dist/quench-darwin-arm64 --version)" = "quench $VERSION"
-          HOME="$PWD/packages/history/test/fixtures/home" ./dist/quench-darwin-arm64 report --days 100000 --no-cache | grep -q "Claude Code"
+          report=$(HOME="$PWD/packages/history/test/fixtures/home" ./dist/quench-darwin-arm64 report --days 100000 --no-cache)
+          grep -q "Claude Code" <<< "$report"
 
   publish:
     name: ${{ github.event_name == 'workflow_dispatch' && 'Stable' || 'Nightly' }}
