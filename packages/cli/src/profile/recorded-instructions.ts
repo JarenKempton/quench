@@ -21,13 +21,20 @@ export type RecordedFile = {
   sessions: number;
   lastRecorded: string | null;
   textChars: number;
+  recordedChars: number;
   textSha256: string;
   checkouts: { path: string; lastRecorded: string | null; disk: DiskComparison }[];
 };
 
 type Copy = { at: string | null; record: InjectedInstruction };
 
-type Row = { root: string | null; file: string; places: SessionPlace[]; copies: Map<string, Copy> };
+type Row = {
+  root: string | null;
+  file: string;
+  places: SessionPlace[];
+  copies: Map<string, Copy>;
+  chars: number;
+};
 
 const SHOWN = 15;
 
@@ -45,8 +52,11 @@ export async function recordedFiles(places: readonly SessionPlace[]): Promise<Re
       const key = `${repo?.root ?? ""}\0${file}\0${record.path === null}`;
       const row =
         rows.get(key) ??
-        rows.set(key, { root: repo?.root ?? null, file, places: [], copies: new Map() }).get(key)!;
+        rows
+          .set(key, { root: repo?.root ?? null, file, places: [], copies: new Map(), chars: 0 })
+          .get(key)!;
       if (row.places.at(-1) !== place) row.places.push(place);
+      row.chars += record.textChars;
       const copy = target ?? "unknown";
       if ((at ?? "") >= (row.copies.get(copy)?.at ?? "")) row.copies.set(copy, { at, record });
     }
@@ -66,6 +76,7 @@ async function summarize(row: Row): Promise<RecordedFile> {
     sessions: row.places.length,
     lastRecorded: newest.at,
     textChars: newest.record.textChars,
+    recordedChars: row.chars,
     textSha256: newest.record.textSha256,
     checkouts: await Promise.all(
       copies.map(async ([path, { at, record }]) => ({

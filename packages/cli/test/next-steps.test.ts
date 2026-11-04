@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -80,7 +80,7 @@ test("the summary ends with measured cuts ranked by characters × sessions, in -
       "▍Do this next · ranked by characters saved × sessions",
       "  1. Trim ~/.claude/CLAUDE.md",
       "     up to 24 chars per session × 2 sessions",
-      "     loaded in full every session; trimming it saves up to its whole size",
+      "     average recorded size per session; trimming it saves up to that",
       "",
       "  2. Cut notes (user folder)",
       "     19 chars per session × 2 sessions",
@@ -189,3 +189,52 @@ test.each([
   expect(json.nextSteps).toEqual([]);
   expect((await quench(home)).stdout).not.toContain("Remove MCP server");
 });
+
+test.each([
+  [10, 1_000],
+  [1_000, 10],
+])(
+  "an instruction file recorded at %i then %i chars counts what sessions recorded",
+  async (first, second) => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
+    const work = join(home, "work");
+    const rules = join(home, ".claude/CLAUDE.md");
+    await mkdir(work);
+    await skill(join(home, ".claude/skills/big"));
+    await Bun.write(rules, "x".repeat(second));
+    const entry = `- big: ${"d".repeat(543)}`;
+    for (const [i, size] of [first, second].entries()) {
+      const path = join(home, `.claude/projects/p/${i}.jsonl`);
+      await Bun.write(
+        path,
+        lines([
+          {
+            type: "attachment",
+            cwd: work,
+            attachment: { type: "skill_listing", names: ["big"], content: entry },
+          },
+          {
+            type: "attachment",
+            cwd: work,
+            attachment: {
+              type: "instructions",
+              files: [{ path: rules, type: "User", content: "x".repeat(size) }],
+            },
+          },
+        ]),
+      );
+      const at = new Date(Date.now() - (2 - i) * 60_000);
+      await utimes(path, at, at);
+    }
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(
+      json.nextSteps.map((s: { kind: string; totalChars: number }) => [s.kind, s.totalChars]),
+    ).toEqual([
+      ["skill-cut", 1_100],
+      ["instruction-file", 1_010],
+    ]);
+    expect((await quench(home)).stdout).toContain(
+      "  2. Trim ~/.claude/CLAUDE.md\n     up to 505 chars per session × 2 sessions\n",
+    );
+  },
+);

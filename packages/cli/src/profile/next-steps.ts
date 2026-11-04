@@ -49,7 +49,7 @@ function cutStep(cut: Cut): NextStep[] {
 function instructionStep(files: readonly RecordedFile[], homeDir: string): NextStep[] {
   const largest = files
     .filter((f) => !f.combined && onDisk(f.checkouts[0]!.disk))
-    .sort((a, b) => b.textChars * b.sessions - a.textChars * a.sessions)[0];
+    .sort((a, b) => b.recordedChars - a.recordedChars)[0];
   if (!largest) return [];
   const path = largest.checkouts[0]!.path;
   return [
@@ -57,10 +57,10 @@ function instructionStep(files: readonly RecordedFile[], homeDir: string): NextS
       kind: "instruction-file",
       action: `Trim ${shortPath(path, homeDir)}`,
       command: null,
-      note: "loaded in full every session; trimming it saves up to its whole size",
-      charsPerSession: largest.textChars,
+      note: "average recorded size per session; trimming it saves up to that",
+      charsPerSession: Math.round(largest.recordedChars / largest.sessions),
       sessions: largest.sessions,
-      totalChars: largest.textChars * largest.sessions,
+      totalChars: largest.recordedChars,
       size: "upper bound",
     },
   ];
