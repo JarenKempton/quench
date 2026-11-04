@@ -1,9 +1,8 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 import { requests } from "./jev.ts";
-import { spawnTree, type Child, type Tree } from "./tree.ts";
 import {
   ReplyKind,
   replyKindMeaning,
@@ -27,20 +26,9 @@ const MODEL = "claude-haiku-5-5";
 const ENV_ALLOWED = new Set(
   [
     "PATH",
-    "PATHEXT",
     "HOME",
     "USER",
     "LOGNAME",
-    "USERPROFILE",
-    "USERNAME",
-    "HOMEDRIVE",
-    "HOMEPATH",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "SYSTEMROOT",
-    "WINDIR",
-    "COMSPEC",
-    "PROGRAMDATA",
     "TMPDIR",
     "TEMP",
     "TMP",
@@ -74,13 +62,18 @@ export function childEnv(env: Record<string, string | undefined>): Record<string
 }
 
 export class HarnessMissing extends Error {
-  constructor(
-    readonly command: string,
-    why = "was not found on PATH",
-  ) {
-    super(`${command} ${why}`);
+  constructor(readonly command: string) {
+    super(`${command} was not found on PATH`);
   }
 }
+
+export class HarnessUnsupported extends Error {
+  constructor(readonly platform: NodeJS.Platform) {
+    super("--judge claude is not supported on Windows yet; use Jev (TYPESAFE_API_KEY) instead");
+  }
+}
+
+type Child = Bun.Subprocess<Uint8Array, "pipe", "pipe">;
 
 export class HarnessFailed extends Error {
   constructor(
@@ -142,9 +135,11 @@ export class HarnessJudge implements Judge {
   static async create(
     env: Record<string, string | undefined> = process.env,
     timeoutMs = TIMEOUT_MS,
+    platform: NodeJS.Platform = process.platform,
   ): Promise<HarnessJudge> {
+    if (platform === "win32") throw new HarnessUnsupported(platform);
     if (env[CHILD_ENV]) throw new Error("Quench is already running inside a classifier call");
-    const command = await resolve(pathOf(env), process.platform);
+    const command = Bun.which("claude", env.PATH === undefined ? {} : { PATH: env.PATH });
     if (!command) throw new HarnessMissing("claude");
     return new HarnessJudge(command, env, timeoutMs);
   }
@@ -170,12 +165,15 @@ export class HarnessJudge implements Judge {
 
   async #one(exchange: Exchange, dir: string): Promise<Judgment> {
     if (this.#broken) return this.#broken;
-    let tree: Tree;
+    let proc: Child;
     try {
-      tree = spawnTree([this.#command, ...ARGV], {
+      proc = Bun.spawn([this.#command, ...ARGV], {
         cwd: dir,
         env: this.#env,
         stdin: new TextEncoder().encode(prompt(exchange)),
+        stdout: "pipe",
+        stderr: "pipe",
+        detached: true,
       });
     } catch (error) {
       return failed("spawn", error);
@@ -183,17 +181,16 @@ export class HarnessJudge implements Judge {
     let timer: Timer | undefined;
     const deadline = new Promise<HarnessFailed>((done) => {
       timer = setTimeout(() => {
-        tree.kill();
+        killGroup(proc);
         done(new HarnessFailed("timeout", `${LABEL} took over ${this.#timeoutMs / 1000}s`));
       }, this.#timeoutMs);
     });
     try {
-      return await Promise.race([this.#finish(tree.proc), deadline]);
+      return await Promise.race([this.#finish(proc), deadline]);
     } catch (error) {
       return failed("spawn", error);
     } finally {
       clearTimeout(timer);
-      tree.release();
     }
   }
 
@@ -253,36 +250,13 @@ export function verdictIn(text: string): Verdict | null {
   return parsed.success ? parsed.data : null;
 }
 
-export async function resolve(
-  path: string | undefined,
-  platform: NodeJS.Platform,
-): Promise<string | null> {
-  const which = (name: string) => Bun.which(name, path === undefined ? {} : { PATH: path });
-  if (platform !== "win32") return which("claude");
-  const exe = which("claude.exe");
-  if (exe) return exe;
-  const shim = which("claude.cmd");
-  if (!shim) return null;
-  const target = await shimTarget(shim);
-  if (!target) throw new HarnessMissing(shim, "is not an npm shim for Claude Code's claude.exe");
-  return target;
-}
-
-export async function shimTarget(shim: string): Promise<string | null> {
-  const pkg = join(dirname(shim), "node_modules", "@anthropic-ai", "claude-code");
+function killGroup(proc: Child): void {
   try {
-    const [root, exe] = await Promise.all([
-      realpath(pkg),
-      realpath(join(pkg, "bin", "claude.exe")),
-    ]);
-    return exe.startsWith(root + sep) ? exe : null;
+    process.kill(-proc.pid, "SIGKILL");
   } catch {
-    return null;
+    proc.kill("SIGKILL");
   }
 }
-
-const pathOf = (env: Record<string, string | undefined>) =>
-  Object.entries(env).find(([name]) => name.toUpperCase() === "PATH")?.[1];
 
 function json(text: string): unknown {
   try {

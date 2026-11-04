@@ -12,7 +12,7 @@ const canaries = [
   "CANARY_PROJECT_MD",
 ];
 
-test.skipIf(!Bun.which("claude"))(
+test.skipIf(process.platform === "win32" || !Bun.which("claude"))(
   "installed claude sends no instructions or model override from the parent environment",
   async () => {
     const root = await mkdtemp(join(tmpdir(), "quench-canary-"));

@@ -14,6 +14,7 @@ import {
   HarnessJudge,
   HarnessMissing,
   type HarnessName,
+  HarnessUnsupported,
   Jev,
   JevCauses,
   JevThemes,
@@ -62,6 +63,10 @@ type ReplyJudge = Jev | HarnessJudge;
 
 export async function corrections(home: Home, options: Options): Promise<number> {
   const harness = options.judge === "jev" ? null : options.judge;
+  if (harness && process.platform === "win32") {
+    process.stderr.write(`${new HarnessUnsupported(process.platform).message}\n`);
+    return 1;
+  }
   const asking = !options.dryRun && !options.cachedOnly;
   let replyJudge: ReplyJudge | null = null;
   try {

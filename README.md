@@ -104,10 +104,10 @@ gets only an allowlisted environment: path, home, temp, locale, Anthropic sign-i
 `CLAUDE_CONFIG_DIR`), proxy and CA variables, and the two telemetry opt-outs. Model overrides and
 anything else in your shell never reach it. Claude Code adds its own note with the temporary
 folder, platform and OS version. Bedrock, Vertex and settings that only live in `settings.json`,
-such as `env` or `apiKeyHelper`, are not supported. A call that times out (its whole process tree
-is killed: process group, or a Windows job object), exits non-zero or answers with anything but
+such as `env` or `apiKeyHelper`, are not supported. A call that times out (its whole process group
+is killed), exits non-zero or answers with anything but
 the bare verdict counts as failed and is retried on the next run. After one non-zero exit, the
-remaining replies are not attempted. Codex is not offered: `codex exec` cannot be run without
+remaining replies are not attempted. On Windows, `--judge claude` refuses to run for now; use Jev there. Codex is not offered: `codex exec` cannot be run without
 tools. `--themes` and `--causes` still use Jev.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
