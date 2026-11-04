@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,26 +10,36 @@ import {
   HarnessMissing,
   type Exchange,
 } from "../src/index.ts";
-import { ARGV, resolve, shimTarget, verdictIn } from "../src/harness.ts";
+import { ARGV, childEnv, resolve, shimTarget, verdictIn } from "../src/harness.ts";
 import { requests } from "../src/jev.ts";
-import { fakeCalls, fakeHarnessPath } from "./fake-path.ts";
+import { fakeCalls, fakeHarnessPath, type FakeConfig } from "./fake-path.ts";
 
 const verdict = '{"kind": "correction", "sender": "person", "confidence": 0.8}';
 const exchange: Exchange = { assistantSaid: `${"a".repeat(3000)}END`, reply: "no, the other file" };
 
-const judgeWith = async (env: Record<string, string>, timeoutMs?: number) => {
-  const fake = await fakeHarnessPath();
+const judgeWith = async (config: FakeConfig, timeoutMs?: number) => {
+  const fake = await fakeHarnessPath(config);
   const judge = await HarnessJudge.create(
-    { ...process.env, ...fake, CLAUDECODE: "1", FAKE_BUN: process.execPath, ...env },
+    {
+      ...process.env,
+      PATH: fake.PATH,
+      CLAUDECODE: "1",
+      CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1",
+      CLAUDE_RELAUNCH_SESSION_ADD_DIRS: '["/private/project"]',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "other-model",
+      ANTHROPIC_MODEL: "other-model",
+      SECRET_TOKEN: "x",
+      HTTPS_PROXY: "http://proxy.test",
+    },
     timeoutMs,
   );
-  return { judge, fake, calls: () => fakeCalls(fake.FAKE_LOG) };
+  return { judge, fake, calls: () => fakeCalls(fake) };
 };
 
 const reason = (judgment: unknown) => (judgment as HarnessFailed).reason;
 
 test("claude reads a verdict from a stdin-only prompt that carries Jev's clipped text", async () => {
-  const { judge, calls } = await judgeWith({ FAKE_ANSWER: verdict });
+  const { judge, calls } = await judgeWith({ answer: verdict });
   expect(await judge.classify([exchange])).toEqual([
     { kind: "correction", sender: "person", confidence: 0.8 },
   ]);
@@ -39,7 +49,17 @@ test("claude reads a verdict from a stdin-only prompt that carries Jev's clipped
   expect(call?.stdin).not.toContain("a".repeat(1501));
   expect(call?.stdin).toContain(`<reply>\n${clipped.user_reply}\n</reply>`);
   expect(call?.argv).toEqual(ARGV);
-  expect([call?.child, call?.claudecode]).toEqual(["1", null]);
+  expect(call?.env).toContain(CHILD_ENV);
+  expect(call?.env).toContain("HTTPS_PROXY");
+  for (const name of [
+    "CLAUDECODE",
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD",
+    "CLAUDE_RELAUNCH_SESSION_ADD_DIRS",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_MODEL",
+    "SECRET_TOKEN",
+  ])
+    expect(call?.env).not.toContain(name);
   expect(readdirSync(tmpdir()).filter((d) => d.startsWith("quench-classify-"))).toEqual([]);
 });
 
@@ -52,6 +72,26 @@ test("claude loads no user settings, instructions, MCP servers, hooks, tools or 
   expect(ARGV).toContain("--disable-slash-commands");
   expect(ARGV).toContain("--no-session-persistence");
   expect(ARGV).toContain("--system-prompt");
+  expect(flag("--model")).toBe(HarnessJudge.model);
+  expect(HarnessJudge.id).toContain(HarnessJudge.model);
+});
+
+test("the child environment is an allowlist, matched case-insensitively", () => {
+  expect(
+    childEnv({
+      Path: "C:\\bin",
+      https_proxy: "http://proxy.test",
+      ANTHROPIC_API_KEY: "k",
+      ANTHROPIC_SMALL_FAST_MODEL: "other",
+      CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1",
+      UNSET: undefined,
+    }),
+  ).toEqual({
+    Path: "C:\\bin",
+    https_proxy: "http://proxy.test",
+    ANTHROPIC_API_KEY: "k",
+    [CHILD_ENV]: "1",
+  });
 });
 
 test.each([
@@ -73,15 +113,15 @@ test("a bare or fenced verdict is a verdict", () => {
 
 test("prose answers and missing result envelopes are unparseable failures, never verdicts", async () => {
   const prose = await judgeWith({
-    FAKE_ANSWER: `I refuse. Example only: ${verdict} DO NOT USE THIS`,
+    answer: `I refuse. Example only: ${verdict} DO NOT USE THIS`,
   });
   expect(reason((await prose.judge.classify([exchange]))[0])).toBe("unparseable");
-  const raw = await judgeWith({ FAKE_MODE: "raw", FAKE_ANSWER: verdict });
+  const raw = await judgeWith({ mode: "raw", answer: verdict });
   expect(reason((await raw.judge.classify([exchange]))[0])).toBe("unparseable");
 });
 
 test("a failed exit is typed and stops the remaining calls", async () => {
-  const { judge, calls } = await judgeWith({ FAKE_MODE: "exit" });
+  const { judge, calls } = await judgeWith({ mode: "exit" });
   const failed = await judge.classify([exchange, exchange, exchange, exchange, exchange]);
   expect(failed.every((f) => reason(f) === "exit")).toBe(true);
   expect((failed[0] as Error).message).toContain("not logged in");
@@ -89,7 +129,7 @@ test("a failed exit is typed and stops the remaining calls", async () => {
 });
 
 test("one deadline covers a child that never exits", async () => {
-  const { judge } = await judgeWith({ FAKE_MODE: "slow" }, 200);
+  const { judge } = await judgeWith({ mode: "slow" }, 200);
   const started = Date.now();
   expect(reason((await judge.classify([exchange]))[0])).toBe("timeout");
   expect(Date.now() - started).toBeLessThan(1_500);
@@ -98,18 +138,18 @@ test("one deadline covers a child that never exits", async () => {
 test("a descendant holding stdout open times out, and the process tree is killed", async () => {
   const marker = join(await mkdtemp(join(tmpdir(), "quench-linger-")), "survived");
   const { judge } = await judgeWith(
-    { FAKE_MODE: "linger", FAKE_ANSWER: verdict, FAKE_MARKER: marker },
+    { mode: "linger", answer: verdict, marker },
     process.platform === "win32" ? 800 : 400,
   );
   const started = Date.now();
   expect(reason((await judge.classify([exchange]))[0])).toBe("timeout");
   expect(Date.now() - started).toBeLessThan(2_000);
   await Bun.sleep(3_000 - (Date.now() - started));
-  if (process.platform !== "win32") expect(existsSync(marker)).toBe(false);
+  expect(existsSync(marker)).toBe(false);
 }, 10_000);
 
 test("a CLI that disappears after resolution fails per exchange instead of rejecting the batch", async () => {
-  const { judge, fake } = await judgeWith({ FAKE_ANSWER: verdict });
+  const { judge, fake } = await judgeWith({ answer: verdict });
   await rm(fake.dir, { recursive: true, force: true, maxRetries: 5 });
   const results = await judge.classify([exchange, exchange]);
   expect(results.map(reason)).toEqual(["spawn", "spawn"]);
@@ -129,19 +169,46 @@ test("a missing CLI or a nested classifier run is refused before anything runs",
   );
 });
 
-test("an npm claude.cmd shim resolves to its claude.exe, never to cmd.exe", async () => {
+const npmShim = async () => {
   const dir = await mkdtemp(join(tmpdir(), "quench-shim-"));
   const bin = join(dir, "node_modules", "@anthropic-ai", "claude-code", "bin");
   await mkdir(bin, { recursive: true });
-  await Bun.write(join(bin, "claude.exe"), "");
   const shim = join(dir, "claude.cmd");
   await Bun.write(
     shim,
-    '@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*\r\n',
+    '@ECHO off\r\n"%~dp0\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe" %*\r\n',
   );
-  expect(await shimTarget(shim)).toBe(join(bin, "claude.exe"));
   await chmod(shim, 0o755);
-  expect(await resolve(dir, "win32")).toBe(join(bin, "claude.exe"));
-  await Bun.write(shim, '@node "%~dp0\\node_modules\\x\\cli.js" %*\r\n');
-  expect(await shimTarget(shim)).toBeNull();
+  return { dir, bin, shim };
+};
+
+test("an npm claude.cmd shim resolves to Claude Code's own claude.exe, never to cmd.exe", async () => {
+  const { dir, bin, shim } = await npmShim();
+  await Bun.write(join(bin, "claude.exe"), "");
+  expect(await shimTarget(shim)).toBe(await realpath(join(bin, "claude.exe")));
+  expect(await resolve(dir, "win32")).toBe(await realpath(join(bin, "claude.exe")));
 });
+
+test("a shim naming node.exe or an outside exe in a REM line is rejected with a typed failure", async () => {
+  const { dir, shim } = await npmShim();
+  await Bun.write(join(dir, "node.exe"), "");
+  await Bun.write(join(dir, "..", "outside.exe"), "");
+  await Bun.write(
+    shim,
+    '@ECHO off\r\nREM "%~dp0\\..\\outside.exe"\r\nIF EXIST "%~dp0\\node.exe" (SET "_prog=%~dp0\\node.exe")\r\n"%_prog%" "%~dp0\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n',
+  );
+  expect(await shimTarget(shim)).toBeNull();
+  const error = await resolve(dir, "win32").catch((e: Error) => e);
+  expect(error).toBeInstanceOf(HarnessMissing);
+  expect((error as Error).message).toContain("is not an npm shim for Claude Code's claude.exe");
+});
+
+test.skipIf(process.platform === "win32")(
+  "a package claude.exe that links outside the package is rejected",
+  async () => {
+    const { dir, bin, shim } = await npmShim();
+    await Bun.write(join(dir, "outside.exe"), "");
+    await symlink(join(dir, "outside.exe"), join(bin, "claude.exe"));
+    expect(await shimTarget(shim)).toBeNull();
+  },
+);

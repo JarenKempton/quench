@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { z } from "zod";
 import { requests } from "./jev.ts";
+import { spawnTree, type Child, type Tree } from "./tree.ts";
 import {
   ReplyKind,
   replyKindMeaning,
@@ -21,10 +22,63 @@ export const CHILD_ENV = "QUENCH_CLASSIFIER_CHILD";
 const WORKERS = 4;
 const TIMEOUT_MS = 180_000;
 const LABEL = "claude -p";
+const MODEL = "claude-haiku-5-5";
+
+const ENV_ALLOWED = new Set(
+  [
+    "PATH",
+    "PATHEXT",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "USERPROFILE",
+    "USERNAME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PROGRAMDATA",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LANGUAGE",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CONFIG_DIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "ALL_PROXY",
+    "NODE_EXTRA_CA_CERTS",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "DISABLE_TELEMETRY",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+  ].map((name) => name.toUpperCase()),
+);
+
+export function childEnv(env: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env))
+    if (value !== undefined && ENV_ALLOWED.has(name.toUpperCase())) out[name] = value;
+  return { ...out, [CHILD_ENV]: "1" };
+}
 
 export class HarnessMissing extends Error {
-  constructor(readonly command: string) {
-    super(`${command} was not found on PATH`);
+  constructor(
+    readonly command: string,
+    why = "was not found on PATH",
+  ) {
+    super(`${command} ${why}`);
   }
 }
 
@@ -63,27 +117,25 @@ export const ARGV = [
   "--system-prompt",
   "You classify one reply sent to a coding agent. Answer only with the JSON object requested.",
   "--model",
-  "haiku",
+  MODEL,
   "--output-format",
   "json",
 ];
 
-type Child = Bun.Subprocess<Uint8Array, "pipe", "pipe">;
-
 export class HarnessJudge implements Judge {
-  static readonly id = "claude/haiku/reply-v2";
+  static readonly model = MODEL;
+  static readonly id = `claude/${MODEL}/reply-v3`;
   static readonly label = LABEL;
   readonly id = HarnessJudge.id;
   readonly label = LABEL;
   readonly #command: string;
-  readonly #env: Record<string, string | undefined>;
+  readonly #env: Record<string, string>;
   readonly #timeoutMs: number;
   #broken: HarnessFailed | null = null;
 
   private constructor(command: string, env: Record<string, string | undefined>, timeoutMs: number) {
     this.#command = command;
-    this.#env = { ...env, [CHILD_ENV]: "1" };
-    delete this.#env.CLAUDECODE;
+    this.#env = childEnv(env);
     this.#timeoutMs = timeoutMs;
   }
 
@@ -92,7 +144,7 @@ export class HarnessJudge implements Judge {
     timeoutMs = TIMEOUT_MS,
   ): Promise<HarnessJudge> {
     if (env[CHILD_ENV]) throw new Error("Quench is already running inside a classifier call");
-    const command = await resolve(env.PATH, process.platform);
+    const command = await resolve(pathOf(env), process.platform);
     if (!command) throw new HarnessMissing("claude");
     return new HarnessJudge(command, env, timeoutMs);
   }
@@ -118,15 +170,12 @@ export class HarnessJudge implements Judge {
 
   async #one(exchange: Exchange, dir: string): Promise<Judgment> {
     if (this.#broken) return this.#broken;
-    let proc: Child;
+    let tree: Tree;
     try {
-      proc = Bun.spawn([this.#command, ...ARGV], {
+      tree = spawnTree([this.#command, ...ARGV], {
         cwd: dir,
         env: this.#env,
         stdin: new TextEncoder().encode(prompt(exchange)),
-        stdout: "pipe",
-        stderr: "pipe",
-        detached: process.platform !== "win32",
       });
     } catch (error) {
       return failed("spawn", error);
@@ -134,16 +183,17 @@ export class HarnessJudge implements Judge {
     let timer: Timer | undefined;
     const deadline = new Promise<HarnessFailed>((done) => {
       timer = setTimeout(() => {
-        killTree(proc.pid);
+        tree.kill();
         done(new HarnessFailed("timeout", `${LABEL} took over ${this.#timeoutMs / 1000}s`));
       }, this.#timeoutMs);
     });
     try {
-      return await Promise.race([this.#finish(proc), deadline]);
+      return await Promise.race([this.#finish(tree.proc), deadline]);
     } catch (error) {
       return failed("spawn", error);
     } finally {
       clearTimeout(timer);
+      tree.release();
     }
   }
 
@@ -212,33 +262,27 @@ export async function resolve(
   const exe = which("claude.exe");
   if (exe) return exe;
   const shim = which("claude.cmd");
-  return shim ? shimTarget(shim) : null;
+  if (!shim) return null;
+  const target = await shimTarget(shim);
+  if (!target) throw new HarnessMissing(shim, "is not an npm shim for Claude Code's claude.exe");
+  return target;
 }
 
 export async function shimTarget(shim: string): Promise<string | null> {
-  const text = await readFile(shim, "utf8").catch(() => "");
-  const target = /"%(?:~dp0|dp0%)\\?([^"%]+\.exe)"/i.exec(text)?.[1];
-  if (!target) return null;
-  const exe = join(dirname(shim), ...target.split("\\"));
-  return (await Bun.file(exe).exists()) ? exe : null;
+  const pkg = join(dirname(shim), "node_modules", "@anthropic-ai", "claude-code");
+  try {
+    const [root, exe] = await Promise.all([
+      realpath(pkg),
+      realpath(join(pkg, "bin", "claude.exe")),
+    ]);
+    return exe.startsWith(root + sep) ? exe : null;
+  } catch {
+    return null;
+  }
 }
 
-function killTree(pid: number): void {
-  if (process.platform === "win32") {
-    Bun.spawnSync(["taskkill", "/pid", String(pid), "/T", "/F"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {}
-  }
-}
+const pathOf = (env: Record<string, string | undefined>) =>
+  Object.entries(env).find(([name]) => name.toUpperCase() === "PATH")?.[1];
 
 function json(text: string): unknown {
   try {

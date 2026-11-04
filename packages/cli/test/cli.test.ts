@@ -305,40 +305,41 @@ test("corrections --judge claude classifies through the local CLI into its own c
   const jevCache = join(dir, ".quench/local/judgments.jsonl");
   const jevLine = `${JSON.stringify({ judge: Jev.id, key: "k", verdict: { kind: "info", sender: "person", confidence: 1 } })}\n`;
   await Bun.write(jevCache, jevLine);
-  const fake = await fakeHarnessPath();
+  const fake = await fakeHarnessPath({
+    answer: '{"kind": "correction", "sender": "person", "confidence": 0.9}',
+  });
   const args = ["corrections", "--days", "36500", "--no-host-history", "--judge", "claude"];
   const env = {
-    ...fake,
-    FAKE_ANSWER: '{"kind": "correction", "sender": "person", "confidence": 0.9}',
+    PATH: fake.PATH,
   };
 
   const dry = await quenchAt(dir, ...args, "--dry-run");
   expect(dry.code).toBe(0);
-  expect(dry.stdout).toContain("judged by claude/haiku/reply-v2");
+  expect(dry.stdout).toContain("judged by claude/claude-haiku-5-5/reply-v3");
   expect(dry.stdout).toContain("2 replies not judged yet would be sent to claude -p in 2 requests");
   expect(JSON.parse((await quenchAt(dir, ...args, "--dry-run", "--json")).stdout).calls).toBe(2);
-  expect(await fakeCalls(fake.FAKE_LOG)).toEqual([]);
+  expect(await fakeCalls(fake)).toEqual([]);
 
   const run = await quenchAtWith(env, dir, ...args, "--json");
   expect(run.code).toBe(0);
   const out = JSON.parse(run.stdout);
   expect([out.judge, out.newlyJudged, out.pending, out.fromPeople.kinds.correction]).toEqual([
-    "claude/haiku/reply-v2",
+    "claude/claude-haiku-5-5/reply-v3",
     2,
     0,
     2,
   ]);
-  expect((await fakeCalls(fake.FAKE_LOG)).length).toBe(2);
+  expect((await fakeCalls(fake)).length).toBe(2);
   expect(await Bun.file(jevCache).text()).toBe(jevLine);
   const own = await VerdictCache.open(
     join(dir, ".quench/local/judgments-claude.jsonl"),
-    "claude/haiku/reply-v2",
+    "claude/claude-haiku-5-5/reply-v3",
   );
   expect(own.size).toBe(2);
 
   const again = await quenchAtWith(env, dir, ...args, "--json");
   expect(JSON.parse(again.stdout).newlyJudged).toBe(0);
-  expect((await fakeCalls(fake.FAKE_LOG)).length).toBe(2);
+  expect((await fakeCalls(fake)).length).toBe(2);
 
   const missing = await quenchAtWith({ PATH: dir }, dir, ...args);
   expect(missing.code).toBe(1);

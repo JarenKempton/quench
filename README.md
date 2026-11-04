@@ -83,10 +83,10 @@ before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a repl
 `--dry-run` shows how many replies would be sent without sending anything.
 
 Without a TypeSafe key, `--judge claude` classifies each reply through Claude Code, signed in as
-you: one `claude -p` call (Haiku) per reply, with the prompt on stdin. It sends the same clipped
-text Jev receives, and `--dry-run --judge claude` counts the calls first. The output names the judge
-that ran, and its verdicts are cached in `~/.quench/local/judgments-claude.jsonl` under their own
-judge id, so they never mix with or replace Jev's.
+you: one `claude -p` call to `claude-haiku-5-5` per reply, with the prompt on stdin. It sends the
+same clipped text Jev receives, and `--dry-run --judge claude` counts the calls first. The output
+names the judge that ran, and its verdicts are cached in `~/.quench/local/judgments-claude.jsonl`
+under their own judge id, which includes the model, so they never mix with or replace Jev's.
 
 |              | Jev                                    | `--judge claude`                                           |
 | ------------ | -------------------------------------- | ---------------------------------------------------------- |
@@ -97,13 +97,18 @@ judge id, so they never mix with or replace Jev's.
 
 Each call runs in an empty temporary folder with `--setting-sources ""`, so no user, project or
 local settings, `CLAUDE.md`, rules, imports, skills or agents load. It also passes `--tools ""`,
-`--strict-mcp-config`, `--disable-slash-commands`, hooks and auto-memory off, its own system
-prompt, and `--no-session-persistence`, so nothing is added to your history. Sign-in still works.
-Claude Code adds its own note with the temporary folder, platform and OS version. Settings that
-only live in `settings.json`, such as `env` or `apiKeyHelper`, are not applied. A call that times
-out, exits non-zero or answers with anything but the bare verdict counts as failed and is retried
-on the next run. After one non-zero exit, the remaining replies are not attempted. Codex is not
-offered: `codex exec` cannot be run without tools. `--themes` and `--causes` still use Jev.
+`--strict-mcp-config` and `--disable-slash-commands`, turns hooks and auto-memory off, sets its own
+system prompt, and uses `--no-session-persistence`, so nothing is added to your history. The child
+gets only an allowlisted environment: path, home, temp, locale, Anthropic sign-in
+(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_OAUTH_TOKEN`,
+`CLAUDE_CONFIG_DIR`), proxy and CA variables, and the two telemetry opt-outs. Model overrides and
+anything else in your shell never reach it. Claude Code adds its own note with the temporary
+folder, platform and OS version. Bedrock, Vertex and settings that only live in `settings.json`,
+such as `env` or `apiKeyHelper`, are not supported. A call that times out (its whole process tree
+is killed: process group, or a Windows job object), exits non-zero or answers with anything but
+the bare verdict counts as failed and is retried on the next run. After one non-zero exit, the
+remaining replies are not attempted. Codex is not offered: `codex exec` cannot be run without
+tools. `--themes` and `--causes` still use Jev.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or
