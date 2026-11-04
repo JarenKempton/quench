@@ -39,8 +39,10 @@ function startingLoad(result: Profile, homeDir: string): string[] {
         .filter((f) => f.sources.some((s) => s.harness === h.harness))
         .reduce((n, f) => n + f.bytes, 0);
       const largest = result.recordedInstructions
-        .filter((f) => f.harnesses.includes(h.harness))
-        .sort((a, b) => b.textChars * b.sessions - a.textChars * a.sessions)[0];
+        .flatMap((file) =>
+          file.loads.filter((l) => l.harness === h.harness).map((load) => ({ file, load })),
+        )
+        .sort((a, b) => b.load.chars - a.load.chars)[0];
       return {
         label: harnessById[h.harness].label,
         global,
@@ -67,7 +69,7 @@ function startingLoad(result: Profile, homeDir: string): string[] {
     ...rows.flatMap((r) =>
       r.largest
         ? [
-            `  ${dim(`${r.label} instructions, largest: ${fileLabel(r.largest, context)} · ${chars(r.largest.textChars)} × ${count(r.largest.sessions)} sessions`)}`,
+            `  ${dim(`${r.label} instructions, largest: ${fileLabel(r.largest.file, context)} · ${chars(r.largest.load.chars)} over ${plural(r.largest.load.sessions, "session")}`)}`,
           ]
         : [],
     ),

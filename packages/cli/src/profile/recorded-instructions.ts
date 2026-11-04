@@ -2,6 +2,7 @@ import { heading } from "../style.ts";
 import { dirname, relative, sep } from "node:path";
 import {
   checkout,
+  claudeProjectSlug,
   compareWithDisk,
   harnessById,
   isInside,
@@ -22,12 +23,19 @@ export type RecordedFile = {
   lastRecorded: string | null;
   textChars: number;
   textSha256: string;
+  loads: { harness: HarnessId; sessions: number; chars: number }[];
   checkouts: { path: string; lastRecorded: string | null; disk: DiskComparison }[];
 };
 
 type Copy = { at: string | null; record: InjectedInstruction };
 
-type Row = { root: string | null; file: string; places: SessionPlace[]; copies: Map<string, Copy> };
+type Row = {
+  root: string | null;
+  file: string;
+  places: SessionPlace[];
+  copies: Map<string, Copy>;
+  loads: Map<HarnessId, { sessions: number; chars: number }>;
+};
 
 const SHOWN = 15;
 
@@ -45,8 +53,23 @@ export async function recordedFiles(places: readonly SessionPlace[]): Promise<Re
       const key = `${repo?.root ?? ""}\0${file}\0${record.path === null}`;
       const row =
         rows.get(key) ??
-        rows.set(key, { root: repo?.root ?? null, file, places: [], copies: new Map() }).get(key)!;
-      if (row.places.at(-1) !== place) row.places.push(place);
+        rows
+          .set(key, {
+            root: repo?.root ?? null,
+            file,
+            places: [],
+            copies: new Map(),
+            loads: new Map(),
+          })
+          .get(key)!;
+      if (row.places.at(-1) !== place) {
+        row.places.push(place);
+        const load = row.loads.get(place.harness) ?? { sessions: 0, chars: 0 };
+        row.loads.set(place.harness, {
+          sessions: load.sessions + 1,
+          chars: load.chars + record.textChars,
+        });
+      }
       const copy = target ?? "unknown";
       if ((at ?? "") >= (row.copies.get(copy)?.at ?? "")) row.copies.set(copy, { at, record });
     }
@@ -67,6 +90,7 @@ async function summarize(row: Row): Promise<RecordedFile> {
     lastRecorded: newest.at,
     textChars: newest.record.textChars,
     textSha256: newest.record.textSha256,
+    loads: [...row.loads].map(([harness, load]) => ({ harness, ...load })),
     checkouts: await Promise.all(
       copies.map(async ([path, { at, record }]) => ({
         path,
@@ -123,7 +147,7 @@ export function fileLabel(
 export function autoMemory(path: string, claudeHome: string, roots: string[]) {
   if (!isInside(path, claudeHome)) return null;
   const [projects, slug, kind, ...rest] = pathParts(path.slice(claudeHome.length));
-  const root = roots.find((r) => r.replace(/[^A-Za-z0-9]/g, "-") === slug);
+  const root = roots.find((r) => claudeProjectSlug(r) === slug);
   return projects === "projects" && root && kind === "memory"
     ? { root, file: rest.join(sep) }
     : null;

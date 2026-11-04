@@ -11,11 +11,10 @@ export type RankedItem = {
   loadedChars: number;
 };
 
-export type LoadCoverage = {
-  sessions: number;
-  unrecorded: number;
-  combinedOnly: number;
-};
+export type LoadCoverage = { sessions: number; unrecorded: number; combinedOnly: number };
+
+const fold = (path: string) =>
+  process.platform === "darwin" || process.platform === "win32" ? path.toLowerCase() : path;
 
 export async function rankedItems(
   files: SteeringFile[],
@@ -27,40 +26,45 @@ export async function rankedItems(
     checkouts.get(dir) ?? checkouts.set(dir, checkout(dir)).get(dir)!;
   const keyOf = async (path: string) => {
     const repo = await checkoutOf(dirname(path));
-    return repo ? `${repo.root}\0${relative(repo.top, path)}` : path;
+    return fold(repo ? `${repo.root}\0${relative(repo.top, path)}` : path);
+  };
+  const rootOf = async (dir: string) => {
+    const real = await realpath(dir).catch(() => dir);
+    return fold((await checkoutOf(real))?.root ?? real);
   };
   const byKey = new Map<string, SteeringFile>();
   for (const file of files)
     for (const source of file.sources)
       for (const path of [source.path, source.realPath]) byKey.set(await keyOf(path), file);
-  const root = (await checkoutOf(project))?.root ?? project;
+  const root = await rootOf(project);
   const loads = new Map<string, { sessions: number; chars: number }>();
-  const coverage: LoadCoverage = {
-    sessions: 0,
-    unrecorded: 0,
-    combinedOnly: 0,
-  };
+  const coverage: LoadCoverage = { sessions: 0, unrecorded: 0, combinedOnly: 0 };
   for (const place of places) {
-    if (!place.cwd || ((await checkoutOf(place.cwd))?.root ?? place.cwd) !== root) continue;
+    if (!place.cwd || (await rootOf(place.cwd)) !== root) continue;
     coverage.sessions++;
     if (!place.instructions) {
       coverage.unrecorded++;
       continue;
     }
-    if (place.instructions.every((r) => r.path === null)) coverage.combinedOnly++;
-    const seen = new Set<string>();
+    if (place.instructions.length && place.instructions.every((r) => r.path === null))
+      coverage.combinedOnly++;
+    const records = new Set<string>();
+    const counted = new Set<string>();
     for (const record of place.instructions) {
       if (!record.path) continue;
+      const key = await keyOf(record.path);
       const file =
-        byKey.get(await keyOf(record.path)) ??
+        byKey.get(key) ??
         byKey.get(await keyOf(await realpath(record.path).catch(() => record.path!)));
-      if (!file || seen.has(file.id)) continue;
-      seen.add(file.id);
+      const identity = `${key}\0${record.label ?? ""}`;
+      if (!file || records.has(identity)) continue;
+      records.add(identity);
       const load = loads.get(file.id) ?? { sessions: 0, chars: 0 };
       loads.set(file.id, {
-        sessions: load.sessions + 1,
+        sessions: load.sessions + (counted.has(file.id) ? 0 : 1),
         chars: load.chars + record.textChars,
       });
+      counted.add(file.id);
     }
   }
   const items = files.map((file) => {

@@ -13,8 +13,8 @@ import { rankedItems } from "../profile/steering-loads.ts";
 
 const LIMITATIONS = [
   "Ranking multiplies recorded loads: each session in this project whose history logged injecting the file adds the characters it recorded. Codex records one combined block per directory, so its loads are not attributed to files.",
-  "Duplicates are rules with identical wording once case, punctuation and list markers are ignored.",
-  "Conflicts and stale entries are heuristics. A possible conflict is a global and a project rule where one is negated and they share wording or a `code` span. A possibly stale entry names, in backticks, a file that is not on disk now, a command not on PATH, or a package script the project does not define. Relative files are checked for project files only; flags are not checked.",
+  "Duplicates are rules with identical wording once case, punctuation and list markers are ignored, found in at least two file locations, byte-identical copies included.",
+  "Conflicts and stale entries are heuristics. A possible conflict is a global and a project rule with the same wording apart from negation and modal words, one negated and one not. A possibly stale entry names, in backticks, a file that is not on disk now, a command not on PATH, or a package script missing from the nearest package.json of every location the file applies from (abstaining when they differ). Relative files are checked for project files only; flags are not checked.",
 ];
 
 export async function steering(

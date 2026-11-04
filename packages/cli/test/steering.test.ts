@@ -114,7 +114,7 @@ test("steering inventories current files offline, deduplicates content and retai
   const rendered = await run(home, join(project, "src"));
   expect(rendered.code).toBe(0);
   expect(rendered.stdout).toContain("ranked by characters × sessions loaded");
-  expect(rendered.stdout).not.toContain("Run the real check.");
+  expect(rendered.stdout).not.toContain("    - Run the real check.");
   expect(rendered.stdout).toContain("--rules");
   const listed = await run(home, join(project, "src"), "--rules");
   expect(listed.stdout).toContain(`${path}:6-7`);
@@ -200,7 +200,7 @@ test("steering flags duplicate rules, global vs project conflicts and stale name
   );
   await Bun.write(
     local,
-    "- Keep replies short, and lead with the answer!\n- Always run `git push --force` after a rebase.\n- See `docs/gone.md` and `README.md`.\n- Run `quench-missing-tool-xyz check` first.\n- Run `bun run nope`, then `bun run test`.\n",
+    "- Keep replies short, and lead with the answer!\n- Always run `git push --force` on main.\n- See `docs/gone.md` and `README.md`.\n- Run `quench-missing-tool-xyz check` first.\n- Run `bun run nope`, then `bun run test`.\n",
   );
   await Bun.write(join(project, "README.md"), "# Readme\n");
   await Bun.write(join(project, "package.json"), JSON.stringify({ scripts: { test: "bun test" } }));
@@ -400,4 +400,121 @@ test("steering reuses aliased rule directories and warns about broken instructio
   ]);
   expect(out.warnings.join(" ")).not.toContain("limit");
   expect(out.warnings.join(" ")).toContain(join(project, "CLAUDE.md"));
+});
+
+test("steering sums every recorded file a session loaded, even when two share their text", async () => {
+  const { home, project } = await fixture();
+  const text = "- Lead with the answer, always.";
+  const global = join(home, "claude-config/CLAUDE.md");
+  const local = join(project, "CLAUDE.md");
+  for (const path of [global, local]) await Bun.write(path, `${text}\n`);
+  await claudeSession(home, "a", project, [
+    [global, text],
+    [local, text],
+  ]);
+  await claudeSession(home, "b", project, []);
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(out.ranked).toHaveLength(1);
+  expect(out.ranked[0]).toMatchObject({ sessions: 1, loadedChars: 2 * text.length });
+  expect(out.coverage).toEqual({ sessions: 2, unrecorded: 0, combinedOnly: 0 });
+});
+
+test("steering counts sessions recorded through a symlinked or differently cased directory", async () => {
+  const { home, project } = await fixture();
+  const local = join(project, "CLAUDE.md");
+  await Bun.write(local, "- Run the tests.\n");
+  const link = join(home, "link");
+  await symlink(project, link, "junction");
+  await claudeSession(home, "a", link, [[join(link, "CLAUDE.md"), "- Run the tests."]]);
+  const folded = process.platform === "darwin" || process.platform === "win32";
+  if (folded)
+    await claudeSession(home, "b", project.toUpperCase(), [
+      [local.toUpperCase(), "- Run the tests."],
+    ]);
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(out.coverage.sessions).toBe(folded ? 2 : 1);
+  expect(out.ranked[0].sessions).toBe(folded ? 2 : 1);
+});
+
+test("steering finds auto memory under Claude Code's truncated, hashed slug for long paths", async () => {
+  const { home, project } = await fixture();
+  const deep = join(project, ...Array.from({ length: 5 }, (_, i) => `${"segment".repeat(6)}-${i}`));
+  await mkdir(deep, { recursive: true });
+  let hash = 0;
+  for (let i = 0; i < deep.length; i++) hash = ((hash << 5) - hash + deep.charCodeAt(i)) | 0;
+  const slug = `${deep.replace(/[^A-Za-z0-9]/g, "-").slice(0, 200)}-${Math.abs(hash).toString(36)}`;
+  const memory = join(home, "claude-config/projects", slug, "memory/MEMORY.md");
+  await Bun.write(memory, "- Remember the long path.\n");
+  const out = JSON.parse((await run(home, deep, "--json")).stdout);
+  expect(deep.replace(/[^A-Za-z0-9]/g, "-").length).toBeGreaterThan(200);
+  expect(out.ranked.map((r: { path: string }) => r.path)).toEqual([memory]);
+});
+
+test("steering lists every location of a duplicated rule, identical files included", async () => {
+  const { home, project } = await fixture();
+  const text = "- Keep every change small and reviewable.\n";
+  const paths = [
+    join(project, "CLAUDE.md"),
+    join(project, ".claude/CLAUDE.md"),
+    join(project, "CLAUDE.local.md"),
+  ];
+  for (const path of paths.slice(0, 2)) await Bun.write(path, text);
+  const two = JSON.parse((await run(home, project, "--json")).stdout).duplicates;
+  expect(two.map((g: { path: string }[]) => g.map((r) => r.path))).toEqual([paths.slice(0, 2)]);
+  await Bun.write(paths[2]!, text);
+  const three = JSON.parse((await run(home, project, "--json")).stdout).duplicates;
+  expect(three.map((g: { path: string }[]) => g.map((r) => r.path).sort())).toEqual([
+    [...paths].sort(),
+  ]);
+});
+
+test("steering conflicts need the same action with opposite polarity", async () => {
+  const { home, project } = await fixture();
+  await Bun.write(
+    join(home, "claude-config/CLAUDE.md"),
+    "- Never skip tests before pushing `main`.\n- Never deploy on a Friday afternoon.\n",
+  );
+  await Bun.write(
+    join(project, "CLAUDE.md"),
+    "- Always add tests before pushing `main`.\n- Always deploy on a Friday afternoon.\n",
+  );
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(
+    out.conflicts.map((c: { global: { text: string }; project: { text: string } }) => [
+      c.global.text,
+      c.project.text,
+    ]),
+  ).toEqual([["- Never deploy on a Friday afternoon.", "- Always deploy on a Friday afternoon."]]);
+});
+
+test("steering checks scripts against the package each file applies to and abstains when ambiguous", async () => {
+  const { home, project } = await fixture();
+  const site = join(project, "site");
+  await mkdir(site);
+  await Bun.write(join(project, "package.json"), JSON.stringify({ scripts: { test: "x" } }));
+  await Bun.write(join(site, "package.json"), JSON.stringify({ scripts: { build: "x" } }));
+  await Bun.write(join(project, "CLAUDE.md"), "- Run `bun run build` here.\n");
+  await Bun.write(join(site, "CLAUDE.md"), "- Run `bun run build` in the site.\n");
+  for (const dir of [project, site])
+    await Bun.write(join(dir, ".claude/CLAUDE.md"), "- Run `bun run deploy` too.\n");
+  const out = JSON.parse((await run(home, site, "--json")).stdout);
+  expect(
+    out.stale.map((rule: { path: string; missing: { name: string }[] }) => [
+      rule.path,
+      rule.missing.map((m) => m.name),
+    ]),
+  ).toEqual([[join(project, "CLAUDE.md"), ["bun run build"]]]);
+});
+
+test("steering recognises drive-letter paths when checking for stale files", async () => {
+  const { home, project } = await fixture();
+  await Bun.write(join(project, "README.md"), "# Readme\n");
+  await Bun.write(
+    join(project, "CLAUDE.md"),
+    `- Read \`C:\\quench-missing\\gone.md\` and \`${join(project, "README.md")}\`.\n`,
+  );
+  const out = JSON.parse((await run(home, project, "--json")).stdout);
+  expect(out.stale.map((rule: { missing: object[] }) => rule.missing)).toEqual([
+    [{ name: "C:\\quench-missing\\gone.md", kind: "file" }],
+  ]);
 });

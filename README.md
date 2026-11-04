@@ -366,9 +366,9 @@ Items are ranked by characters × sessions loaded: for each session in this proj
 `--days` (default 30), the characters its history recorded injecting each file. Codex records
 combined blocks without file boundaries, so they are counted as coverage, not attributed. Below
 the ranking come duplicate rules across files (same wording ignoring case, punctuation and list
-markers), possible global-vs-project conflicts (one rule negated, sharing wording or a `code`
-span) and possibly stale entries (a backticked file not on disk, command not on `PATH`, or
-package script the project lacks), each citing every location. Conflicts and stale entries are
+markers), possible global-vs-project conflicts (the same action, one rule negated and one not)
+and possibly stale entries (a backticked file not on disk, command not on `PATH`, or
+package script missing from the file's nearest `package.json`), each citing every location. Conflicts and stale entries are
 heuristics. `--rules` adds every bullet and paragraph with its line range.
 
 **The inventory is current-disk evidence; only the ranking uses recorded loads.** Both ordinary

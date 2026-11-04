@@ -963,3 +963,42 @@ test("profile shows each MCP server's recorded tool schemas, how they load, and 
     },
   ]);
 });
+
+test("summary names the instruction file with the most recorded characters summed per session", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-largest-")));
+  const repo = join(home, "code/app");
+  await mkdir(repo, { recursive: true });
+  const global = join(home, ".claude/CLAUDE.md");
+  const local = join(repo, "CLAUDE.md");
+  await Bun.write(global, "g".repeat(1000));
+  await Bun.write(local, "p".repeat(600));
+  for (const [id, globalChars] of [
+    ["one", 10],
+    ["two", 1000],
+  ] as const)
+    await Bun.write(
+      join(home, ".claude/projects/sessions", `${id}.jsonl`),
+      [
+        { type: "user", timestamp: "2026-10-20T10:00:00Z", cwd: repo, message: { content: "hi" } },
+        {
+          type: "attachment",
+          timestamp: "2026-10-20T10:00:00Z",
+          cwd: repo,
+          attachment: {
+            type: "instructions",
+            files: [
+              { path: global, type: "User", content: "g".repeat(globalChars) },
+              { path: local, type: "Project", content: "p".repeat(600) },
+            ],
+          },
+        },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n") + "\n",
+    );
+  const { stdout, code } = await quench(home, "--no-cache");
+  expect(code).toBe(0);
+  expect(stdout).toContain(
+    `Claude Code instructions, largest: ${p("~/code/app/CLAUDE.md")} · 1.2k chars over 2 sessions`,
+  );
+});

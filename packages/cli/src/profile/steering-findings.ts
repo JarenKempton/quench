@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, relative, win32 } from "node:path";
 import type { SteeringFile } from "@quench/history";
 
 export type RuleAt = {
@@ -12,6 +12,7 @@ export type RuleAt = {
 export type StaleReason = { name: string; kind: "file" | "command" | "script" };
 
 const MIN_CHARS = 20;
+const MIN_ACTION_WORDS = 3;
 const NEGATION = /\b(?:never|not|no|don t|dont|avoid|without|stop)\b/;
 const MODAL = /\b(?:never|not|no|don t|dont|do|avoid|without|stop|always|must|should|please)\b/g;
 const FILE_TYPES = new Set(
@@ -33,20 +34,28 @@ const isGlobal = (file: SteeringFile) => file.sources.some((s) => s.scope === "u
 const located = (file: SteeringFile) =>
   file.rules.map((rule) => ({ ...rule, path: file.sources[0]!.realPath }));
 
+const everyLocation = (file: SteeringFile) =>
+  [...new Map(file.sources.map((s) => [fold(s.realPath), s.realPath])).values()].flatMap((path) =>
+    file.rules.map((rule) => ({ ...rule, path })),
+  );
+
+const fold = (path: string) =>
+  process.platform === "darwin" || process.platform === "win32" ? path.toLowerCase() : path;
+
 const codeSpans = (text: string) =>
   [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
 
 export function duplicateRules(files: SteeringFile[]): RuleAt[][] {
-  const groups = new Map<string, { ids: Set<string>; rules: RuleAt[] }>();
+  const groups = new Map<string, { paths: Set<string>; rules: RuleAt[] }>();
   for (const file of files)
-    for (const rule of located(file)) {
+    for (const rule of everyLocation(file)) {
       const key = normal(rule.text);
       if (key.length < MIN_CHARS) continue;
-      const group = groups.get(key) ?? groups.set(key, { ids: new Set(), rules: [] }).get(key)!;
-      group.ids.add(file.id);
+      const group = groups.get(key) ?? groups.set(key, { paths: new Set(), rules: [] }).get(key)!;
+      group.paths.add(fold(rule.path));
       group.rules.push(rule);
     }
-  return [...groups.values()].filter((g) => g.ids.size > 1).map((g) => g.rules);
+  return [...groups.values()].filter((g) => g.paths.size > 1).map((g) => g.rules);
 }
 
 export function conflictingRules(files: SteeringFile[]): { global: RuleAt; project: RuleAt }[] {
@@ -56,12 +65,12 @@ export function conflictingRules(files: SteeringFile[]): { global: RuleAt; proje
   const core = (rule: RuleAt) => normal(rule.text).replace(MODAL, " ").replace(/\s+/g, " ").trim();
   return global.flatMap((g) =>
     project
-      .filter((p) => {
-        if (negated(g) === negated(p)) return false;
-        if (core(g).length >= MIN_CHARS && core(g) === core(p)) return true;
-        const spans = new Set(codeSpans(g.text).filter((s) => s.length > 2));
-        return codeSpans(p.text).some((s) => spans.has(s));
-      })
+      .filter(
+        (p) =>
+          negated(g) !== negated(p) &&
+          core(g).split(" ").length >= MIN_ACTION_WORDS &&
+          core(g) === core(p),
+      )
       .map((p) => ({ global: g, project: p })),
   );
 }
@@ -70,7 +79,6 @@ export async function staleRules(
   files: SteeringFile[],
   context: { homeDir: string; project: string; top: string },
 ): Promise<(RuleAt & { missing: StaleReason[] })[]> {
-  const scripts = await packageScripts(context.top);
   const found: (RuleAt & { missing: StaleReason[] })[] = [];
   for (const file of files) {
     const bases = isGlobal(file)
@@ -82,6 +90,7 @@ export async function staleRules(
             context.top,
           ]),
         ];
+    const scripts = isGlobal(file) ? null : await scriptsFor(file, context.top);
     for (const rule of located(file)) {
       const missing: StaleReason[] = [];
       for (const span of new Set(codeSpans(rule.text))) {
@@ -106,7 +115,7 @@ async function staleSpan(
     const home = /^~[\\/]/.test(span);
     const candidates = home
       ? [join(homeDir, span.slice(2))]
-      : isAbsolute(span)
+      : isAbsolute(span) || win32.isAbsolute(span)
         ? [span]
         : bases.map((base) => join(base, span));
     if (!candidates.length) return null;
@@ -116,22 +125,38 @@ async function staleSpan(
   const [program, sub, script] = words as [string, string, string | undefined];
   if (!/^[a-z][\w.-]*$/.test(program) || !/^[\w-]/.test(sub)) return null;
   if (!Bun.which(program)) return { name: program, kind: "command" };
-  if (bases.length && scripts && RUNNERS.has(program) && sub === "run" && script)
+  if (scripts && RUNNERS.has(program) && sub === "run" && script)
     if (/^[\w:.-]+$/.test(script) && !scripts.has(script))
       return { name: `${program} run ${script}`, kind: "script" };
   return null;
 }
 
 function pathLike(span: string): boolean {
-  if (/[\s*?<>{}@:|$"'()[\],=]/.test(span) || span.includes("://")) return false;
+  const path = span.replace(/^[A-Za-z]:(?=[\\/])/, "");
+  if (/[\s*?<>{}@:|$"'()[\],=]/.test(path) || span.includes("://")) return false;
   const extension = /\.([A-Za-z0-9]+)$/.exec(span)?.[1]?.toLowerCase();
   const stem = span.replace(/^.*[\\/]/, "").replace(/\.[^.]*$/, "");
   return Boolean(extension && FILE_TYPES.has(extension) && stem);
 }
 
-async function packageScripts(top: string): Promise<Set<string> | null> {
-  const manifest = (await Bun.file(join(top, "package.json"))
+async function scriptsFor(file: SteeringFile, top: string): Promise<Set<string> | null> {
+  const manifests = new Set<string | null>();
+  for (const source of file.sources)
+    manifests.add(await nearestManifest(dirname(source.path), top));
+  const [manifest] = manifests;
+  if (manifests.size !== 1 || !manifest) return null;
+  const parsed = (await Bun.file(manifest)
     .json()
     .catch(() => null)) as { scripts?: Record<string, unknown> } | null;
-  return manifest ? new Set(Object.keys(manifest.scripts ?? {})) : null;
+  return parsed ? new Set(Object.keys(parsed.scripts ?? {})) : null;
+}
+
+async function nearestManifest(dir: string, top: string): Promise<string | null> {
+  for (let at = dir; ; at = dirname(at)) {
+    const inside = relative(top, at);
+    if (inside.startsWith("..") || isAbsolute(inside)) return null;
+    const manifest = join(at, "package.json");
+    if (await Bun.file(manifest).exists()) return manifest;
+    if (!inside) return null;
+  }
 }
