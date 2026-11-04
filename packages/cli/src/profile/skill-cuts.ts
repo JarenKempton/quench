@@ -159,7 +159,7 @@ function cutFrom(t: Target, unused: string[], cut: SkillCut, unknown: HarnessId[
   };
 }
 
-export function renderCuts({ cuts, notOnDisk }: SkillCuts, homeDir: string): string[] {
+export function renderCuts({ cuts, notOnDisk }: SkillCuts): string[] {
   if (!cuts.length && !notOnDisk.length) return [];
   const lines = [
     "",
@@ -170,7 +170,7 @@ export function renderCuts({ cuts, notOnDisk }: SkillCuts, homeDir: string): str
       ...table(
         [
           ["Listed", "Sessions", "Agent", "Cut", "Source", "Command"],
-          ...cuts.slice(0, SHOWN).map((cut) => row(cut, homeDir)),
+          ...cuts.slice(0, SHOWN).map(row),
         ],
         [0, 1],
       ),
@@ -186,7 +186,7 @@ export function renderCuts({ cuts, notOnDisk }: SkillCuts, homeDir: string): str
   return lines;
 }
 
-function row(cut: Cut, homeDir: string): string[] {
+function row(cut: Cut): string[] {
   const what =
     cut.skills.length > 1 ? `${cut.what} (${plural(cut.skills.length, "skill")})` : cut.what;
   return [
@@ -197,11 +197,9 @@ function row(cut: Cut, homeDir: string): string[] {
     cut.agents.map((h) => harnessById[h].label).join(", "),
     what,
     cut.source,
-    [cut.command && home(cut.command, homeDir), cut.note].filter(Boolean).join(" · "),
+    [cut.command, cut.note].filter(Boolean).join(" · "),
   ];
 }
-
-const home = (command: string, homeDir: string) => command.replace(` -- ${homeDir}/`, " -- ~/");
 
 export const list = (items: string[], shown = 8) =>
   items.slice(0, shown).join(", ") +

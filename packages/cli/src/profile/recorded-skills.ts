@@ -100,12 +100,7 @@ export function skillUse(places: readonly SessionPlace[], originOf: PlaceOrigin)
   return { uses, occurrences };
 }
 
-export function renderSkillUse(
-  uses: SkillUse[],
-  cuts: SkillCuts,
-  days: number,
-  homeDir: string,
-): string[] {
+export function renderSkillUse(uses: SkillUse[], cuts: SkillCuts, days: number): string[] {
   if (!uses.length) return [];
   const lines = [
     "",
@@ -139,7 +134,7 @@ export function renderSkillUse(
   const unknown = uses.filter((u) => !u.useRecorded).map((u) => harnessById[u.harness].label);
   if (unknown.length)
     lines.push(`  ${unknown.join(", ")} history does not record skill use, so it is unknown.`);
-  return [...lines, ...renderCuts(cuts, homeDir)];
+  return [...lines, ...renderCuts(cuts)];
 }
 
 function sources(u: SkillUse): string {

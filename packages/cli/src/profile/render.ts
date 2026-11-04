@@ -80,8 +80,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
         roots: result.projects.map((p) => p.root),
       }),
     ],
-    skills: () =>
-      renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days, homeDir),
+    skills: () => renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days),
     failures: () => renderFailures(result.recordedFailures, result.days, homeDir),
   };
   if (view === "summary") return summary(result, homeDir);
