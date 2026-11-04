@@ -88,6 +88,9 @@ retired with it and live in git history.
 - **Releases run on two channels, nightly and stable.** Every merge to `main` replaces one
   rolling `nightly` pre-release; a maintainer cuts stable by choosing patch, minor or major.
   The version is stamped at build time, never committed. `quench update` downloads with `gh`.
+- **Linux, macOS and Windows are all supported and tested** ([#118](https://github.com/JarenKempton/quench/issues/118)).
+  CI runs the full check and test suite on Ubuntu, macOS (arm64) and Windows, and a release
+  publishes only after the darwin binary runs a real command on a macOS runner.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

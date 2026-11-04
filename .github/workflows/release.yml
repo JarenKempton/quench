@@ -19,9 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: ${{ github.event_name == 'workflow_dispatch' && 'Stable' || 'Nightly' }}
-    if: github.ref == 'refs/heads/main'
+  build:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -59,16 +57,51 @@ jobs:
           test "$(./dist/quench-linux-x64 --version)" = "quench $VERSION"
           test -f dist/quench-windows-x64.exe
           (cd dist && sha256sum quench-* > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  smoke-darwin:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Run the darwin binary
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          chmod +x dist/quench-darwin-arm64
+          test "$(./dist/quench-darwin-arm64 --version)" = "quench $VERSION"
+          report=$(HOME="$PWD/packages/history/test/fixtures/home" ./dist/quench-darwin-arm64 report --days 100000 --no-cache)
+          grep -q "Claude Code" <<< "$report"
+
+  publish:
+    name: ${{ github.event_name == 'workflow_dispatch' && 'Stable' || 'Nightly' }}
+    needs: [build, smoke-darwin]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
       - name: Publish nightly
         if: github.event_name == 'push'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release delete nightly --yes --cleanup-tag || true
           gh release create nightly dist/quench-* dist/SHA256SUMS install.sh install.ps1 --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "Nightly $VERSION" --notes "Built from $GITHUB_SHA. Install with: quench update --channel nightly"
       - name: Publish stable
         if: github.event_name == 'workflow_dispatch'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: gh release create "v$VERSION" dist/quench-* dist/SHA256SUMS install.sh install.ps1 --target "$GITHUB_SHA" --title "Quench v$VERSION" --generate-notes
