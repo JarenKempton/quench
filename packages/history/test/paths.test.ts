@@ -87,3 +87,11 @@ test("recorded shell paths resolve in the style of the session, not the machine 
     "C:\\Users\\me\\n.md",
   ]);
 });
+
+test("an MCP URL's endpoint keeps its query and ignores a trailing slash", () => {
+  const endpoint = (url: string) => describeServer({ url }).endpoint;
+  expect(endpoint("https://a.example.com/mcp?workspace=alpha")).not.toBe(
+    endpoint("https://a.example.com/mcp?workspace=beta"),
+  );
+  expect(endpoint("https://a.example.com/mcp/")).toBe(endpoint("https://a.example.com/mcp"));
+});

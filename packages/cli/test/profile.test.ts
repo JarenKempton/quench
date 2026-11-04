@@ -497,7 +497,7 @@ test("profile lists skills and MCP servers each agent finds, without reading out
   );
   expect(stdout).toContain(
     [
-      "▍MCP servers · configured on disk now · tool definitions not counted",
+      "▍MCP servers · configured on disk now",
       "  Server   Agent        Scope    Transport  Target            State           Where",
       "  figma    Claude Code  user     http       mcp.example.com   on              all projects",
       "  docs     Codex        user     http       docs.example.com  on              all projects",
@@ -863,4 +863,95 @@ test("the summary splits each harness's first request by source, from the cache 
     expect(summary.code, `run ${run}`).toBe(0);
     expect(summary.stdout).toContain(expected.join("\n"));
   }
+});
+
+test("profile shows each MCP server's recorded tool schemas, how they load, and duplicate config", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-mcptools-")));
+  const lines = (...entries: object[]) => entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  await Bun.write(
+    join(home, ".claude.json"),
+    JSON.stringify({
+      mcpServers: {
+        docs: { type: "http", url: "https://docs.example.com/mcp" },
+        "docs-copy": { type: "http", url: "https://docs.example.com/mcp/" },
+        search: { command: "search-mcp", args: ["--key", "SECRET"] },
+      },
+    }),
+  );
+  await Bun.write(
+    join(home, ".codex/config.toml"),
+    '[mcp_servers.github]\ncommand = "gh-mcp"\n\n[mcp_servers.idle]\nurl = "https://idle.example.com/mcp?token=SECRET"\n',
+  );
+  await Bun.write(
+    join(home, ".claude/projects/-x/a.jsonl"),
+    lines(
+      {
+        type: "attachment",
+        cwd: home,
+        attachment: {
+          type: "deferred_tools_delta",
+          addedNames: ["mcp__docs__a", "mcp__docs__b", "Cron"],
+          addedLines: ["mcp__docs__a", "mcp__docs__b", "Cron"],
+        },
+      },
+      {
+        type: "api-request-shape",
+        shape: {
+          tools: [
+            { name: "Read", description: "r" },
+            { name: "mcp__search__q", description: "d".repeat(100) },
+          ],
+        },
+      },
+    ),
+  );
+  await Bun.write(
+    join(home, ".codex/sessions/2026/10/20/c.jsonl"),
+    lines(
+      { type: "session_meta", payload: { id: "c", cwd: home } },
+      {
+        type: "response_item",
+        payload: {
+          type: "additional_tools",
+          tools: [
+            {
+              type: "namespace",
+              name: "mcp__github__",
+              tools: [{ name: "issue", description: "x" }],
+            },
+          ],
+        },
+      },
+    ),
+  );
+
+  const { stdout, code } = await quench(home, "profile", "mcp");
+  expect(code).toBe(0);
+  expect(stdout).not.toContain("SECRET");
+  expect(stdout).toContain(
+    "  Duplicate: docs (user) and docs-copy (user) · Claude Code · same URL · all projects",
+  );
+  expect(stdout).toContain(
+    [
+      "▍MCP tool definitions · from session history · last 30 days",
+      "  Server     Agent        Loads         Tools        Schema  Sessions  Source",
+      "  search     Claude Code  up front          1     142 chars         1  request",
+      "  github     Codex        up front          1      34 chars         1  request",
+      "  docs       Claude Code  deferred          2  not recorded         1  deferred tool list",
+      "  docs-copy  Claude Code  not recorded      —             —         0  —",
+      "  idle       Codex        not recorded      —             —         0  —",
+    ].join("\n"),
+  );
+  const json = JSON.parse((await quench(home, "profile", "mcp", "--json")).stdout);
+  expect(json.duplicateMcpServers).toEqual([
+    {
+      harness: "claude-code",
+      servers: [
+        { name: "docs", scope: "user" },
+        { name: "docs-copy", scope: "user" },
+      ],
+      same: "url",
+      where: "all projects",
+    },
+  ]);
 });

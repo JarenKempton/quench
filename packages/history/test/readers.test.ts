@@ -7,6 +7,7 @@ import {
   discoverAll,
   inferences,
   readSessions,
+  startingContext,
   type Author,
   type HarnessId,
   type Session,
@@ -190,6 +191,32 @@ describe("Codex", () => {
       ["gpt-6.1-sol", "high", { input: 6804, cacheRead: 11904, cacheWrite: 0, output: 13 }],
     ]);
   });
+});
+
+test("Codex records MCP tool definitions up front, grouped by server namespace", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quench-codex-"));
+  await Bun.write(
+    join(dir, ".codex/sessions/2026/10/20/rollout-2026-10-20T10-00-00-t.jsonl"),
+    [
+      { type: "session_meta", payload: { id: "t", cwd: "/w" } },
+      {
+        type: "response_item",
+        payload: {
+          type: "additional_tools",
+          tools: [
+            { type: "namespace", name: "mcp__docs__", tools: [{ name: "find" }, { name: "get" }] },
+            { type: "namespace", name: "clock", tools: [{ name: "now" }] },
+          ],
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n"),
+  );
+  const [s] = await all(new Home(dir));
+  expect(startingContext(s!).mcp).toEqual([
+    { server: "docs", loading: "up front", tools: 2, chars: 29 },
+  ]);
 });
 
 describe("Pi", () => {
