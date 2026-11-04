@@ -78,7 +78,7 @@ test("the summary ends with measured cuts ranked by characters × sessions, in -
   expect(next).toBe(
     [
       "▍Do this next · ranked by characters saved × sessions",
-      "  1. Trim ~/.claude/CLAUDE.md",
+      `  1. Trim ${join("~", ".claude", "CLAUDE.md")}`,
       "     up to 24 chars per session × 2 sessions",
       "     average recorded size per session, capped at its size on disk now; trimming it saves up to that",
       "",
@@ -234,7 +234,7 @@ test.each([
       ["instruction-file", 1_010],
     ]);
     expect((await quench(home)).stdout).toContain(
-      "  2. Trim ~/.claude/CLAUDE.md\n     up to 505 chars per session × 2 sessions\n",
+      `  2. Trim ${join("~", ".claude", "CLAUDE.md")}\n     up to 505 chars per session × 2 sessions\n`,
     );
   },
 );
