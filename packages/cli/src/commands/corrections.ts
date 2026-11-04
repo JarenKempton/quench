@@ -42,7 +42,7 @@ const NO_KEY = `Classifying replies uses Jev (typesafe.ai) with your own key. Fo
 it sends the reply and the last 1,500 characters of the agent message before it.
 Set TYPESAFE_API_KEY to opt in, or pass --dry-run to see what would be sent.
 Answers are cached in ~/.quench/local/judgments.jsonl, so each reply is paid for once.
-Without a key, --judge claude or --judge codex classifies through that CLI and your own account.
+Without a key, --judge claude classifies through claude -p and your own Claude account.
 `;
 
 type Options = {
@@ -65,7 +65,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const asking = !options.dryRun && !options.cachedOnly;
   let replyJudge: ReplyJudge | null = null;
   try {
-    replyJudge = !asking ? null : harness ? HarnessJudge.create(harness) : Jev.fromEnv();
+    replyJudge = !asking ? null : harness ? await HarnessJudge.create() : Jev.fromEnv();
   } catch (error) {
     if (!(error instanceof Error)) throw error;
     process.stderr.write(
@@ -78,11 +78,11 @@ export async function corrections(home: Home, options: Options): Promise<number>
     process.stderr.write(NO_KEY);
     return 2;
   }
-  const label = harness ? HarnessJudge.labelOf(harness) : "Jev";
+  const label = harness ? HarnessJudge.label : "Jev";
   const callsPerReply = harness ? 1 : 2;
   const cache = await VerdictCache.open(
     join(home.dir, `.quench/local/${harness ? `judgments-${harness}` : "judgments"}.jsonl`),
-    harness ? HarnessJudge.idOf(harness) : Jev.id,
+    harness ? HarnessJudge.id : Jev.id,
     replyJudge === null,
   );
   const host =

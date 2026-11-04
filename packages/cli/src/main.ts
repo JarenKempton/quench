@@ -41,7 +41,7 @@ Usage:
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
     --cached-only                     use cached reply verdicts only; never classify new replies
-    --judge jev|claude|codex           who classifies replies: Jev (default, TYPESAFE_API_KEY), or claude -p / codex exec on your own account
+    --judge jev|claude                 who classifies replies: Jev (default, TYPESAFE_API_KEY), or claude -p on your own account
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 
@@ -132,7 +132,7 @@ if (values.judge !== "jev" && command !== "corrections") {
   process.exit(1);
 }
 if (!judge) {
-  process.stderr.write("--judge must be jev, claude or codex\n");
+  process.stderr.write("--judge must be jev or claude\n");
   process.exit(1);
 }
 if (values["theme-limit"] !== undefined && !values.themes) {
