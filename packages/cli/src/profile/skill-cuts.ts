@@ -37,7 +37,9 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export const sourceOf = (origin: SkillOrigin) =>
-  SOURCE_LABELS[origin.kind === "folder" ? origin.scope : origin.kind]!;
+  origin.kind === "folder" && origin.repo
+    ? "tracked in repo"
+    : SOURCE_LABELS[origin.kind === "folder" ? origin.scope : origin.kind]!;
 
 type Target = {
   origin: SkillOrigin;
@@ -47,6 +49,7 @@ type Target = {
   sized: number;
   chars: number;
   names: Set<string>;
+  realPaths: Set<string>;
   listings: Map<string, string>;
   usedListings: Set<string>;
   uses: Map<string, number>;
@@ -71,6 +74,7 @@ export function skillCuts(
           sized: 0,
           chars: 0,
           names: new Set(),
+          realPaths: new Set(),
           listings: new Map(),
           usedListings: new Set(),
           uses: new Map(),
@@ -79,6 +83,7 @@ export function skillCuts(
     t.harnesses.add(o.harness);
     t.sessions.add(o.session);
     t.names.add(o.name);
+    if (o.origin.kind === "folder") t.realPaths.add(o.origin.realPath);
     const listing = `${o.harness}\0${o.name}`;
     t.listings.set(listing, o.name);
     if (o.chars === null) t.unsized.add(o.session);
@@ -94,6 +99,12 @@ export function skillCuts(
     const real = realUses.get(o.origin.realPath) ?? new Map<string, number>();
     realUses.set(o.origin.realPath, real.set(user, (real.get(user) ?? 0) + 1));
   }
+  const usesOf = (realPaths: Set<string>) => {
+    const uses = new Map<string, number>();
+    for (const real of realPaths)
+      for (const [user, n] of realUses.get(real) ?? []) uses.set(user, (uses.get(user) ?? 0) + n);
+    return uses;
+  };
   const cuts: Cut[] = [];
   const notOnDisk = new Map<HarnessId, string[]>();
   for (const t of targets.values()) {
@@ -108,9 +119,8 @@ export function skillCuts(
       continue;
     }
     const unknown = [...t.harnesses].filter((h) => !useRecorded(h));
-    const shared =
-      t.origin.kind === "folder" && !t.origin.link ? realUses.get(t.origin.realPath) : undefined;
-    const guarded = shared ? { ...t, uses: shared } : t;
+    const guarded =
+      t.origin.kind === "folder" && !t.origin.link ? { ...t, uses: usesOf(t.realPaths) } : t;
     cuts.push(cutFrom(guarded, unused, cutOf(recorded[0]!, t.origin), unknown));
   }
   return {

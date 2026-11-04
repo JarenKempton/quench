@@ -100,3 +100,65 @@ test("a folder used through a symlink alias is protected, and an unused alias re
     `37 chars | 1 | Codex | memo | user folder | ${posix ? "rm -- ~/.agents/skills/memo" : `(Get-Item -LiteralPath ${quoteArg(memo, "powershell")}).Delete()`} · removes the link only, not the folder it points to`,
   ]);
 });
+
+test("a skill tracked in a repo is one row across worktrees, removed from the repo with git", async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-repo-")));
+  const main = join(home, "repo");
+  const other = join(home, "repo-wt");
+  await mkdir(main, { recursive: true });
+  const git = (cwd: string, ...args: string[]) =>
+    Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd });
+  git(main, "init", "-q");
+  await skill(join(main, ".claude/skills/foo"));
+  await skill(join(main, "b/.claude/skills/foo"));
+  git(main, "add", ".");
+  git(main, "commit", "-q", "-m", "skills");
+  git(main, "worktree", "add", "-q", other);
+  await skill(join(other, ".claude/skills/scratch"));
+  await Bun.write(join(home, ".claude/projects/p/m.jsonl"), lines(listing(main, ["foo"], [])));
+  await Bun.write(
+    join(home, ".claude/projects/p/w.jsonl"),
+    lines(listing(other, ["foo", "scratch"], [])),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/b.jsonl"),
+    lines(listing(join(other, "b"), ["foo"], [])),
+  );
+  const { stdout, code } = await quench(home, "profile", "skills");
+  expect(code).toBe(0);
+  const repo = (rel: string) => `git -C ${quoteArg(main, shellFor())} rm -r -- ${rel}`;
+  const note = "tracked in the repo: commit the removal, and every worktree drops it as it updates";
+  const scratch = join(other, ".claude/skills/scratch");
+  expect(cutRows(stdout)).toEqual([
+    `30 chars | 2 | Claude Code | foo | tracked in repo | ${repo(".claude/skills/foo")} · ${note}`,
+    `23 chars | 1 | Claude Code | scratch | project folder | ${posix ? "rm -r -- ~/repo-wt/.claude/skills/scratch" : `Remove-Item -Recurse -LiteralPath ${quoteArg(scratch, "powershell")}`}`,
+    `15 chars | 1 | Claude Code | foo | tracked in repo | ${repo("b/.claude/skills/foo")} · ${note}`,
+  ]);
+});
+
+test.skipIf(process.platform === "win32")(
+  "a symlinked skill tracked in a repo is one row across worktrees",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-repolink-")));
+    const main = join(home, "repo");
+    const other = join(home, "repo-wt");
+    await mkdir(join(main, ".claude/skills"), { recursive: true });
+    await skill(join(main, "shared/linked"));
+    await symlink("../../shared/linked", join(main, ".claude/skills/linked"));
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd: main });
+    git("init", "-q");
+    git("add", ".");
+    git("commit", "-q", "-m", "skills");
+    git("worktree", "add", "-q", other);
+    await Bun.write(join(home, ".claude/projects/p/m.jsonl"), lines(listing(main, ["linked"], [])));
+    await Bun.write(
+      join(home, ".claude/projects/p/w.jsonl"),
+      lines(listing(other, ["linked"], [])),
+    );
+    const { stdout } = await quench(home, "profile", "skills");
+    expect(cutRows(stdout)).toEqual([
+      `42 chars | 2 | Claude Code | linked | tracked in repo | git -C ${main} rm -r -- .claude/skills/linked · tracked in the repo: commit the removal, and every worktree drops it as it updates`,
+    ]);
+  },
+);

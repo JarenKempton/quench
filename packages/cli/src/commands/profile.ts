@@ -3,6 +3,7 @@ import {
   harnessById,
   harnesses,
   shellFor,
+  skillFolder,
   linkedWorktrees,
   mcpInventory,
   projects,
@@ -25,6 +26,7 @@ import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { mcpToolRecords } from "../profile/recorded-mcp-tools.ts";
 import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
+import { trackedInRepo } from "../profile/skill-repos.ts";
 import { skillCuts } from "../profile/skill-cuts.ts";
 import { startSplit } from "../profile/recorded-start.ts";
 import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
@@ -40,7 +42,7 @@ const LIMITATIONS = [
   "Skills are SKILL.md folders in each agent's documented locations on disk now. Up-front size is name plus description before each agent's own caps and budgets; bodies load on demand. Built-in and plugin skills, managed and /etc locations, and Codex agents/openai.yaml policies are not read. Codex and Pi project trust is approximated from user config, or assumed for Pi.",
   "Recorded skills are the skill lists session histories logged: Claude Code's listing, Codex's skills block and Pi's skills section. Listing size is the first listing in each session. Use counts sessions where the model invoked a listed skill (Claude Code's Skill tool), read its SKILL.md, or ran a shell command or code naming that exact listed path, or the user ran it as a command. Relative paths are not resolved, so shell-based use (how Codex loads skills) is a lower bound, and a command editing the file counts too.",
   "Skill sources: Claude Code records skill names only, so a name is matched to its user or project folder on disk now, then to Claude Code's own skills, then to an installed plugin by its prefix. Codex and Pi record each skill's file, so its path decides the source. Codex plugins installed by default come from the remote plugin catalog Codex caches locally. A skill found nowhere on disk now is not on disk now: removed since, or loaded from a place Quench does not read. Built-in skills are left out of never used and the cut list.",
-  "The cut list groups never-used skills by what removes them: a plugin or a skill folder. Listed is the characters of each skill's own entry in the recorded listings, summed over every session that listed the target; sessions whose listing has no per-skill text make the size a lower bound, or unknown when none has it, and rank after known sizes. A target any agent still uses, or one whose use an agent does not record, gets no command. Commands are written for this machine's shell, carry an overridden agent home, and are shown, never run.",
+  "The cut list groups never-used skills by what removes them: a plugin or a skill folder. Listed is the characters of each skill's own entry in the recorded listings, summed over every session that listed the target; sessions whose listing has no per-skill text make the size a lower bound, or unknown when none has it, and rank after known sizes. A target any agent still uses, or one whose use an agent does not record, gets no command. Commands are written for this machine's shell, carry an overridden agent home, and are shown, never run. A project skill git tracks is one target per repository and path inside it, counted across every worktree, and is removed from the repository with git; an untracked folder is its own target. Claude Code names are matched to a user folder first, then the project folder nearest the session's directory.",
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
   "Repeated failures are tool results a session recorded as errors, grouped per project by kind and by what failed: the missing path or command named in the error text, the read path, or the command's program and subcommand. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.",
   "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Duplicates are servers of one agent, in effect for the same project, with the same URL (ignoring query) or the same command and arguments, compared by fingerprint. Plugin and managed servers are not read.",
@@ -143,7 +145,23 @@ async function placeOrigins(
   const onDisk = new Map<SessionPlace, Skill[]>();
   for (const place of places)
     if (place.skills) onDisk.set(place, place.cwd ? await inventory(place.cwd) : global);
-  return (place, skill) => origins.get(place.harness)!(skill, onDisk.get(place) ?? global);
+  const repos = await trackedInRepo(
+    [...onDisk.values()].flatMap((skills) =>
+      skills.flatMap((s) =>
+        s.sources.flatMap((source) =>
+          source.scope === "project" || source.scope === "ancestor"
+            ? [skillFolder(source.path)]
+            : [],
+        ),
+      ),
+    ),
+  );
+  return (place, skill) => {
+    const origin = origins.get(place.harness)!(skill, onDisk.get(place) ?? global);
+    if (origin.kind !== "folder") return origin;
+    const repo = repos.get(origin.path);
+    return repo ? { ...origin, repo } : origin;
+  };
 }
 
 async function profileProject(home: Home, project: Project, places: SessionPlace[]) {

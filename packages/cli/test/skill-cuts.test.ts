@@ -145,6 +145,7 @@ test("profile --json carries each skill's origin and each cut's sessions and siz
     path: join(home, ".claude/skills/notes"),
     realPath: join(home, ".claude/skills/notes"),
     link: false,
+    repo: null,
   });
   expect(origin.simplify).toEqual({ kind: "built-in" });
   expect(origin["acme:lint"]).toEqual({

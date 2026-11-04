@@ -22,6 +22,7 @@ const folder = (path: string, realPath = path, link = false): SkillOrigin => ({
   path,
   realPath,
   link,
+  repo: null,
 });
 
 function cuts(places: SessionPlace[], originOf: PlaceOrigin) {
