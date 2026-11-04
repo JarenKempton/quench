@@ -3,6 +3,7 @@ import { ago, chars, count, plural, projectName, size, table, tokens } from "../
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
 import { renderStartSplit } from "./recorded-start.ts";
 import { neverUsed } from "./skill-cuts.ts";
+import { renderNextSteps } from "./next-steps.ts";
 import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
@@ -18,6 +19,7 @@ export function summary(result: Profile, homeDir: string): string[] {
     ...renderStartSplit(result.recordedStart),
     ...worthALook(result, homeDir),
     ...busiest(result, homeDir),
+    ...renderNextSteps(result.nextSteps),
     "",
     dim(
       "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",

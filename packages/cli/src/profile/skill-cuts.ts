@@ -23,6 +23,8 @@ export type CutOf = (harness: HarnessId, origin: SkillOrigin) => SkillCut;
 
 const SHOWN = 10;
 
+export const WITHHELD = "no command, ";
+
 export const neverUsed = (u: SkillUse) =>
   u.skills.filter((s) => !s.usedIn && s.origin.kind !== "built-in");
 
@@ -155,7 +157,7 @@ function cutFrom(t: Target, unused: string[], cut: SkillCut, unknown: HarnessId[
     unsizedSessions: t.unsized.size,
     size: !t.sized ? "unknown" : t.unsized.size ? "lower bound" : "exact",
     command: withheld ? null : cut.command,
-    note: withheld ? `no command, ${withheld}` : cut.note,
+    note: withheld ? `${WITHHELD}${withheld}` : cut.note,
   };
 }
 
