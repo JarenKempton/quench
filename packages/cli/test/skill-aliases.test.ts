@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, realpath, symlink, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { quoteArg, shellFor } from "@quench/history";
-import { lines, quench, quenchWith } from "./run.ts";
+import { lines, quench } from "./run.ts";
 
 const skill = (dir: string) =>
   Bun.write(join(dir, "SKILL.md"), `---\nname: ${basename(dir)}\ndescription: d\n---\n`);
@@ -33,17 +32,6 @@ const cutRows = (stdout: string) =>
     .filter((r) => /^\s+\S+ chars/.test(r))
     .map((r) => r.replace(/^\s+/, "").replace(/\s{2,}/g, " | "));
 
-const posix = shellFor() === "posix";
-
-const gitTop = (dir: string) =>
-  Bun.spawnSync(["git", "-C", dir, "rev-parse", "--show-toplevel"]).stdout.toString().trim();
-
-const inside = (path: string, real = path) =>
-  `remove ${path} · inside a git repo (${gitTop(real)})`;
-
-const commit = (cwd: string, ...args: string[]) =>
-  Bun.spawnSync(["git", "-c", "user.name=q", "-c", "user.email=q@q", ...args], { cwd });
-
 test("each session's skills resolve against its own directory, not the project's latest", async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-cwd-")));
   const repo = join(home, "repo");
@@ -62,11 +50,11 @@ test("each session's skills resolve against its own directory, not the project's
   expect(code).toBe(0);
   const b = join(repo, "b/.claude/skills/foo");
   expect(cutRows(stdout)).toEqual([
-    `15 chars | 1 | Claude Code | foo | project folder | ${inside(b)}`,
+    `15 chars | 1 | Claude Code | foo | project folder | remove ${b}`,
   ]);
 });
 
-test("a folder used through a symlink alias is protected, and an unused alias removes only the link", async () => {
+test("a folder used through a symlink alias is protected, and an unused alias names only the link", async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-alias-")));
   const work = join(home, "work");
   await mkdir(work, { recursive: true });
@@ -106,11 +94,11 @@ test("a folder used through a symlink alias is protected, and an unused alias re
   const memo = join(agents, "memo");
   expect(cutRows(stdout)).toEqual([
     "40 chars | 1 | Codex | notes | user folder | no command, still used: Claude Code notes 1",
-    `37 chars | 1 | Codex | memo | user folder | ${posix ? "rm -- ~/.agents/skills/memo" : `(Get-Item -LiteralPath ${quoteArg(memo, "powershell")}).Delete()`} · removes the link only, not the folder it points to`,
+    `37 chars | 1 | Codex | memo | user folder | remove the link ${memo}`,
   ]);
 });
 
-test("a skill tracked in a repo is one row across worktrees, removed from the repo with git", async () => {
+test("a skill tracked in a repo is one row across worktrees, removed in a PR", async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-repo-")));
   const main = join(home, "repo");
   const other = join(home, "repo-wt");
@@ -138,7 +126,7 @@ test("a skill tracked in a repo is one row across worktrees, removed from the re
   const scratch = join(other, ".claude/skills/scratch");
   expect(cutRows(stdout)).toEqual([
     "30 chars | 2 | Claude Code | foo | tracked in repo | tracked in repo: remove .claude/skills/foo in a PR",
-    `23 chars | 1 | Claude Code | scratch | project folder | ${inside(scratch)}`,
+    `23 chars | 1 | Claude Code | scratch | project folder | remove ${scratch}`,
     "15 chars | 1 | Claude Code | foo | tracked in repo | tracked in repo: remove b/.claude/skills/foo in a PR",
   ]);
 });
@@ -191,105 +179,7 @@ test("tracking checks are literal and need the skill's own entrypoint", async ()
   const { stdout, code } = await quench(home, "profile", "skills");
   expect(code).toBe(0);
   expect(cutRows(stdout)).toEqual([
-    `21 chars | 1 | Claude Code | cut[x] | project folder | ${inside(join(skills, "cut[x]"))}`,
-    `17 chars | 1 | Claude Code | half | project folder | ${inside(join(skills, "half"))}`,
+    `21 chars | 1 | Claude Code | cut[x] | project folder | remove ${join(skills, "cut[x]")}`,
+    `17 chars | 1 | Claude Code | half | project folder | remove ${join(skills, "half")}`,
   ]);
 });
-
-async function codexListing(home: string, root: string, names: string[]) {
-  const block = [
-    "<skills_instructions>",
-    `- \`r0\` = \`${root}\``,
-    ...names.map((n) => `- ${n}: ${n} (file: r0/${n}/SKILL.md)`),
-    "</skills_instructions>",
-  ].join("\n");
-  await Bun.write(
-    join(home, ".codex/sessions/2026/10/20/c.jsonl"),
-    lines([
-      { type: "session_meta", payload: { id: "c", cwd: home } },
-      {
-        type: "response_item",
-        payload: {
-          type: "message",
-          role: "developer",
-          content: [{ type: "input_text", text: block }],
-        },
-      },
-    ]),
-  );
-}
-
-const guardedRows = async (home: string) => {
-  const { stdout, code } = await quench(home, "profile", "skills");
-  expect(code).toBe(0);
-  return cutRows(stdout);
-};
-
-test("a user-scope skill folder tracked by git gets no delete command", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-s10-")));
-  const claude = join(home, ".claude");
-  await skill(join(claude, "skills/dotfile"));
-  commit(claude, "init", "-q");
-  commit(claude, "add", "skills/dotfile/SKILL.md");
-  commit(claude, "commit", "-q", "-m", "dotfiles");
-  await Bun.write(join(claude, "projects/p/s.jsonl"), lines(listing(home, ["dotfile"], [])));
-  expect(await guardedRows(home)).toEqual([
-    `23 chars | 1 | Claude Code | dotfile | user folder | ${inside(join(claude, "skills/dotfile"))}`,
-  ]);
-});
-
-test("a skill reached through a symlink into another worktree gets no delete command", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-s11-")));
-  const repo = join(home, "repo");
-  const wt = join(home, "repo-wt");
-  await skill(join(repo, "shared/borrowed"));
-  commit(repo, "init", "-q");
-  commit(repo, "add", ".");
-  commit(repo, "commit", "-q", "-m", "skills");
-  commit(repo, "worktree", "add", "-q", wt);
-  await mkdir(join(home, ".agents"), { recursive: true });
-  await symlink(join(wt, "shared"), join(home, ".agents/skills"), "dir");
-  await codexListing(home, join(home, ".agents/skills"), ["borrowed"]);
-  expect(await guardedRows(home)).toEqual([
-    `49 chars | 1 | Codex | borrowed | user folder | ${inside(join(home, ".agents/skills/borrowed"), join(wt, "shared/borrowed"))}`,
-  ]);
-});
-
-test("a skill folder that is itself a git checkout gets no delete command", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-s12-")));
-  const tool = join(home, ".codex/skills/tool");
-  await skill(tool);
-  commit(tool, "init", "-q");
-  await codexListing(home, join(home, ".codex/skills"), ["tool"]);
-  expect(await guardedRows(home)).toEqual([
-    `37 chars | 1 | Codex | tool | user folder | ${inside(tool)}`,
-  ]);
-});
-
-test.skipIf(process.platform === "win32")(
-  "a git error such as dubious ownership leaves a link without a removal command",
-  async () => {
-    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-s13-")));
-    const bin = join(home, "bin");
-    await Bun.write(
-      join(bin, "git"),
-      "#!/bin/sh\necho \"fatal: detected dubious ownership in repository at '$PWD'\" >&2\nexit 128\n",
-    );
-    await chmod(join(bin, "git"), 0o755);
-    await skill(join(home, "shared/memo"));
-    await mkdir(join(home, ".agents/skills"), { recursive: true });
-    await symlink(join(home, "shared/memo"), join(home, ".agents/skills/memo"), "dir");
-    await codexListing(home, join(home, ".agents/skills"), ["memo"]);
-    const { stdout, code } = await quenchWith(
-      { PATH: `${bin}:${process.env.PATH}` },
-      home,
-      "profile",
-      "skills",
-    );
-    expect(code).toBe(0);
-    const memo = join(home, ".agents/skills/memo");
-    expect(cutRows(stdout)).toEqual([
-      `37 chars | 1 | Codex | memo | user folder | git could not check ${join(home, ".agents/skills")}: remove the link ${memo} there`,
-    ]);
-  },
-);

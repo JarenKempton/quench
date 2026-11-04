@@ -136,7 +136,7 @@ export const pi: Harness<"pi"> = {
     return (skill, onDisk) => folderOrigin("pi", skill, onDisk) ?? notFound(skill);
   },
 
-  skillCut: (origin, { shell }) => folderCut(origin, shell) ?? { command: null, note: null },
+  skillCut: (origin) => folderCut(origin) ?? { command: null, note: null },
 
   async configs(home, project) {
     const user = home.of(HOME);

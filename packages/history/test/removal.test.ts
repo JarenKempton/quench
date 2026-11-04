@@ -1,18 +1,12 @@
 import { expect, test } from "bun:test";
-import { harnessById, Home, quoteArg, removeLink, withEnv } from "../src/index.ts";
+import { harnessById, Home, quoteArg, withEnv } from "../src/index.ts";
 
-test("link removal quotes paths so a quote or shell syntax cannot escape", () => {
-  expect(removeLink("/home/me/.claude/skills/pr", "posix")).toBe(
-    "rm -- /home/me/.claude/skills/pr",
-  );
-  expect(removeLink("/Users/O'Brien/skills/pr", "posix")).toBe(
-    `rm -- '/Users/O'\\''Brien/skills/pr'`,
-  );
-  expect(removeLink("/tmp/$(touch pwned)/x", "posix")).toBe(`rm -- '/tmp/$(touch pwned)/x'`);
-  expect(removeLink("-rf", "posix")).toBe("rm -- '-rf'");
-  expect(removeLink("C:\\Users\\O'Brien\\a b\\$x", "powershell")).toBe(
-    "(Get-Item -LiteralPath 'C:\\Users\\O''Brien\\a b\\$x').Delete()",
-  );
+test("command arguments are quoted so a quote or shell syntax cannot escape", () => {
+  expect(quoteArg("lint@tools", "posix")).toBe("lint@tools");
+  expect(quoteArg("/Users/O'Brien/x", "posix")).toBe(`'/Users/O'\\''Brien/x'`);
+  expect(quoteArg("$(touch pwned)", "posix")).toBe(`'$(touch pwned)'`);
+  expect(quoteArg("-rf", "posix")).toBe("'-rf'");
+  expect(quoteArg("C:\\Users\\O'Brien\\a b", "powershell")).toBe("'C:\\Users\\O''Brien\\a b'");
   expect(quoteArg("C:\\Users\\O\u2019Brien", "powershell")).toBe("'C:\\Users\\O\u2019\u2019Brien'");
   expect(quoteArg("a,b", "powershell")).toBe("'a,b'");
 });

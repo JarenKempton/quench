@@ -15,11 +15,6 @@ export function quoteArg(value: string, shell: Shell, always = false): string {
     : `'${value.replace(/['\u2018\u2019\u201A\u201B]/g, (quote) => quote + quote)}'`;
 }
 
-export const removeLink = (path: string, shell: Shell) =>
-  shell === "posix"
-    ? `rm -- ${quoteArg(path, shell)}`
-    : `(Get-Item -LiteralPath ${quoteArg(path, shell)}).Delete()`;
-
 export function withEnv(variable: string, value: string | null, command: string, shell: Shell) {
   if (value === null) return command;
   return shell === "posix"

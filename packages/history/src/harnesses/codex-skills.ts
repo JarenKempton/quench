@@ -58,7 +58,7 @@ export function codexSkillCut(
   harnessHome: HarnessHome,
 ): SkillCut {
   if (origin.kind === "built-in") return { command: null, note: "built into Codex" };
-  if (origin.kind !== "plugin") return folderCut(origin, shell)!;
+  if (origin.kind !== "plugin") return folderCut(origin)!;
   if (origin.installedByDefault)
     return {
       command: null,

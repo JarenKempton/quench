@@ -2,13 +2,10 @@ import { join } from "node:path";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
-export const quench = (home: string, ...args: string[]) => quenchWith({}, home, ...args);
-
-export async function quenchWith(env: Record<string, string>, home: string, ...args: string[]) {
+export async function quench(home: string, ...args: string[]) {
   const proc = Bun.spawn(["bun", main, ...args], {
     env: {
       ...process.env,
-      ...env,
       HOME: home,
       CLAUDE_CONFIG_DIR: "",
       CODEX_HOME: "",

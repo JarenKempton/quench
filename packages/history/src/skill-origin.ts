@@ -2,7 +2,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { Home } from "./home.ts";
 import type { HarnessId, ListedSkill } from "./model.ts";
-import { removeLink, type Shell } from "./removal.ts";
+import type { Shell } from "./removal.ts";
 import type { Skill, SkillRoot } from "./skills.ts";
 
 export type SkillOrigin =
@@ -54,7 +54,7 @@ export function notFound(skill: ListedSkill, plugin: string | null = null): Skil
   return { kind: "not-found", path: skill.path, plugin };
 }
 
-export function folderCut(origin: SkillOrigin, shell: Shell): SkillCut | null {
+export function folderCut(origin: SkillOrigin): SkillCut | null {
   if (origin.kind === "folder" && origin.repo)
     return {
       command: null,
@@ -62,10 +62,8 @@ export function folderCut(origin: SkillOrigin, shell: Shell): SkillCut | null {
     };
   if (origin.kind === "folder")
     return {
-      command: origin.link ? removeLink(origin.path, shell) : null,
-      note: origin.link
-        ? "removes the link only, not the folder it points to"
-        : `remove ${origin.path}`,
+      command: null,
+      note: origin.link ? `remove the link ${origin.path}` : `remove ${origin.path}`,
     };
   if (origin.kind === "not-found")
     return {
