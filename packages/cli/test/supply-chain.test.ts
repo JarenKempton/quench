@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const main = join(import.meta.dir, "../src/main.ts");
 const COMMITTED = "ghp_" + "FakeQuenchRepoValue0123456789abcdefgh";
+const LOCKED = "ghp_" + "FakeQuenchLockValue0123456789abcdefgh";
 const line = (value: unknown) => JSON.stringify(value);
 
 async function git(dir: string, ...args: string[]) {
@@ -21,8 +22,11 @@ async function fakeHome() {
   await Bun.write(join(project, "README.md"), "hello\n");
   await git(home, "init", "-q", project);
   await Bun.write(join(project, "config.js"), `const token = "${COMMITTED}";\n`);
+  await Bun.write(join(project, "package-lock.json"), line({ token: LOCKED }));
   await git(project, "add", ".");
   await git(project, "commit", "-q", "-m", "add config");
+  await Bun.write(join(project, "config.js"), `const token = "${COMMITTED}";\nconst port = 1;\n`);
+  await git(project, "commit", "-q", "-am", "edit config");
   await git(project, "rm", "-q", "config.js");
   await git(project, "commit", "-q", "-m", "remove config");
   const hooks = join(project, ".git/hooks");
@@ -83,6 +87,7 @@ async function run(home: string, ...args: string[]) {
   const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   expect(code).toBe(0);
   expect(stdout).not.toContain(COMMITTED.slice(4, 16));
+  expect(stdout).not.toContain(LOCKED.slice(4, 16));
   return stdout;
 }
 
@@ -128,17 +133,20 @@ test("secrets lists executable git hooks in session repos and flags unknown ones
 test("secrets scans repo history only with --repo-history and masks what it finds", async () => {
   const { home, project } = await fakeHome();
   const report = JSON.parse(await run(home, "--json", "--repo-history"));
-  expect(report.repoHistory.commits).toBe(2);
+  expect(report.repoHistory).toMatchObject({ repos: 1, failed: 0, commits: 3, blobs: 3 });
+  expect(report.repoHistory.lowConfidence).toEqual([]);
   expect(
     report.repoHistory.secrets.map((s: Record<string, unknown>) => [
       s.provider,
       s.masked,
-      s.commits,
+      s.versions,
       s.repos,
       s.files,
     ]),
-  ).toEqual([["github", expect.stringMatching(/^ghp_…[0-9a-f]{8}$/), 1, [project], ["config.js"]]]);
+  ).toEqual([["github", expect.stringMatching(/^ghp_…[0-9a-f]{8}$/), 2, [project], ["config.js"]]]);
   const text = await run(home, "--repo-history");
-  expect(text).toContain("Repo git history · 1 secret in 2 commits across 1 repository");
+  expect(text).toContain(
+    "Repo git history · 1 secret in 3 file versions from 3 commits across 1 repository",
+  );
   expect(text).toContain("lynis, osquery or trufflehog");
 });

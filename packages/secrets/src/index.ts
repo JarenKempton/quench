@@ -88,7 +88,7 @@ export async function secretsReport(
       "Unpinned means an MCP server, marketplace, plugin or package started from @latest, no version, a range, or a branch instead of an exact version, tag or commit. Versions to pin to come from the local npx cache when present; Codex plugins record no source to check.",
       "Git hooks are executable hooks in the hooks directory, or core.hooksPath, of each known project; a hook with no known manager's marker was installed by hand or by an unknown tool.",
       options.repoHistory
-        ? "Repo history covers every added line in every commit on every ref of the known projects."
+        ? "Repo history scans every version of every file reachable from any ref of the known projects once, skipping binaries and the paths gitleaks skips (lockfiles, node_modules, vendored code)."
         : "Repo git history is not scanned unless you pass --repo-history, because it is slow on big repositories.",
       "Out of scope: ports, network and OS hardening, persistence and PATH. Use lynis, osquery or trufflehog for those.",
       "Nothing is changed or redacted.",

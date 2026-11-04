@@ -242,8 +242,10 @@ model or the network.
 Supply-chain checks read MCP launch commands and skill sources (Claude Code marketplaces and
 plugins, Pi packages) through each adapter's `mcp` and `skillSources`, and judge pinning from the
 spec alone; versions to pin to come from the local npx cache. Git hooks come from
-`git rev-parse --git-path hooks` in each known project. `--repo-history` streams
-`git log --all -p -U0` per known project and runs the same detection over added lines.
+`git rev-parse --git-path hooks` in each known project. `--repo-history` reads each
+blob reachable from any ref once (`git rev-list --all --objects` into `git cat-file --batch`) and
+runs the same detection with gitleaks' global path allowlist; diffs were too slow on repos that
+rewrite large files.
 
 ## Reading at scale
 

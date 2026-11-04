@@ -51,6 +51,10 @@ const allowOf = (list: Allowlist): Allow => ({
 
 export const globalAllow = allowOf(config.allowlist);
 
+const allowedPaths = (config.allowlist.paths ?? []).map((source) => goRegex(source, ""));
+
+export const allowedPath = (path: string) => allowedPaths.some((regex) => regex.test(path));
+
 export const rules: Rule[] = config.rules.flatMap((rule) =>
   rule.regex
     ? [
