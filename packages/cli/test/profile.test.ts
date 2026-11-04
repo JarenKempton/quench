@@ -638,21 +638,29 @@ test("profile shows which recorded skills sessions listed and used", async () =>
   expect(stdout).toContain(
     [
       "▍Recorded skills · what session histories listed and used · last 30 days",
-      "  Agent        Sessions  Listed  Listing size  Used  Never used",
-      "  Claude Code         2       3      63 chars     2           1",
-      `  Codex               1       2     ${180 + home.length} chars     1           1`,
-      `  Pi                  1       2     ${316 + 2 * home.length} chars     1           1`,
+      "  Agent        Sessions  Listed  Listing size  Used  Built-in  Never used",
+      "  Claude Code         2       3      63 chars     2         0           1",
+      `  Codex               1       2     ${180 + home.length} chars     1         0           1`,
+      `  Pi                  1       2     ${316 + 2 * home.length} chars     1         0           1`,
+      "  Sources · Claude Code: 3 not on disk now",
       "  Most used · Claude Code: review 2, deploy 1",
-      "  Listed, never used · Claude Code: notes",
+      "  Sources · Codex: 2 not on disk now",
       "  Most used · Codex: notes 1",
-      "  Listed, never used · Codex: figma:figma-use",
+      "  Sources · Pi: 2 not on disk now",
       "  Most used · Pi: notes 1",
-      "  Listed, never used · Pi: plan",
+      "",
+      "▍Cut list · listed, never used · ranked by listing size × sessions listed",
+      "  Not on disk now, nothing to cut · Claude Code: notes",
+      "  Not on disk now, nothing to cut · Codex: figma:figma-use",
+      "  Not on disk now, nothing to cut · Pi: plan",
     ].join("\n"),
   );
   const out = JSON.parse((await quench(home, "--json")).stdout);
   const byHarness = Object.fromEntries(
-    out.recordedSkills.map((u: { harness: string; skills: object[] }) => [u.harness, u.skills]),
+    out.recordedSkills.map((u: { harness: string; skills: Record<string, unknown>[] }) => [
+      u.harness,
+      u.skills.map(({ name, listedIn, usedIn, byUser }) => ({ name, listedIn, usedIn, byUser })),
+    ]),
   );
   expect(byHarness["claude-code"]).toEqual([
     { name: "review", listedIn: 2, usedIn: 2, byUser: 0 },

@@ -20,7 +20,7 @@ import { json, median } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
-import { skillUse } from "../profile/recorded-skills.ts";
+import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
 import { startSplit } from "../profile/recorded-start.ts";
 import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
 import { splitInstructions, splitSkills, type InstructionFile } from "../profile/setup.ts";
@@ -34,6 +34,8 @@ const LIMITATIONS = [
   "A recorded file is the same as disk now when its hash matches the file's text exactly, or with one final newline removed as Claude Code does. Anything else differs: usually the file changed since, possibly other processing by the harness.",
   "Skills are SKILL.md folders in each agent's documented locations on disk now. Up-front size is name plus description before each agent's own caps and budgets; bodies load on demand. Built-in and plugin skills, managed and /etc locations, and Codex agents/openai.yaml policies are not read. Codex and Pi project trust is approximated from user config, or assumed for Pi.",
   "Recorded skills are the skill lists session histories logged: Claude Code's listing, Codex's skills block and Pi's skills section. Listing size is the first listing in each session. Use counts sessions where the model invoked a listed skill (Claude Code's Skill tool), read its SKILL.md, or ran a shell command or code naming that exact listed path, or the user ran it as a command. Relative paths are not resolved, so shell-based use (how Codex loads skills) is a lower bound, and a command editing the file counts too.",
+  "Skill sources: Claude Code records skill names only, so a name is matched to its user or project folder on disk now, then to Claude Code's own skills, then to an installed plugin by its prefix. Codex and Pi record each skill's file, so its path decides the source. Codex plugins installed by default come from the remote plugin catalog Codex caches locally. A skill found nowhere on disk now is not on disk now: removed since, or loaded from a place Quench does not read. Built-in skills are left out of never used and the cut list.",
+  "The cut list groups never-used skills by what removes them: a plugin or a skill folder. Listed is the characters of each skill's own entry in the recorded listings, summed over every session that listed it; listings without per-skill text count zero. Commands are shown, never run. Removing a folder removes it for every agent that reads that folder.",
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
   "Repeated failures are tool results a session recorded as errors, grouped per project by kind and by what failed: the missing path or command named in the error text, the read path, or the command's program and subcommand. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.",
   "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Tool definitions need a live connection and are not counted. Plugin and managed servers are not read.",
@@ -82,7 +84,10 @@ export async function profile(
     globalSkills: [...globalSkills.values()],
     globalMcpServers: [...globalMcp.values()],
     recordedInstructions: await recordedFiles(places),
-    recordedSkills: skillUse(places),
+    recordedSkills: skillUse(
+      places,
+      await placeOrigins(home, found.placesByRoot, profiled, globalSkills),
+    ),
     recordedMcp: mcpUse(places, [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)]),
     recordedFailures: repeatedFailures(found.placesByRoot),
     recordedStart: startSplit(places),
@@ -97,6 +102,23 @@ export async function profile(
     options.json ? json(result) : render(result, home.dir, options.view).join("\n") + "\n",
   );
   return 0;
+}
+
+async function placeOrigins(
+  home: Home,
+  placesByRoot: Map<string, SessionPlace[]>,
+  profiled: ProfiledProject[],
+  globalSkills: Map<string, Skill>,
+): Promise<PlaceOrigin> {
+  const origins = new Map(
+    await Promise.all(harnesses.map(async (h) => [h.id, await h.skillOrigins(home)] as const)),
+  );
+  const onDisk = new Map<SessionPlace, Skill[]>();
+  for (const project of profiled)
+    for (const place of placesByRoot.get(project.root) ?? [])
+      onDisk.set(place, [...globalSkills.values(), ...project.skills]);
+  return (place, skill) =>
+    origins.get(place.harness)!(skill, onDisk.get(place) ?? [...globalSkills.values()]);
 }
 
 async function profileProject(home: Home, project: Project, places: SessionPlace[]) {

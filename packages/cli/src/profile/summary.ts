@@ -2,6 +2,7 @@ import { harnessById } from "@quench/history";
 import { ago, chars, count, plural, projectName, size, table, tokens } from "../format.ts";
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
 import { renderStartSplit } from "./recorded-start.ts";
+import { neverUsed } from "./skill-cuts.ts";
 import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
@@ -62,14 +63,14 @@ function worthALook(result: Profile, homeDir: string): string[] {
     .filter((u) => u.useRecorded)
     .map((u) => ({
       label: harnessById[u.harness].label,
-      n: u.skills.filter((s) => !s.usedIn).length,
+      n: neverUsed(u).length,
     }))
     .filter((u) => u.n);
   const neverTotal = never.reduce((n, u) => n + u.n, 0);
   if (neverTotal)
     items.push({
       headline: `${plural(neverTotal, "skill")} listed but never used`,
-      detail: `${never.map((u) => `${u.label} ${u.n}`).join(" · ")} — each one costs context up front`,
+      detail: `${never.map((u) => `${u.label} ${u.n}`).join(" · ")} — ranked cut list with a command for each`,
       command: "quench profile skills",
     });
   const top = result.recordedFailures.repeated[0];

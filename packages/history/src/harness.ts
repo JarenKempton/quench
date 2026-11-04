@@ -3,6 +3,7 @@ import type { Home } from "./home.ts";
 import type { HarnessId, Session } from "./model.ts";
 import type { McpEntry } from "./mcp.ts";
 import type { ConfigFile, RiskyPermission } from "./settings.ts";
+import type { OriginOf, SkillCut, SkillOrigin } from "./skill-origin.ts";
 import type { SkillSource } from "./skill-sources.ts";
 import type { SkillRoot } from "./skills.ts";
 import type { SteeringRoot } from "./steering.ts";
@@ -29,6 +30,8 @@ export interface Harness<Id extends HarnessId = HarnessId> {
   skills(home: Home, project: string): Promise<SkillRoot[]>;
   mcp(home: Home, project: string): Promise<McpEntry[]>;
   skillSources(home: Home, project: string): Promise<SkillSource[]>;
+  skillOrigins(home: Home): Promise<OriginOf>;
+  skillCut(origin: SkillOrigin): SkillCut;
   configs(home: Home, project: string): Promise<ConfigFile[]>;
   permissions(home: Home, project: string): Promise<RiskyPermission[]>;
 }

@@ -7,6 +7,7 @@ import { repositoryRoot } from "../files.ts";
 import { describeServer, record, type McpEntry } from "../mcp.ts";
 import type { ConfigFile, RiskyPermission } from "../settings.ts";
 import type { SkillRoot } from "../skills.ts";
+import { codexSkillCut, codexSkillOrigins } from "./codex-skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
@@ -153,6 +154,9 @@ export const codex: Harness<"codex"> = {
   async skillSources() {
     return [];
   },
+
+  skillOrigins: (home) => codexSkillOrigins(home.of(HOME)),
+  skillCut: codexSkillCut,
 
   async configs(home, project) {
     return [
@@ -442,11 +446,14 @@ function skillListing(line: Line): EventKind | null {
   const roots = new Map(
     [...block.matchAll(/^- `(r\d+)` = `([^`]+)`$/gm)].map(([, id, path]) => [id!, path!]),
   );
-  const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(([, name, file]) => {
-    const [root, ...rest] = file!.split(/[\\/]/);
-    const base = roots.get(root!);
-    return { name: name!, path: base ? pathStyle(base).join(base, ...rest) : file! };
-  });
+  const listed = [...block.matchAll(/^- (\S+): .*\(file: ([^)]+)\)$/gm)].map(
+    ([entry, name, file]) => {
+      const [root, ...rest] = file!.split(/[\\/]/);
+      const base = roots.get(root!);
+      const path = base ? pathStyle(base).join(base, ...rest) : file!;
+      return { name: name!, path, chars: entry.length };
+    },
+  );
   return { type: "skills", listed, chars: block.length };
 }
 
