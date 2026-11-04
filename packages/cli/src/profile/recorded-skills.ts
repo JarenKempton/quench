@@ -5,20 +5,18 @@ import {
   type HarnessId,
   type ListedSkill,
   type SessionPlace,
-  type SkillCut,
   type SkillOrigin,
 } from "@quench/history";
 import { chars, count, median, table } from "../format.ts";
-import { cutList, list, neverUsed, renderCuts, sourceOf, type Cut } from "./skill-cuts.ts";
+import { list, neverUsed, renderCuts, sourceOf, type SkillCuts } from "./skill-cuts.ts";
 
 export type UsedSkill = {
   name: string;
+  target: string;
   listedIn: number;
   usedIn: number;
   byUser: number;
-  listedChars: number;
   origin: SkillOrigin;
-  cut: SkillCut;
 };
 
 export type SkillUse = {
@@ -28,62 +26,84 @@ export type SkillUse = {
   medianChars: number | null;
   useRecorded: boolean;
   skills: UsedSkill[];
-  cuts: Cut[];
+};
+
+export type Occurrence = {
+  session: number;
+  harness: HarnessId;
+  name: string;
+  target: string;
+  origin: SkillOrigin;
+  chars: number | null;
+  used: boolean;
 };
 
 export type PlaceOrigin = (place: SessionPlace, skill: ListedSkill) => SkillOrigin;
 
-export function skillUse(places: readonly SessionPlace[], originOf: PlaceOrigin): SkillUse[] {
-  return harnesses.flatMap((harness) => {
-    const recorded = places.filter((p) => p.harness === harness.id && p.skills);
+export function targetOf(harness: HarnessId, origin: SkillOrigin, name: string): string {
+  if (origin.kind === "folder") return `folder:${origin.path}`;
+  if (origin.kind === "plugin") return `plugin:${harness}:${origin.plugin}`;
+  return `${origin.kind}:${harness}:${name}`;
+}
+
+export function skillUse(places: readonly SessionPlace[], originOf: PlaceOrigin) {
+  const occurrences: Occurrence[] = [];
+  const uses = harnesses.flatMap((harness): SkillUse[] => {
+    const recorded = places.flatMap((place, session) =>
+      place.harness === harness.id && place.skills
+        ? [{ place, session, skills: place.skills }]
+        : [],
+    );
     if (!recorded.length) return [];
     const skills = new Map<string, UsedSkill>();
-    const entry = (name: string) =>
-      skills.get(name) ??
-      skills
-        .set(name, {
-          name,
-          listedIn: 0,
-          usedIn: 0,
-          byUser: 0,
-          listedChars: 0,
-          origin: { kind: "not-found", path: null, plugin: null },
-          cut: { command: null, note: null },
-        })
-        .get(name)!;
-    for (const place of recorded) {
-      for (const listed of place.skills!.listed) {
-        const skill = entry(listed.name);
+    for (const { place, session, skills: listing } of recorded) {
+      const used = new Map(listing.used.map((u) => [u.name, u.by]));
+      for (const listed of listing.listed) {
+        const origin = originOf(place, listed);
+        const target = targetOf(harness.id, origin, listed.name);
+        const key = `${target}\0${listed.name}`;
+        const skill =
+          skills.get(key) ??
+          skills
+            .set(key, { name: listed.name, target, listedIn: 0, usedIn: 0, byUser: 0, origin })
+            .get(key)!;
         skill.listedIn++;
-        skill.listedChars += listed.chars ?? 0;
-        if (skill.origin.kind === "not-found") skill.origin = originOf(place, listed);
-      }
-      for (const use of place.skills!.used) {
-        entry(use.name).usedIn++;
-        if (use.by === "user") entry(use.name).byUser++;
+        if (used.has(listed.name)) skill.usedIn++;
+        if (used.get(listed.name) === "user") skill.byUser++;
+        occurrences.push({
+          session,
+          harness: harness.id,
+          name: listed.name,
+          target,
+          origin,
+          chars: listed.chars,
+          used: used.has(listed.name),
+        });
       }
     }
-    for (const skill of skills.values()) skill.cut = harness.skillCut(skill.origin);
-    const sorted = [...skills.values()].sort(
-      (a, b) => b.usedIn - a.usedIn || b.listedIn - a.listedIn || a.name.localeCompare(b.name),
-    );
     return [
       {
         harness: harness.id,
         sessions: recorded.length,
-        medianListed: median(recorded.map((p) => p.skills!.upFront.count)),
-        medianChars: median(recorded.map((p) => p.skills!.upFront.chars)),
+        medianListed: median(recorded.map((r) => r.skills.upFront.count)),
+        medianChars: median(recorded.map((r) => r.skills.upFront.chars)),
         useRecorded: harness.skillUse,
-        skills: sorted,
-        cuts: harness.skillUse ? cutList(sorted) : [],
+        skills: [...skills.values()].sort(
+          (a, b) => b.usedIn - a.usedIn || b.listedIn - a.listedIn || a.name.localeCompare(b.name),
+        ),
       },
     ];
   });
+  return { uses, occurrences };
 }
 
-export function renderSkillUse(uses: SkillUse[], days: number, homeDir: string): string[] {
+export function renderSkillUse(
+  uses: SkillUse[],
+  cuts: SkillCuts,
+  days: number,
+  homeDir: string,
+): string[] {
   if (!uses.length) return [];
-  const known = uses.filter((u) => u.useRecorded);
   const lines = [
     "",
     heading(`Recorded skills · what session histories listed and used · last ${days} days`),
@@ -116,7 +136,7 @@ export function renderSkillUse(uses: SkillUse[], days: number, homeDir: string):
   const unknown = uses.filter((u) => !u.useRecorded).map((u) => harnessById[u.harness].label);
   if (unknown.length)
     lines.push(`  ${unknown.join(", ")} history does not record skill use, so it is unknown.`);
-  return [...lines, ...renderCuts(known, homeDir)];
+  return [...lines, ...renderCuts(cuts, homeDir)];
 }
 
 function sources(u: SkillUse): string {

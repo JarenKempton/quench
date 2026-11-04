@@ -1,18 +1,24 @@
-import { harnessById, type HarnessId, type SkillOrigin } from "@quench/history";
+import { harnessById, type HarnessId, type SkillCut, type SkillOrigin } from "@quench/history";
 import { chars, count, plural, table } from "../format.ts";
 import { dim, heading } from "../style.ts";
-import type { SkillUse, UsedSkill } from "./recorded-skills.ts";
+import type { Occurrence, SkillUse } from "./recorded-skills.ts";
 
 export type Cut = {
   what: string;
   source: string;
+  agents: HarnessId[];
   skills: string[];
-  alsoUsed: string[];
+  usedBy: string[];
   sessions: number;
   listedChars: number;
+  unsizedSessions: number;
   command: string | null;
   note: string | null;
 };
+
+export type SkillCuts = { cuts: Cut[]; notOnDisk: { harness: HarnessId; skills: string[] }[] };
+
+export type CutOf = (harness: HarnessId, origin: SkillOrigin) => SkillCut;
 
 const SHOWN = 10;
 
@@ -32,88 +38,146 @@ const SOURCE_LABELS: Record<string, string> = {
 export const sourceOf = (origin: SkillOrigin) =>
   SOURCE_LABELS[origin.kind === "folder" ? origin.scope : origin.kind]!;
 
-export function cutList(skills: readonly UsedSkill[]): Cut[] {
-  const cuts = new Map<string, Cut>();
-  const pluginOf = (s: UsedSkill) => (s.origin.kind === "plugin" ? s.origin.plugin : null);
-  for (const skill of skills) {
-    const { origin } = skill;
-    if (skill.usedIn || origin.kind === "built-in" || origin.kind === "not-found") continue;
-    const key = origin.kind === "plugin" ? origin.plugin : origin.path;
-    const cut =
-      cuts.get(key) ??
-      cuts
-        .set(key, {
-          what: origin.kind === "plugin" ? origin.plugin : skill.name,
-          source:
-            origin.kind === "plugin" && origin.installedByDefault
-              ? "plugin, installed by default"
-              : sourceOf(origin),
-          skills: [],
-          alsoUsed: skills.filter((s) => s.usedIn && pluginOf(s) === key).map((s) => s.name),
-          sessions: 0,
-          listedChars: 0,
-          command: skill.cut.command,
-          note: skill.cut.note,
+type Target = {
+  origin: SkillOrigin;
+  harnesses: Set<HarnessId>;
+  sessions: Set<number>;
+  unsized: Set<number>;
+  chars: number;
+  names: Set<string>;
+  listings: Map<string, string>;
+  usedListings: Set<string>;
+  uses: Map<string, number>;
+};
+
+export function skillCuts(
+  occurrences: readonly Occurrence[],
+  useRecorded: (harness: HarnessId) => boolean,
+  cutOf: CutOf,
+): SkillCuts {
+  const targets = new Map<string, Target>();
+  for (const o of occurrences) {
+    const t =
+      targets.get(o.target) ??
+      targets
+        .set(o.target, {
+          origin: o.origin,
+          harnesses: new Set(),
+          sessions: new Set(),
+          unsized: new Set(),
+          chars: 0,
+          names: new Set(),
+          listings: new Map(),
+          usedListings: new Set(),
+          uses: new Map(),
         })
-        .get(key)!;
-    cut.skills.push(skill.name);
-    cut.sessions = Math.max(cut.sessions, skill.listedIn);
-    cut.listedChars += skill.listedChars;
+        .get(o.target)!;
+    t.harnesses.add(o.harness);
+    t.sessions.add(o.session);
+    t.names.add(o.name);
+    const listing = `${o.harness}\0${o.name}`;
+    t.listings.set(listing, o.name);
+    if (o.chars === null) t.unsized.add(o.session);
+    else t.chars += o.chars;
+    if (!o.used) continue;
+    const user = `${harnessById[o.harness].label} ${o.name}`;
+    t.usedListings.add(listing);
+    t.uses.set(user, (t.uses.get(user) ?? 0) + 1);
   }
-  return [...cuts.values()].sort(
-    (a, b) => b.listedChars - a.listedChars || a.what.localeCompare(b.what),
-  );
+  const cuts: Cut[] = [];
+  const notOnDisk = new Map<HarnessId, string[]>();
+  for (const t of targets.values()) {
+    const unused = [
+      ...new Set([...t.listings].filter(([l]) => !t.usedListings.has(l)).map(([, name]) => name)),
+    ];
+    const recorded = [...t.harnesses].filter(useRecorded);
+    if (!unused.length || !recorded.length || t.origin.kind === "built-in") continue;
+    if (t.origin.kind === "not-found") {
+      const [harness] = t.harnesses;
+      notOnDisk.set(harness!, [...(notOnDisk.get(harness!) ?? []), ...unused]);
+      continue;
+    }
+    const unknown = [...t.harnesses].filter((h) => !useRecorded(h));
+    cuts.push(cutFrom(t, unused, cutOf(recorded[0]!, t.origin), unknown));
+  }
+  return {
+    cuts: cuts.sort(
+      (a, b) =>
+        Number(a.unsizedSessions === a.sessions) - Number(b.unsizedSessions === b.sessions) ||
+        b.listedChars - a.listedChars ||
+        a.what.localeCompare(b.what),
+    ),
+    notOnDisk: [...notOnDisk].map(([harness, skills]) => ({ harness, skills })),
+  };
 }
 
-export function renderCuts(uses: readonly SkillUse[], homeDir: string): string[] {
-  const rows = uses
-    .flatMap((u) => u.cuts.map((cut) => ({ harness: u.harness, cut })))
-    .sort((a, b) => b.cut.listedChars - a.cut.listedChars);
-  const missing = uses.flatMap((u) => {
-    const names = neverUsed(u).filter((s) => s.origin.kind === "not-found");
-    return names.length
-      ? [`${harnessById[u.harness].label}: ${list(names.map((s) => s.name))}`]
-      : [];
-  });
-  if (!rows.length && !missing.length) return [];
+function cutFrom(t: Target, unused: string[], cut: SkillCut, unknown: HarnessId[]): Cut {
+  const usedBy = [...t.uses].map(([user, n]) => `${user} ${n}`);
+  const withheld = usedBy.length
+    ? `still used: ${usedBy.join(", ")}`
+    : unknown.length
+      ? `use not recorded by ${unknown.map((h) => harnessById[h].label).join(", ")}`
+      : null;
+  return {
+    what: t.origin.kind === "plugin" ? t.origin.plugin : [...t.names].join(" / "),
+    source:
+      t.origin.kind === "plugin" && t.origin.installedByDefault
+        ? "plugin, installed by default"
+        : sourceOf(t.origin),
+    agents: [...t.harnesses],
+    skills: unused,
+    usedBy,
+    sessions: t.sessions.size,
+    listedChars: t.chars,
+    unsizedSessions: t.unsized.size,
+    command: withheld ? null : cut.command,
+    note: withheld ? `no command, ${withheld}` : cut.note,
+  };
+}
+
+export function renderCuts({ cuts, notOnDisk }: SkillCuts, homeDir: string): string[] {
+  if (!cuts.length && !notOnDisk.length) return [];
   const lines = [
     "",
     heading("Cut list · listed, never used · ranked by listing size × sessions listed"),
   ];
-  if (rows.length)
+  if (cuts.length)
     lines.push(
       ...table(
         [
           ["Listed", "Sessions", "Agent", "Cut", "Source", "Command"],
-          ...rows.slice(0, SHOWN).map(({ harness, cut }) => row(harness, cut, homeDir)),
+          ...cuts.slice(0, SHOWN).map((cut) => row(cut, homeDir)),
         ],
         [0, 1],
       ),
     );
-  if (rows.length > SHOWN) lines.push(`  ${dim(`… ${rows.length - SHOWN} more in --json`)}`);
-  for (const line of missing) lines.push(`  Not on disk now, nothing to cut · ${line}`);
+  if (cuts.length > SHOWN) lines.push(`  ${dim(`… ${cuts.length - SHOWN} more in --json`)}`);
+  for (const { harness, skills } of notOnDisk)
+    lines.push(
+      `  Not on disk now, nothing to cut · ${harnessById[harness].label}: ${list(skills)}`,
+    );
   lines.push(
-    `  ${dim("Listed: each skill's own entry in the recorded skill listings, summed over the sessions that listed it.")}`,
+    `  ${dim("Listed: each skill's own entry in the recorded listings, summed over the sessions that listed it; ≥ when some sessions recorded no per-skill text, unknown when none did.")}`,
   );
   return lines;
 }
 
-function row(harness: HarnessId, cut: Cut, homeDir: string): string[] {
+function row(cut: Cut, homeDir: string): string[] {
   const what =
     cut.skills.length > 1 ? `${cut.what} (${plural(cut.skills.length, "skill")})` : cut.what;
-  const also = cut.alsoUsed.length ? ` · also removes used ${cut.alsoUsed.join(", ")}` : "";
   return [
-    chars(cut.listedChars),
+    cut.unsizedSessions === cut.sessions
+      ? "unknown"
+      : `${cut.unsizedSessions ? "≥" : ""}${chars(cut.listedChars)}`,
     count(cut.sessions),
-    harnessById[harness].label,
+    cut.agents.map((h) => harnessById[h].label).join(", "),
     what,
     cut.source,
-    [cut.command && home(cut.command, homeDir), cut.note].filter(Boolean).join(" · ") + also,
+    [cut.command && home(cut.command, homeDir), cut.note].filter(Boolean).join(" · "),
   ];
 }
 
-const home = (command: string, homeDir: string) =>
-  command.replace(` ${homeDir}/`, " ~/").replace(` ${homeDir}\\`, " ~\\");
+const home = (command: string, homeDir: string) => command.replace(` -- ${homeDir}/`, " -- ~/");
 
 export const list = (items: string[], shown = 8) =>
   items.slice(0, shown).join(", ") +

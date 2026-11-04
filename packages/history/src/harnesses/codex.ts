@@ -156,7 +156,7 @@ export const codex: Harness<"codex"> = {
   },
 
   skillOrigins: (home) => codexSkillOrigins(home.of(HOME)),
-  skillCut: codexSkillCut,
+  skillCut: (origin, context) => codexSkillCut(origin, context, HOME),
 
   async configs(home, project) {
     return [

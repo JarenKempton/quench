@@ -1,5 +1,7 @@
 import { dirname } from "node:path";
+import type { Home } from "./home.ts";
 import type { HarnessId, ListedSkill } from "./model.ts";
+import { removeFolder, type Shell } from "./removal.ts";
 import type { Skill, SkillRoot } from "./skills.ts";
 
 export type SkillOrigin =
@@ -9,6 +11,8 @@ export type SkillOrigin =
   | { kind: "not-found"; path: string | null; plugin: string | null };
 
 export type SkillCut = { command: string | null; note: string | null };
+
+export type CutContext = { home: Home; shell: Shell };
 
 export type OriginOf = (skill: ListedSkill, onDisk: readonly Skill[]) => SkillOrigin;
 
@@ -32,8 +36,8 @@ export function notFound(skill: ListedSkill, plugin: string | null = null): Skil
   return { kind: "not-found", path: skill.path, plugin };
 }
 
-export function folderCut(origin: SkillOrigin): SkillCut | null {
-  if (origin.kind === "folder") return { command: `rm -r ${shellPath(origin.path)}`, note: null };
+export function folderCut(origin: SkillOrigin, shell: Shell): SkillCut | null {
+  if (origin.kind === "folder") return { command: removeFolder(origin.path, shell), note: null };
   if (origin.kind === "not-found")
     return {
       command: null,
@@ -41,7 +45,5 @@ export function folderCut(origin: SkillOrigin): SkillCut | null {
     };
   return null;
 }
-
-const shellPath = (path: string) => (/^[\w@%+=:,./~\\-]+$/.test(path) ? path : `'${path}'`);
 
 const removable = (path: string) => (/[\\/]SKILL\.md$/.test(path) ? dirname(path) : path);

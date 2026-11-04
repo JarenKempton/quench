@@ -2,11 +2,14 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { isInside, pathParts } from "../files.ts";
+import type { HarnessHome } from "../harness.ts";
 import { readJson } from "../mcp.ts";
+import { quoteArg, withEnv } from "../removal.ts";
 import {
   folderCut,
   folderOrigin,
   notFound,
+  type CutContext,
   type OriginOf,
   type SkillCut,
   type SkillOrigin,
@@ -49,16 +52,25 @@ export async function codexSkillOrigins(codexHome: string): Promise<OriginOf> {
   };
 }
 
-export function codexSkillCut(origin: SkillOrigin): SkillCut {
+export function codexSkillCut(
+  origin: SkillOrigin,
+  { home, shell }: CutContext,
+  harnessHome: HarnessHome,
+): SkillCut {
   if (origin.kind === "built-in") return { command: null, note: "built into Codex" };
-  if (origin.kind !== "plugin") return folderCut(origin)!;
+  if (origin.kind !== "plugin") return folderCut(origin, shell)!;
   if (origin.installedByDefault)
     return {
       command: null,
       note: "installed by default; Codex refuses to uninstall it. Turn it off in codex → /plugins",
     };
   return {
-    command: `codex plugin remove ${origin.plugin}`,
+    command: withEnv(
+      harnessHome.variable,
+      home.override(harnessHome),
+      `codex plugin remove ${quoteArg(origin.plugin, shell)}`,
+      shell,
+    ),
     note:
       origin.installedByDefault === null
         ? "if Codex refuses with 403 (installed by default), turn it off in codex → /plugins"

@@ -1,9 +1,12 @@
 import { join } from "node:path";
+import type { HarnessHome } from "../harness.ts";
 import { readJson, record } from "../mcp.ts";
+import { quoteArg, withEnv } from "../removal.ts";
 import {
   folderCut,
   folderOrigin,
   notFound,
+  type CutContext,
   type OriginOf,
   type SkillCut,
   type SkillOrigin,
@@ -52,9 +55,16 @@ export async function claudeSkillOrigins(configDir: string): Promise<OriginOf> {
   };
 }
 
-export function claudeSkillCut(origin: SkillOrigin): SkillCut {
+export function claudeSkillCut(
+  origin: SkillOrigin,
+  { home, shell }: CutContext,
+  harnessHome: HarnessHome,
+): SkillCut {
   if (origin.kind === "built-in") return { command: null, note: "built into Claude Code" };
-  if (origin.kind === "plugin")
-    return { command: `claude plugin disable ${origin.plugin}`, note: null };
-  return folderCut(origin)!;
+  if (origin.kind !== "plugin") return folderCut(origin, shell)!;
+  const command = `claude plugin disable ${quoteArg(origin.plugin, shell)}`;
+  return {
+    command: withEnv(harnessHome.variable, home.override(harnessHome), command, shell),
+    note: null,
+  };
 }

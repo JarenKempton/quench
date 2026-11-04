@@ -1,6 +1,8 @@
 import { stat } from "node:fs/promises";
 import {
+  harnessById,
   harnesses,
+  shellFor,
   linkedWorktrees,
   mcpInventory,
   projects,
@@ -21,6 +23,7 @@ import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
 import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
+import { skillCuts } from "../profile/skill-cuts.ts";
 import { startSplit } from "../profile/recorded-start.ts";
 import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
 import { splitInstructions, splitSkills, type InstructionFile } from "../profile/setup.ts";
@@ -68,6 +71,10 @@ export async function profile(
       globalMcp.set(`${server.harness}\0${server.name}`, server);
     profiled.push(shared.project);
   }
+  const skills = skillUse(
+    places,
+    await placeOrigins(home, found.placesByRoot, profiled, globalSkills),
+  );
   const result: Profile & { observedAt: string; limitations: string[] } = {
     observedAt: new Date().toISOString(),
     days: options.days,
@@ -84,9 +91,11 @@ export async function profile(
     globalSkills: [...globalSkills.values()],
     globalMcpServers: [...globalMcp.values()],
     recordedInstructions: await recordedFiles(places),
-    recordedSkills: skillUse(
-      places,
-      await placeOrigins(home, found.placesByRoot, profiled, globalSkills),
+    recordedSkills: skills.uses,
+    recordedSkillCuts: skillCuts(
+      skills.occurrences,
+      (id) => harnessById[id].skillUse,
+      (id, origin) => harnessById[id].skillCut(origin, { home, shell: shellFor() }),
     ),
     recordedMcp: mcpUse(places, [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)]),
     recordedFailures: repeatedFailures(found.placesByRoot),
