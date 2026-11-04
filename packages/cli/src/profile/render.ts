@@ -10,7 +10,9 @@ import { count, plural, projectName, shortPath, size, table } from "../format.ts
 import { projectTables } from "./projects.ts";
 import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
+import type { McpDuplicate } from "./mcp-duplicates.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
+import { renderMcpTools, type McpToolRecord } from "./recorded-mcp-tools.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import type { SkillCuts } from "./skill-cuts.ts";
 import type { StartSplit } from "./recorded-start.ts";
@@ -37,6 +39,8 @@ export type Profile = {
   recordedSkills: SkillUse[];
   recordedSkillCuts: SkillCuts;
   recordedMcp: McpUse[];
+  recordedMcpTools: McpToolRecord[];
+  duplicateMcpServers: McpDuplicate[];
   recordedFailures: FailureSummary;
   recordedStart: StartSplit[];
   projects: ProfiledProject[];
@@ -59,7 +63,13 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
   const sections = {
     projects: () => projectTables(result, homeDir),
     mcp: () => [
-      ...renderMcpServers(result.globalMcpServers, result.projects, homeDir),
+      ...renderMcpServers(
+        result.globalMcpServers,
+        result.projects,
+        result.duplicateMcpServers,
+        homeDir,
+      ),
+      ...renderMcpTools(result.recordedMcpTools, result.days),
       ...renderMcpUse(result.recordedMcp, result.days),
     ],
     instructions: () => [

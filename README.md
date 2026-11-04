@@ -256,9 +256,12 @@ folders. The profile counts skills the model can see and their up-front name and
 description size; bodies load on demand. MCP servers are read from each agent's config
 files with scope and state (`on`, `off`, or `needs approval` for an unapproved
 `.mcp.json` server). Only the server name, transport and command name or URL host are
-shown; arguments, environment, headers and full URLs are never read out, and tool
-definitions are not counted. Built-in and plugin skills and plugin or managed MCP servers
-are not counted yet.
+shown; arguments, environment, headers and full URLs are never read out. Two servers of
+one agent with the same URL or the same command and arguments are flagged as duplicates.
+MCP tool definitions come from session history: per server, the tool count and schema size
+the latest session recorded, and whether they load up front or are deferred to tool search
+(deferred schemas are not starting load). A server no session recorded shows `not
+recorded`. Built-in and plugin skills and plugin or managed MCP servers are not counted yet.
 
 Recorded skills come from the skill lists histories logged: per agent, the sessions with a
 listing, the median number of skills listed and listing size, which listed skills were

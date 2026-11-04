@@ -21,7 +21,12 @@ const tool = (name: string, server: string | null, chars: number, deferred = fal
 test("starting context splits what the first request carried, by source", () => {
   const start = startingContext(
     session([
-      { type: "deferred_tools", names: ["mcp__b__z"], chars: 9, at: null },
+      {
+        type: "deferred_tools",
+        names: ["mcp__b__z", "mcp__c__q", "Cron"],
+        chars: 9,
+        at: null,
+      },
       { type: "instructions", files: [], unreadable: 0, at: null },
       {
         type: "prompt",
@@ -51,13 +56,33 @@ test("starting context splits what the first request carried, by source", () => 
       { kind: "system", chars: 100 },
       { kind: "tools", count: 1, chars: 40 },
       { kind: "mcp_tools", server: "a", count: 2, chars: 50 },
-      { kind: "deferred_tools", count: 1, chars: 9 },
+      { kind: "deferred_tools", count: 3, chars: 9 },
       { kind: "instructions", files: 0, chars: 0 },
     ],
     unrecorded: [],
+    mcp: [
+      { server: "a", loading: "up front", tools: 2, chars: 50 },
+      { server: "b", loading: "deferred", tools: 1, chars: 50 },
+      { server: "c", loading: "deferred", tools: 1, chars: null },
+    ],
   });
 });
 
 test("a session without a recorded request says which parts are missing", () => {
   expect(startingContext(session([])).unrecorded).toEqual(["system", "tools", "mcp_tools"]);
+});
+
+test("deferred tool lists before the first request add up", () => {
+  const start = startingContext(
+    session([
+      { type: "deferred_tools", names: ["mcp__docs__a"], chars: 12, at: null },
+      { type: "deferred_tools", names: ["mcp__search__q", "mcp__docs__a"], chars: 14, at: null },
+      { type: "prompt", system: 1, tools: [], at: null },
+    ]),
+  );
+  expect(start.mcp).toEqual([
+    { server: "docs", loading: "deferred", tools: 1, chars: null },
+    { server: "search", loading: "deferred", tools: 1, chars: null },
+  ]);
+  expect(start.parts).toContainEqual({ kind: "deferred_tools", count: 2, chars: 26 });
 });

@@ -7,6 +7,7 @@ import {
   type SteeringFile,
 } from "@quench/history";
 import { chars, count, projectName, table } from "../format.ts";
+import type { McpDuplicate } from "./mcp-duplicates.ts";
 
 export type InstructionFile = Omit<SteeringFile, "rules"> & { rules: number };
 
@@ -48,6 +49,7 @@ export function skillsCell(skills: Skill[], harness: HarnessId): string {
 export function renderMcpServers(
   global: McpServer[],
   projects: { root: string; mcpServers: McpServer[] }[],
+  duplicates: McpDuplicate[],
   homeDir: string,
 ): string[] {
   const servers = [
@@ -59,7 +61,7 @@ export function renderMcpServers(
   if (!servers.length) return [];
   return [
     "",
-    heading("MCP servers · configured on disk now · tool definitions not counted"),
+    heading("MCP servers · configured on disk now"),
     ...table([
       ["Server", "Agent", "Scope", "Transport", "Target", "State", "Where"],
       ...servers.map((s) => [
@@ -72,5 +74,9 @@ export function renderMcpServers(
         s.where,
       ]),
     ]),
+    ...duplicates.map(
+      (d) =>
+        `  Duplicate: ${d.servers.map((s) => `${s.name} (${s.scope})`).join(" and ")} · ${harnessById[d.harness].label} · same ${d.same === "url" ? "URL" : "command and arguments"} · ${d.where}`,
+    ),
   ];
 }

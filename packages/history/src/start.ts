@@ -1,3 +1,4 @@
+import { mcpToolLoads, type McpToolLoad } from "./mcp-tools.ts";
 import { contextOf, type PromptTool, type Session } from "./model.ts";
 
 export type StartPart =
@@ -13,6 +14,7 @@ export type StartingContext = {
   tokens: number | null;
   parts: StartPart[];
   unrecorded: StartPart["kind"][];
+  mcp: McpToolLoad[];
 };
 
 export function startingContext(session: Session): StartingContext {
@@ -31,8 +33,8 @@ export function startingContext(session: Session): StartingContext {
       system = event.system ?? system;
       tools = event.tools ?? tools;
     } else if (event.type === "deferred_tools") {
-      deferred = event.names;
-      deferredChars = event.chars;
+      deferred = [...new Set([...deferred, ...event.names])];
+      deferredChars += event.chars;
     } else if (event.type === "mcp_instructions") {
       parts.push({ kind: "mcp_instructions", servers: event.servers, chars: event.chars });
     } else if (event.type === "instructions") {
@@ -74,6 +76,7 @@ export function startingContext(session: Session): StartingContext {
       ...(system === null ? (["system"] as const) : []),
       ...(tools === null ? (["tools", "mcp_tools"] as const) : []),
     ],
+    mcp: mcpToolLoads(tools, deferred),
   };
 }
 
