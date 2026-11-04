@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { Home, harnessById } from "@quench/history";
-import { THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
+import { HarnessName, THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
 import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
@@ -41,6 +41,7 @@ Usage:
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
     --cached-only                     use cached reply verdicts only; never classify new replies
+    --judge jev|claude                 who classifies replies: Jev (default, TYPESAFE_API_KEY), or claude -p on your own account
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 
@@ -62,6 +63,7 @@ const { positionals, values } = parseArgs({
     causes: { type: "boolean", default: false },
     "cached-only": { type: "boolean", default: false },
     "theme-limit": { type: "string" },
+    judge: { type: "string", default: "jev" },
     "host-history": { type: "string" },
     "no-host-history": { type: "boolean", default: false },
     "repo-history": { type: "boolean", default: false },
@@ -122,6 +124,15 @@ if (values.causes && command !== "corrections") {
 }
 if (values["cached-only"] && command !== "corrections") {
   process.stderr.write("--cached-only is only available for corrections\n");
+  process.exit(1);
+}
+const judge = values.judge === "jev" ? "jev" : HarnessName.safeParse(values.judge).data;
+if (values.judge !== "jev" && command !== "corrections") {
+  process.stderr.write("--judge is only available for corrections\n");
+  process.exit(1);
+}
+if (!judge) {
+  process.stderr.write("--judge must be jev or claude\n");
   process.exit(1);
 }
 if (values["theme-limit"] !== undefined && !values.themes) {
@@ -219,6 +230,7 @@ switch (command) {
       themes: values.themes,
       causes: values.causes,
       cachedOnly: values["cached-only"],
+      judge,
       themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }

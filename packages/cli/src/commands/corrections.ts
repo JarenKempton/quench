@@ -11,6 +11,10 @@ import {
 import { openT3History, t3State } from "@quench/history/hosts/t3";
 import { behaviour, linkSubagents, runs } from "@quench/insights";
 import {
+  HarnessJudge,
+  HarnessMissing,
+  type HarnessName,
+  HarnessUnsupported,
   Jev,
   JevCauses,
   JevThemes,
@@ -39,6 +43,7 @@ const NO_KEY = `Classifying replies uses Jev (typesafe.ai) with your own key. Fo
 it sends the reply and the last 1,500 characters of the agent message before it.
 Set TYPESAFE_API_KEY to opt in, or pass --dry-run to see what would be sent.
 Answers are cached in ~/.quench/local/judgments.jsonl, so each reply is paid for once.
+Without a key, --judge claude classifies through claude -p and your own Claude account.
 `;
 
 type Options = {
@@ -51,18 +56,38 @@ type Options = {
   themeLimit: number;
   causes: boolean;
   cachedOnly: boolean;
+  judge: "jev" | HarnessName;
 };
 
+type ReplyJudge = Jev | HarnessJudge;
+
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const replyJudge = options.dryRun || options.cachedOnly ? null : Jev.fromEnv();
+  const harness = options.judge === "jev" ? null : options.judge;
+  if (harness && process.platform === "win32") {
+    process.stderr.write(`${new HarnessUnsupported(process.platform).message}\n`);
+    return 1;
+  }
+  const asking = !options.dryRun && !options.cachedOnly;
+  let replyJudge: ReplyJudge | null = null;
+  try {
+    replyJudge = !asking ? null : harness ? await HarnessJudge.create() : Jev.fromEnv();
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    process.stderr.write(
+      `${error.message}${error instanceof HarnessMissing ? `. Install it or pick another --judge.` : ""}\n`,
+    );
+    return 1;
+  }
   const optIn = options.themes || options.causes;
-  if (!options.dryRun && !options.cachedOnly && !optIn && !replyJudge) {
+  if (asking && !optIn && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
   }
+  const label = harness ? HarnessJudge.label : "Jev";
+  const callsPerReply = harness ? 1 : 2;
   const cache = await VerdictCache.open(
-    join(home.dir, ".quench/local/judgments.jsonl"),
-    Jev.id,
+    join(home.dir, `.quench/local/${harness ? `judgments-${harness}` : "judgments"}.jsonl`),
+    harness ? HarnessJudge.id : Jev.id,
     replyJudge === null,
   );
   const host =
@@ -112,7 +137,8 @@ export async function corrections(home: Home, options: Options): Promise<number>
     process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
-  const tokens = replyJudge?.tokens ?? null;
+  const tokens = replyJudge instanceof Jev ? replyJudge.tokens : null;
+  const calls = { label, perReply: callsPerReply };
   process.stdout.write(
     options.json
       ? json({
@@ -120,6 +146,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
           judge: cache.judge,
           newlyJudged: judged.newlyJudged,
           pending: judged.pending,
+          calls: judged.pending * callsPerReply,
           failed: judged.failures.length,
           tokens,
           warnings,
@@ -138,8 +165,8 @@ export async function corrections(home: Home, options: Options): Promise<number>
           latestAutomation: summary.latestAutomation.map(example),
         })
       : (themes
-          ? renderThemes(themes, judged, options.days)
-          : render(summary, judged, options.days, cache.judge, tokens, options.cachedOnly)) +
+          ? renderThemes(themes, judged, options.days, calls)
+          : render(summary, judged, options.days, cache.judge, tokens, options.cachedOnly, calls)) +
           (causes ? renderCauses(causes, options.examples) : ""),
   );
   if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
@@ -186,11 +213,13 @@ async function sessionRuns(
   return [...parents.values()];
 }
 
-function renderThemes(themes: Themes, judged: Judged, days: number): string {
+type Calls = { label: string; perReply: number };
+
+function renderThemes(themes: Themes, judged: Judged, days: number, calls: Calls): string {
   const recurring = themes.themes.filter((t) => t.recurring);
   const lines = [
     `Last ${days} days · correction themes · ${themes.judge}`,
-    `Reply classification: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
+    `Reply classification by ${calls.label}: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
     `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
     `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
@@ -218,7 +247,7 @@ function renderThemes(themes: Themes, judged: Judged, days: number): string {
   );
   if (judged.pending)
     lines.push(
-      `Uncached replies: ${judged.pending} (${judged.pending * 2} classification requests); additional corrections may become eligible for grouping.`,
+      `Uncached replies: ${judged.pending} (${judged.pending * calls.perReply} classification requests); additional corrections may become eligible for grouping.`,
     );
   if (themes.pending || themes.blocked)
     lines.push(
@@ -237,6 +266,7 @@ function render(
   judge: string,
   tokens: Jev["tokens"] | null,
   cachedOnly: boolean,
+  calls: Calls,
 ): string {
   const people = summary.fromPeople;
   const bots = summary.fromAutomation;
@@ -297,7 +327,7 @@ function render(
       "",
       cachedOnly
         ? `${judged.pending} replies not judged yet stay unclassified (--cached-only).`
-        : `Dry run: ${judged.pending} replies not judged yet would be sent to Jev in ${judged.pending * 2} requests.`,
+        : `Dry run: ${judged.pending} replies not judged yet would be sent to ${calls.label} in ${judged.pending * calls.perReply} requests.`,
     );
   }
   if (tokens && judged.newlyJudged) {
