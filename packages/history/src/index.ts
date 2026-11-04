@@ -22,6 +22,14 @@ export { ancestorDirs } from "./steering.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
+export { launchOf, type Ecosystem, type Launch } from "./launch.ts";
+export {
+  piPackageSpec,
+  pluginSourceSpec,
+  skillSourceInventory,
+  type SkillSource,
+  type SkillSourceEntry,
+} from "./skill-sources.ts";
 export { harnessSettings, type ConfigFile, type RiskyPermission } from "./settings.ts";
 export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export {

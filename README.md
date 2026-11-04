@@ -75,7 +75,7 @@ history.
 | `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in              |
 | `quench steering <project-dir> [--json]`       | Current instruction-file inventory and source rule candidates; offline                |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
-| `quench secrets [--json]`                      | Credentials your agents exposed, risky permissions, files worms harvest; offline      |
+| `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
@@ -322,6 +322,15 @@ matched by package name and script hash (esbuild's `postinstall`).
 
 Rules that gitleaks limits to a file path, such as `hashicorp-tf-password` for `.tf` and `.hcl`,
 only run on files with that path, never on session text.
+
+Supply chain: it lists MCP servers, Claude Code marketplaces and plugins, and Pi packages whose
+source is unpinned (`@latest`, no version, a range, or a branch instead of an exact version, tag or
+commit), grouped by harness, with the pinned form to switch to. In the repositories your sessions
+used, it lists executable git hooks (`.git/hooks` or `core.hooksPath`) and flags any not installed
+by a known hook manager. `--repo-history` also scans every commit of those repositories for
+secrets with the same rules, masks and tags; it is opt-in because it is slow on big repositories.
+Ports, network and OS hardening, persistence and PATH are out of scope: use lynis, osquery or
+trufflehog.
 
 Detection uses the [gitleaks](https://github.com/gitleaks/gitleaks) ruleset (MIT, vendored in
 `packages/secrets/vendor`) plus an entropy check. Everything runs locally: no secret, excerpt or

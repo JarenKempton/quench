@@ -3,6 +3,8 @@ import { z } from "zod";
 import { filesWithExt } from "../files.ts";
 import { NotASession, sessionRef, type Harness, type SessionRef } from "../harness.ts";
 import type { Home } from "../home.ts";
+import { readJson } from "../mcp.ts";
+import { piPackageSpec, type SkillSource } from "../skill-sources.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
@@ -115,6 +117,18 @@ export const pi: Harness<"pi"> = {
 
   async mcp() {
     return [];
+  },
+
+  async skillSources(home, project) {
+    const sources: SkillSource[] = [];
+    for (const path of [join(home.of(HOME), "settings.json"), join(project, ".pi/settings.json")]) {
+      const settings = await readJson(path).catch(() => null);
+      for (const entry of Array.isArray(settings?.packages) ? settings.packages : []) {
+        const spec = piPackageSpec(entry);
+        if (spec) sources.push({ name: spec.spec, kind: "package", source: path, ...spec });
+      }
+    }
+    return sources;
   },
 
   async configs(home, project) {
