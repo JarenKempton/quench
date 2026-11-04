@@ -85,7 +85,7 @@ function render(report: SecretsReport, homeDir: string): string[] {
   if (!repo) lines.push("Repo git history · not scanned, pass --repo-history");
   else {
     lines.push(
-      `Repo git history · ${plural(repo.secrets.length, "secret")} in ${count(repo.blobs)} file versions from ${count(repo.commits)} commits across ${plural(repo.repos, "repository", "repositories")}${repo.failed ? ` · ${count(repo.failed)} unreadable` : ""}`,
+      `Repo git history · ${plural(repo.secrets.length, "secret")} in ${count(repo.blobs)} file versions from ${count(repo.commits)} commits across ${plural(repo.repos, "repository", "repositories")}${repo.failed ? ` · ${count(repo.failed)} unreadable` : ""} · skipped ${count(repo.skipped.binary)} binary and ${count(repo.skipped.oversize)} over 10 MB`,
     );
     lines.push(...committed(repo.secrets, short));
     lines.push(`Lower confidence in repo history · ${plural(repo.lowConfidence.length, "value")}`);
@@ -210,13 +210,16 @@ function hookTable(found: GitHook[], short: (path: string) => string): string[] 
 function committed(found: RepoSecret[], short: (path: string) => string): string[] {
   if (!found.length) return [];
   return table([
-    ["Provider", "Value", "File versions", "Repository", "Files"],
+    ["Provider", "Value", "File versions", "Introduced", "Repository", "Files"],
     ...found.map((s) => [
       s.provider,
       s.masked,
       count(s.versions),
+      s.introducedIn ? `${s.introducedIn} ${s.introducedAt?.slice(0, 10) ?? ""}` : "unknown",
       s.repos.map(short).join(", "),
-      s.files.join(", "),
+      s.files.length > 3
+        ? `${s.files.slice(0, 3).join(", ")} +${s.files.length - 3}`
+        : s.files.join(", "),
     ]),
   ]);
 }

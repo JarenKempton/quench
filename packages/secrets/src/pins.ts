@@ -3,7 +3,7 @@ import type { Ecosystem } from "@quench/history";
 export type Unpinned = { reason: string; pinTo: string };
 
 const EXACT = /^v?\d+\.\d+\.\d+(?:[-+][\w.+-]+)?$/;
-const SHA = /^[0-9a-f]{40}$/i;
+const SHA = /^[0-9a-f]{7,40}$/i;
 const DIGEST = /@sha256:[0-9a-f]{64}$/i;
 
 export function unpinned(
@@ -53,7 +53,7 @@ function dockerPin(spec: string): Unpinned | null {
 function splitRef(spec: string): [string, string | null] {
   const hash = spec.indexOf("#");
   if (hash !== -1) return [spec.slice(0, hash), spec.slice(hash + 1).replace(/^semver:/, "")];
-  const at = /^(git\+\S+?\.git)@([^@/]+)$/.exec(spec);
+  const at = /^(git\+\S*\/[^@/]+)@([^@/]+)$/.exec(spec);
   return at ? [at[1]!, at[2]!] : [spec, null];
 }
 

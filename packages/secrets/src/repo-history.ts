@@ -4,12 +4,22 @@ import type { Masker } from "./mask.ts";
 import { allowedPath } from "./rules.ts";
 import { secretOf, type Secret } from "./secret.ts";
 
-export type RepoSecret = Secret & { repos: string[]; files: string[]; versions: number };
+export type RepoSecret = Secret & {
+  repos: string[];
+  files: string[];
+  versions: number;
+  introducedIn: string | null;
+  introducedAt: string | null;
+};
 
-type Found = RepoSecret & { repoSet: Set<string>; fileSet: Set<string> };
+type Blob = { paths: Set<string>; commit: string | null; at: number };
 
-const SHOWN_FILES = 5;
+type Found = RepoSecret & { repoSet: Set<string>; fileSet: Set<string>; first: number };
+
 const BINARY_PROBE = 8000;
+const MAX_BYTES = 10 * 1024 * 1024;
+const COMMIT = "\u0001";
+const NO_BLOB = /^0+$/;
 
 export async function scanRepoHistory(
   projects: readonly string[],
@@ -17,12 +27,13 @@ export async function scanRepoHistory(
   onRead?: Progress,
 ) {
   const found = new Map<string, Found>();
-  let commits = 0;
-  let blobs = 0;
+  const totals = { commits: 0, blobs: 0, binary: 0, oversize: 0 };
   let failed = 0;
   let done = 0;
   for (const repo of projects) {
-    const scanned = await scanRepo(repo, (path, text) => {
+    const scanned = await scanRepo(repo, (blob, text) => {
+      const paths = [...blob.paths].sort();
+      const path = paths.find((p) => !allowedPath(p)) ?? paths[0]!;
       for (const detection of detectInFile(text, path)) {
         const id = mask.id(detection.value);
         const known = found.get(id) ?? {
@@ -30,59 +41,114 @@ export async function scanRepoHistory(
           repos: [],
           files: [],
           versions: 0,
+          introducedIn: null,
+          introducedAt: null,
+          first: Infinity,
           repoSet: new Set<string>(),
           fileSet: new Set<string>(),
         };
         found.set(id, known);
         known.versions++;
         known.repoSet.add(repo);
-        known.fileSet.add(path);
+        for (const p of paths) known.fileSet.add(p);
+        if (blob.commit && blob.at < known.first) {
+          known.first = blob.at;
+          known.introducedIn = blob.commit.slice(0, 12);
+          known.introducedAt = new Date(blob.at * 1000).toISOString();
+        }
       }
     }).catch(() => null);
-    if (scanned) {
-      commits += scanned.commits;
-      blobs += scanned.blobs;
-    } else failed++;
+    if (scanned)
+      for (const key of Object.keys(totals) as (keyof typeof totals)[]) totals[key] += scanned[key];
+    else failed++;
     onRead?.(++done, projects.length);
   }
-  const listed = [...found.values()].map(({ repoSet, fileSet, ...secret }) => ({
+  const listed = [...found.values()].map(({ repoSet, fileSet, first: _, ...secret }) => ({
     ...secret,
     repos: [...repoSet].sort(),
-    files: [...fileSet].sort().slice(0, SHOWN_FILES),
+    files: [...fileSet].sort(),
   }));
   listed.sort((a, b) => b.versions - a.versions || a.provider.localeCompare(b.provider));
   return {
     repos: projects.length - failed,
     failed,
-    commits,
-    blobs,
+    commits: totals.commits,
+    blobs: totals.blobs,
+    skipped: { binary: totals.binary, oversize: totals.oversize },
     secrets: listed.filter((s) => s.confidence === "high"),
     lowConfidence: listed.filter((s) => s.confidence === "low"),
   };
 }
 
-async function scanRepo(repo: string, onBlob: (path: string, text: string) => void) {
-  const commits = Number(await git(repo, ["rev-list", "--all", "--count"]));
-  const paths = new Map<string, string>();
-  for (const line of (await git(repo, ["rev-list", "--all", "--objects"])).split("\n")) {
-    const [sha, path] = [line.slice(0, line.indexOf(" ")), line.slice(line.indexOf(" ") + 1)];
-    if (line.includes(" ") && path && !paths.has(sha) && !allowedPath(path)) paths.set(sha, path);
-  }
+async function scanRepo(repo: string, onBlob: (blob: Blob, text: string) => void) {
+  const blobs = await blobsOf(repo);
+  const scannable = new Map(
+    [...blobs].filter(([, blob]) => [...blob.paths].some((path) => !allowedPath(path))),
+  );
   const checked = await git(
     repo,
-    ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
-    [...paths.keys()].join("\n"),
+    ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+    [...scannable.keys()].join("\n"),
   );
-  const shas = checked
-    .split("\n")
-    .filter((line) => line.endsWith(" blob"))
-    .map((line) => line.split(" ")[0]!);
+  const shas: string[] = [];
+  let oversize = 0;
+  let binary = 0;
+  for (const line of checked.split("\n")) {
+    const [sha, type, size] = line.split(" ");
+    if (type !== "blob") continue;
+    if (Number(size) > MAX_BYTES) oversize++;
+    else shas.push(sha!);
+  }
   const decoder = new TextDecoder();
   await catFile(repo, shas, (sha, bytes) => {
-    if (bytes.subarray(0, BINARY_PROBE).includes(0)) return;
-    onBlob(paths.get(sha)!, decoder.decode(bytes));
+    if (bytes.subarray(0, BINARY_PROBE).includes(0)) binary++;
+    else onBlob(scannable.get(sha)!, decoder.decode(bytes));
   });
-  return { commits, blobs: shas.length };
+  const commits = Number(await git(repo, ["rev-list", "--all", "--count"]));
+  return { commits, blobs: shas.length - binary, binary, oversize };
+}
+
+async function blobsOf(repo: string): Promise<Map<string, Blob>> {
+  const blobs = new Map<string, Blob>();
+  const add = (sha: string, path: string, commit: string | null, at: number) => {
+    const blob = blobs.get(sha) ?? { paths: new Set<string>(), commit: null, at: Infinity };
+    blobs.set(sha, blob);
+    blob.paths.add(path);
+    if (commit && at < blob.at) {
+      blob.commit = commit;
+      blob.at = at;
+    }
+  };
+  const log = await git(repo, [
+    "log",
+    "--all",
+    "--reverse",
+    "--date-order",
+    "--raw",
+    "--no-abbrev",
+    "--no-renames",
+    "--no-color",
+    `--format=${COMMIT}%H %ct`,
+  ]);
+  let commit = "";
+  let at = 0;
+  for (const line of log.split("\n")) {
+    if (line.startsWith(COMMIT)) {
+      const [sha, time] = line.slice(1).split(" ");
+      commit = sha!;
+      at = Number(time);
+    } else if (line.startsWith(":")) {
+      const tab = line.indexOf("\t");
+      const [, , , sha] = line.slice(0, tab).split(" ");
+      if (sha && !NO_BLOB.test(sha)) add(sha, line.slice(tab + 1), commit, at);
+    }
+  }
+  for (const line of (await git(repo, ["rev-list", "--all", "--objects"])).split("\n")) {
+    const space = line.indexOf(" ");
+    if (space > 0 && !blobs.has(line.slice(0, space)))
+      add(line.slice(0, space), line.slice(space + 1), null, Infinity);
+  }
+  return blobs;
 }
 
 async function git(repo: string, args: string[], input?: string): Promise<string> {

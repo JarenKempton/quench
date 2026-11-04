@@ -4,30 +4,36 @@ export type Ecosystem = "npm" | "pypi" | "docker" | "git";
 
 export type Launch = { runner: string; ecosystem: Ecosystem; spec: string };
 
-type Runner = { ecosystem: Ecosystem; sub?: string; spec?: string[]; valued: string[] };
+type Runner = {
+  ecosystem: Ecosystem;
+  sub?: string;
+  spec?: string[];
+  valued: string[];
+  flags?: string[];
+};
 
 const NPM_VALUED = ["--registry", "--cache", "--userconfig", "-c", "--call", "--node-options"];
 const PY_VALUED = ["--with", "--python", "-p", "--index-url", "--index", "--directory", "--spec"];
-const DOCKER_VALUED = [
-  "-e",
-  "--env",
-  "--env-file",
-  "-v",
-  "--volume",
-  "--mount",
-  "--name",
-  "-p",
-  "--publish",
-  "--network",
-  "-w",
-  "--workdir",
-  "--entrypoint",
-  "-u",
-  "--user",
-  "--platform",
-  "--pull",
-  "-l",
-  "--label",
+const DOCKER_FLAGS = [
+  "-i",
+  "-t",
+  "-d",
+  "-P",
+  "-it",
+  "-ti",
+  "--interactive",
+  "--tty",
+  "--detach",
+  "--rm",
+  "--init",
+  "--privileged",
+  "--read-only",
+  "--publish-all",
+  "--no-healthcheck",
+  "--oom-kill-disable",
+  "--sig-proxy",
+  "--quiet",
+  "-q",
 ];
 
 const RUNNERS: Record<string, Runner> = {
@@ -41,12 +47,16 @@ const RUNNERS: Record<string, Runner> = {
   uvx: { ecosystem: "pypi", spec: ["--from"], valued: PY_VALUED },
   uv: { ecosystem: "pypi", sub: "tool", spec: ["--from"], valued: PY_VALUED },
   pipx: { ecosystem: "pypi", sub: "run", spec: ["--spec"], valued: PY_VALUED },
-  docker: { ecosystem: "docker", sub: "run", valued: DOCKER_VALUED },
-  podman: { ecosystem: "docker", sub: "run", valued: DOCKER_VALUED },
+  docker: { ecosystem: "docker", sub: "run", valued: [], flags: DOCKER_FLAGS },
+  podman: { ecosystem: "docker", sub: "run", valued: [], flags: DOCKER_FLAGS },
 };
 
 export function launchOf(command: string, args: readonly string[]): Launch | null {
   const runner = (pathParts(command).at(-1) ?? "").replace(/\.(cmd|exe|ps1)$/i, "").toLowerCase();
+  if (runner === "cmd" && /^\/[ck]$/i.test(args[0] ?? "") && args[1]) {
+    const inner = args.length === 2 ? args[1].trim().split(/\s+/) : args.slice(1);
+    return launchOf(inner[0]!, inner.slice(1));
+  }
   const known = RUNNERS[runner];
   if (!known) return null;
   let rest = [...args];
@@ -67,7 +77,8 @@ function specOf(args: string[], runner: Runner): string | null {
     const [flag, inline] = arg.split(/=(.*)/s, 2) as [string, string | undefined];
     if (runner.spec?.includes(flag)) return inline ?? args[i + 1] ?? null;
     if (!arg.startsWith("-")) return arg;
-    if (inline === undefined && runner.valued.includes(flag)) i++;
+    const valued = runner.flags ? !runner.flags.includes(flag) : runner.valued.includes(flag);
+    if (inline === undefined && valued) i++;
   }
   return null;
 }

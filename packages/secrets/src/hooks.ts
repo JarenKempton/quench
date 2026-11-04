@@ -66,7 +66,7 @@ export async function gitHooks(projects: readonly string[], mask: Masker): Promi
         ? configured
         : resolve(project, configured)
       : null;
-    for (const name of await readdir(dir).catch(() => [])) {
+    for (const name of (await readdir(dir).catch(() => [])).sort((a, b) => a.localeCompare(b))) {
       if (!HOOKS.has(name)) continue;
       const path = join(dir, name);
       const real = await realpath(path).catch(() => path);

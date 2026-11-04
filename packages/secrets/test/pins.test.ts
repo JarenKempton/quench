@@ -24,6 +24,18 @@ test("runner commands resolve to the package they fetch and whether it is pinned
   );
   expect(verdict("docker", ["run", "-i", "mcp/fetch:latest"])).toBe("tag latest");
   expect(verdict("docker", ["run", "mcp/fetch@sha256:" + "b".repeat(64)])).toBe("pinned");
+  expect(verdict("uvx", ["--from", "git+https://github.com/o/r@" + "d".repeat(40), "r"])).toBe(
+    "pinned",
+  );
+  expect(verdict("uvx", ["--from", "git+https://github.com/o/r@v1.2.3", "r"])).toBe("pinned");
+  expect(verdict("uvx", ["--from", "git+https://github.com/o/r", "r"])).toBe("default branch");
+  expect(verdict("npx", ["github:o/r#abc1234"])).toBe("pinned");
+  expect(verdict("cmd", ["/c", "npx", "-y", "@playwright/mcp@latest"])).toBe("@latest");
+  expect(verdict("C:\\Windows\\cmd.exe", ["/C", "npx -y server-memory@1.0.0"])).toBe("pinned");
+  expect(verdict("docker", ["run", "--cpus", "2", "-it", "--rm", "mcp/fetch"])).toBe("no tag");
+  expect(launchOf("docker", ["run", "--memory", "512m", "mcp/fetch:1.2"])?.spec).toBe(
+    "mcp/fetch:1.2",
+  );
   expect(verdict("node", ["server.js"])).toBeNull();
   expect(verdict("npx", ["./local-server"])).toBeNull();
 });

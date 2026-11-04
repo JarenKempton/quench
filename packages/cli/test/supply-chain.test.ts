@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { chmod, mkdtemp, realpath } from "node:fs/promises";
+import { afterAll, expect, test } from "bun:test";
+import { chmod, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +7,9 @@ const main = join(import.meta.dir, "../src/main.ts");
 const COMMITTED = "ghp_" + "FakeQuenchRepoValue0123456789abcdefgh";
 const LOCKED = "ghp_" + "FakeQuenchLockValue0123456789abcdefgh";
 const line = (value: unknown) => JSON.stringify(value);
+const homes: string[] = [];
+
+afterAll(() => Promise.all(homes.map((home) => rm(home, { recursive: true, force: true }))));
 
 async function git(dir: string, ...args: string[]) {
   const proc = Bun.spawn(
@@ -18,6 +21,7 @@ async function git(dir: string, ...args: string[]) {
 
 async function fakeHome() {
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-supply-")));
+  homes.push(home);
   const project = join(home, "repo");
   await Bun.write(join(project, "README.md"), "hello\n");
   await git(home, "init", "-q", project);
@@ -27,6 +31,11 @@ async function fakeHome() {
   await git(project, "commit", "-q", "-m", "add config");
   await Bun.write(join(project, "config.js"), `const token = "${COMMITTED}";\nconst port = 1;\n`);
   await git(project, "commit", "-q", "-am", "edit config");
+  await Bun.write(join(project, "copy.js"), `const token = "${COMMITTED}";\nconst port = 1;\n`);
+  await Bun.write(join(project, "big.txt"), "x".repeat(11 * 1024 * 1024));
+  await Bun.write(join(project, "blob.dat"), new Uint8Array([0, 1, 2, 3]));
+  await git(project, "add", ".");
+  await git(project, "commit", "-q", "-m", "copy config");
   await git(project, "rm", "-q", "config.js");
   await git(project, "commit", "-q", "-m", "remove config");
   const hooks = join(project, ".git/hooks");
@@ -132,21 +141,40 @@ test("secrets lists executable git hooks in session repos and flags unknown ones
 
 test("secrets scans repo history only with --repo-history and masks what it finds", async () => {
   const { home, project } = await fakeHome();
+  const first = Bun.spawnSync(["git", "-C", project, "rev-list", "--max-parents=0", "HEAD"])
+    .stdout.toString()
+    .trim();
   const report = JSON.parse(await run(home, "--json", "--repo-history"));
-  expect(report.repoHistory).toMatchObject({ repos: 1, failed: 0, commits: 3, blobs: 3 });
+  expect(report.repoHistory).toMatchObject({
+    repos: 1,
+    failed: 0,
+    commits: 4,
+    blobs: 3,
+    skipped: { binary: 1, oversize: 1 },
+  });
   expect(report.repoHistory.lowConfidence).toEqual([]);
   expect(
     report.repoHistory.secrets.map((s: Record<string, unknown>) => [
       s.provider,
       s.masked,
       s.versions,
+      s.introducedIn,
       s.repos,
       s.files,
     ]),
-  ).toEqual([["github", expect.stringMatching(/^ghp_…[0-9a-f]{8}$/), 2, [project], ["config.js"]]]);
+  ).toEqual([
+    [
+      "github",
+      expect.stringMatching(/^ghp_…[0-9a-f]{8}$/),
+      2,
+      first.slice(0, 12),
+      [project],
+      ["config.js", "copy.js"],
+    ],
+  ]);
   const text = await run(home, "--repo-history");
   expect(text).toContain(
-    "Repo git history · 1 secret in 3 file versions from 3 commits across 1 repository",
+    "Repo git history · 1 secret in 3 file versions from 4 commits across 1 repository · skipped 1 binary and 1 over 10 MB",
   );
   expect(text).toContain("lynis, osquery or trufflehog");
 });
