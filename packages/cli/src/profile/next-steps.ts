@@ -22,8 +22,8 @@ type Findings = {
 
 const SHOWN = 5;
 
-export function nextSteps(found: Findings, homeDir: string): NextStep[] {
-  return [...found.cuts.flatMap(cutStep), ...instructionStep(found.instructions, homeDir)]
+export async function nextSteps(found: Findings, homeDir: string): Promise<NextStep[]> {
+  return [...found.cuts.flatMap(cutStep), ...(await instructionStep(found.instructions, homeDir))]
     .filter((s) => s.totalChars > 0)
     .sort((a, b) => b.totalChars - a.totalChars || a.action.localeCompare(b.action))
     .slice(0, SHOWN);
@@ -46,21 +46,34 @@ function cutStep(cut: Cut): NextStep[] {
   ];
 }
 
-function instructionStep(files: readonly RecordedFile[], homeDir: string): NextStep[] {
-  const largest = files
-    .filter((f) => !f.combined && onDisk(f.checkouts[0]!.disk))
-    .sort((a, b) => b.recordedChars - a.recordedChars)[0];
+async function instructionStep(
+  files: readonly RecordedFile[],
+  homeDir: string,
+): Promise<NextStep[]> {
+  const candidates = await Promise.all(
+    files
+      .filter((f) => !f.combined && onDisk(f.checkouts[0]!.disk))
+      .map(async (f) => {
+        const path = f.checkouts[0]!.path;
+        const now = await Bun.file(path)
+          .text()
+          .then((text) => text.length)
+          .catch(() => 0);
+        const perSession = Math.min(Math.round(f.recordedChars / f.sessions), now);
+        return { path, sessions: f.sessions, perSession, total: perSession * f.sessions };
+      }),
+  );
+  const largest = candidates.filter((c) => c.perSession > 0).sort((a, b) => b.total - a.total)[0];
   if (!largest) return [];
-  const path = largest.checkouts[0]!.path;
   return [
     {
       kind: "instruction-file",
-      action: `Trim ${shortPath(path, homeDir)}`,
+      action: `Trim ${shortPath(largest.path, homeDir)}`,
       command: null,
-      note: "average recorded size per session; trimming it saves up to that",
-      charsPerSession: Math.round(largest.recordedChars / largest.sessions),
+      note: "average recorded size per session, capped at its size on disk now; trimming it saves up to that",
+      charsPerSession: largest.perSession,
       sessions: largest.sessions,
-      totalChars: largest.recordedChars,
+      totalChars: largest.total,
       size: "upper bound",
     },
   ];

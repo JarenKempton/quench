@@ -80,7 +80,7 @@ test("the summary ends with measured cuts ranked by characters × sessions, in -
       "▍Do this next · ranked by characters saved × sessions",
       "  1. Trim ~/.claude/CLAUDE.md",
       "     up to 24 chars per session × 2 sessions",
-      "     average recorded size per session; trimming it saves up to that",
+      "     average recorded size per session, capped at its size on disk now; trimming it saves up to that",
       "",
       "  2. Cut notes (user folder)",
       "     19 chars per session × 2 sessions",
@@ -201,7 +201,7 @@ test.each([
     const rules = join(home, ".claude/CLAUDE.md");
     await mkdir(work);
     await skill(join(home, ".claude/skills/big"));
-    await Bun.write(rules, "x".repeat(second));
+    await Bun.write(rules, "x".repeat(1_000));
     const entry = `- big: ${"d".repeat(543)}`;
     for (const [i, size] of [first, second].entries()) {
       const path = join(home, `.claude/projects/p/${i}.jsonl`);
@@ -238,3 +238,59 @@ test.each([
     );
   },
 );
+
+const instructionHome = async (recorded: number[]) => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
+  const work = join(home, "work");
+  const rules = join(home, ".claude/CLAUDE.md");
+  const steady = join(work, "CLAUDE.md");
+  await mkdir(work);
+  await Bun.write(steady, "s".repeat(2_500));
+  for (const [i, size] of recorded.entries()) {
+    const files = [
+      { path: rules, type: "User", content: "x".repeat(size) },
+      { path: steady, type: "Project", content: "s".repeat(2_500) },
+    ];
+    await Bun.write(
+      join(home, `.claude/projects/p/${i}.jsonl`),
+      lines([{ type: "attachment", cwd: work, attachment: { type: "instructions", files } }]),
+    );
+  }
+  return { home, rules, steady };
+};
+
+test.each([
+  {
+    name: "shrank",
+    alone: [2_100],
+    disk: async (rules: string) => Bun.write(rules, "x".repeat(2_100)),
+  },
+  { name: "was emptied", alone: [], disk: async (rules: string) => Bun.write(rules, "") },
+  {
+    name: "is unreadable",
+    alone: [],
+    disk: async (rules: string) => {
+      await rm(rules, { force: true });
+      await mkdir(rules);
+    },
+  },
+])("an instruction file that $name is capped at its size on disk now", async ({ disk, alone }) => {
+  const { home, rules, steady } = await instructionHome([15_000, 2_100]);
+  await disk(rules);
+  const json = JSON.parse((await quench(home, "--json")).stdout);
+  expect(json.nextSteps).toEqual([
+    {
+      kind: "instruction-file",
+      action: `Trim ${steady.replace(home, "~")}`,
+      command: null,
+      note: "average recorded size per session, capped at its size on disk now; trimming it saves up to that",
+      charsPerSession: 2_500,
+      sessions: 2,
+      totalChars: 5_000,
+      size: "upper bound",
+    },
+  ]);
+  await rm(steady);
+  const left = JSON.parse((await quench(home, "--json")).stdout).nextSteps;
+  expect(left.map((s: { charsPerSession: number }) => s.charsPerSession)).toEqual(alone);
+});
