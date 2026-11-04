@@ -269,6 +269,8 @@ function operands(program: string, args: Word[]): Word[] | null {
   return files;
 }
 
+const WINDOWS_PATH = /^(?:[A-Za-z]:|\.{1,2})(?:\\.*)?$/;
+
 function segments(command: string): Segment[] {
   const out: Segment[] = [];
   let segment: Segment = { words: [], inputs: [], piped: false, heredoc: null };
@@ -350,6 +352,9 @@ function segments(command: string): Segment[] {
           i++;
         }
       }
+      i++;
+    } else if (c === "\\" && WINDOWS_PATH.test(word.text) && /[\w.-]/.test(command[i + 1] ?? "")) {
+      word.text += c;
       i++;
     } else if (c === "\\") {
       word.text += command[i + 1] ?? "";

@@ -22,7 +22,13 @@ export { checkout, isInside, pathParts, repositoryRoot } from "./files.ts";
 export { ancestorDirs } from "./steering.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export type { McpToolLoad } from "./mcp-tools.ts";
-export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
+export {
+  failedCall,
+  failureOf,
+  recordedFailures,
+  type Scrub,
+  type SessionFailure,
+} from "./failures.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { launchOf, type Ecosystem, type Launch } from "./launch.ts";
 export {

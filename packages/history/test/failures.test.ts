@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { failureSummary } from "../src/failure-text.ts";
 import { failureOf, type Denial } from "../src/failures.ts";
 import { commandSignature } from "../src/shell.ts";
 
@@ -52,7 +53,7 @@ test("failures are classified from the error text", () => {
 });
 
 test("a nonzero exit keeps the first line of its output, masked, from either harness", () => {
-  const error = (text: string) => failureOf(text, null)?.error;
+  const error = (text: string) => failureSummary(failureOf(text, null)?.error ?? "");
   expect(error("Exit code 255\nssh: connect to host box port 22: Connection refused")).toBe(
     "ssh: connect to host box port N: Connection refused",
   );
@@ -64,10 +65,25 @@ test("a nonzero exit keeps the first line of its output, masked, from either har
   );
 });
 
+test("quoted, spaced and bare paths to the same file give one error line", () => {
+  const error = (text: string) => failureOf(text, null)?.error;
+  const lines = [
+    'Exit code 1\nerror: "C:\\Program Files\\app\\main.ts" not found',
+    "Exit code 1\nerror: 'C:\\Program Files\\app\\main.ts' not found",
+    "Exit code 1\nerror: C:\\app\\main.ts not found",
+    'Exit code 1\nerror: "/home/me/app/main.ts" not found',
+    "Exit code 1\nerror: /home/me/app/main.ts: not found",
+  ].map((text) => failureSummary(error(text)!));
+  expect(new Set(lines)).toEqual(new Set(["error: main.ts not found"]));
+});
+
 test("a command signature names one program, or none for several", () => {
   expect(commandSignature('"C:\\Program Files\\Git\\bin\\git.exe" push origin main')).toBe(
     "git push",
   );
+  expect(commandSignature("C:\\Git\\bin\\git.exe push origin main")).toBe("git push");
+  expect(commandSignature(".\\tools\\build.cmd release")).toBe("build release");
+  expect(commandSignature("make my\\ target")).toBe("make");
   expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe("bun test");
   expect(commandSignature("python3 -c 'print(1)'")).toBe("python3");
   expect(commandSignature("git status && npm test")).toBeNull();

@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction } from "./model.ts";
-import { recordedFailures, type SessionFailure } from "./failures.ts";
+import { recordedFailures, type Scrub, type SessionFailure } from "./failures.ts";
 import { discoverAll, readSessions, type Progress } from "./read.ts";
 import { startingContext, type StartingContext } from "./start.ts";
 import {
@@ -50,6 +50,7 @@ export type PlaceCache = {
 export async function sessionPlaces(
   home: Home,
   since: Date,
+  scrub: Scrub,
   onRead?: Progress,
   cache?: PlaceCache,
 ) {
@@ -80,7 +81,7 @@ export async function sessionPlaces(
       instructions: recordedInstructions(outcome.session),
       skills: recordedSkills(outcome.session),
       mcp: recordedMcp(outcome.session),
-      failures: recordedFailures(outcome.session),
+      failures: recordedFailures(outcome.session, scrub),
       start: startingContext(outcome.session),
     };
     found.set(outcome.session.path, place);

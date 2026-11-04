@@ -1,3 +1,4 @@
+import { redacted } from "@quench/secrets";
 import {
   checkWorktrees,
   linkedWorktrees,
@@ -16,7 +17,7 @@ export async function worktrees(
 ): Promise<number> {
   const since = new Date(Date.now() - options.days * 86_400_000);
   const cache = options.cache ? await placeCache(home.dir) : undefined;
-  const { places } = await sessionPlaces(home, since, reading(), cache);
+  const { places } = await sessionPlaces(home, since, redacted, reading(), cache);
   await cache?.save();
   const found = await projects(places);
   const repositories = [];

@@ -20,6 +20,8 @@ const PASSWORDS = [
   new RegExp(`\\bredis-cli\\b(?:\\s+\\S+)*?\\s+(?:-a|--pass)\\s+${VALUE}`, "g"),
   /:\/\/[^\s:@/]+:([^\s@/]+)@/g,
 ];
+const AUTH_HEADER =
+  /\b(?:authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)?|bearer)\s+([^\s"',;]{8,})/gi;
 const HTPASSWD = /\bhtpasswd((?:\s+(?:'[^']*'|"[^"]*"|[^\s|;&]+))+)/g;
 const WORD = new RegExp(VALUE, "g");
 
@@ -41,16 +43,26 @@ export function masker(key: Buffer): Masker {
   const tag = (value: string) => id(value).slice(0, 8);
   const masked = (value: string) => `${value.slice(0, 4)}…${tag(value)}`;
   const scrubbed = (text: string, width = 80) => {
-    const values = new Set(detectInFile(text).map((d) => d.value));
-    for (const value of passwords(text)) values.add(value);
     let safe = text;
-    for (const value of [...values].sort((a, b) => b.length - a.length))
-      safe = safe.replaceAll(value, masked(value));
+    for (const value of secretValues(text)) safe = safe.replaceAll(value, masked(value));
     safe = safe.replace(LONG_WORD, (word) => (entropy(word) >= 3.5 ? masked(word) : word));
     const line = safe.split(/\s+/).filter(Boolean).join(" ");
     return line.length > width ? `${line.slice(0, width)}…` : line;
   };
   return { id, tag, masked, scrubbed };
+}
+
+export function redacted(text: string): string {
+  let safe = text;
+  for (const value of secretValues(text)) safe = safe.replaceAll(value, "‹secret›");
+  return safe;
+}
+
+function secretValues(text: string): string[] {
+  const values = new Set(detectInFile(text).map((d) => d.value));
+  for (const value of passwords(text)) values.add(value);
+  for (const [, value] of text.matchAll(AUTH_HEADER)) values.add(value!);
+  return [...values].sort((a, b) => b.length - a.length);
 }
 
 export function passwords(text: string): string[] {

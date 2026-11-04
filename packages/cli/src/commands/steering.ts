@@ -1,3 +1,4 @@
+import { redacted } from "@quench/secrets";
 import { checkout, sessionPlaces, steeringInventory, type Home } from "@quench/history";
 import { placeCache } from "../cache.ts";
 import { chars, count, json, plural, shortPath, table } from "../format.ts";
@@ -32,7 +33,7 @@ export async function steering(
     const inventory = await steeringInventory(home, directories[0]!);
     const since = new Date(Date.now() - options.days * 86_400_000);
     const cache = options.cache ? await placeCache(home.dir) : undefined;
-    const { places } = await sessionPlaces(home, since, reading(), cache);
+    const { places } = await sessionPlaces(home, since, redacted, reading(), cache);
     const ranked = await rankedItems(inventory.files, places, inventory.project);
     const top = (await checkout(inventory.project))?.top ?? inventory.project;
     const result = {

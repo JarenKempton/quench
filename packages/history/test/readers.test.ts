@@ -229,3 +229,57 @@ describe("Pi", () => {
     ]);
   });
 });
+
+test("Claude Code counts a hook or permission-rule refusal as blocked, never a person's denial", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quench-claude-"));
+  const refused = (id: string, recorded: object) => [
+    {
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id, name: "Bash", input: {} }] },
+    },
+    {
+      type: "user",
+      ...recorded,
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: id,
+            is_error: true,
+            content: "PreToolUse:Bash hook error: [guard.sh]: guard: blocked — push to main.",
+          },
+        ],
+      },
+    },
+  ];
+  const lines = [
+    ...refused("hook", { permissionDecision: { decision: "reject", source: "hook" } }),
+    ...refused("rule", { toolDenialKind: "permission-rule" }),
+    ...refused("rejected", {
+      permissionDecision: { decision: "reject", source: "user_reject" },
+      toolDenialKind: "permission-rule",
+    }),
+    ...refused("aborted", {
+      permissionDecision: { decision: "reject", source: "user_abort" },
+      toolDenialKind: "permission-rule",
+    }),
+    ...refused("prompted", { toolDenialKind: "user-rejected" }),
+    ...refused("unmarked", {}),
+  ];
+  await Bun.write(
+    join(dir, ".claude/projects/-x/d.jsonl"),
+    lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+  );
+  const [session] = await all(new Home(dir));
+  const kinds = session!.events.flatMap((e) =>
+    e.type === "tool_result" ? [[e.callId, e.failure?.kind]] : [],
+  );
+  expect(kinds).toEqual([
+    ["hook", "blocked"],
+    ["rule", "blocked"],
+    ["rejected", "rejected"],
+    ["aborted", "rejected"],
+    ["prompted", "rejected"],
+    ["unmarked", "rejected"],
+  ]);
+});

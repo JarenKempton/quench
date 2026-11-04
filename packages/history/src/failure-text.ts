@@ -39,7 +39,7 @@ export function mentionsMissingPath(text: string): boolean {
 
 export function errorLineOf(text: string): string | null {
   const output = /"output"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text)?.[1];
-  return failureSummary(output === undefined ? text : output.replace(/\\(.)/g, unescaped));
+  return firstLineOf(output === undefined ? text : output.replace(/\\(.)/g, unescaped));
 }
 
 const unescaped = (_: string, c: string) => ({ n: "\n", t: "\t", r: "\r" })[c] ?? c;
@@ -66,8 +66,12 @@ function firstLineOf(text: string): string | null {
 }
 
 function shortenPaths(line: string): string {
-  return line.replace(/\S*[\\/]\S*/g, (token) => win32.basename(token.replace(/[\]:,.]+$/, "")));
+  return line
+    .replace(/(["'`])([^"'`\n]*[\\/][^"'`\n]*)\1/g, (_, _quote, path: string) => fileOf(path))
+    .replace(/\S*[\\/]\S*/g, fileOf);
 }
+
+const fileOf = (path: string) => win32.basename(path.replace(/^["'`]+|[\]:,.;"'`]+$/g, ""));
 
 function maskVolatile(line: string): string {
   return line.replace(/\b[0-9a-f]{7,}\b/g, "…").replace(/\d+/g, "N");

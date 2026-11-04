@@ -53,7 +53,9 @@ export function failureOf(
   return { kind: "error", detail: failureSummary(head), exitCode };
 }
 
-export function recordedFailures(session: Session): SessionFailure[] {
+export type Scrub = (text: string) => string;
+
+export function recordedFailures(session: Session, scrub: Scrub): SessionFailure[] {
   const callsById = new Map<string, ToolCall>();
   const countedResults = new Set<string>();
   const rows = new Map<string, SessionFailure>();
@@ -74,14 +76,15 @@ export function recordedFailures(session: Session): SessionFailure[] {
     }
 
     const call = event.callId === null ? undefined : callsById.get(event.callId);
-    const failed = failedCall(event.failure, call);
+    const failed = failedCall(event.failure, call, scrub);
     if (!failed) {
       breakRun();
       continue;
     }
 
     const { what } = failed;
-    const error = event.failure.error ?? null;
+    const raw = event.failure.error;
+    const error = raw ? failureSummary(scrub(raw)) : null;
     const key = `${event.failure.kind}\0${what}\0${error}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
@@ -97,10 +100,12 @@ export function recordedFailures(session: Session): SessionFailure[] {
 export function failedCall(
   failure: Failure,
   call: ToolCall | undefined,
+  scrub: Scrub = (text) => text,
 ): { kind: Failure["kind"]; what: string | null } | null {
-  const signature = shellSignatureOf(call);
+  const signature = shellSignatureOf(call, scrub);
   if (isNothingFound(failure, signature)) return null;
-  return { kind: failure.kind, what: whatFailed(failure, call, signature) };
+  const what = whatFailed(failure, call, signature);
+  return { kind: failure.kind, what: what && scrub(what) };
 }
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
@@ -110,10 +115,10 @@ function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   return false;
 }
 
-function shellSignatureOf(call: ToolCall | undefined): string | null {
+function shellSignatureOf(call: ToolCall | undefined, scrub: Scrub): string | null {
   if (call?.shell?.length !== 1) return null;
   const command = call.shell[0]!.command;
-  return command ? commandSignature(command) : null;
+  return command ? commandSignature(scrub(command)) : null;
 }
 
 const NOTHING_FOUND = new Set(["grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "["]);
