@@ -25,4 +25,11 @@ jobs:
       - run: bunx vp run compile
       - run: ./dist/quench --help
       - run: ./dist/quench --version
-      - run: bunx vp run test
+      - run: |
+          tmp=$(bun -p "require('node:os').tmpdir()")
+          before=$(ls -A "$tmp" | grep -c '^quench-' || true)
+          bunx vp run test
+          sleep 2
+          after=$(ls -A "$tmp" | grep -c '^quench-' || true)
+          echo "quench-* entries in $tmp: $before -> $after"
+          test "$after" -le "$before"

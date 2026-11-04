@@ -20,6 +20,7 @@ Bun.spawnSync = inherit(spawnSync);
 
 spawn([process.execPath, join(import.meta.dir, "reap.ts"), root], {
   stdin: "pipe",
+  detached: true,
   stdout: "ignore",
   stderr: "ignore",
 }).unref();
