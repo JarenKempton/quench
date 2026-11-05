@@ -1,6 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+  discoverAll,
   harnessById,
   harnesses,
   sessionPlaces,
@@ -49,7 +50,7 @@ import { drift, readSource, SourceError, type Source } from "../skills/drift.ts"
 import { ORIGINS, SCHEMA_VERSION, skillRecords } from "../skills/records.ts";
 import { renderSkills } from "../skills/render.ts";
 import { sessionKey, type SessionContext } from "./context.ts";
-import { sessionRuns } from "./corrections.ts";
+import { sessionRuns } from "./session-runs.ts";
 import { placeOrigins } from "./profile.ts";
 
 const UNREADABLE = {
@@ -389,7 +390,7 @@ async function skillsReport(home: Home, options: Options) {
   const contexts = new Map<string, SessionContext>();
   let sessions: SessionRuns[];
   try {
-    sessions = await sessionRuns(home, since, host?.enrich, contexts);
+    sessions = await sessionRuns(await discoverAll(home, since), home.dir, host?.enrich, contexts);
   } finally {
     host?.close();
   }

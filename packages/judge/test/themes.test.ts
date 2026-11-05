@@ -23,6 +23,7 @@ const reply = (sessionId: string, text: string, extra: Partial<Reply> = {}): Rep
   kind: "correction",
   sender: "person",
   senderSource: "judge",
+  classified: "cached",
   run: runs({
     id: sessionId,
     harness: "codex",

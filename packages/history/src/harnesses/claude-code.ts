@@ -414,7 +414,8 @@ export const claudeCode: Harness<"claude-code"> = {
     const attachments = new Set<string>();
     let cwd: string | null = null;
     let branch: string | null = null;
-    for await (const line of jsonlLines(r.path, Line, diagnostics)) {
+    const position = { line: 0 };
+    for await (const line of jsonlLines(r.path, Line, diagnostics, position)) {
       cwd ??= line.cwd ?? null;
       branch ??= line.gitBranch && line.gitBranch !== "HEAD" ? line.gitBranch : null;
       if (line.type === "attachment" && line.uuid) {
@@ -426,11 +427,15 @@ export const claudeCode: Harness<"claude-code"> = {
         const id = line.message?.id;
         const seen = kind.type === "inference" && id ? inferenceAt.get(id) : undefined;
         if (seen !== undefined) {
-          events[seen] = { ...kind, at: events[seen]?.at ?? at };
+          events[seen] = {
+            ...kind,
+            at: events[seen]?.at ?? at,
+            line: events[seen]?.line ?? position.line,
+          };
           continue;
         }
         if (kind.type === "inference" && id) inferenceAt.set(id, events.length);
-        events.push({ ...kind, at });
+        events.push({ ...kind, at, line: position.line });
       }
     }
     return {

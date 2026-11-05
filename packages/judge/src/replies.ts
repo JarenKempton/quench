@@ -21,6 +21,7 @@ export type Reply = {
   kind: ReplyKind | null;
   sender: Sender | null;
   senderSource: "harness" | "host" | "judge" | "unknown";
+  classified: "preset" | "cached" | "new" | "pending";
 };
 
 export type Judged = { replies: Reply[]; newlyJudged: number; pending: number; failures: Error[] };
@@ -52,6 +53,7 @@ export async function judgeReplies(
     return judgment && !(judgment instanceof Error) ? [[exchange, judgment] as const] : [];
   });
   await cache.remember(fresh);
+  const fresher = new Set(fresh.map(([exchange]) => exchange));
   return {
     newlyJudged: fresh.length,
     pending: judge ? 0 : unknown.length,
@@ -66,6 +68,13 @@ export async function judgeReplies(
         position,
         run,
         kind: preset ?? verdict?.kind ?? null,
+        classified: preset
+          ? "preset"
+          : fresher.has(exchange)
+            ? "new"
+            : verdict
+              ? "cached"
+              : "pending",
         ...senderOf(run, verdict),
       };
     }),

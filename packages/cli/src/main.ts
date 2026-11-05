@@ -57,6 +57,8 @@ Usage:
                                        a user service that keeps applying the source; never updates itself
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
+  quench corrections [session-file...] [--session <id>]... [--causes] [--json]
+                                       corrections in those sessions only, with transcript line locators
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
@@ -79,7 +81,7 @@ Harness homes are found at their default locations or their own environment vari
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
-    days: { type: "string", default: "30" },
+    days: { type: "string" },
     examples: { type: "string", default: "10" },
     "dry-run": { type: "boolean", default: false },
     themes: { type: "boolean", default: false },
@@ -100,7 +102,7 @@ const { positionals, values } = parseArgs({
     help: { type: "boolean", short: "h", default: false },
     version: { type: "boolean", short: "v", default: false },
     "no-cache": { type: "boolean", default: false },
-    session: { type: "string" },
+    session: { type: "string", multiple: true, default: [] },
     all: { type: "boolean", default: false },
     rules: { type: "boolean", default: false },
     history: { type: "string", multiple: true, default: [] },
@@ -120,7 +122,7 @@ for (const [flag, harness] of Object.entries(HOME_FLAGS)) {
   if (home && dir) home = home.withVar(harnessById[harness].home.variable, dir);
 }
 const [command = "summary", ...rest] = positionals;
-const days = Number(values.days);
+const days = Number(values.days ?? "30");
 const examples = Number(values.examples);
 const themeLimit = Number(values["theme-limit"] ?? THEME_LIMIT);
 
@@ -179,8 +181,21 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
   process.exit(1);
 }
 
-if (values.session !== undefined && command !== "runs") {
-  process.stderr.write("--session is only available for runs\n");
+if (values.session.length && command !== "runs" && command !== "corrections") {
+  process.stderr.write("--session is only available for runs and corrections\n");
+  process.exit(1);
+}
+if (command === "runs" && values.session.length > 1) {
+  process.stderr.write("runs takes one --session\n");
+  process.exit(1);
+}
+const scoped = command === "corrections" && (rest.length > 0 || values.session.length > 0);
+if (scoped && values.days !== undefined) {
+  process.stderr.write("--days can't be combined with session scope\n");
+  process.exit(2);
+}
+if (scoped && (values.themes || values.context)) {
+  process.stderr.write("--themes and --context read all history; drop them with session scope\n");
   process.exit(1);
 }
 if ((values.all || values.history.length) && command !== "runs") {
@@ -191,7 +206,7 @@ if (values.history.length && !values.all) {
   process.stderr.write("--history requires --all\n");
   process.exit(1);
 }
-if (values.all && (!values.json || values.session !== undefined || rest.length)) {
+if (values.all && (!values.json || values.session.length || rest.length)) {
   process.stderr.write("--all takes no session and needs --json\n");
   process.exit(1);
 }
@@ -305,6 +320,7 @@ switch (command) {
       judge: provider(choice),
       typesafeKey: jevKey instanceof Error ? undefined : jevKey,
       secrets: secretsIn(config, process.env),
+      scope: scoped ? { files: rest, sessions: values.session } : null,
       themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
@@ -365,7 +381,7 @@ switch (command) {
     }
     process.exitCode = await runs(home, rest[0], {
       json: values.json,
-      ...(values.session ? { session: values.session } : {}),
+      ...(values.session[0] ? { session: values.session[0] } : {}),
     });
     break;
   default:
