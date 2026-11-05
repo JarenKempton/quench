@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 import { Answer, answerSchema, json, replyPrompt, SYSTEM_PROMPT } from "./questions.ts";
+import { OpenAIUsage } from "./response.ts";
 import { failureOf, JudgeFailed, reasonForStatus, type FailureReason } from "./failure.ts";
 import type { Exchange, Judge, Judgment } from "./verdict.ts";
 
@@ -34,9 +35,7 @@ const Completion = z.object({
       }),
     )
     .length(1),
-  usage: z
-    .object({ prompt_tokens: z.number().optional(), completion_tokens: z.number().optional() })
-    .optional(),
+  usage: OpenAIUsage,
 });
 
 export const keyProblem = (key: string): string | null =>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UnitInterval } from "./response.ts";
 import {
   ReplyKind,
   replyKindMeaning,
@@ -22,7 +23,7 @@ export const clipped = (exchange: Exchange): Exchange => ({
 export const Answer = z.strictObject({
   kind: ReplyKind,
   sender: Sender,
-  confidence: z.number().min(0).max(1),
+  confidence: UnitInterval,
 });
 
 export const answerSchema = {

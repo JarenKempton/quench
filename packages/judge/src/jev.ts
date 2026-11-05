@@ -7,11 +7,11 @@ import {
   PermissionDeniedError,
   TypeSafeClient,
   type Fetch,
-  type Usage,
 } from "@typesafe-ai/sdk";
 import type { CauseInput, CauseJudge } from "./causes.ts";
 import { JudgeFailed, reasonForStatus } from "./failure.ts";
 import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
+import { jevAnswer } from "./response.ts";
 import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
   ReplyKind,
@@ -70,25 +70,32 @@ export class Jev implements Judge {
   async #one(exchange: Exchange): Promise<Judgment> {
     try {
       const { kind, sender } = requests(exchange);
-      const kindResult = await this.#client.systemOne(kind);
-      const senderResult = await this.#client.systemOne(sender);
-      this.#count(kindResult.usage);
-      this.#count(senderResult.usage);
+      const kindAnswer = jevAnswer(
+        await this.#client.systemOne(kind),
+        "kind",
+        ReplyKind.options,
+        MODEL,
+      );
+      const senderAnswer = jevAnswer(
+        await this.#client.systemOne(sender),
+        "sender",
+        Sender.options,
+        MODEL,
+      );
+      for (const answer of [kindAnswer, senderAnswer]) {
+        this.tokens.input += answer.input;
+        this.tokens.output += answer.output;
+      }
       return {
-        kind: ReplyKind.parse(kindResult.answers.kind.choice),
-        sender: Sender.parse(senderResult.answers.sender.choice),
-        confidence: kindResult.answers.kind.confidence,
+        kind: ReplyKind.parse(kindAnswer.choice),
+        sender: Sender.parse(senderAnswer.choice),
+        confidence: kindAnswer.confidence,
       };
     } catch (error) {
       const failure = jevFailure(error);
       if (failure instanceof KeyRejected) throw failure;
       return failure;
     }
-  }
-
-  #count(usage: Usage): void {
-    this.tokens.input += usage.input_tokens ?? 0;
-    this.tokens.output += usage.output_tokens ?? 0;
   }
 }
 
@@ -138,9 +145,10 @@ export class JevThemes implements ThemeJudge {
         },
         { signal: this.#signal },
       );
-      this.tokens.input += result.usage.input_tokens ?? 0;
-      this.tokens.output += result.usage.output_tokens ?? 0;
-      return { choice: result.answers.theme.choice, model: result.model };
+      const answer = jevAnswer(result, "theme", Object.keys(input.choices), MODEL);
+      this.tokens.input += answer.input;
+      this.tokens.output += answer.output;
+      return { choice: answer.choice, model: answer.model };
     } catch (error) {
       throw jevFailure(error);
     }
@@ -175,9 +183,10 @@ export class JevCauses implements CauseJudge {
         state: input.state,
         questions: { cause: choice(input.question, input.choices) },
       });
-      this.tokens.input += result.usage.input_tokens ?? 0;
-      this.tokens.output += result.usage.output_tokens ?? 0;
-      return { choice: result.answers.cause.choice, model: result.model };
+      const answer = jevAnswer(result, "cause", Object.keys(input.choices), MODEL);
+      this.tokens.input += answer.input;
+      this.tokens.output += answer.output;
+      return { choice: answer.choice, model: answer.model };
     } catch (error) {
       throw jevFailure(error);
     }

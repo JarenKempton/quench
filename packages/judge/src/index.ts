@@ -9,7 +9,7 @@ export {
   HarnessUnsupported,
 } from "./harness.ts";
 export { Jev, JevCauses, JevThemes, KeyRejected } from "./jev.ts";
-export { ThemeCache } from "./theme-cache.ts";
+export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {
   judgeReplies,
