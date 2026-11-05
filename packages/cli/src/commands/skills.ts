@@ -1,5 +1,5 @@
 import { harnessById, type Home } from "@quench/history";
-import { HARNESSES, plan, targetPath, type HarnessId, type Installed } from "@quench/fleet";
+import { HARNESSES, plan, targetPath, type HarnessId, type InstalledState } from "@quench/fleet";
 import { buildBundle, installedTree, loadFleet } from "@quench/fleet/disk";
 
 export async function userSkillRoot(home: Home, harness: HarnessId): Promise<string> {
@@ -28,7 +28,7 @@ export async function skillsPlan(home: Home, options: { source: string; machine:
   const roots = {} as Record<HarnessId, string>;
   for (const harness of HARNESSES)
     roots[harness] = display(home, await userSkillRoot(home, harness));
-  const installed: Record<string, Installed | undefined> = {};
+  const installed: Record<string, InstalledState | undefined> = {};
   for (const p of built.bundle.placements) {
     if (p.scope.kind !== "global") continue;
     const path = targetPath(roots[p.harness], p.skill);

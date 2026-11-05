@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TreeHash } from "./common.ts";
+import { foldKey, insideFolder, type TreeHash } from "./common.ts";
 
 export const FileMode = z.enum(["100644", "100755", "120000"]);
 export type FileMode = z.infer<typeof FileMode>;
@@ -14,23 +14,29 @@ export const EXCLUDED_NAMES = [".git", ".DS_Store", "Thumbs.db"] as const;
 export const excluded = (path: string) =>
   path.split("/").some((part) => (EXCLUDED_NAMES as readonly string[]).includes(part));
 
-export const canonicalPath = (path: string) => path.replaceAll("\\", "/").normalize("NFC");
-
 const utf8 = new TextEncoder();
 const byBytes = (a: string, b: string) => Buffer.compare(utf8.encode(a), utf8.encode(b));
 
 export const sha256 = (bytes: Uint8Array | string) =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
+export const foldCollision = (paths: string[]) => {
+  const seen = new Map<string, string>();
+  for (const path of paths) {
+    const other = seen.get(foldKey(path));
+    if (other !== undefined) return [other, path] as const;
+    seen.set(foldKey(path), path);
+  }
+  return null;
+};
+
 export function sortedEntries(entries: TreeEntry[]): TreeEntry[] {
-  const kept = entries
-    .map((entry) => ({ ...entry, path: canonicalPath(entry.path) }))
-    .filter((entry) => !excluded(entry.path));
-  const sorted = kept.sort((a, b) => byBytes(a.path, b.path));
-  for (let i = 1; i < sorted.length; i++)
-    if (sorted[i]!.path === sorted[i - 1]!.path)
-      throw new Error(`duplicate path ${sorted[i]!.path}`);
-  return sorted;
+  const kept = entries.filter((entry) => !excluded(entry.path));
+  for (const { path } of kept)
+    if (!insideFolder(path)) throw new Error(`${JSON.stringify(path)} is not a portable NFC path`);
+  const collision = foldCollision(kept.map((e) => e.path));
+  if (collision) throw new Error(`duplicate path ${collision.join(" and ")}`);
+  return kept.sort((a, b) => byBytes(a.path, b.path));
 }
 
 export const treeHash = (entries: TreeEntry[]): TreeHash =>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HarnessId } from "./common.ts";
+import { own, type HarnessId } from "./common.ts";
 import { cmp, FleetFile, scopeKey, type Assignment } from "./fleet.ts";
 
 const Registry = z.object({
@@ -13,6 +13,7 @@ export type SkillsRepo = {
   registry: string;
   manifests: Record<string, string>;
   overrides: Record<string, Record<string, string>>;
+  folders?: Record<string, string>;
 };
 
 const HOSTS: Record<string, HarnessId> = { claude: "claude-code", codex: "codex", pi: "pi" };
@@ -35,9 +36,16 @@ export function importSkillsRepo(repo: SkillsRepo): { fleet: FleetFile; warnings
     byPath.set(entry.path, name);
   }
   const skillOf = (ref: string) => {
-    const name = byPath.get(ref) ?? (skills[leaf(ref)] ? leaf(ref) : null);
-    if (name) return name;
-    if (!ref.includes("/")) return null;
+    const exact = byPath.get(ref);
+    if (exact) return exact;
+    const known = own(skills, leaf(ref));
+    if (!ref.includes("/")) return known ? leaf(ref) : null;
+    if (known) {
+      const folder = repo.folders && own(repo.folders, ref);
+      if (folder !== undefined && folder === own(repo.folders!, known.path)) return leaf(ref);
+      warnings.push(`${ref}: registry has ${leaf(ref)} at ${known.path}, not substituted`);
+      return null;
+    }
     skills[leaf(ref)] = { path: ref };
     byPath.set(ref, leaf(ref));
     warnings.push(`${ref}: not in registry.yaml, imported as ${leaf(ref)}`);

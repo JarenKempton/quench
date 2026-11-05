@@ -113,10 +113,13 @@ retired with it and live in git history.
 - **Fleet contracts live in `packages/fleet`** ([#137](https://github.com/JarenKempton/quench/issues/137)).
   zod schemas for the fleet file, bundle manifest, ledger, plan, snapshot and proposal, frozen
   before the hub, agent and UI are built. A skill version is its tree hash: SHA-256 over
-  `<mode> <path>\0<sha256 of bytes>\n` per file, paths with `/` in NFC sorted by UTF-8 bytes,
-  mode `120000` for a symlink, hashed by the raw bytes of its target and not followed, else
-  `100644`: the executable bit is not hashed, because Windows cannot read it, and travels only as
-  the bundle file's mode. The skill folder itself is followed; `.git`, `.DS_Store` and `Thumbs.db` are
+  `<mode> <path>\0<sha256 of bytes>\n` per file, sorted by UTF-8 bytes. Paths use `/`, must
+  already be NFC, must not fold together by case or Unicode, and must be valid on Windows (no
+  reserved device names, trailing dots or spaces, or `<>:"|?*`); anything else is rejected, never
+  normalised. Hash mode is
+  `120000` for a symlink, hashed by the raw bytes of its target and not followed, else `100644`.
+  The executable bit is not hashed, because Windows cannot read it; it travels as the bundle
+  file's mode and the ledger's executables, and is compared wherever the OS can read it. The skill folder itself is followed; `.git`, `.DS_Store` and `Thumbs.db` are
   excluded. Plans are deterministic: no timestamps, `~/` paths, the same bytes on every OS.
   A skill's scope is deny-by-default: it reaches a machine only when the fleet opens that scope
   or the machine accepts it, and a denied skill is named in the plan with its reason.

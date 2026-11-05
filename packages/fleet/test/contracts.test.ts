@@ -43,15 +43,14 @@ test("the tree hash spec is frozen: hash mode, path, NUL, content sha256, newlin
   expect(treeHash([...entries].reverse())).toBe(treeHash(entries));
 });
 
-test("the tree hash tells symlinks from files, normalises path separators and Unicode, and skips exclusions", () => {
+test("the tree hash tells symlinks from files, rejects backslashes and non-NFC paths, and skips exclusions", () => {
   const base = [file("SKILL.md", "x")];
   expect(treeHash([file("SKILL.md", "x", "120000")])).not.toBe(treeHash(base));
   expect(
     treeHash([...base, file(".git/HEAD", "ref"), file("a/.DS_Store", ""), file("Thumbs.db", "")]),
   ).toBe(treeHash(base));
-  expect(treeHash([...base, file("ref\\café.md", "y")])).toBe(
-    treeHash([...base, file("ref/café.md", "y")]),
-  );
+  expect(() => treeHash([...base, file("ref\\cafe.md", "y")])).toThrow("portable");
+  expect(() => treeHash([...base, file("ref/cafe\u0301.md", "y")])).toThrow("portable");
   expect(() => treeHash([...base, file("SKILL.md", "y")])).toThrow("duplicate");
 });
 
@@ -155,6 +154,7 @@ const entry = (kind: LedgerEntry["kind"], treeHash: string, appliedAt: string): 
   kind,
   appliedAt,
   gitExclude: null,
+  executables: [],
 });
 
 test("the ledger yields installation intervals with prior tree hashes", () => {
@@ -196,8 +196,8 @@ test("the planner updates only what the ledger owns and never overwrites foreign
     bundle,
     roots,
     installed: {
-      "~/.claude/skills/a": { treeHash: H(1), symlink: false },
-      "~/.codex/skills/a": { treeHash: H(3), symlink: true },
+      "~/.claude/skills/a": { treeHash: H(1), symlink: false, executables: [] },
+      "~/.codex/skills/a": { treeHash: H(3), symlink: true, executables: [] },
     },
     ledger,
     warnings: [],
@@ -211,7 +211,7 @@ test("the planner updates only what the ledger owns and never overwrites foreign
   const edited = plan({
     bundle,
     roots,
-    installed: { "~/.claude/skills/old": { treeHash: H(5), symlink: false } },
+    installed: { "~/.claude/skills/old": { treeHash: H(5), symlink: false, executables: [] } },
     ledger,
     warnings: [],
   });

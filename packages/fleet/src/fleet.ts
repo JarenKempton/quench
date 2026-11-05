@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { HARNESSES, HarnessId, MachineName, RelativePath, Scope, SkillName } from "./common.ts";
+import {
+  HARNESSES,
+  HarnessId,
+  MachineName,
+  own,
+  RelativePath,
+  Scope,
+  SkillName,
+} from "./common.ts";
 
 export const Target = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all") }).strict(),
@@ -47,7 +55,7 @@ export const FleetFile = z
   .strict()
   .superRefine((fleet, ctx) => {
     fleet.assignments.forEach((a, i) => {
-      if (!fleet.skills[a.skill])
+      if (!own(fleet.skills, a.skill))
         ctx.addIssue({
           code: "custom",
           path: ["assignments", i, "skill"],
@@ -74,7 +82,7 @@ export function resolve(
   fleet: FleetFile,
   machineName: string,
 ): { placements: Placement[]; denied: Denied[] } {
-  const machine = fleet.machines[machineName];
+  const machine = own(fleet.machines, machineName);
   const winners = new Map<
     string,
     { rank: number; mode: Assignment["mode"]; placement: Placement }
@@ -101,12 +109,12 @@ export function resolve(
   const accepts = (scope: string | undefined) =>
     !scope || fleet.openScopes.includes(scope) || !!machine?.scopes.includes(scope);
   return {
-    placements: included.filter((p) => accepts(fleet.skills[p.skill]!.scope)),
+    placements: included.filter((p) => accepts(own(fleet.skills, p.skill)!.scope)),
     denied: included
-      .filter((p) => !accepts(fleet.skills[p.skill]!.scope))
+      .filter((p) => !accepts(own(fleet.skills, p.skill)!.scope))
       .map((p) => ({
         ...p,
-        reason: `scope ${fleet.skills[p.skill]!.scope} is not accepted by ${machineName}`,
+        reason: `scope ${own(fleet.skills, p.skill)!.scope} is not accepted by ${machineName}`,
       })),
   };
 }

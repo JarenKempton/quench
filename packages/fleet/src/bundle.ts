@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  own,
   HarnessId,
   MachineName,
   RelativePath,
@@ -8,7 +9,7 @@ import {
   SkillName,
   TreeHash,
 } from "./common.ts";
-import { FileMode, treeHashOf } from "./tree-hash.ts";
+import { FileMode, foldCollision, treeHashOf } from "./tree-hash.ts";
 
 export const BundleFile = z
   .object({
@@ -23,8 +24,13 @@ export const BundleSkill = z
   .object({ treeHash: TreeHash, files: z.array(BundleFile) })
   .strict()
   .superRefine((skill, ctx) => {
-    if (new Set(skill.files.map((f) => f.path)).size !== skill.files.length)
-      ctx.addIssue({ code: "custom", path: ["files"], message: "duplicate file path" });
+    const collision = foldCollision(skill.files.map((f) => f.path));
+    if (collision)
+      ctx.addIssue({
+        code: "custom",
+        path: ["files"],
+        message: `duplicate path ${collision.join(" and ")}`,
+      });
     if (treeHashOf(skill.files) !== skill.treeHash)
       ctx.addIssue({
         code: "custom",
@@ -64,7 +70,7 @@ export const BundleManifest = z
           });
       });
     bundle.placements.forEach((p, i) => {
-      if (bundle.skills[p.skill]?.treeHash !== p.treeHash)
+      if (own(bundle.skills, p.skill)?.treeHash !== p.treeHash)
         ctx.addIssue({
           code: "custom",
           path: ["placements", i],

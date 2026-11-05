@@ -100,6 +100,7 @@ const owns = (skill: string, hash: string): LedgerEntry => ({
   kind: "install",
   appliedAt: "2026-11-01T00:00:00Z",
   gitExclude: null,
+  executables: [],
 });
 
 test("a missing source for an assigned skill is unavailable, never a removal", async () => {
@@ -108,7 +109,7 @@ test("a missing source for an assigned skill is unavailable, never a removal", a
   const result = plan({
     bundle,
     roots,
-    installed: { "~/.claude/skills/gone": { treeHash: H(1), symlink: false } },
+    installed: { "~/.claude/skills/gone": { treeHash: H(1), symlink: false, executables: [] } },
     ledger: [owns("gone", H(1))],
     warnings: [],
   });

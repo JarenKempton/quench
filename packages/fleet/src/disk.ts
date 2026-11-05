@@ -1,16 +1,10 @@
 import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { BundleManifest } from "./bundle.ts";
+import { own } from "./common.ts";
 import { byPlacement, cmp, FleetFile, resolve } from "./fleet.ts";
 import { importSkillsRepo, type SkillsRepo } from "./import.ts";
-import {
-  canonicalPath,
-  excluded,
-  sha256,
-  sortedEntries,
-  treeHash,
-  type TreeEntry,
-} from "./tree-hash.ts";
+import { excluded, sha256, sortedEntries, treeHash, type TreeEntry } from "./tree-hash.ts";
 
 export const FLEET_FILE = "quench-fleet.yaml";
 
@@ -20,7 +14,7 @@ export async function readTree(dir: string): Promise<TreeEntry[]> {
   const walk = async (rel: string) => {
     for (const name of await readdir(join(root, rel))) {
       const path = rel ? `${rel}/${name}` : name;
-      if (excluded(canonicalPath(path))) continue;
+      if (excluded(path)) continue;
       const full = join(root, path);
       const info = await lstat(full);
       if (info.isDirectory()) await walk(path);
@@ -46,7 +40,18 @@ export async function readTree(dir: string): Promise<TreeEntry[]> {
 export async function installedTree(dir: string) {
   const info = await lstat(dir).catch(() => null);
   if (!info) return undefined;
-  return { treeHash: treeHash(await readTree(dir)), symlink: info.isSymbolicLink() };
+  const tree = await readTree(dir);
+  return {
+    treeHash: treeHash(tree),
+    symlink: info.isSymbolicLink(),
+    executables:
+      process.platform === "win32"
+        ? null
+        : tree
+            .filter((e) => e.mode === "100755")
+            .map((e) => e.path)
+            .sort(),
+  };
 }
 
 const text = (path: string) => readFile(path, "utf8").catch(() => null);
@@ -69,7 +74,23 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
   const entries = await readdir(overridesDir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => cmp(a.name, b.name)))
     overrides[entry.name] = await manifests(join(overridesDir, entry.name));
-  return { registry, manifests: await manifests(join(dir, "hosts")), overrides };
+  const hosts = await manifests(join(dir, "hosts"));
+  const refs = new Set<string>();
+  for (const entry of Object.values(
+    (Bun.YAML.parse(registry) as { skills?: Record<string, { path?: unknown }> })?.skills ?? {},
+  ))
+    if (typeof entry?.path === "string") refs.add(entry.path);
+  for (const text of [...Object.values(hosts), ...Object.values(overrides).flatMap(Object.values)])
+    for (const line of text.split(/\r?\n/)) {
+      const ref = line.trim().replace(/^[+-]/, "").trim();
+      if (ref.includes("/") && !ref.startsWith("#")) refs.add(ref);
+    }
+  const folders: Record<string, string> = {};
+  for (const ref of [...refs].sort(cmp)) {
+    const real = await realpath(join(dir, ...ref.split("/"))).catch(() => null);
+    if (real) folders[ref] = real;
+  }
+  return { registry, manifests: hosts, overrides, folders };
 }
 
 export async function loadFleet(dir: string): Promise<{ fleet: FleetFile; warnings: string[] }> {
@@ -99,8 +120,8 @@ export async function buildBundle(
   for (const d of denied) warnings.push(`${d.skill} (${d.harness}): ${d.reason}`);
   const failures = new Map<string, string>();
   for (const placement of placements.sort(byPlacement)) {
-    const source = fleet.skills[placement.skill]!.path;
-    if (!bundle.skills[placement.skill] && !failures.has(placement.skill)) {
+    const source = own(fleet.skills, placement.skill)!.path;
+    if (!own(bundle.skills, placement.skill) && !failures.has(placement.skill)) {
       const tree = await readTree(join(dir, ...source.split("/"))).then(
         (t) => (t.some((e) => e.path === "SKILL.md") ? t : `no SKILL.md at ${source}`),
         (error: Error) => `cannot read ${source}: ${error.message.split(",")[0]}`,
@@ -118,7 +139,7 @@ export async function buildBundle(
         };
     }
     const failure = failures.get(placement.skill);
-    const skill = bundle.skills[placement.skill];
+    const skill = own(bundle.skills, placement.skill);
     if (failure) bundle.unavailable.push({ ...placement, reason: failure });
     else if (skill) bundle.placements.push({ ...placement, treeHash: skill.treeHash });
   }
