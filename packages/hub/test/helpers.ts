@@ -113,8 +113,16 @@ export class Owner {
     return /name="base" value="([0-9a-f]{40})"/.exec(html)![1]!;
   }
 
-  async addMachine(name: string) {
-    const html = await (await this.post("/machines", { name })).text();
+  addMachine(name: string) {
+    return this.connectCommand("/machines", name);
+  }
+
+  allowProposals(name: string) {
+    return this.connectCommand("/machines/propose", name);
+  }
+
+  private async connectCommand(route: string, name: string) {
+    const html = await (await this.post(route, { name })).text();
     const command = /<pre id="connect">([^<]+)<\/pre>/.exec(html)?.[1] ?? "";
     return {
       command,
@@ -139,3 +147,43 @@ export const failure = (promise: Promise<unknown>) =>
     () => "",
     (error: Error) => error.message,
   );
+
+const main = join(import.meta.dir, "../../cli/src/main.ts");
+
+export const quench = (home: string, args: string[], env: Record<string, string> = {}) =>
+  Bun.spawn([process.execPath, main, ...args], {
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      CLAUDE_CONFIG_DIR: "",
+      CODEX_HOME: "",
+      PI_CODING_AGENT_DIR: "",
+      ...env,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+export async function run(home: string, args: string[]) {
+  const proc = quench(home, args);
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, code };
+}
+
+export async function lines(proc: ReturnType<typeof quench>, until: RegExp) {
+  const reader = proc.stdout.getReader();
+  let text = "";
+  while (!until.test(text)) {
+    const { value, done } = await reader.read();
+    if (done)
+      throw new Error(`hub exited early: ${text} ${await new Response(proc.stderr).text()}`);
+    text += new TextDecoder().decode(value);
+  }
+  reader.releaseLock();
+  return text;
+}

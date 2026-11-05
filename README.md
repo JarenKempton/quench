@@ -84,11 +84,14 @@ profile of every agent and project in your history.
 | `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                           |
 | `quench hub serve` / `quench hub import <repo>` | The fleet hub: skills in git, toggles, editor, pairing, bundles; first run needs `QUENCH_HUB_PASSWORD` |
 | `quench connect <https://hub> --code … --pin …` | Pair this machine with a hub and fetch the bundle of skills assigned to it                             |
+| `quench skill list\|show\|diff\|propose`        | Read this machine's assigned skills from the hub and propose a new `SKILL.md` for the owner to approve |
 | `quench skills [--source <dir>] [--json]`       | One record per skill, agent and location: origin, use, tree hash, drift; read-only                     |
 | `quench skills plan --source <dir>`             | What a skills checkout would change here, with `--machine <name> --json`; read-only                    |
 | `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                      |
 | `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
 | `quench agent install\|uninstall\|run`          | A user service that keeps applying `--source` every `--interval`; never self-updates                   |
+
+Agents find this through the shipped `quench` skill (the hub's "Add the shipped quench skill" button, then toggle it on like any skill). "Allow proposals" on a machine gives it a separate proposal token, revocable on its own, that can only read and propose changes to skills assigned to that machine. The owner approves each proposal on its review page by re-entering the password; a proposal whose skill changed since its base is stale and shows a 3-way diff instead.
 
 The hub's data folder (`--data`, default `~/.quench/hub`) must be private to the user that runs it: the hub creates it 0700 and refuses to start if it is a link, owned by someone else, readable by group or others, or contains any symlink.
 

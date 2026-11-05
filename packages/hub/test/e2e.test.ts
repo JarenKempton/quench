@@ -3,47 +3,17 @@ import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sha256 } from "@quench/fleet";
 import { clientDir, fetchBundle, postSnapshot, storedBundle, blobPath } from "../src/client.ts";
-import { git, Owner, PASSWORD, skillsSource, snapshot, temp } from "./helpers.ts";
-
-const main = join(import.meta.dir, "../../cli/src/main.ts");
-
-const quench = (home: string, args: string[], env: Record<string, string> = {}) =>
-  Bun.spawn([process.execPath, main, ...args], {
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-      CLAUDE_CONFIG_DIR: "",
-      CODEX_HOME: "",
-      PI_CODING_AGENT_DIR: "",
-      ...env,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-async function run(home: string, args: string[]) {
-  const proc = quench(home, args);
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, code };
-}
-
-async function lines(proc: ReturnType<typeof quench>, until: RegExp) {
-  const reader = proc.stdout.getReader();
-  let text = "";
-  while (!until.test(text)) {
-    const { value, done } = await reader.read();
-    if (done)
-      throw new Error(`hub exited early: ${text} ${await new Response(proc.stderr).text()}`);
-    text += new TextDecoder().decode(value);
-  }
-  reader.releaseLock();
-  return text;
-}
+import {
+  git,
+  lines,
+  Owner,
+  PASSWORD,
+  quench,
+  run,
+  skillsSource,
+  snapshot,
+  temp,
+} from "./helpers.ts";
 
 const servers: ReturnType<typeof quench>[] = [];
 afterAll(async () => {

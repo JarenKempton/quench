@@ -1,0 +1,83 @@
+export type Change = { kind: " " | "-" | "+"; line: string; at: number };
+
+const linesOf = (text: string) => (text === "" ? [] : text.replace(/\n$/, "").split("\n"));
+
+export function lineChanges(before: string, after: string): Change[] {
+  const a = linesOf(before);
+  const b = linesOf(after);
+  const width = b.length + 1;
+  const lcs = new Uint32Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      lcs[i * width + j] =
+        a[i] === b[j]
+          ? lcs[(i + 1) * width + j + 1]! + 1
+          : Math.max(lcs[(i + 1) * width + j]!, lcs[i * width + j + 1]!);
+  const out: Change[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      out.push({ kind: " ", line: a[i]!, at: ++j });
+      i++;
+    } else if (
+      j < b.length &&
+      (i === a.length || lcs[i * width + j + 1]! >= lcs[(i + 1) * width + j]!)
+    )
+      out.push({ kind: "+", line: b[j]!, at: ++j });
+    else out.push({ kind: "-", line: a[i++]!, at: j });
+  }
+  return out;
+}
+
+export function unifiedDiff(before: string, after: string, path: string) {
+  const changes = lineChanges(before, after);
+  if (!changes.some((c) => c.kind !== " ")) return "";
+  return [`--- a/${path}`, `+++ b/${path}`, ...changes.map((c) => `${c.kind}${c.line}`)].join("\n");
+}
+
+export type FlagKind = "url" | "shell" | "script" | "credential";
+export type Flag = { kind: FlagKind; line: number; text: string };
+
+const URL_PATTERN = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()"'`]+/gi;
+const SCRIPT_FENCE =
+  /^\s*(?:```|~~~)\s*(?:sh|bash|zsh|fish|shell|console|powershell|pwsh|ps1|bat|cmd|python|py|javascript|js|typescript|ts|node|ruby|rb|perl|php|lua)\b/i;
+const FENCE = /^\s*(?:```|~~~)/;
+const SHELL =
+  /(?:^\s*[$>#]\s+\S|\b(?:curl|wget|sudo|chmod|chown|eval|exec|ssh|scp|rsync|nc|ncat|npx|bunx|iwr|iex|Invoke-WebRequest|Invoke-Expression)\b|\brm\s+-[a-z]*[rf]|\|\s*(?:ba|z)?sh\b|\b(?:bash|sh|zsh)\s+-c\b|\$\(|\b(?:npm|pnpm|yarn|bun|pip|pip3|brew|apt|apt-get|cargo|go)\s+(?:install|add|i)\b)/i;
+const SCRIPT = /^#!|<script\b|\bpowershell\b|\bpython3?\s+-c\b|\bnode\s+-e\b/i;
+const CREDENTIAL =
+  /\b(?:api[_ -]?keys?|access[_ -]?keys?|tokens?|secrets?|passwords?|passwd|passphrases?|credentials?|private[_ -]?keys?|ssh[_ -]?keys?|bearer|authorization|cookies?|aws_[a-z_]+|gh[pousr]_|\.env|\.netrc|\.npmrc|id_rsa|id_ed25519|keychain)\b/i;
+
+const clip = (line: string) => (line.length > 200 ? `${line.slice(0, 200)}…` : line);
+
+export function flagsFor(base: string, proposed: string): Flag[] {
+  const known = new Set(base.match(URL_PATTERN) ?? []);
+  const flags: Flag[] = [];
+  let fence: "script" | "other" | null = null;
+  for (const change of lineChanges(base, proposed)) {
+    if (change.kind === "-") continue;
+    const { line, at } = change;
+    const opens = FENCE.test(line) && fence === null;
+    const added = change.kind === "+";
+    if (added) {
+      const add = (kind: FlagKind) => flags.push({ kind, line: at, text: clip(line) });
+      if ((line.match(URL_PATTERN) ?? []).some((u) => !known.has(u))) add("url");
+      if (SHELL.test(line) || (fence === "script" && !FENCE.test(line) && line.trim() !== ""))
+        add("shell");
+      if (SCRIPT.test(line) || (opens && SCRIPT_FENCE.test(line))) add("script");
+      if (CREDENTIAL.test(line)) add("credential");
+    }
+    if (opens) fence = SCRIPT_FENCE.test(line) ? "script" : "other";
+    else if (FENCE.test(line)) fence = null;
+  }
+  return flags;
+}
+
+const TEXT_CONTROLS = new Set([9, 10, 13]);
+
+export const binary = (text: string) =>
+  !text.isWellFormed() ||
+  Array.from({ length: text.length }, (_, i) => text.charCodeAt(i)).some(
+    (c) => (c < 32 && !TEXT_CONTROLS.has(c)) || c === 127 || c === 0xfffd,
+  );
