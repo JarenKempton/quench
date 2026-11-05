@@ -17,7 +17,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { z } from "zod";
 import type { BundleManifest } from "./bundle.ts";
 import { own, Sha256, TreeHash } from "./common.ts";
-import { installedTree, readTree } from "./disk.ts";
+import { installedTree } from "./disk.ts";
 import { LedgerEntry, owned } from "./ledger.ts";
 import {
   executablesOf,
@@ -26,7 +26,7 @@ import {
   type PlanItem,
   type ProjectCheckout,
 } from "./plan.ts";
-import { FileMode, sha256, treeHash } from "./tree-hash.ts";
+import { FileMode, sha256, treeHash, treeHashOf, type HashedEntry } from "./tree-hash.ts";
 
 export class Conflict extends Error {}
 
@@ -120,6 +120,67 @@ export async function guard(base: string, path: string, want: Want, pin: string 
   const now = await resolved(base);
   if (!samePath(now, pin))
     throw new Conflict(`${base} now resolves to ${now}, not ${pin} as planned`);
+}
+
+async function rawWalk(root: string) {
+  const files: HashedEntry[] = [];
+  const dirs: string[] = [];
+  const walk = async (rel: string) => {
+    for (const name of await readdir(rel ? join(root, rel) : root)) {
+      const path = rel ? `${rel}/${name}` : name;
+      const full = join(root, ...path.split("/"));
+      const info = await lstat(full);
+      if (info.isDirectory()) {
+        dirs.push(path);
+        await walk(path);
+      } else if (info.isSymbolicLink())
+        files.push({
+          path,
+          mode: "120000",
+          sha256: sha256(await readlink(full, { encoding: "buffer" })),
+        });
+      else if (info.isFile())
+        files.push({
+          path,
+          mode: process.platform !== "win32" && info.mode & 0o111 ? "100755" : "100644",
+          sha256: sha256(await readFile(full)),
+        });
+      else throw new Conflict(`${full} is not a file, folder or symlink`);
+    }
+  };
+  await walk("");
+  return { files, dirs };
+}
+
+const impliedDirs = (paths: string[]) =>
+  new Set(
+    paths.flatMap((p) =>
+      p
+        .split("/")
+        .slice(0, -1)
+        .map((_, i, a) => a.slice(0, i + 1).join("/")),
+    ),
+  );
+
+export async function rawState(path: string): Promise<InstalledState | undefined> {
+  const info = await lstat(path).catch(() => null);
+  if (!info) return undefined;
+  if (info.isSymbolicLink()) return { treeHash: treeHashOf([]), symlink: true, executables: null };
+  const { files, dirs } = await rawWalk(path);
+  const implied = impliedDirs(files.map((f) => f.path));
+  const extra = dirs.filter((d) => !implied.has(d)).sort();
+  const hash = treeHashOf(files);
+  return {
+    treeHash: extra.length ? `sha256:${sha256(`${hash}\0${extra.join("\0")}`)}` : hash,
+    symlink: false,
+    executables:
+      process.platform === "win32"
+        ? null
+        : files
+            .filter((f) => f.mode === "100755")
+            .map((f) => f.path)
+            .sort(),
+  };
 }
 
 export async function inspect(path: string) {
@@ -286,17 +347,21 @@ async function dropExclude({ file, line, added }: Exclude, ledger: LedgerEntry[]
 const removeTree = (path: string) => rm(path, { recursive: true, force: true });
 
 async function stagedByUs(op: JournalOp) {
-  const tree = await readTree(op.stage!).catch(() => null);
+  const tree = await rawWalk(op.stage!).catch(() => null);
   if (!tree) return false;
   const files = new Map(op.files.map((f) => [f.path, f]));
-  return tree.every((entry) => {
-    const file = files.get(entry.path);
-    return (
-      !!file &&
-      file.sha256 === sha256(entry.bytes) &&
-      (file.mode === "120000") === (entry.mode === "120000")
-    );
-  });
+  const implied = impliedDirs(op.files.map((f) => f.path));
+  return (
+    tree.dirs.every((d) => implied.has(d)) &&
+    tree.files.every((entry) => {
+      const file = files.get(entry.path);
+      return (
+        !!file &&
+        file.sha256 === entry.sha256 &&
+        (file.mode === "120000") === (entry.mode === "120000")
+      );
+    })
+  );
 }
 
 const placedExecutables = (op: JournalOp) =>
@@ -309,7 +374,7 @@ async function backedUp(op: JournalOp, conflict: (why: string) => Conflict) {
   await guard(op.base, op.backup, "dir", op.pin);
   if (!op.backupId || (await identity(op.backup)) !== op.backupId)
     throw conflict(`${op.backup} is not the folder Quench moved aside`);
-  if (!matches(await inspect(op.backup), op.previous, op.previousExecutables))
+  if (!matches(await rawState(op.backup), op.previous, op.previousExecutables))
     throw conflict(`${op.backup} changed after Quench moved it aside`);
 }
 
@@ -361,7 +426,7 @@ export async function recover(state: string): Promise<string | null> {
         await guard(op.base, op.path, "dir", op.pin);
         if (!op.stagedId || (await identity(op.path)) !== op.stagedId)
           throw conflict(`${op.path} was created by someone else after the interrupted apply`);
-        if (!matches(await inspect(op.path), op.desired, placedExecutables(op)))
+        if (!matches(await rawState(op.path), op.desired, placedExecutables(op)))
           throw conflict(`${op.path} was edited after the interrupted apply`);
       };
       if (await probe(op.backup)) {
@@ -506,12 +571,12 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
     op.stagedId = await identity(op.stage);
     await writeJournal(state, op);
     await stage(op, own(input.sources, item.skill)!);
-    if (!matches(await inspect(op.stage), op.desired, desiredModes))
+    if (!matches(await rawState(op.stage), op.desired, desiredModes))
       throw new Error(`${item.skill} staged with a different tree hash or mode; plan again`);
     await interrupt?.("staged");
   }
   await check(path, planned ? "dir" : "absent");
-  if (!matches(await inspect(path), planned?.treeHash, planned?.executables ?? null))
+  if (!matches(await rawState(path), planned?.treeHash, planned?.executables ?? null))
     throw new Conflict(`${item.path} changed since the plan`);
   if (planned) {
     await check(op.backup, "absent");
@@ -532,7 +597,7 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
     await check(path, "dir");
     if (
       (await identity(path)) !== op.stagedId ||
-      !matches(await inspect(path), op.desired, desiredModes)
+      !matches(await rawState(path), op.desired, desiredModes)
     )
       throw new Conflict(`${item.path} changed during the swap`);
     if (op.exclude?.added) await addExclude(op.exclude);

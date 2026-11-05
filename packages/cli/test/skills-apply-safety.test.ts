@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { readJournal, readLedger, withLock } from "@quench/fleet/apply";
+import { readJournal, readLedger, recover, withLock } from "@quench/fleet/apply";
 import { skillsApply, skillsPlan, stateDir } from "../src/commands/skills.ts";
 import {
   cleanup,
@@ -429,3 +429,68 @@ test.skipIf(windows)(
     expect(await readFile(claude(home, "alpha"), "utf8")).toBe("# alpha v1\n");
   },
 );
+
+const userGit = (folder: string) => join(folder, ".git/objects/private");
+
+async function plantGit(folder: string, text: string) {
+  await mkdir(join(folder, ".git/objects"), { recursive: true });
+  await writeFile(userGit(folder), text);
+}
+
+for (const update of [false, true])
+  test(`recovery after "swapped" keeps user bytes under .git in the placed ${update ? "update" : "install"}`, async () => {
+    const { home, source, options } = await setup(V1, ALPHA);
+    if (update) {
+      await planAndApply(home, options);
+      await writeSource(source, V2, ALPHA);
+    }
+    await interrupted(home, options, "swapped", async () => {
+      throw new Error("crash");
+    }).catch(() => undefined);
+    const folder = join(home.dir, ".claude/skills/alpha");
+    await plantGit(folder, "user git object after crash");
+    const result = await recover(stateDir(home)).catch((e: Error) => e);
+    expect(result instanceof Error ? result.message : "").toContain("conflict");
+    expect(await readFile(userGit(folder), "utf8")).toBe("user git object after crash");
+  });
+
+for (const remove of [false, true])
+  test(`${remove ? "uninstall" : "update"} never deletes user bytes under .git in an owned folder`, async () => {
+    const { home, source, options } = await setup(V1, ALPHA);
+    await planAndApply(home, options);
+    const folder = join(home.dir, ".claude/skills/alpha");
+    await plantGit(folder, "user git object before apply");
+    await writeSource(source, remove ? V1 : V2, remove ? [] : ALPHA);
+    const plan = await skillsPlan(home, options);
+    expect(plan.items.map((i) => i.action)).toEqual(["conflict"]);
+    await skillsApply(home, { ...options, planHash: plan.hash! });
+    expect(await readFile(userGit(folder), "utf8")).toBe("user git object before apply");
+  });
+
+for (const step of ["staged", "committed"] as const)
+  test(`recovery after "${step}" keeps user bytes under .git in the work folder`, async () => {
+    const { home, source, options } = await setup(V1, ALPHA);
+    await planAndApply(home, options);
+    await writeSource(source, V2, ALPHA);
+    await interrupted(home, options, step, async () => {
+      throw new Error("crash");
+    }).catch(() => undefined);
+    const op = (await readJournal(stateDir(home)))!;
+    const folder = step === "staged" ? op.stage! : op.backup;
+    await plantGit(folder, "user git object in work");
+    const result = await recover(stateDir(home)).catch((e: Error) => e);
+    expect(result instanceof Error ? result.message : "").toContain("conflict");
+    expect(await readFile(userGit(folder), "utf8")).toBe("user git object in work");
+  });
+
+test("an extra empty folder in an owned skill is a conflict, never deleted", async () => {
+  const { home, source, options } = await setup(V1, ALPHA);
+  await planAndApply(home, options);
+  const extra = join(home.dir, ".claude/skills/alpha/.DS_Store-dir/empty");
+  await mkdir(extra, { recursive: true });
+  await writeSource(source, V1, []);
+  const plan = await skillsPlan(home, options);
+  expect(plan.items.map((i) => i.action)).toEqual(["conflict"]);
+  await skillsApply(home, { ...options, planHash: plan.hash! });
+  expect((await lstat(extra)).isDirectory()).toBe(true);
+});

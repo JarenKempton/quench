@@ -21,6 +21,7 @@ import {
   inspect,
   pinKey,
   readJournal,
+  rawState,
   readLedger,
   recover,
   resolved,
@@ -28,6 +29,12 @@ import {
   withLock,
   type ApplyInput,
 } from "@quench/fleet/apply";
+
+const UNREADABLE = {
+  treeHash: `sha256:${"0".repeat(64)}`,
+  symlink: false,
+  executables: null,
+};
 
 export type SkillsOptions = { source: string; machine: string; projects?: string[] };
 
@@ -136,7 +143,11 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
       for (const c of projects)
         if (c.remote === p.scope.remote) paths.add(targetPath(c.roots[p.harness], p.skill));
   const installed: Record<string, InstalledState | undefined> = {};
-  for (const path of [...paths].sort()) installed[path] = await inspect(absolute(home, path));
+  const mine = owned(ledger);
+  for (const path of [...paths].sort())
+    installed[path] = mine.has(path)
+      ? await rawState(absolute(home, path)).catch(() => UNREADABLE)
+      : await inspect(absolute(home, path));
   const sources: Record<string, string> = {};
   for (const name of Object.keys(built.bundle.skills))
     sources[name] = join(options.source, ...own(fleet.skills, name)!.path.split("/"));
