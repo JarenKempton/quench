@@ -208,4 +208,6 @@ test("unknown token counts stay unknown in run totals and report coverage", () =
     null,
     null,
   ]);
+  const none = { n: 0, p10: null, p50: null, p90: null };
+  expect([k!.startingLoad, k!.peakContext]).toEqual([none, none]);
 });

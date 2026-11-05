@@ -7,7 +7,7 @@ import {
   type HarnessReport,
 } from "@quench/insights";
 import { reading } from "../progress.ts";
-import { json, knownTokens, tokens } from "../format.ts";
+import { json, knownTokens } from "../format.ts";
 
 export async function report(
   home: Home,
@@ -61,7 +61,7 @@ function render(harnesses: HarnessReport[], days: number, unreadable: number): s
 }
 
 const spread = (d: Distribution) =>
-  d.n === 0 ? "none" : `median ${tokens(d.p50)}  (p10 ${tokens(d.p10)}, p90 ${tokens(d.p90)})`;
+  `median ${knownTokens(d.p50)}  (p10 ${knownTokens(d.p10)}, p90 ${knownTokens(d.p90)})`;
 
 const toolCalls = (h: HarnessReport) =>
   h.toolResultsWithStatus === 0
