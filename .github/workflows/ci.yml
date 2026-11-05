@@ -26,4 +26,14 @@ jobs:
       - run: ./dist/quench --help
       - run: ./dist/quench --version
       - run: bunx vp run test && bunx vp run test
+      - name: Agent service smoke
+        run: |
+          scratch="$RUNNER_TEMP/agent-home"
+          mkdir -p "$scratch"
+          ./dist/quench agent install --source packages/fleet/test/fixtures/skills-repo --machine laptop \
+            --interval 10 --claude-home "$scratch/claude" --codex-home "$scratch/codex" --pi-home "$scratch/pi"
+          for _ in $(seq 60); do test -f "$scratch/claude/skills/commit-style/SKILL.md" && break; sleep 2; done
+          ./dist/quench agent uninstall
+          test -f "$scratch/claude/skills/commit-style/SKILL.md"
+          test -f "$scratch/pi/skills/commit-style/SKILL.md"
       - run: bun -e "const fs = require('node:fs'); const d = require('node:os').tmpdir(); const left = fs.readdirSync(d).filter((n) => n.startsWith('quench-')); console.log(d, left); if (left.length) process.exit(1)"
