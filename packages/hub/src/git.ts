@@ -1,5 +1,13 @@
 import { join, posix } from "node:path";
-import { excluded, foldCollision, insideFolder } from "@quench/fleet";
+import {
+  excluded,
+  foldCollision,
+  insideFolder,
+  sha256,
+  treeHashOf,
+  type FileMode,
+  type TreeHash,
+} from "@quench/fleet";
 import type { DataDir } from "./data.ts";
 
 export const BRANCH = "refs/heads/main";
@@ -65,6 +73,23 @@ export class StaleHead extends Error {
 }
 
 export type Commit = { sha: string; subject: string; date: string };
+
+export type Version = { commit: string; treeHash: TreeHash | null };
+
+const LITERAL = { GIT_LITERAL_PATHSPECS: "1" };
+
+type TreeLine = { mode: string; type: string; sha: string; path: string };
+
+const treeLines = (stdout: Uint8Array): TreeLine[] =>
+  new TextDecoder()
+    .decode(stdout)
+    .split("\0")
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf("\t");
+      const [mode = "", type = "", sha = ""] = line.slice(0, tab).split(" ");
+      return { mode, type, sha, path: line.slice(tab + 1) };
+    });
 
 export class Repo {
   readonly dir: string;
@@ -247,17 +272,66 @@ export class Repo {
     });
   }
 
+  private async blobs<T extends TreeLine>(entries: T[]) {
+    if (!entries.length) return [];
+    const batch = await this.git(["cat-file", "--batch"], {
+      input: entries.map((e) => e.sha).join("\n") + "\n",
+    });
+    const out = batch.stdout;
+    let offset = 0;
+    return entries.map((entry) => {
+      const newline = out.indexOf(0x0a, offset);
+      const [sha, type, size] = new TextDecoder().decode(out.subarray(offset, newline)).split(" ");
+      if (sha !== entry.sha || type !== "blob") throw new GitError(`cannot read ${entry.path}`);
+      const bytes = out.subarray(newline + 1, newline + 1 + Number(size));
+      offset = newline + 1 + Number(size) + 1;
+      return { ...entry, bytes };
+    });
+  }
+
+  async treeHashAt(commit: string, folder: string): Promise<TreeHash | null> {
+    const prefix = `${folder}/`;
+    const { stdout } = await this.git(
+      ["ls-tree", "-r", "-z", "--full-tree", commit, "--", prefix],
+      {
+        env: LITERAL,
+      },
+    );
+    const entries = treeLines(stdout)
+      .filter((e) => e.type === "blob" && BLOB_MODES.has(e.mode) && e.path.startsWith(prefix))
+      .map((e) => ({ ...e, path: e.path.slice(prefix.length) }))
+      .filter((e) => !excluded(e.path));
+    if (!entries.some((e) => e.path === "SKILL.md")) return null;
+    return treeHashOf(
+      (await this.blobs(entries)).map((e) => ({
+        path: e.path,
+        mode: e.mode as FileMode,
+        sha256: sha256(e.bytes),
+      })),
+    );
+  }
+
+  async versions(folder: string, limit = 100): Promise<Version[]> {
+    const { text } = await this.git(["log", `-${limit}`, "--format=%H", BRANCH, "--", folder], {
+      env: LITERAL,
+    });
+    const commits = text.split("\n").filter(Boolean).reverse();
+    return Promise.all(
+      commits.map(async (commit) => ({ commit, treeHash: await this.treeHashAt(commit, folder) })),
+    );
+  }
+
+  async diffCommits(before: string, after: string, folder: string) {
+    const { text } = await this.git(
+      ["diff", "--no-color", "--no-ext-diff", before, after, "--", folder],
+      { env: LITERAL },
+    );
+    return text;
+  }
+
   async materialize(commit: string, target: string[]) {
     const { stdout } = await this.git(["ls-tree", "-r", "-z", "--full-tree", commit]);
-    const entries = new TextDecoder()
-      .decode(stdout)
-      .split("\0")
-      .filter(Boolean)
-      .map((line) => {
-        const tab = line.indexOf("\t");
-        const [mode = "", type = "", sha = ""] = line.slice(0, tab).split(" ");
-        return { mode, type, sha, path: line.slice(tab + 1) };
-      });
+    const entries = treeLines(stdout);
     for (const e of entries) {
       if (e.type !== "blob" || !BLOB_MODES.has(e.mode))
         throw new GitError(`${JSON.stringify(e.path)}: unsupported ${e.type} ${e.mode}`);
@@ -266,19 +340,7 @@ export class Repo {
     }
     const collision = foldCollision(entries.map((e) => e.path));
     if (collision) throw new GitError(`duplicate path ${collision.join(" and ")}`);
-    const batch = await this.git(["cat-file", "--batch"], {
-      input: entries.map((e) => e.sha).join("\n") + "\n",
-    });
-    const out = batch.stdout;
-    let offset = 0;
-    const files = entries.map((entry) => {
-      const newline = out.indexOf(0x0a, offset);
-      const [sha, type, size] = new TextDecoder().decode(out.subarray(offset, newline)).split(" ");
-      if (sha !== entry.sha || type !== "blob") throw new GitError(`cannot read ${entry.path}`);
-      const bytes = out.subarray(newline + 1, newline + 1 + Number(size));
-      offset = newline + 1 + Number(size) + 1;
-      return { ...entry, bytes };
-    });
+    const files = await this.blobs(entries);
     for (const f of files)
       if (f.mode === "120000" && escapes(f.path, new TextDecoder().decode(f.bytes)))
         throw new GitError(`${f.path} links outside the tree`);

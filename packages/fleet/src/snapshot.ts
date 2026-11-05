@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { HarnessId, Location, SkillName, Timestamp, TreeHash } from "./common.ts";
+import { SkillReport } from "./skill-report.ts";
 
 export const SnapshotInstall = z
   .object({
@@ -27,6 +28,7 @@ export const Snapshot = z
     takenAt: Timestamp,
     revision: z.string().nullable(),
     harnesses: z.partialRecord(HarnessId, HarnessSnapshot),
+    skills: SkillReport.optional(),
   })
   .strict();
 export type Snapshot = z.infer<typeof Snapshot>;
@@ -43,6 +45,8 @@ export const MachineState = z
   .object({
     generation: z.number().int().nonnegative(),
     harnesses: z.partialRecord(HarnessId, HarnessState),
+    skills: SkillReport.optional(),
+    skillsTakenAt: Timestamp.optional(),
   })
   .strict();
 export type MachineState = z.infer<typeof MachineState>;
@@ -57,5 +61,10 @@ export function mergeSnapshot(previous: MachineState | null, next: Snapshot): Ma
       harnesses[harness] = { snapshot: fresh, generation: next.generation, stale: false };
     else if (kept) harnesses[harness] = { ...kept, stale: true };
   }
-  return { generation: next.generation, harnesses };
+  const skills = next.skills
+    ? { skills: next.skills, skillsTakenAt: next.takenAt }
+    : previous?.skills
+      ? { skills: previous.skills, skillsTakenAt: previous.skillsTakenAt }
+      : {};
+  return { generation: next.generation, harnesses, ...skills };
 }

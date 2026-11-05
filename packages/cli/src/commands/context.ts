@@ -12,7 +12,7 @@ import { behaviour, behaviourLabel, type Behaviour } from "@quench/insights";
 import type { Reply, Sender } from "@quench/judge";
 import { plural } from "../format.ts";
 
-export type SkillLoaded = { name: string; path: string | null };
+export type SkillLoaded = { name: string; path: string | null; at: number | null };
 
 export type SessionContext = {
   skills: string[] | null;
@@ -197,7 +197,7 @@ function skillsLoaded(session: Session, home: string): SkillLoaded[] | null {
         (l.how === "read" && l.status === "returned") ||
         (l.how === "shell-read" && l.status === "ran")),
   );
-  return used.map((l) => ({ name: l.name, path: l.path }));
+  return used.map((l) => ({ name: l.name, path: l.path, at: l.at?.getTime() ?? null }));
 }
 
 export function renderInContext(found: InContext, path: (file: string) => string): string {

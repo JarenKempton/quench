@@ -11,7 +11,7 @@ import {
   type Skill,
 } from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
-import { Jev, judgeReplies, VerdictCache, type SessionRuns } from "@quench/judge";
+import { Jev, judgeReplies, VerdictCache, type Reply, type SessionRuns } from "@quench/judge";
 import {
   HARNESSES,
   installations,
@@ -86,7 +86,7 @@ const display = (home: Home, path: string) => {
       : slashed;
 };
 
-const absolute = (home: Home, path: string) =>
+export const absolute = (home: Home, path: string) =>
   path.startsWith("~/") ? `${home.dir}/${path.slice(2)}` : path;
 
 async function git(dir: string, ...args: string[]) {
@@ -376,6 +376,36 @@ async function skillsReport(home: Home, options: Options) {
     process.stderr.write(`--source: ${kind}\n`);
     return 1;
   }
+  const { judge, records, unrecognised } = await collectSkills(home, { ...options, source });
+  const compared = source && drift(source, records);
+  process.stdout.write(
+    options.json
+      ? json({
+          schemaVersion: SCHEMA_VERSION,
+          days: options.days,
+          judge,
+          origins: ORIGINS,
+          skills: records,
+          unrecognised,
+          ...(compared ? { source: compared } : {}),
+          limitations: LIMITATIONS,
+        })
+      : renderSkills(records, unrecognised, options.days, judge, compared),
+  );
+  return 0;
+}
+
+export type SkillEvidence = {
+  since: Date;
+  started: ReadonlyMap<string, { harness: HarnessId; at: number; cwd: string | null }>;
+  contexts: ReadonlyMap<string, SessionContext>;
+  replies: readonly Reply[];
+};
+
+export async function collectSkills(
+  home: Home,
+  options: { days: number; cache: boolean; hostHistory?: string | false; source?: Source | null },
+) {
   const since = new Date(Date.now() - options.days * 86_400_000);
   const cache = options.cache ? await placeCache(home.dir) : undefined;
   const { places } = await sessionPlaces(home, since, reading(), cache);
@@ -401,25 +431,21 @@ async function skillsReport(home: Home, options: Options) {
     sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
     recordedHarnesses: new Set(recorded.uses.map((u) => u.harness)),
     roots: await skillRoots(home, places),
-    sourceNames: new Set(source?.skills.keys()),
+    sourceNames: new Set(options.source?.skills.keys()),
     coOccurrence: coOccurrence(replies, contexts, since),
   });
-  const compared = source && drift(source, records);
-  process.stdout.write(
-    options.json
-      ? json({
-          schemaVersion: SCHEMA_VERSION,
-          days: options.days,
-          judge: verdicts.judge,
-          origins: ORIGINS,
-          skills: records,
-          unrecognised,
-          ...(compared ? { source: compared } : {}),
-          limitations: LIMITATIONS,
-        })
-      : renderSkills(records, unrecognised, options.days, verdicts.judge, compared),
-  );
-  return 0;
+  const started = new Map<string, { harness: HarnessId; at: number; cwd: string | null }>();
+  for (const s of sessions) {
+    const times = s.runs.flatMap((r) => (r.startedAt ? [r.startedAt.getTime()] : []));
+    if (times.length)
+      started.set(sessionKey({ harness: s.harness, sessionId: s.id }), {
+        harness: s.harness,
+        at: Math.min(...times),
+        cwd: s.cwd,
+      });
+  }
+  const evidence: SkillEvidence = { since, started, contexts, replies };
+  return { judge: verdicts.judge, records, unrecognised, evidence };
 }
 
 async function skillRoots(home: Home, places: readonly SessionPlace[]): Promise<string[]> {
