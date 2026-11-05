@@ -79,6 +79,36 @@ test("verdicts an older version appends to a shared file after migration are mer
   expect(await Bun.file(shared).text()).toBe(before);
 });
 
+test("a verdict remembered while a legacy merge is paused beats the migrated one", async () => {
+  const dir = await cachePath();
+  const shared = join(dir, "judgments.jsonl");
+  await Bun.write(shared, "");
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("one"), verdict]]);
+  const other = await VerdictCache.open(dir, "judge/a");
+  const older: Verdict = { kind: "correction", sender: "person", confidence: 0.2 };
+  const newer: Verdict = { kind: "approval", sender: "person", confidence: 0.9 };
+  const elsewhere = await VerdictCache.open(await cachePath(), "judge/a");
+  await elsewhere.remember([[exchange("k"), older]]);
+  await appendFile(shared, await Bun.file(elsewhere.path).text());
+
+  const proto = VerdictCache.prototype as unknown as {
+    append: (this: VerdictCache, lines: string[]) => Promise<void>;
+  };
+  const append = proto.append;
+  proto.append = async function (this: VerdictCache, lines: string[]) {
+    proto.append = append;
+    await other.remember([[exchange("k"), newer]]);
+    return append.call(this, lines);
+  };
+  try {
+    await VerdictCache.open(dir, "judge/a");
+  } finally {
+    proto.append = append;
+  }
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("k"))).toEqual(newer);
+  expect((await VerdictCache.open(dir, "judge/a", true)).get(exchange("k"))).toEqual(newer);
+});
+
 test("concurrent first opens migrate once and keep every append", async () => {
   const dir = await cachePath();
   const line = (n: number) => `${JSON.stringify({ judge: "judge/a", key: `k${n}`, verdict })}\n`;
