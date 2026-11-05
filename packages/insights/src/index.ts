@@ -13,6 +13,7 @@ export {
   linkSubagents,
   runs,
   type CommandRecord,
+  type FollowUp,
   type Run,
 } from "./run.ts";
 export { runRecords, type RunRecord } from "./record.ts";

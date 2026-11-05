@@ -78,7 +78,7 @@ profile of every agent and project in your history.
 | `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                      |
 | `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                          |
 | `quench corrections [--dry-run]`                | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`                    |
-| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 1                |
+| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 2                |
 | `quench steering <project-dir> [--json]`        | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline                       |
 | `quench sources [session-file] [--json]`        | What one session read and loaded; default: the latest session in this folder; offline                  |
 | `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                           |
@@ -158,7 +158,7 @@ the environment is not written to the file.
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or
 delegated-task results (`notification` / `delegatedCompletion`) count as host automation with kind
-`info`. A notice that can't be joined to host history (delivered over 60 seconds after T3 created
+`info`. A notice that can't be joined to host history (delivered over an hour after T3 created
 it, repeated text, or not hosted) falls back to its fixed PR-watch, restart or delegated-task
 text. A reply the harness recorded as a slash command
 (Claude Code's `<command-name>`) counts as a person's `new_request` (harness source) unless
@@ -185,11 +185,15 @@ requirement. Use `--host-history <sqlite-file>` for another location, or `--no-h
 skip it. There is no recursive file search. Missing or incompatible host history leaves the
 harness/model fallback intact; incompatible formats produce a warning.
 
-T3 matching requires a strong native session link, unique exact message text in both histories,
-and delivery within 60 seconds of host creation. Repeated, edited, delayed or otherwise
-unmatched messages fall back to the judge. Imported `user/server` records are not proof of human
+T3 matching requires a strong native session link, exact message text in both histories, and
+delivery within an hour of host creation, so messages queued while the agent works still join.
+Text repeated equally often in both histories pairs in order. Edited, unequally repeated, later or
+otherwise unmatched messages fall back to the judge. Imported `user/server` records are not proof of human
 authorship. This uses T3's current internal format, not a stable public API. It does not change
-cached judgments or send host records to Jev. `report` and `runs` do not read host history.
+cached judgments or send host records to Jev. `runs` uses it too: `runs --json` gives each prompt and
+reply a sender (`promptSender` / `replySender`: `human`, `agent` or `unknown`) and its source
+(`promptSenderSource` / `replySenderSource`: `host-history`, `harness` or `none`). `report` does
+not read host history.
 
 ## Recurring correction themes
 

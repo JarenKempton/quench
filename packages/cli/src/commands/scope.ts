@@ -9,7 +9,14 @@ import {
   type Home,
   type SessionRef,
 } from "@quench/history";
-import { Cause, type Causes, type Judged, type Reply, type SessionRuns } from "@quench/judge";
+import {
+  Cause,
+  type Attribution,
+  type Causes,
+  type Judged,
+  type Reply,
+  type SessionRuns,
+} from "@quench/judge";
 
 export type Scope = { files: string[]; sessions: string[] };
 
@@ -74,6 +81,13 @@ export const unread = (scoped: ScopedRefs, sessions: readonly SessionRuns[]) =>
 const kinds = { person: "human", automation: "agent" } as const;
 const sources = { host: "host-history", harness: "harness", judge: "model", unknown: "none" };
 
+export const senderJson = (a: Attribution) => ({
+  kind: a.sender ? kinds[a.sender] : "unknown",
+  source: sources[a.senderSource],
+});
+
+export const SCHEMA_VERSION = 2;
+
 export function scopedReport(
   judge: string,
   sessions: readonly SessionRuns[],
@@ -87,7 +101,7 @@ export function scopedReport(
     .map((r) => entry(r, caused.get(r)));
   const count = (kind: string) => corrections.filter((c) => c.sender.kind === kind).length;
   return {
-    schemaVersion: 1,
+    schemaVersion: SCHEMA_VERSION,
     judge,
     summary: {
       sessionsRead: sessions.length,
@@ -106,7 +120,7 @@ function entry(r: Reply, caused: Causes["caused"][number] | undefined) {
     file: r.path,
     runIndex: r.position,
     at: r.run.replyAt?.toISOString() ?? null,
-    sender: { kind: r.sender ? kinds[r.sender] : "unknown", source: sources[r.senderSource] },
+    sender: senderJson(r),
     cause: cause.success ? cause.data : null,
     cached: r.classified !== "new" && caused?.judged !== "new",
     locator: {

@@ -13,7 +13,9 @@ export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {
   judgeReplies,
+  recordedSender,
   summarize,
+  type Attribution,
   type Judged,
   type Reply,
   type SessionRuns,

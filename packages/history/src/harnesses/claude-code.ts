@@ -136,6 +136,10 @@ const Attachment = z.looseObject({
   addedLines: z.array(z.string()).nullish(),
   /** On `mcp_instructions_delta`: each server's instructions. */
   addedBlocks: z.array(z.string()).nullish(),
+  commandMode: z.string().nullish(),
+  prompt: z.unknown().optional(),
+  isMeta: z.boolean().nullish(),
+  origin: z.looseObject({ kind: z.string().nullish() }).nullish(),
 });
 
 const InstructionFile = z.looseObject({
@@ -412,6 +416,8 @@ export const claudeCode: Harness<"claude-code"> = {
     const events: Event[] = [];
     const inferenceAt = new Map<string, number>();
     const attachments = new Set<string>();
+    const queued = new Map<string, Event[]>();
+    const delivered = new Set<Event>();
     let cwd: string | null = null;
     let branch: string | null = null;
     const position = { line: 0 };
@@ -435,7 +441,14 @@ export const claudeCode: Harness<"claude-code"> = {
           continue;
         }
         if (kind.type === "inference" && id) inferenceAt.set(id, events.length);
-        events.push({ ...kind, at, line: position.line });
+        if (kind.type === "inference") queued.clear();
+        const event = { ...kind, at, line: position.line };
+        if (kind.type === "message" && kind.author === "user") {
+          const waiting = queued.get(kind.text) ?? [];
+          if (line.type === "attachment") queued.set(kind.text, [...waiting, event]);
+          else if (waiting.length) delivered.add(waiting.shift()!);
+        }
+        events.push(event);
       }
     }
     return {
@@ -445,7 +458,7 @@ export const claudeCode: Harness<"claude-code"> = {
       cwd,
       branch,
       parent: r.parent,
-      events,
+      events: delivered.size ? events.filter((e) => !delivered.has(e)) : events,
       diagnostics,
     };
   },
@@ -468,6 +481,7 @@ function eventsOf(line: Line): EventKind[] {
         ...instructions(line.attachment),
         ...skillListing(line.attachment),
         ...promptParts(line.attachment),
+        ...queuedPrompt(line.attachment),
       ];
     default:
       return [];
@@ -488,6 +502,25 @@ function requestShape(shape: NonNullable<Line["shape"]>): EventKind {
         deferred: tool.defer_loading === true,
       })) ?? null,
   };
+}
+
+function queuedPrompt(raw: unknown): EventKind[] {
+  const attachment = Attachment.safeParse(raw);
+  if (!attachment.success) return [];
+  const a = attachment.data;
+  if (a.type !== "queued_command" || a.commandMode !== "prompt" || typeof a.prompt !== "string")
+    return [];
+  if (!a.prompt.trim()) return [];
+  const injected = a.isMeta === true || injectedTag(a.prompt);
+  return [
+    {
+      type: "message",
+      author: injected ? "injected" : "user",
+      origin: a.origin?.kind === "human" ? "typed" : "unknown",
+      text: a.prompt,
+      queued: true,
+    },
+  ];
 }
 
 function promptParts(raw: unknown): EventKind[] {

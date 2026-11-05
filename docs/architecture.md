@@ -128,9 +128,10 @@ filesystem or read the event log. Missing storage is a no-op; unreadable or inco
 warns and falls back rather than discarding valid harness history.
 
 T3 does not share a user-message id with the normalized transcript. Enrichment therefore
-requires a strong native session link, unique exact text on both sides, and a harness timestamp
-between host creation and 60 seconds later. Ambiguous links, repeated text, longer delivery
-delays and unknown timestamps are left alone. Explicit agent authorship maps to automation;
+requires a strong native session link, exact text on both sides, and a harness timestamp
+between host creation and one hour later, so messages queued while the agent works still join.
+Text repeated equally often on both sides pairs in order; T3's attached-image notes are ignored.
+Ambiguous links, unequal repeats, longer delivery delays and unknown timestamps are left alone. Explicit agent authorship maps to automation;
 only user/web or user/mobile records establish human authorship. Imported user/server records
 remain unverified. This is deliberately incomplete, not a claim of universal sender identity.
 
@@ -138,7 +139,10 @@ remain unverified. This is deliberately incomplete, not a claim of universal sen
 
 - A **run** is everything the agent did between two user messages: model, effort,
   context at start and peak, tool calls and errors, compactions, subagents, duration, and
-  the reply that came next.
+  the reply that came next. A user message sent before the agent answered the previous one
+  (seconds apart, or after a slash command or an interruption) is a `followUp` of the run the
+  agent last answered, and is judged as a reply to it. Claude Code prompts queued and absorbed
+  mid-turn (`queued_command` attachments) are user messages like any other.
 - A **run record** (`runs --all`) follows the agent's turn instead: a prompt sent while the
   agent is still working, within 10 minutes, joins the run as `steering`; a 10-minute gap
   starts a new run. Its `outcome` is the last assistant message after the last tool call, so
