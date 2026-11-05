@@ -753,7 +753,11 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   });
   const blocked = (id: string, content: string, source: string) => ({
     ...result(id, content),
-    permissionDecision: { decision: "reject", source },
+    permissionDecision: {
+      decision: "reject",
+      source,
+      ...(source === "hook" ? { reasonCode: "hook:PreToolUse" } : {}),
+    },
   });
   const ssh = (id: string, error: string) => [
     call(id, "Bash", { command: "ssh box uptime" }),
@@ -839,14 +843,14 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   expect(stdout).toContain(
     [
       "▍Blocked by hooks and permissions · rules agents keep hitting · last 30 days",
-      "  Guard                          Command           Blocks  Sessions  Projects  Agents       Example session",
-      "  PreToolUse:Bash hook guard.sh  git push --force       3         1  work 3    Claude Code  one",
-      "  permission rule                WebFetch               1         1  work 1    Claude Code  two",
+      "  Guard            Command   Blocks  Sessions  Projects  Agents       Example session",
+      "  PreToolUse hook  git push       3         1  work 3    Claude Code  one",
+      "  permission rule  WebFetch       1         1  work 1    Claude Code  two",
       "",
       "▍Repeated failures · tool calls that failed the same way · last 30 days",
       "  Project  Kind             Command or tool  Error        Failures  Sessions  In a row     Output  Agents       Example session",
       "  work     no such file     Read             not found           3         2         2   60 chars  Claude Code  one",
-      "  work     no such command  pytest -q        not found           2         2         1  218 chars  Codex        c1",
+      "  work     no such command  pytest           not found           2         2         1  218 chars  Codex        c1",
       "  work     exit code        ssh              network             2         2         1  132 chars  Claude Code  one",
       "  work     exit code        ssh              auth failed         2         2         1  106 chars  Claude Code  one",
       "  15 failed tool calls in all, returning 935 chars of output.",
@@ -855,11 +859,13 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   expect(stdout).not.toContain("grep");
   expect(stdout).not.toContain("npm");
   expect(stdout).not.toContain("force push");
+  expect(stdout).not.toContain("guard.sh");
+  expect(stdout).not.toContain("--force");
   const json = JSON.parse((await quench(home, "--json")).stdout);
   expect(json.recordedFailures.failures).toBe(15);
   expect(json.recordedFailures.blocked[0]).toEqual({
-    guard: "PreToolUse:Bash hook guard.sh",
-    command: "git push --force",
+    guard: "PreToolUse hook",
+    command: "git push",
     blocks: 3,
     sessions: 1,
     projects: [{ root: project, blocks: 3 }],
@@ -874,7 +880,7 @@ test("profile lists hook blocks apart, and failures that repeat by command and f
   expect((await quench(home)).stdout).toContain(
     [
       "▍Worth a look",
-      '  1. PreToolUse:Bash hook guard.sh blocked "git push --force" 3×',
+      '  1. PreToolUse hook blocked "git push" 3×',
       "     1 session · work",
       "     → quench profile failures",
       "",

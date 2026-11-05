@@ -101,6 +101,33 @@ const repros: Repro[] = [
     leaks: ["qoqa", token, "qmqa", "qmqb", "qmqf"],
   },
   {
+    name: "a secret shaped as a flag name",
+    command: "deploy --token --qflagsecretq",
+    output: "Exit code 1\nrejected",
+    leaks: ["qflagsecretq"],
+  },
+  {
+    name: "a secret positional after --",
+    command: "curl -- --qpositionalsecretq",
+    output: "Exit code 2\nrejected",
+    leaks: ["qpositionalsecretq"],
+  },
+  {
+    name: "hook arguments carrying a secret",
+    command: "git push",
+    output:
+      "PreToolUse:Bash hook error: [node guard.js --token /tokens/qhookargsecretq]: guard: blocked",
+    leaks: ["qhookargsecretq"],
+    blocked: true,
+  },
+  {
+    name: "a chained command behind a setup step",
+    command: "cd /tmp/qchaindirq && git push",
+    output: `${hook} push`,
+    leaks: ["qchaindirq"],
+    blocked: true,
+  },
+  {
     name: "hook refusal naming a user:pass@host URL",
     command: "git push https://user:qhrq@example.test/r.git",
     output: `${hook} https://user:qhrq@example.test`,
@@ -158,8 +185,9 @@ test("no credential from a command, error or refusal reaches profile, steering, 
   expect(failures.blocked.length).toBeGreaterThan(0);
   expect(failures.repeated.length).toBeGreaterThan(0);
   const steering = await quench(home, "steering", project);
-  expect(steering.stdout).toContain("PreToolUse:Bash hook guard.sh · git push");
-  expect(steering.stdout).toContain("PreToolUse:Bash hook guard.sh · several commands");
+  expect(steering.stdout).toContain("hook · git push");
+  expect(steering.stdout).toContain("hook · several commands");
+  for (const cut of ["guard.js", "guard.sh", "--token", "--qflag"]) expect(json).not.toContain(cut);
   const steeringJson = (await quench(home, "steering", project, "--json")).stdout;
   const cache = await Bun.file(join(home, ".quench/local/session-places.json")).text();
   const outputs = { table: table.stdout, json, steering: steering.stdout, steeringJson, cache };

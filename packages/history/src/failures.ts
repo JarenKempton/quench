@@ -11,7 +11,7 @@ import {
   missingProgramOf,
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
-import { commandSignature } from "./shell.ts";
+import { commandSignature, isChained } from "./shell.ts";
 
 export type SessionFailure = {
   kind: Failure["kind"];
@@ -121,7 +121,7 @@ function failureKey(
   const signature = shellSignatureOf(call, (text) => text);
   if (isNothingFound(failure, signature)) return null;
   const blocked = failure.kind === "blocked";
-  const chained = blocked && signature === null && call?.shell?.length;
+  const chained = call?.shell?.some((shell) => shell.command && isChained(shell.command));
   return {
     what: chained ? "several commands" : (signature ?? (call?.shell ? null : (call?.name ?? null))),
     error: blocked ? null : (failure.errorClass ?? "other"),

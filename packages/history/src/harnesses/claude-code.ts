@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { join, basename, win32 } from "node:path";
+import { join, basename } from "node:path";
 import { z } from "zod";
 import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
@@ -101,7 +101,11 @@ const Line = z.looseObject({
   toolUseResult: z.unknown().optional(),
   /** On a tool result line: how the call was allowed or refused; `source` is `hook`, `config`, `user_abort`, `user_reject`… */
   permissionDecision: z
-    .looseObject({ decision: z.string().nullish(), source: z.string().nullish() })
+    .looseObject({
+      decision: z.string().nullish(),
+      source: z.string().nullish(),
+      reasonCode: z.string().nullish(),
+    })
     .nullish(),
   /** On a refused tool result line in older versions: `permission-rule`, `automode-blocked`, `user-rejected`, `interrupted`… */
   toolDenialKind: z.string().nullish(),
@@ -636,24 +640,18 @@ function denial(line: Line, text: string, single: boolean): Denial {
   const blocked = decision
     ? decision.decision === "reject" && BLOCKED_BY.has(decision.source ?? "")
     : BLOCKED_KINDS.has(line.toolDenialKind ?? "");
-  if (single && blocked) return { guard: guardOf(line, text) };
+  if (single && blocked) return { guard: guardOf(line) };
   return rejected(text) ? "rejected" : null;
 }
 
-const HOOK = /^\s*(?:Error:\s*)?([A-Za-z]+:\w+) hook error: \[([^\]\n]*)\]/;
-
-function guardOf(line: Line, text: string): string {
-  const hook = HOOK.exec(text);
-  if (hook) return [`${hook[1]} hook`, scriptOf(hook[2]!)].filter(Boolean).join(" ");
-  if (line.permissionDecision?.source === "hook") return "hook";
-  if (line.toolDenialKind === "automode-blocked") return "auto mode";
-  return "permission rule";
-}
-
-function scriptOf(command: string): string {
-  const words = command.split(/\s+/).map((word) => word.replace(/^["']+|["']+$/g, ""));
-  const name = win32.basename(words.find((word) => /[\\/]/.test(word)) ?? words[0] ?? "");
-  return /^[A-Za-z0-9._-]{1,48}$/.test(name) ? name : "";
+function guardOf(line: Line): string {
+  const decision = line.permissionDecision;
+  if (decision?.source === "hook") {
+    const event = /^hook:([A-Za-z]{1,32})$/.exec(decision.reasonCode ?? "")?.[1];
+    return event ? `${event} hook` : "hook";
+  }
+  if (decision?.source === "config") return "permission rule";
+  return line.toolDenialKind === "automode-blocked" ? "auto mode" : "permission rule";
 }
 
 const ToolReference = z.object({ type: z.literal("tool_reference"), tool_name: z.string() });

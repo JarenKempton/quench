@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { failureSummary } from "../src/failure-text.ts";
 import { failureOf, type Denial } from "../src/failures.ts";
-import { commandSignature } from "../src/shell.ts";
+import { commandSignature, isChained } from "../src/shell.ts";
 
 test("failures are classified from the error text", () => {
   const kind = (text: string, isError: boolean | null = true, denial: Denial = null) => {
@@ -41,9 +41,9 @@ test("failures are classified from the error text", () => {
     kind(
       "PreToolUse:Bash hook error: [/home/me/hooks/guard.sh]: guard: blocked — force push. Ask first.",
       true,
-      { guard: "PreToolUse:Bash hook guard.sh" },
+      { guard: "PreToolUse hook" },
     ),
-  ).toEqual(["blocked", "PreToolUse:Bash hook guard.sh", null]);
+  ).toEqual(["blocked", "PreToolUse hook", null]);
   expect(kind("Exit code 3\nsomething broke")).toEqual(["exit-code", null, 3]);
   expect(kind("Request timed out after 5000ms")).toEqual([
     "error",
@@ -98,27 +98,26 @@ test("a command signature names one program, or none for several", () => {
   );
   expect(commandSignature("C:\\Git\\bin\\git.exe push origin main")).toBe("git push");
   expect(commandSignature(".\\tools\\build.cmd release")).toBe("build");
-  expect(commandSignature("git -C some/dir push --force origin main")).toBe("git -C --force");
-  expect(commandSignature("gh api repos/o/r --jq .x")).toBe("gh api --jq");
+  expect(commandSignature("git -C some/dir push --force origin main")).toBe("git");
+  expect(commandSignature("git push --force origin main")).toBe("git push");
+  expect(commandSignature("deploy --token --qflag")).toBe("deploy");
+  expect(commandSignature("curl -- --qpos")).toBe("curl");
+  expect(commandSignature("git commit -m 'a && b'")).toBe("git commit");
+  expect(isChained("cd /tmp && git push")).toBe(true);
+  expect(isChained("git status\ngit push")).toBe(true);
+  expect(isChained("ls | wc")).toBe(true);
+  expect(isChained("git commit -m 'a; b | c'")).toBe(false);
+  expect(commandSignature("gh api repos/o/r --jq .x")).toBe("gh api");
   expect(commandSignature("npm run deadbeef")).toBe("npm run");
   expect(commandSignature("oathtool deadbeef")).toBe("oathtool");
   expect(commandSignature("git deadbeef")).toBe("git");
   expect(commandSignature("ssh box uptime")).toBe("ssh");
   expect(commandSignature("make my\\ target")).toBe("make");
-  expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBe(
-    "bun test --watch",
-  );
-  expect(commandSignature("python3 -c 'print(1)'")).toBe("python3 -c");
-  expect(commandSignature("curl -u a:b --header=x https://example.test")).toBe("curl -u --header");
-  expect(commandSignature("deploy -uadmin:pw --token=-canary --token z user:pw")).toBe(
-    "deploy -u --token",
-  );
-  expect(commandSignature("env -u GITHUB_TOKEN A=1 gh pr merge 12 --squash")).toBe(
-    "gh pr --squash",
-  );
+  expect(commandSignature("cd app && FOO=1 bun test --watch 2>&1 | tail -20")).toBeNull();
+  expect(commandSignature("FOO=1 bun test --watch 2>&1")).toBe("bun test");
+  expect(commandSignature("python3 -c 'print(1)'")).toBe("python3");
+  expect(commandSignature("curl -u a:b --header=x https://example.test")).toBe("curl");
+  expect(commandSignature("env -u GITHUB_TOKEN A=1 gh pr merge 12 --squash")).toBe("gh pr");
   expect(commandSignature("git status && npm test")).toBeNull();
-  expect(commandSignature("cd app && git push --force origin main | tail")).toBe(
-    "git push --force",
-  );
   expect(commandSignature("sleep 5; echo hi")).toBeNull();
 });

@@ -123,27 +123,22 @@ const SETUP = new Set(["cd", "export", "source", ".", "set", "sleep", "true", "e
 const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee", "column", "jq"]);
 
 export function commandSignature(command: string): string | null {
-  const keys = segmentKeys(command);
-  return keys.length === 1 ? keys[0]! : null;
+  const [segment, ...more] = segments(command);
+  if (!segment || more.length) return null;
+  const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
+  const name =
+    words[0] && !words[0].dynamic
+      ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
+      : null;
+  const program = name && /^[A-Za-z0-9._+-]{1,40}$/.test(name) ? name : null;
+  if (!program || SETUP.has(program) || FILTERS.has(program)) return null;
+  const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
+  const sub = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
+  return sub ? `${program} ${sub}` : program;
 }
 
-function segmentKeys(command: string): string[] {
-  return segments(command)
-    .flatMap((segment) => {
-      const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
-      const name =
-        words[0] && !words[0].dynamic
-          ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
-          : null;
-      const program = name && /^[A-Za-z0-9._+-]{1,40}$/.test(name) ? name : null;
-      if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
-      const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
-      const sub =
-        program && !positional?.dynamic ? knownSubcommand(program, positional?.text) : null;
-      const flags = new Set(words.slice(1).flatMap((w) => flagName(w.text)));
-      return [program ? [program, ...(sub ? [sub] : []), ...flags].join(" ") : null];
-    })
-    .filter((key): key is string => key !== null);
+export function isChained(command: string): boolean {
+  return segments(command).length > 1;
 }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -155,12 +150,6 @@ function unwrapped(words: Word[]): Word[] {
   while (words[i] && (words[i]!.text.startsWith("-") || ASSIGNMENT.test(words[i]!.text)))
     i += ENV_VALUED.has(words[i]!.text) ? 2 : 1;
   return words.slice(i);
-}
-
-function flagName(word: string): string[] {
-  const long = /^--[a-z][a-z0-9-]{0,30}(?==|$)/.exec(word)?.[0];
-  if (long) return [long];
-  return /^-[A-Za-z]/.test(word) ? [word.slice(0, 2)] : [];
 }
 
 function searchOf(

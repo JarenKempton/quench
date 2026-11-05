@@ -13,7 +13,7 @@ import { rankedItems } from "../profile/steering-loads.ts";
 import { blockedRules } from "../profile/recorded-failures.ts";
 
 const LIMITATIONS = [
-  "Blocked rules count tool calls Claude Code recorded as refused by a hook or permission rule in sessions here, grouped by the guard (hook event, matcher and script name, or permission rule) and the command's program, known subcommand and flag names; no refusal or command text is kept. Codex and Pi record no such marker.",
+  'Blocked rules count tool calls Claude Code recorded as refused by a hook or permission rule in sessions here, grouped by the guard from recorded fields (hook event, or hook, permission rule, auto mode) and the command\'s program and known subcommand, or "several commands" for a chain; no refusal or command text is kept. Codex and Pi record no such marker.',
   "Ranking multiplies recorded loads: each session in this project whose history logged injecting the file adds the characters it recorded. Codex records one combined block per directory, so its loads are not attributed to files.",
   "Duplicates are rules with identical wording once case, punctuation and list markers are ignored, found in at least two file locations, byte-identical copies included.",
   "Conflicts and stale entries are heuristics. A possible conflict is a global and a project rule with the same wording apart from negation and modal words, one negated and one not. A possibly stale entry names, in backticks, a file that is not on disk now, a command not on PATH, or a package script missing from the nearest package.json of every location the file applies from (abstaining when they differ). Relative files are checked for project files only; flags are not checked.",
