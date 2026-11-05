@@ -131,7 +131,7 @@ async function context(home: string, ...flags: string[]) {
 type Loaded = { name: string; sessions: number; corrections: number; first: string };
 
 async function snapshot(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { recursive: true });
+  const entries = (await readdir(dir, { recursive: true })).sort();
   return Promise.all(entries.map(async (e) => `${e}:${(await stat(join(dir, e))).mtimeMs}`));
 }
 
