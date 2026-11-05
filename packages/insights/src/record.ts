@@ -4,10 +4,17 @@ import {
   type HarnessId,
   type Origin,
   type Session,
-  type ShellCommand,
   type Usage,
 } from "@quench/history";
-import { IDLE_MS, linkSubagents, splitRuns, type Run } from "./run.ts";
+import {
+  commandRecords,
+  IDLE_MS,
+  linkSubagents,
+  splitRuns,
+  type CommandRecord,
+  type Run,
+  type RunCommand,
+} from "./run.ts";
 
 export type RunRecord = {
   id: string;
@@ -34,8 +41,14 @@ export type RunRecord = {
   toolErrors: number;
   compactions: number;
   subagents: number;
-  commands: ShellCommand[];
-  failures: { tool: string; server: string | null; kind: FailureKind; what: string | null }[];
+  commands: CommandRecord[];
+  failures: {
+    tool: string;
+    server: string | null;
+    kind: FailureKind;
+    what: string | null;
+    error: string | null;
+  }[];
   filesRead: string[];
   prLinks: string[];
 };
@@ -78,7 +91,7 @@ export function runRecords(
     toolErrors: run.toolErrors,
     compactions: run.compactions,
     subagents: run.subagents,
-    commands: run.commands,
+    commands: commandRecords(run),
     failures: run.calls.flatMap((c) =>
       c.failure ? [{ tool: c.tool, server: c.server, ...c.failure }] : [],
     ),
@@ -90,7 +103,7 @@ export function runRecords(
 const closedByIdle = (run: Run, now: Date) =>
   run.endedAt !== null && now.getTime() - run.endedAt.getTime() >= IDLE_MS;
 
-const shellFilesRead = (commands: ShellCommand[], sessionFolder: string | null) =>
+const shellFilesRead = (commands: RunCommand[], sessionFolder: string | null) =>
   commands.flatMap(({ command, workdir }) =>
     command === null
       ? []

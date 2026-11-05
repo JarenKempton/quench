@@ -55,22 +55,23 @@ const run = (body: Event[], end = 5, tokens = 1_000) => {
   return runs(session)[0]!;
 };
 
-test("the same failure three times in one run is a retry loop with its call positions", () => {
+test("the same failure three times in one run is a retry loop keyed by tool, not path", () => {
   const found = behaviour(
     run([
       ...failing("Read", missing("a.ts")),
       ...failing("Read", null),
       ...failing("Bash", missing("a.ts")),
-      ...failing("Read", missing("a.ts")),
+      ...failing("Read", missing("b.ts")),
+      ...failing("Read", missing("c.ts")),
     ]),
   );
   expect(found).toEqual([
     {
       kind: "retry-loop",
       failure: "missing-path",
-      what: "a.ts",
-      tools: ["Read", "Bash"],
-      calls: [1, 3, 4],
+      what: "Read",
+      tools: ["Read"],
+      calls: [1, 4, 5],
     },
   ]);
 });
@@ -84,8 +85,8 @@ test("two repeats, different errors and unnamed failures on different tools are 
     behaviour(
       run([
         ...failing("Read", missing("a.ts")),
-        ...failing("Read", missing("b.ts")),
-        ...failing("Read", missing("c.ts")),
+        ...failing("Read", { ...missing("a.ts"), errorClass: "permission denied" }),
+        ...failing("Read", missing("a.ts")),
       ]),
     ),
   ).toEqual([]);
@@ -105,10 +106,10 @@ test("one shell command failing three times is a retry loop", () => {
   );
 });
 
-test("unnamed failures fall back to the failing tool as the key", () => {
+test("failures without a command fall back to the failing tool as the key", () => {
   const exit: Failure = { kind: "exit-code", detail: null, exitCode: 2 };
   expect(behaviour(run([1, 2, 3].flatMap(() => failing("Bash", exit))))).toEqual([
-    { kind: "retry-loop", failure: "exit-code", what: null, tools: ["Bash"], calls: [1, 2, 3] },
+    { kind: "retry-loop", failure: "exit-code", what: "Bash", tools: ["Bash"], calls: [1, 2, 3] },
   ]);
 });
 

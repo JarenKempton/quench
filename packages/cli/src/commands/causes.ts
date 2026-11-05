@@ -1,7 +1,13 @@
-import { harnessById, type HarnessId } from "@quench/history";
-import { behaviour, behaviourLabel, type BehaviourKind } from "@quench/insights";
-import { Cause, total, type Causes, type CauseStatus, type CauseTally } from "@quench/judge";
-import { describe, quote } from "../format.ts";
+import { harnessById } from "@quench/history";
+import { behaviourLabel, type BehaviourKind } from "@quench/insights";
+import {
+  Cause,
+  total,
+  type Causes,
+  type CauseStatus,
+  type CauseTally,
+  type Reply,
+} from "@quench/judge";
 
 const STATUSES: CauseStatus[] = [...Cause.options, "pending", "failed"];
 
@@ -47,13 +53,7 @@ export function renderCauses(causes: Causes, examples: number): string {
   const latest = [...causes.caused]
     .sort((a, b) => (b.reply.run.replyAt?.getTime() ?? 0) - (a.reply.run.replyAt?.getTime() ?? 0))
     .slice(0, examples);
-  for (const { reply, cause } of latest) {
-    const found = behaviour(reply.run);
-    lines.push(
-      `  ${label[cause]} · ${reply.sender ?? "unresolved"} · ${harnessLabel(reply.harness)} · ${reply.path} run ${reply.position}  ${quote(reply.run.reply)}`,
-      `      behaviour: ${found.length ? found.map(describe).join(" · ") : "none detected"}`,
-    );
-  }
+  for (const { reply, cause } of latest) lines.push(`  ${label[cause]} · ${latestLine(reply)}`);
   lines.push(
     "",
     "Causes are one Jev choice per correction; behaviour comes from the log. Correlations, not causes of each other.",
@@ -80,4 +80,7 @@ function top(t: CauseTally): string {
   return `${n} · ${parts.join(" · ")}`;
 }
 
-const harnessLabel = (id: HarnessId) => harnessById[id].label;
+export const latestLine = (r: Reply) =>
+  `${dateOf(r) ?? "undated"} · ${r.kind ?? "unclassified"} · ${r.sender ?? "unresolved"} (${r.senderSource} attribution) · ${harnessById[r.harness].label} ${r.sessionId} run ${r.position}`;
+
+export const dateOf = (r: Reply) => r.run.replyAt?.toISOString().slice(0, 10) ?? null;

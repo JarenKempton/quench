@@ -1,5 +1,5 @@
-import { redacted } from "@quench/secrets";
 import {
+  commandShape,
   contextOf,
   failedCall,
   startedAt,
@@ -10,6 +10,7 @@ import {
   type SenderEvidence,
   type Session,
   type ShellCommand,
+  type CommandShape,
   type Usage,
 } from "@quench/history";
 
@@ -20,8 +21,12 @@ export type ToolCall = {
   resultChars: number | null;
   inScript: boolean;
   loadedTools?: string[];
-  failure?: { kind: FailureKind; what: string | null };
+  failure?: { kind: FailureKind; what: string | null; error: string | null };
 };
+
+export type RunCommand = ShellCommand & { call: number };
+
+export type CommandRecord = CommandShape & { error: string | null };
 
 export type Run = {
   prompt: string | null;
@@ -36,7 +41,7 @@ export type Run = {
   assistantSaid: string | null;
   outcome: string | null;
   steering: string[];
-  commands: ShellCommand[];
+  commands: RunCommand[];
   filesRead: string[];
   startedAt: Date | null;
   endedAt: Date | null;
@@ -87,6 +92,12 @@ export const durationSeconds = (r: Run): number | null =>
   r.startedAt && r.endedAt
     ? Math.round((r.endedAt.getTime() - r.startedAt.getTime()) / 1000)
     : null;
+
+export const commandRecords = (run: Run): CommandRecord[] =>
+  run.commands.map(({ command, call }) => ({
+    ...(command === null ? { program: "other command", subcommand: null } : commandShape(command)),
+    error: run.calls[call - 1]!.failure?.error ?? null,
+  }));
 
 export const IDLE_MS = 10 * 60 * 1000;
 
@@ -175,7 +186,7 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
         run.toolCalls += 1;
         run.calls.push(call);
         run.outcome = null;
-        run.commands.push(...(event.shell ?? []));
+        run.commands.push(...(event.shell ?? []).map((c) => ({ ...c, call: run.calls.length })));
         if (event.fileRead) run.filesRead.push(event.fileRead.path);
         if (event.id !== null) {
           byId.set(event.id, call);
@@ -200,8 +211,7 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
           call.ok = event.isError === null ? null : !event.isError;
           call.resultChars = event.chars;
           if (event.loadedTools) call.loadedTools = event.loadedTools;
-          const failed =
-            event.failure && failedCall(event.failure, recorded.get(event.callId!), redacted);
+          const failed = event.failure && failedCall(event.failure, recorded.get(event.callId!));
           if (failed) call.failure = failed;
         }
         break;

@@ -8,7 +8,7 @@ export { discoverAll, readSessions, type Progress, type ReadOutcome } from "./re
 export { jsonlLines } from "./jsonl.ts";
 export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
-export { shellReads } from "./shell.ts";
+export { commandShape, shellReads, type CommandShape } from "./shell.ts";
 export type { SkillListing, SkillLoad } from "./skill-loads.ts";
 export {
   compareWithDisk,
@@ -22,13 +22,7 @@ export { checkout, isInside, pathParts, repositoryRoot } from "./files.ts";
 export { ancestorDirs } from "./steering.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export type { McpToolLoad } from "./mcp-tools.ts";
-export {
-  failedCall,
-  failureOf,
-  recordedFailures,
-  type Scrub,
-  type SessionFailure,
-} from "./failures.ts";
+export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
 export { knownProgram, knownSubcommand } from "./subcommands.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { launchOf, type Ecosystem, type Launch } from "./launch.ts";

@@ -50,6 +50,7 @@ function retryLoops(run: Run): Behaviour[] {
     const key = JSON.stringify([
       failure.kind,
       failure.what,
+      failure.error,
       failure.what === null ? call.tool : null,
     ]);
     const seen = repeats.get(key) ?? { failure: failure.kind, what: failure.what, calls: [] };

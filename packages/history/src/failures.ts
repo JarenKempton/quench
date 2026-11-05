@@ -63,8 +63,6 @@ function classified(head: string, exitCode: number | null, denial: Denial): Fail
   return summarised("error");
 }
 
-export type Scrub = (text: string) => string;
-
 export function recordedFailures(session: Session): SessionFailure[] {
   const callsById = new Map<string, ToolCall>();
   const countedResults = new Set<string>();
@@ -107,18 +105,16 @@ export function recordedFailures(session: Session): SessionFailure[] {
 export function failedCall(
   failure: Failure,
   call: ToolCall | undefined,
-  scrub: Scrub = (text) => text,
-): { kind: Failure["kind"]; what: string | null } | null {
-  const signature = shellSignatureOf(call, scrub);
-  if (isNothingFound(failure, signature)) return null;
-  return { kind: failure.kind, what: whatFailed(failure, call, signature, scrub) };
+): { kind: Failure["kind"]; what: string | null; error: string | null } | null {
+  const keyed = failureKey(failure, call);
+  return keyed && { kind: failure.kind, what: keyed.what, error: keyed.error };
 }
 
 function failureKey(
   failure: Failure,
   call: ToolCall | undefined,
 ): { what: string | null; error: string | null; guard: string | null } | null {
-  const signature = shellSignatureOf(call, (text) => text);
+  const signature = shellSignatureOf(call);
   if (isNothingFound(failure, signature)) return null;
   const blocked = failure.kind === "blocked";
   const chained = call?.shell?.some((shell) => shell.command && isChained(shell.command));
@@ -129,10 +125,6 @@ function failureKey(
   };
 }
 
-function scrubbedLine(failure: Failure, scrub: Scrub): string | null {
-  return failure.line ? failureSummary(scrub(failure.line)) : null;
-}
-
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   if (event.callId === null) return false;
   if (counted.has(event.callId)) return true;
@@ -140,10 +132,10 @@ function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   return false;
 }
 
-function shellSignatureOf(call: ToolCall | undefined, scrub: Scrub): string | null {
+function shellSignatureOf(call: ToolCall | undefined): string | null {
   if (call?.shell?.length !== 1) return null;
   const command = call.shell[0]!.command;
-  return command ? commandSignature(scrub(command)) : null;
+  return command ? commandSignature(command) : null;
 }
 
 const NOTHING_FOUND = new Set(["grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "["]);
@@ -151,20 +143,6 @@ const NOTHING_FOUND = new Set(["grep", "egrep", "fgrep", "rg", "diff", "cmp", "t
 function isNothingFound(failure: Failure, signature: string | null): boolean {
   if (failure.kind !== "exit-code" || failure.exitCode !== 1) return false;
   return NOTHING_FOUND.has(signature?.split(" ")[0] ?? "");
-}
-
-function whatFailed(
-  failure: Failure,
-  call: ToolCall | undefined,
-  signature: string | null,
-  scrub: Scrub,
-): string | null {
-  if (failure.kind !== "exit-code" && failure.line) return scrubbedLine(failure, scrub);
-  if (failure.detail !== null) return scrub(failure.detail);
-  if (failure.kind === "missing-path" && call?.fileRead) return scrub(call.fileRead.path);
-  if (signature !== null) return signature;
-  if (failure.kind === "exit-code" || failure.kind === "missing-program") return null;
-  return call?.name ?? null;
 }
 
 function rowFor(

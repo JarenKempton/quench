@@ -128,13 +128,14 @@ test("corrections separate people, automation and unresolved senders without tre
   ]);
   expect(out.latest).toHaveLength(2);
   expect(out.latestAutomation).toHaveLength(1);
-  expect(out.latestAutomation[0]).toMatchObject({
+  expect(out.latestAutomation[0]).toEqual({
+    harness: "claude-code",
     sessionId: "c",
-    path: join(sessions, "c.jsonl"),
     position: 1,
+    date: "2026-10-20",
+    kind: "correction",
     sender: "automation",
     senderSource: "judge",
-    reply: "Relay: run the checks.",
   });
   const preview = await run(home, [...args, "--dry-run"]);
   expect(JSON.parse(preview.stdout).themes.eligibleCorrections).toBe(3);
@@ -142,7 +143,7 @@ test("corrections separate people, automation and unresolved senders without tre
   expect(text.stdout).toContain("5 replies to agent runs");
   expect(text.stdout).toContain("Unresolved senders");
   expect(text.stdout).toContain("Latest corrections from agents / automation");
-  expect(text.stdout).toContain("Relay: run the checks.");
+  expect(text.stdout).not.toContain("Relay: run the checks.");
   expect(text.stdout).not.toContain("not counted below");
   expect(await Bun.file(cacheFile).text()).toBe(before);
 });

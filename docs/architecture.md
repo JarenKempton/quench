@@ -143,7 +143,8 @@ remain unverified. This is deliberately incomplete, not a claim of universal sen
   progress lines are skipped, and `null` when the turn never finished. A run is `open` only
   while it is the session's last and was active in the last 10 minutes; once closed, later
   history cannot change it, so `<session>:<n>` ids are stable. Records add the session's folder
-  and branch, commands with their folders, failures, files read and PR links in commands.
+  and branch, commands as program, known subcommand and error class, failures, files read and PR links in
+  commands.
   `--history <dir>` reads each folder as one machine's home and tags runs with its name.
 - A **report** totals runs and sessions per harness.
 

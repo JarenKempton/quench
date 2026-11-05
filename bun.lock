@@ -39,7 +39,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@quench/history": "workspace:*",
-        "@quench/secrets": "workspace:*",
       },
     },
     "packages/judge": {

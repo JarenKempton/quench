@@ -182,8 +182,7 @@ test("context renders no reply, error or command text, in text or JSON", async (
     })),
   );
   const { json, text } = await context(home);
-  expect(json.recurring.map((r: { behaviour: string }) => r.behaviour).sort()).toEqual([
-    "Same failure 3+ times: Bash",
+  expect(json.recurring.map((r: { behaviour: string }) => r.behaviour)).toEqual([
     "Same failure 3+ times: Bash · curl",
   ]);
   expect(JSON.stringify(json)).not.toContain(CANARY);
