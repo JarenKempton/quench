@@ -292,3 +292,101 @@ test("removing a project skill keeps an exclude line that was there before Quenc
   expect(removed.applied.map((a) => a.action)).toEqual(["remove"]);
   expect((await readFile(exclude, "utf8")).split("\n")).toContain("/.claude/skills/alpha/");
 });
+
+const ALPHA = [{ skill: "alpha", harnesses: ["claude-code"] }];
+
+for (const step of ["staged", "backed-up"] as const)
+  test(`recovery after "${step}" keeps a foreign folder at the target even when its content matches`, async () => {
+    const { home, source, options } = await setup(V1, ALPHA);
+    if (step === "backed-up") {
+      await planAndApply(home, options);
+      await writeSource(source, V2, ALPHA);
+    }
+    const target = join(home.dir, ".claude/skills/alpha");
+    await interrupted(home, options, step, async () => {
+      await cp(join(source, "skills/alpha"), target, { recursive: true });
+      throw new Error("crash");
+    }).catch(() => undefined);
+    const plan = await skillsPlan(home, options);
+    await skillsApply(home, { ...options, planHash: plan.hash! }).catch(() => undefined);
+    expect(await readFile(join(target, "SKILL.md"), "utf8")).toBe(
+      step === "staged" ? "# alpha v1\n" : "# alpha v2\n",
+    );
+  });
+
+test("plan reports a symlinked project root as a conflict, like apply", async () => {
+  const { dir, home, options } = await setup(V1, PROJECT);
+  const checkout = await project(dir);
+  const elsewhere = await outside(join(dir, "elsewhere"), {});
+  await mkdir(elsewhere, { recursive: true });
+  await mkdir(join(checkout, ".claude"));
+  await link(elsewhere, join(checkout, ".claude/skills"));
+  const withProject = { ...options, projects: [checkout] };
+  const plan = await skillsPlan(home, withProject);
+  expect(plan.items.map((i) => i.action)).toEqual(["conflict"]);
+  expect(plan.items[0]?.reason).toContain("another writer");
+  const outcome = await skillsApply(home, { ...withProject, planHash: plan.hash! });
+  expect(outcome.applied).toEqual([]);
+  expect(await snapshotOf(elsewhere)).toEqual([]);
+});
+
+test("plan reports an owned folder under a newly symlinked root as a conflict, never a removal", async () => {
+  const { home, source, options } = await setup(V1, ALPHA);
+  await planAndApply(home, options);
+  const root = join(home.dir, ".claude/skills");
+  await rename(root, `${root}.saved`);
+  await link(`${root}.saved`, root);
+  await writeSource(source, V1, []);
+  const plan = await skillsPlan(home, options);
+  expect(plan.items.map((i) => i.action)).toEqual(["conflict"]);
+  await skillsApply(home, { ...options, planHash: plan.hash! });
+  expect(await readFile(join(`${root}.saved`, "alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
+});
+
+async function dotfiles(dir: string, home: { dir: string }) {
+  const first = join(dir, "dotfiles-a");
+  await mkdir(first, { recursive: true });
+  await link(first, join(home.dir, ".claude"));
+  return first;
+}
+
+test("a symlinked ~/.claude is followed while it stays where the plan resolved it", async () => {
+  const { dir, home, options } = await setup(V1, ALPHA);
+  const first = await dotfiles(dir, home);
+  const outcome = await planAndApply(home, options);
+  expect(outcome.conflicts).toEqual([]);
+  expect(await readFile(join(first, "skills/alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
+});
+
+test("re-pointing a symlinked ~/.claude after the plan changes the plan hash", async () => {
+  const { dir, home, options } = await setup(V1, ALPHA);
+  await dotfiles(dir, home);
+  const plan = await skillsPlan(home, options);
+  const second = join(dir, "dotfiles-b");
+  await mkdir(second, { recursive: true });
+  await rm(join(home.dir, ".claude"), { recursive: true });
+  await link(second, join(home.dir, ".claude"));
+  const refused = await skillsApply(home, { ...options, planHash: plan.hash! }).catch(
+    (e: Error) => e,
+  );
+  expect((refused as Error).message).toContain("changed since plan");
+  expect(await snapshotOf(second)).toEqual([]);
+});
+
+test("re-pointing a symlinked ~/.claude mid-apply is a conflict and nothing is written through it", async () => {
+  const { dir, home, source, options } = await setup(V1, ALPHA);
+  const first = await dotfiles(dir, home);
+  await planAndApply(home, options);
+  await writeSource(source, V2, ALPHA);
+  const second = join(dir, "dotfiles-b");
+  const outcome = await interrupted(home, options, "staged", async () => {
+    await cp(first, second, { recursive: true });
+    await rm(join(home.dir, ".claude"), { recursive: true });
+    await link(second, join(home.dir, ".claude"));
+  }).catch((e: Error) => e);
+  expect(outcome instanceof Error ? outcome.message : JSON.stringify(outcome.conflicts)).toContain(
+    "resolves",
+  );
+  expect(await readFile(join(second, "skills/alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
+  expect(await readFile(join(first, "skills/alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
+});

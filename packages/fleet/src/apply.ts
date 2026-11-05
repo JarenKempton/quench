@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { BundleManifest } from "./bundle.ts";
 import { own, Sha256, TreeHash } from "./common.ts";
@@ -39,10 +39,13 @@ export const JournalOp = z
     kind: z.enum(["install", "update", "remove"]),
     path: z.string(),
     base: z.string(),
+    pin: z.string(),
     work: z.string(),
     token: z.string(),
     stage: z.string().nullable(),
     backup: z.string(),
+    stagedId: z.string().nullable(),
+    backupId: z.string().nullable(),
     desired: TreeHash.nullable(),
     previous: TreeHash.nullable(),
     files: z.array(z.object({ path: z.string(), mode: FileMode, sha256: Sha256 }).strict()),
@@ -69,7 +72,30 @@ const probe = (path: string) =>
 
 type Want = "dir" | "absent" | "dir?" | "file?";
 
-export async function guard(base: string, path: string, want: Want) {
+export const pinKey = (path: string) =>
+  process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
+
+export const samePath = (a: string, b: string) => pinKey(a) === pinKey(b);
+
+export async function resolved(path: string) {
+  const missing: string[] = [];
+  let at = path;
+  for (;;) {
+    const real = await realpath(at).catch(() => null);
+    if (real) return join(real, ...missing.reverse());
+    const up = dirname(at);
+    if (up === at) return path;
+    missing.push(basename(at));
+    at = up;
+  }
+}
+
+export const identity = async (path: string) => {
+  const info = await lstat(path, { bigint: true }).catch(() => null);
+  return info ? `${info.dev}:${info.ino}` : null;
+};
+
+export async function guard(base: string, path: string, want: Want, pin: string = base) {
   const rel = relative(base, path);
   if (isAbsolute(rel) || rel.split(/[\\/]/)[0] === "..")
     throw new Conflict(`${path} is outside ${base}`);
@@ -80,7 +106,7 @@ export async function guard(base: string, path: string, want: Want) {
     const last = i === parts.length;
     const info = await probe(at);
     if (!info) {
-      if (want !== "dir") return;
+      if (want !== "dir") break;
       throw new Conflict(`${at} is missing`);
     }
     if (info.isSymbolicLink())
@@ -90,6 +116,9 @@ export async function guard(base: string, path: string, want: Want) {
       throw new Conflict(`${at} is not a regular ${last && want === "file?" ? "file" : "folder"}`);
     if (last && want === "absent") throw new Conflict(`${at} already exists`);
   }
+  const now = await resolved(base);
+  if (!samePath(now, pin))
+    throw new Conflict(`${base} now resolves to ${now}, not ${pin} as planned`);
 }
 
 export async function inspect(path: string) {
@@ -226,7 +255,8 @@ const excludeConflict = (error: unknown) =>
   error instanceof Conflict ? new Conflict(`.git/info/exclude: ${error.message}`) : error;
 
 async function guardExclude(file: string) {
-  await guard(dirname(dirname(file)), file, "file?").catch((error) => {
+  const git = dirname(dirname(file));
+  await guard(git, file, "file?", git).catch((error) => {
     throw excludeConflict(error);
   });
 }
@@ -274,18 +304,20 @@ async function tidy(op: JournalOp) {
     new Conflict(
       `conflict: ${why}; Quench left it in place (interrupted ${op.kind} of ${op.path})`,
     );
-  await guard(op.base, op.work, "dir");
+  await guard(op.base, op.work, "dir", op.pin);
   const marker = await readFile(join(op.work, MARKER), "utf8").catch(() => null);
   const names = (await readdir(op.work)).filter((n) => n !== MARKER);
   if (marker !== op.token && (marker !== null || names.length))
     throw conflict(`${op.work} is not marked as created by this apply`);
   for (const name of names) {
     const path = join(op.work, name);
-    await guard(op.base, path, "dir");
+    await guard(op.base, path, "dir", op.pin);
+    const id = await identity(path);
     if (path === op.backup) {
-      if ((await inspect(path))?.treeHash !== op.previous) throw conflict(`${path} changed`);
+      if (id !== op.backupId || (await inspect(path))?.treeHash !== op.previous)
+        throw conflict(`${path} changed`);
     } else if (path === op.stage) {
-      if (!(await stagedByUs(op))) throw conflict(`${path} changed`);
+      if (id !== op.stagedId || !(await stagedByUs(op))) throw conflict(`${path} changed`);
     } else throw conflict(`${path} was not created by Quench`);
     await removeTree(path);
   }
@@ -311,20 +343,23 @@ export async function recover(state: string): Promise<string | null> {
     if (op.kind === "remove" && op.exclude) await wrap(() => dropExclude(op.exclude!, ledger));
   } else
     await wrap(async () => {
+      const ours = async (path: string) => !!op.stagedId && (await identity(path)) === op.stagedId;
       if (await probe(op.backup)) {
-        await guard(op.base, op.backup, "dir");
+        await guard(op.base, op.backup, "dir", op.pin);
+        if ((await identity(op.backup)) !== op.backupId)
+          throw conflict(`${op.backup} is not the folder Quench moved aside`);
         if (await probe(op.path)) {
-          await guard(op.base, op.path, "dir");
-          if (!op.desired || (await inspect(op.path))?.treeHash !== op.desired)
-            throw conflict(`${op.path} changed after the interrupted apply`);
+          await guard(op.base, op.path, "dir", op.pin);
+          if (!(await ours(op.path)))
+            throw conflict(`${op.path} was created by someone else after the interrupted apply`);
           await removeTree(op.path);
         }
-        await guard(op.base, op.path, "absent");
+        await guard(op.base, op.path, "absent", op.pin);
         await rename(op.backup, op.path);
-        await guard(op.base, op.path, "dir");
+        await guard(op.base, op.path, "dir", op.pin);
       } else if (op.kind === "install" && (await probe(op.path))) {
-        await guard(op.base, op.path, "dir");
-        if ((await inspect(op.path))?.treeHash === op.desired) await removeTree(op.path);
+        await guard(op.base, op.path, "dir", op.pin);
+        if (await ours(op.path)) await removeTree(op.path);
       }
       if (op.kind === "install" && op.exclude) await dropExclude(op.exclude, ledger);
     });
@@ -334,12 +369,11 @@ export async function recover(state: string): Promise<string | null> {
 }
 
 async function stage(op: JournalOp, source: string) {
-  await mkdir(op.stage!);
   for (const file of op.files) {
     const from = join(source, ...file.path.split("/"));
     const to = join(op.stage!, ...file.path.split("/"));
     await mkdir(dirname(to), { recursive: true });
-    await guard(op.work, dirname(to), "dir");
+    await guard(op.base, dirname(to), "dir", op.pin);
     const bytes =
       file.mode === "120000" ? await readlink(from, { encoding: "buffer" }) : await readFile(from);
     if (sha256(bytes) !== file.sha256)
@@ -356,6 +390,7 @@ export type ApplyInput = {
   state: string;
   absolute: (path: string) => string;
   installed: Record<string, InstalledState | undefined>;
+  pins?: Record<string, string>;
   projects?: (ProjectCheckout & { exclude: string })[];
   now?: () => string;
   interrupt?: (step: "staged" | "backed-up" | "swapped" | "committed") => void | Promise<void>;
@@ -397,6 +432,8 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
   if (at.scope === "project" && !checkout)
     throw new Conflict(`${item.path}: checkout ${at.checkout} was not given`);
   const base = checkout ? absolute(checkout.checkout) : root;
+  const pin = input.pins?.[pinKey(base)] ?? base;
+  const check = (target: string, want: Want) => guard(base, target, want, pin);
   const line = checkout ? `/${relative(base, path).replaceAll("\\", "/")}/` : null;
   const planned = own(input.installed, item.path!);
   const desiredModes = kind === "remove" ? null : executablesOf(bundle, item.skill);
@@ -408,10 +445,13 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
     kind,
     path,
     base,
+    pin,
     work,
     token,
     stage: kind === "remove" ? null : join(work, "new"),
     backup: join(work, "old"),
+    stagedId: null,
+    backupId: null,
     desired: kind === "remove" ? null : item.desired,
     previous: planned?.treeHash ?? null,
     files:
@@ -431,48 +471,54 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
           ? {
               file: checkout.exclude,
               line,
-              added: !(await excludeHas({ file: checkout.exclude, line }).catch((e) => {
-                throw excludeConflict(e);
-              })),
+              added: !(await excludeHas({ file: checkout.exclude, line })),
             }
           : null,
   };
-  await guard(base, root, kind === "remove" ? "dir" : "dir?");
+  await check(root, kind === "remove" ? "dir" : "dir?");
   await mkdir(root, { recursive: true });
-  await guard(base, root, "dir");
-  await guard(base, work, "absent");
+  await check(root, "dir");
+  await check(work, "absent");
   await writeJournal(state, op);
   await mkdir(work);
   await writeFile(join(work, MARKER), token, { flag: "wx" });
-  await guard(base, work, "dir");
+  await check(work, "dir");
   if (op.stage) {
+    await mkdir(op.stage);
+    await check(op.stage, "dir");
+    op.stagedId = await identity(op.stage);
+    await writeJournal(state, op);
     await stage(op, own(input.sources, item.skill)!);
     if (!matches(await inspect(op.stage), op.desired, desiredModes))
       throw new Error(`${item.skill} staged with a different tree hash or mode; plan again`);
     await interrupt?.("staged");
   }
-  await guard(base, path, planned ? "dir" : "absent");
+  await check(path, planned ? "dir" : "absent");
   if (!matches(await inspect(path), planned?.treeHash, planned?.executables ?? null))
     throw new Conflict(`${item.path} changed since the plan`);
   if (planned) {
-    await guard(base, op.backup, "absent");
+    await check(op.backup, "absent");
+    op.backupId = await identity(path);
+    await writeJournal(state, op);
     await rename(path, op.backup);
     await interrupt?.("backed-up");
-    await guard(base, op.backup, "dir");
-    await guard(base, path, "absent");
+    await check(op.backup, "dir");
+    await check(path, "absent");
+    if ((await identity(op.backup)) !== op.backupId)
+      throw new Conflict(`${item.path} was replaced during the move`);
   }
   if (op.stage) {
-    await guard(base, op.stage, "dir");
-    await guard(base, path, "absent");
+    await check(op.stage, "dir");
+    await check(path, "absent");
     await rename(op.stage, path);
     await interrupt?.("swapped");
-    await guard(base, path, "dir");
-    if (!matches(await inspect(path), op.desired, desiredModes))
+    await check(path, "dir");
+    if (
+      (await identity(path)) !== op.stagedId ||
+      !matches(await inspect(path), op.desired, desiredModes)
+    )
       throw new Conflict(`${item.path} changed during the swap`);
-    if (op.exclude?.added)
-      await addExclude(op.exclude).catch((e) => {
-        throw excludeConflict(e);
-      });
+    if (op.exclude?.added) await addExclude(op.exclude);
   }
   const location =
     at.scope === "project"

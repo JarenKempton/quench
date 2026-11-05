@@ -19,9 +19,12 @@ import {
   ACTIONABLE,
   applyPlan,
   inspect,
+  pinKey,
   readJournal,
   readLedger,
   recover,
+  resolved,
+  samePath,
   withLock,
   type ApplyInput,
 } from "@quench/fleet/apply";
@@ -93,13 +96,37 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
   const built = await buildBundle(options.source, fleet, options.machine);
   const roots = {} as Record<HarnessId, string>;
   const linkedRoots: string[] = [];
+  const pins: Record<string, string> = {};
+  const shownPins: Record<string, string> = {};
+  const pinned = async (base: string) => {
+    const real = await resolved(base);
+    if (samePath(real, base)) return;
+    pins[pinKey(base)] = real;
+    shownPins[display(home, base)] = real.replaceAll("\\", "/");
+  };
   for (const harness of HARNESSES) {
     const root = await userSkillRoot(home, harness);
     roots[harness] = display(home, root);
     if ((await lstat(root).catch(() => null))?.isSymbolicLink()) linkedRoots.push(roots[harness]);
+    await pinned(root);
   }
   const projects = [];
-  for (const dir of options.projects ?? []) projects.push(await project(home, dir));
+  for (const dir of options.projects ?? []) {
+    const checkout = await project(home, dir);
+    projects.push(checkout);
+    const base = absolute(home, checkout.checkout);
+    await pinned(base);
+    for (const harness of HARNESSES) {
+      let at = base;
+      for (const part of PROJECT_ROOTS[harness].split("/")) {
+        at = join(at, part);
+        if ((await lstat(at).catch(() => null))?.isSymbolicLink()) {
+          linkedRoots.push(checkout.roots[harness]);
+          break;
+        }
+      }
+    }
+  }
   const state = stateDir(home);
   const ledger = await readLedger(state);
   const paths = new Set(owned(ledger).keys());
@@ -130,6 +157,7 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
     ],
     projects,
     linkedRoots,
+    pins: shownPins,
   });
   return {
     plan: result,
@@ -140,6 +168,7 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
       state,
       absolute: (path: string) => absolute(home, path),
       installed,
+      pins,
       projects,
     } satisfies ApplyInput,
     ledger,

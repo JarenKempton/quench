@@ -69,8 +69,11 @@ export const Plan = z
   .strict();
 export type Plan = z.infer<typeof Plan>;
 
-export const planHash = ({ hash: _, ...rest }: Plan, modes: (string[] | null)[]) =>
-  sha256(JSON.stringify({ plan: rest, modes }));
+export const planHash = (
+  { hash: _, ...rest }: Plan,
+  modes: (string[] | null)[],
+  pins: Record<string, string> = {},
+) => sha256(JSON.stringify({ plan: rest, modes, pins }));
 
 export type ProjectCheckout = {
   remote: string;
@@ -86,6 +89,7 @@ export type PlanInput = {
   warnings: string[];
   projects?: ProjectCheckout[];
   linkedRoots?: string[];
+  pins?: Record<string, string>;
 };
 
 const FOREIGN_LINK =
@@ -110,6 +114,7 @@ export function plan({
   warnings,
   projects = [],
   linkedRoots = [],
+  pins = {},
 }: PlanInput): Plan {
   const mine = owned(ledger);
   const items: PlanItem[] = [];
@@ -230,7 +235,7 @@ export function plan({
     if (entry.location.scope !== "global" && !checkouts.has(entry.location.checkout)) continue;
     const now = own(installed, path) ?? null;
     const action =
-      !now || (!now.symlink && sameState(now, entry.treeHash, entry.executables))
+      !linked(path) && (!now || (!now.symlink && sameState(now, entry.treeHash, entry.executables)))
         ? "remove"
         : "conflict";
     items.push({
@@ -241,7 +246,12 @@ export function plan({
       desired: null,
       installed: shown(now),
       action,
-      reason: action === "conflict" ? "edited since Quench wrote it" : null,
+      reason:
+        action !== "conflict"
+          ? null
+          : linked(path) || now?.symlink
+            ? FOREIGN_LINK
+            : "edited since Quench wrote it",
     });
   }
   const byFold = new Map<string, PlanItem[]>();
@@ -271,5 +281,6 @@ export function plan({
     warnings,
   };
   const modes = items.map((i) => (i.desired ? executablesOf(bundle, i.skill) : null));
-  return { ...result, hash: planHash(result, modes) };
+  const sortedPins = Object.fromEntries(Object.entries(pins).sort(([a], [b]) => cmp(a, b)));
+  return { ...result, hash: planHash(result, modes, sortedPins) };
 }
