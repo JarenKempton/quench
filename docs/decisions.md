@@ -123,6 +123,8 @@ retired with it and live in git history.
   excluded. Plans are deterministic: no timestamps, `~/` paths, the same bytes on every OS.
   A skill's scope is deny-by-default: it reaches a machine only when the fleet opens that scope
   or the machine accepts it, and a denied skill is named in the plan with its reason.
+  A skill source must resolve inside the source repo, and any unreadable or unparseable fleet
+  file, registry, manifest or override fails the plan; only an absent file counts as empty.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

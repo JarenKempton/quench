@@ -111,7 +111,13 @@ test("paths must already be NFC, in the manifest and on disk alike", async () =>
   const dir = await mkdtemp(join(tmpdir(), "fleet-nfd-"));
   await writeFile(join(dir, nfd), "x");
   const stored = (await import("node:fs")).readdirSync(dir)[0]!;
-  if (stored === nfd) expect(readTree(dir)).rejects.toThrow();
+  if (stored === nfd)
+    expect(
+      await readTree(dir).then(
+        () => null,
+        (error: Error) => error.message,
+      ),
+    ).toContain("portable");
 });
 
 test("skills named like Object prototype members are ordinary skills", async () => {

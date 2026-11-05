@@ -21,11 +21,17 @@ export const sha256 = (bytes: Uint8Array | string) =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
 export const foldCollision = (paths: string[]) => {
-  const seen = new Map<string, string>();
+  const seen = new Map<string, { path: string; file: boolean }>();
   for (const path of paths) {
-    const other = seen.get(foldKey(path));
-    if (other !== undefined) return [other, path] as const;
-    seen.set(foldKey(path), path);
+    const parts = path.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join("/");
+      const file = i === parts.length;
+      const other = seen.get(foldKey(prefix));
+      if (other && (other.path !== prefix || other.file || file))
+        return [other.path, prefix] as const;
+      seen.set(foldKey(prefix), { path: prefix, file });
+    }
   }
   return null;
 };

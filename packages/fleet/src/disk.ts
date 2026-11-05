@@ -1,5 +1,5 @@
 import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, relative } from "node:path";
 import type { BundleManifest } from "./bundle.ts";
 import { own } from "./common.ts";
 import { byPlacement, cmp, FleetFile, resolve } from "./fleet.ts";
@@ -54,15 +54,37 @@ export async function installedTree(dir: string) {
   };
 }
 
-const text = (path: string) => readFile(path, "utf8").catch(() => null);
+const absent = (error: NodeJS.ErrnoException) => error.code === "ENOENT";
+
+const failed = (path: string) => (error: NodeJS.ErrnoException) => {
+  throw new Error(`cannot read ${path}: ${error.code ?? error.message}`);
+};
+
+const text = (path: string) =>
+  readFile(path, "utf8").catch((error: NodeJS.ErrnoException) =>
+    absent(error) ? null : failed(path)(error),
+  );
+
+const required = async (path: string) =>
+  (await text(path)) ?? failed(path)({ code: "ENOENT" } as NodeJS.ErrnoException);
+
+const listing = (dir: string) =>
+  readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) =>
+    absent(error) ? [] : failed(dir)(error),
+  );
+
+export const inside = (root: string, path: string) => {
+  const rel = relative(root, path);
+  return rel === "" || (!isAbsolute(rel) && rel.split(/[\\/]/)[0] !== "..");
+};
 
 async function manifests(dir: string): Promise<Record<string, string>> {
-  const names = (await readdir(dir).catch(() => []))
-    .filter((n) => n.endsWith(".manifest"))
+  const names = (await listing(dir))
+    .filter((e) => e.name.endsWith(".manifest"))
+    .map((e) => e.name)
     .sort(cmp);
   const found: Record<string, string> = {};
-  for (const name of names)
-    found[basename(name, ".manifest")] = (await text(join(dir, name))) ?? "";
+  for (const name of names) found[basename(name, ".manifest")] = await required(join(dir, name));
   return found;
 }
 
@@ -71,7 +93,7 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
   if (registry === null) return null;
   const overridesDir = join(dir, "hosts", "overrides");
   const overrides: SkillsRepo["overrides"] = {};
-  const entries = await readdir(overridesDir, { withFileTypes: true }).catch(() => []);
+  const entries = await listing(overridesDir);
   for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => cmp(a.name, b.name)))
     overrides[entry.name] = await manifests(join(overridesDir, entry.name));
   const hosts = await manifests(join(dir, "hosts"));
@@ -85,10 +107,11 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
       const ref = line.trim().replace(/^[+-]/, "").trim();
       if (ref.includes("/") && !ref.startsWith("#")) refs.add(ref);
     }
+  const root = await realpath(dir);
   const folders: Record<string, string> = {};
   for (const ref of [...refs].sort(cmp)) {
     const real = await realpath(join(dir, ...ref.split("/"))).catch(() => null);
-    if (real) folders[ref] = real;
+    if (real && inside(root, real)) folders[ref] = real;
   }
   return { registry, manifests: hosts, overrides, folders };
 }
@@ -118,16 +141,23 @@ export async function buildBundle(
   };
   const { placements, denied } = resolve(fleet, machine);
   for (const d of denied) warnings.push(`${d.skill} (${d.harness}): ${d.reason}`);
+  const root = await realpath(dir);
   const failures = new Map<string, string>();
   for (const placement of placements.sort(byPlacement)) {
     const source = own(fleet.skills, placement.skill)!.path;
     if (!own(bundle.skills, placement.skill) && !failures.has(placement.skill)) {
-      const tree = await readTree(join(dir, ...source.split("/"))).then(
-        (t) => (t.some((e) => e.path === "SKILL.md") ? t : `no SKILL.md at ${source}`),
-        (error: Error) => `cannot read ${source}: ${error.message.split(",")[0]}`,
-      );
-      if (typeof tree === "string") failures.set(placement.skill, tree);
-      else
+      const real = await realpath(join(dir, ...source.split("/"))).catch(() => null);
+      const tree =
+        real && !inside(root, real)
+          ? `${source} resolves outside the source repo, rejected`
+          : await readTree(join(dir, ...source.split("/"))).then(
+              (t) => (t.some((e) => e.path === "SKILL.md") ? t : `no SKILL.md at ${source}`),
+              (error: Error) => `cannot read ${source}: ${error.message.split(",")[0]}`,
+            );
+      if (typeof tree === "string") {
+        failures.set(placement.skill, tree);
+        warnings.push(`${placement.skill}: ${tree}`);
+      } else
         bundle.skills[placement.skill] = {
           treeHash: treeHash(tree),
           files: tree.map((e) => ({
