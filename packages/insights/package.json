@@ -7,7 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@quench/history": "workspace:*",
-    "@quench/secrets": "workspace:*"
+    "@quench/history": "workspace:*"
   }
 }

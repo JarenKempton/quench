@@ -123,12 +123,14 @@ judged normally. The output counts each source separately. Human and automation 
 correction rates, outcome signals and recent examples; unresolved senders remain a separate
 bucket. Rates use classified replies only; only the correction verdict increases their numerator.
 JSON keeps human `signals` and `latest`, and adds `automationSignals`, `latestAutomation` and
-`fromUnknown`. Examples include the history path, session, run and sender evidence.
+`fromUnknown`. Examples show only the date, harness, session, run, verdict and sender evidence:
+no reply text, folder or history path.
 
 Each run also gets behaviour signals read from its own log, with no model call: the same failure
-(kind and what failed, or kind and tool when the log doesn't say what failed) 3 or more times, invalid tool input 2 or more times, 15 minutes or more of
+(kind, error class and the command's program and known subcommand, or the tool when no command was
+recorded) 3 or more times, invalid tool input 2 or more times, 15 minutes or more of
 agent time, and 10M or more tokens processed. They appear as yes/no rows in the "what came before"
-tables and on each example, with the call positions behind them (`behaviour` in JSON). Rework and
+tables, with the call positions behind them. Rework and
 early "done" claims are not detected: edit targets and completion claims are not recorded
 structurally, so detecting them would mean guessing from text.
 

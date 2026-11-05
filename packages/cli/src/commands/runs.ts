@@ -12,7 +12,7 @@ import {
   type Session,
   type SessionRef,
 } from "@quench/history";
-import { runRecords, runs as runsOf } from "@quench/insights";
+import { commandRecords, runRecords, runs as runsOf } from "@quench/insights";
 import { json, quote, runFacts } from "../format.ts";
 import { latestSessionIn } from "../latest.ts";
 
@@ -49,7 +49,13 @@ export async function runs(
   if (options.json) {
     const start = startingContext(session);
     process.stdout.write(
-      json(list.map((run, i) => (i === 0 ? { ...run, startingContext: start } : run))),
+      json(
+        list.map((run, i) => ({
+          ...run,
+          commands: commandRecords(run),
+          ...(i === 0 ? { startingContext: start } : {}),
+        })),
+      ),
     );
     return 0;
   }

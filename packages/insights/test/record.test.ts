@@ -80,10 +80,10 @@ test("a prompt sent while the agent is still working joins the run, and the outc
     endedAt: at(64),
     open: false,
     commands: [
-      { command: "gh pr view https://github.com/o/r/pull/7 && cat notes.md", workdir: "/repo" },
-      { command: "cat missing.md", workdir: "/repo" },
+      { program: "several commands", subcommand: null, error: null },
+      { program: "cat", subcommand: null, error: "other" },
     ],
-    failures: [{ tool: "anything", server: null, kind: "missing-path" }],
+    failures: [{ tool: "other tool", kind: "missing-path", what: "cat" }],
     filesRead: ["/repo/notes.md", "/repo/missing.md"],
     prLinks: ["https://github.com/o/r/pull/7"],
   });
@@ -163,6 +163,6 @@ test("a failed command's credentials never reach the run record", () => {
     at(30),
   );
   expect(record!.failures).toEqual([
-    { tool: "Bash", server: null, kind: "exit-code", what: "curl" },
+    { tool: "Bash", kind: "exit-code", what: "curl", error: "other" },
   ]);
 });

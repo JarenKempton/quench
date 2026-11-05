@@ -1,15 +1,13 @@
 import { join } from "node:path";
 import {
   discoverAll,
-  harnessById,
-  pathParts,
   readSessions,
   startedAt,
   type Home,
   type SessionEnricher,
 } from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
-import { behaviour, linkSubagents, runs } from "@quench/insights";
+import { linkSubagents, runs } from "@quench/insights";
 import {
   HarnessJudge,
   HarnessMissing,
@@ -34,9 +32,9 @@ import {
   type Themes,
 } from "@quench/judge";
 import { reading } from "../progress.ts";
-import { renderCauses } from "./causes.ts";
+import { dateOf, latestLine, renderCauses } from "./causes.ts";
 import { contextOf, inContext, renderInContext, type SessionContext } from "./context.ts";
-import { describe, json, quote, runFacts, shortPath } from "../format.ts";
+import { json, quote, shortPath } from "../format.ts";
 
 const MIN_BUCKET = 15;
 
@@ -332,16 +330,7 @@ function render(
     ["agents / automation", summary.latestAutomation],
   ] as const) {
     lines.push("", `Latest corrections from ${label}`);
-    for (const r of latest) {
-      const when = r.run.replyAt?.toISOString().slice(0, 10) ?? "";
-      lines.push(
-        `  ${when}  ${harnessById[r.harness].label} · ${folder(r.cwd) ?? "?"}  ${quote(r.run.reply)}`,
-        `      ${r.senderSource} attribution · ${r.path} run ${r.position}`,
-        `      after: ${runFacts(r.run)}`,
-      );
-      const found = behaviour(r.run);
-      if (found.length) lines.push(`      behaviour: ${found.map(describe).join(" · ")}`);
-    }
+    for (const r of latest) lines.push(`  ${latestLine(r)}`);
   }
   if (judged.pending) {
     lines.push(
@@ -365,16 +354,11 @@ const share = (t: Tally) =>
 const example = (r: Reply) => ({
   harness: r.harness,
   sessionId: r.sessionId,
-  path: r.path,
   position: r.position,
-  folder: folder(r.cwd),
-  reply: r.run.reply,
+  date: dateOf(r),
+  kind: r.kind,
   sender: r.sender,
   senderSource: r.senderSource,
-  run: r.run,
-  behaviour: behaviour(r.run),
 });
 
 const percent = (n: number, of: number) => `${((100 * n) / Math.max(of, 1)).toFixed(1)}%`;
-
-const folder = (cwd: string | null) => (cwd ? (pathParts(cwd).at(-1) ?? null) : null);

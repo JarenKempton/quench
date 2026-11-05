@@ -88,6 +88,10 @@ retired with it and live in git history.
 - **Run records may list tool names; analysis may not depend on them.** `runs --json` lists
   each call's recorded name, MCP server, outcome and result size as raw data. Patterns and
   rankings still use structural fields only, because hosts rename tools.
+- **Commands and corrections render from a fixed vocabulary, never history text** ([#128](https://github.com/JarenKempton/quench/issues/128)).
+  `runs --json` commands and failures name an allowlisted program, a known subcommand and an
+  error class; correction examples name only date, harness, session, run, verdict and sender.
+  Masking free text was shown unsafe in #126, so it is removed instead.
 - **`runs --all` folds a prompt sent mid-turn into the run as `steering`; corrections still split per prompt.**
 - **Releases run on two channels, nightly and stable.** Every merge to `main` replaces one
   rolling `nightly` pre-release; a maintainer cuts stable by choosing patch, minor or major.

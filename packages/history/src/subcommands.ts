@@ -31,3 +31,11 @@ export function knownSubcommand(program: string, word: string | undefined): stri
   if (!word || !/^[a-z][a-z0-9-]{0,24}$/.test(word)) return null;
   return subcommands.get(program)?.has(word) ? word : null;
 }
+
+const TOOLS = new Set(
+  "Bash BashOutput KillShell Read Write Edit MultiEdit NotebookEdit NotebookRead Glob Grep LS WebFetch WebSearch Task Agent TodoWrite Skill ExitPlanMode shell local_shell exec_command write_stdin apply_patch update_plan view_image bash read write edit grep find ls".split(
+    " ",
+  ),
+);
+
+export const knownTool = (name: string): string => (TOOLS.has(name) ? name : "other tool");

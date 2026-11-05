@@ -124,18 +124,32 @@ const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee
 
 export function commandSignature(command: string): string | null {
   if (isChained(command)) return null;
-  const [segment] = segments(command);
-  if (!segment) return null;
-  const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
-  const name =
-    words[0] && !words[0].dynamic
-      ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
-      : null;
+  const name = programName(command);
   if (!name || SETUP.has(name) || FILTERS.has(name)) return null;
-  const program = knownProgram(name);
+  const { program, subcommand } = commandShape(command);
+  return subcommand ? `${program} ${subcommand}` : program;
+}
+
+export type CommandShape = { program: string; subcommand: string | null };
+
+export function commandShape(command: string): CommandShape {
+  if (isChained(command)) return { program: "several commands", subcommand: null };
+  const words = firstWords(command);
+  const name = programName(command);
+  const program = name ? knownProgram(name) : "other command";
   const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
-  const sub = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
-  return sub ? `${program} ${sub}` : program;
+  const subcommand = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
+  return { program, subcommand };
+}
+
+const firstWords = (command: string): Word[] =>
+  unwrapped((segments(command)[0]?.words ?? []).filter((w) => !ASSIGNMENT.test(w.text)));
+
+function programName(command: string): string | null {
+  const first = firstWords(command)[0];
+  return first && !first.dynamic
+    ? win32.basename(first.text).replace(/\.(exe|cmd|bat)$/i, "")
+    : null;
 }
 
 export const isChained = (command: string): boolean => /&&|[|;\n]/.test(command);
