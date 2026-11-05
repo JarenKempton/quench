@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Author, Event, Session } from "@quench/history";
-import { ReportBuilder, durationSeconds, runs, signals } from "../src/index.ts";
+import { ReportBuilder, durationSeconds, runs, signals, startingShare } from "../src/index.ts";
 
 const at = (secs: number) => new Date(Date.UTC(2026, 9, 20, 10, 0, secs));
 
@@ -186,5 +186,26 @@ test("unknown token counts stay unknown in run totals and report coverage", () =
   const report = new ReportBuilder();
   report.add(s);
   const [h] = report.finish();
-  expect([h!.inferences, h!.inferencesWithoutTokens, h!.tokensProcessed]).toEqual([2, 1, 100]);
+  expect([
+    h!.inferences,
+    h!.inferencesWithoutTokens,
+    h!.tokensProcessed,
+    h!.startingLoadTokens,
+    startingShare(h!),
+  ]).toEqual([2, 1, null, null, null]);
+
+  const later = new ReportBuilder();
+  later.add(
+    session("v", null, [
+      say(0, "user", "go"),
+      { ...unknown, at: at(1) },
+      call(2, 100, "m", "high"),
+    ]),
+  );
+  const [k] = later.finish();
+  expect([k!.tokensProcessed, k!.startingLoadTokens, startingShare(k!)]).toEqual([
+    null,
+    null,
+    null,
+  ]);
 });

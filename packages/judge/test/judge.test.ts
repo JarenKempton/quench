@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Event, SenderEvidence } from "@quench/history";
@@ -40,6 +40,40 @@ test("switching judges and back keeps both judges' verdicts", async () => {
   expect((await VerdictCache.open(dir, "judge/a")).get(exchange("no"))).toEqual(verdict);
   expect((await VerdictCache.open(dir, "judge/b")).get(exchange("no"))).toEqual(verdict);
 });
+
+test("judge ids that differ only in punctuation keep separate caches", async () => {
+  const dir = await cachePath();
+  const shared = `${JSON.stringify({ judge: "judge/a", key: "k", verdict })}\n`;
+  await Bun.write(join(dir, "judgments.jsonl"), shared);
+  await (await VerdictCache.open(dir, "judge_a")).remember([[exchange("yes"), verdict]]);
+  const migrated = await VerdictCache.open(dir, "judge/a");
+  expect(migrated.size).toBe(1);
+  expect(migrated.path).not.toBe((await VerdictCache.open(dir, "judge_a")).path);
+});
+
+test("a truncated last line does not swallow the next verdict", async () => {
+  const dir = await cachePath();
+  const cache = await VerdictCache.open(dir, "judge/a");
+  await cache.remember([[exchange("one"), verdict]]);
+  await appendFile(cache.path, '{"judge":"judge/a","key":"partial');
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("two"), verdict]]);
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(2);
+});
+
+test("concurrent first opens migrate once and keep every append", async () => {
+  const dir = await cachePath();
+  const line = (n: number) => `${JSON.stringify({ judge: "judge/a", key: `k${n}`, verdict })}\n`;
+  await Bun.write(
+    join(dir, "judgments.jsonl"),
+    Array.from({ length: 15_000 }, (_, n) => line(n)).join(""),
+  );
+  const script = join(import.meta.dir, "remember-one.ts");
+  const procs = Array.from({ length: 8 }, (_, n) =>
+    Bun.spawn(["bun", script, dir, "judge/a", `reply ${n}`], { stderr: "inherit" }),
+  );
+  expect(await Promise.all(procs.map((p) => p.exited))).toEqual(Array(8).fill(0));
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(15_008);
+}, 30_000);
 
 test("a shared verdict file migrates into per-judge files without losing or changing entries", async () => {
   const dir = await cachePath();

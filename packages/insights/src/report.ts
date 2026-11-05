@@ -11,8 +11,8 @@ export type HarnessReport = {
   runs: number;
   inferences: number;
   inferencesWithoutTokens: number;
-  tokensProcessed: number;
-  startingLoadTokens: number;
+  tokensProcessed: number | null;
+  startingLoadTokens: number | null;
   startingLoad: Distribution;
   peakContext: Distribution;
   compactions: number;
@@ -26,7 +26,11 @@ export type HarnessReport = {
 };
 
 export const startingShare = (r: HarnessReport) =>
-  r.tokensProcessed ? r.startingLoadTokens / r.tokensProcessed : 0;
+  r.tokensProcessed === null || r.startingLoadTokens === null
+    ? null
+    : r.tokensProcessed
+      ? r.startingLoadTokens / r.tokensProcessed
+      : 0;
 
 export class ReportBuilder {
   private readonly tallies = new Map<HarnessId, Tally>();
@@ -136,8 +140,8 @@ class Tally {
       runs: this.runs,
       inferences: this.inferences,
       inferencesWithoutTokens: this.inferencesWithoutTokens,
-      tokensProcessed: this.tokensProcessed,
-      startingLoadTokens: this.startingLoadTokens,
+      tokensProcessed: this.inferencesWithoutTokens ? null : this.tokensProcessed,
+      startingLoadTokens: this.inferencesWithoutTokens ? null : this.startingLoadTokens,
       startingLoad: distribution(this.starts),
       peakContext: distribution(this.peaks),
       compactions: this.compactions,
