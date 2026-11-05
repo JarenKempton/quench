@@ -7,6 +7,7 @@ packages/history    reads each harness's session files into one Session model
 packages/insights   pure functions over sessions: runs, reports, signals
 packages/judge      opt-in model judgments about runs, behind the Judge interface
 packages/secrets    offline credential detection over history, configs and files on disk
+packages/fleet      fleet contracts (zod), tree hashes, the importer and the read-only skills planner
 packages/cli        the `quench` command; composition and formatting
 ```
 

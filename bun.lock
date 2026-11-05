@@ -17,10 +17,18 @@
         "quench": "./src/main.ts",
       },
       "dependencies": {
+        "@quench/fleet": "workspace:*",
         "@quench/history": "workspace:*",
         "@quench/insights": "workspace:*",
         "@quench/judge": "workspace:*",
         "@quench/secrets": "workspace:*",
+      },
+    },
+    "packages/fleet": {
+      "name": "@quench/fleet",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "^4.1.0",
       },
     },
     "packages/history": {
@@ -464,6 +472,8 @@
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
     "@quench/cli": ["@quench/cli@workspace:packages/cli"],
+
+    "@quench/fleet": ["@quench/fleet@workspace:packages/fleet"],
 
     "@quench/history": ["@quench/history@workspace:packages/history"],
 

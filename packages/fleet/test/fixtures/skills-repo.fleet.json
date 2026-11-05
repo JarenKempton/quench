@@ -1,0 +1,123 @@
+{
+  "fleet": {
+    "version": 1,
+    "openScopes": [
+      "personal",
+      "portable",
+      "work"
+    ],
+    "skills": {
+      "commit-style": {
+        "path": "skills/writing/commit-style",
+        "scope": "portable"
+      },
+      "deploy-notes": {
+        "path": "skills/ops/deploy-notes",
+        "scope": "work"
+      },
+      "review-checklist": {
+        "path": "skills/engineering/review-checklist",
+        "scope": "portable"
+      },
+      "scratchpad": {
+        "path": "skills/misc/scratchpad",
+        "scope": "personal"
+      }
+    },
+    "machines": {
+      "laptop": {
+        "tags": [],
+        "scopes": []
+      }
+    },
+    "assignments": [
+      {
+        "skill": "commit-style",
+        "target": {
+          "kind": "all"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "claude-code",
+          "codex",
+          "pi"
+        ],
+        "mode": "include"
+      },
+      {
+        "skill": "deploy-notes",
+        "target": {
+          "kind": "all"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "claude-code"
+        ],
+        "mode": "include"
+      },
+      {
+        "skill": "deploy-notes",
+        "target": {
+          "kind": "machine",
+          "machine": "laptop"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "claude-code"
+        ],
+        "mode": "exclude"
+      },
+      {
+        "skill": "review-checklist",
+        "target": {
+          "kind": "all"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "claude-code",
+          "codex"
+        ],
+        "mode": "include"
+      },
+      {
+        "skill": "review-checklist",
+        "target": {
+          "kind": "machine",
+          "machine": "laptop"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "codex"
+        ],
+        "mode": "exclude"
+      },
+      {
+        "skill": "scratchpad",
+        "target": {
+          "kind": "machine",
+          "machine": "laptop"
+        },
+        "scope": {
+          "kind": "global"
+        },
+        "harnesses": [
+          "claude-code"
+        ],
+        "mode": "include"
+      }
+    ]
+  },
+  "warnings": [
+    "hosts/editor-default.manifest: no supported harness, skipped"
+  ]
+}
