@@ -29,8 +29,10 @@ export class VerdictCache {
     const path = join(dir, "judgments", fileName(judge));
     const legacy = merged(await read(await sharedFiles(dir), judge));
     const own = (await Bun.file(path).exists()) ? await read([path], judge) : null;
-    const missing = [...legacy].filter(([key]) => !own?.migrated.has(key) && !own?.native.has(key));
-    const known = new Map([...legacy, ...(own ? merged(own) : [])]);
+    const missing = [...legacy].filter(
+      ([key, v]) => JSON.stringify(own?.migrated.get(key)) !== JSON.stringify(v),
+    );
+    const known = new Map([...(own?.migrated ?? []), ...legacy, ...(own?.native ?? [])]);
     const cache = new VerdictCache(path, judge, known, readOnly);
     if (readOnly || missing.length === 0) return cache;
     if (own === null) return (await cache.create()) ? cache : VerdictCache.open(dir, judge);
