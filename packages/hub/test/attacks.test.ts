@@ -597,3 +597,43 @@ test("preview, commits, revert and import write nothing outside the hub's data f
     chmodSync(outside, 0o700);
   }
 });
+
+test("a pre-created <data>/tmp symlink or file is refused, never followed or chmodded", async () => {
+  if (process.platform === "win32") return;
+  const { chmodSync, mkdirSync, readdirSync, statSync, symlinkSync, writeFileSync } =
+    await import("node:fs");
+  for (const kind of ["symlink", "file"] as const) {
+    const data = join(temp("data"), "hub");
+    mkdirSync(data, { recursive: true });
+    const outside = temp("outside");
+    chmodSync(outside, 0o755);
+    if (kind === "symlink") symlinkSync(outside, join(data, "tmp"));
+    else writeFileSync(join(data, "tmp"), "");
+    const repo = new Repo(join(data, "skills.git"));
+    await repo.init();
+    expect(await failure(repo.scratch("diff-"))).toContain("tmp is not a plain folder");
+    expect(await failure(repo.diff(null, "x\n", "a.txt"))).toContain("not a plain folder");
+    expect(await failure(repo.commitFile(null, "a.txt", "x\n", "m"))).toContain(
+      "not a plain folder",
+    );
+    expect(await failure(importInto(join(data, "other"), await skillsSource()))).toBe("");
+    expect(readdirSync(outside)).toEqual([]);
+    expect(statSync(outside).mode & 0o777).toBe(0o755);
+  }
+});
+
+test("scratch folders are fresh, private, and inside the data folder", async () => {
+  const data = join(temp("data"), "hub");
+  const repo = new Repo(join(data, "skills.git"));
+  await repo.init();
+  const { lstatSync, realpathSync } = await import("node:fs");
+  const a = await repo.scratch("diff-");
+  const b = await repo.scratch("diff-");
+  expect(a).not.toBe(b);
+  for (const dir of [a, b]) {
+    const info = lstatSync(dir);
+    expect(info.isDirectory() && !info.isSymbolicLink()).toBe(true);
+    expect(realpathSync(dir).startsWith(realpathSync(data))).toBe(true);
+    if (process.platform !== "win32") expect(info.mode & 0o777).toBe(0o700);
+  }
+});

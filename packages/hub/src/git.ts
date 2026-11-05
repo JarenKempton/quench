@@ -1,5 +1,17 @@
-import { chmod, lstat, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, posix } from "node:path";
+import { constants } from "node:fs";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, posix, relative } from "node:path";
 import { excluded, foldCollision, insideFolder } from "@quench/fleet";
 
 export const BRANCH = "refs/heads/main";
@@ -44,6 +56,27 @@ const escapes = (path: string, target: string) => {
   const resolved = posix.normalize(posix.join(posix.dirname(path), target));
   return resolved === ".." || resolved.startsWith("../");
 };
+
+async function privateFolder(path: string, home: string) {
+  const info = await lstat(path);
+  if (info.isSymbolicLink() || !info.isDirectory())
+    throw new GitError(`${path} is not a plain folder; remove it and retry`);
+  if (process.getuid && info.uid !== process.getuid())
+    throw new GitError(`${path} is not owned by the user running the hub`);
+  const [real, base] = await Promise.all([realpath(path), realpath(home)]);
+  if (relative(base, real).startsWith("..") || isAbsolute(relative(base, real)))
+    throw new GitError(`${path} resolves outside the hub's data folder`);
+  if (process.platform === "win32") return;
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
+  try {
+    await handle.chmod(0o700);
+  } finally {
+    await handle.close();
+  }
+}
 
 async function freshPath(root: string, parts: string[]) {
   let dir = root;
@@ -113,11 +146,18 @@ export class Repo {
   }
 
   async scratch(prefix: string) {
-    const root = join(dirname(this.dir), "tmp");
-    await mkdir(root, { recursive: true, mode: 0o700 });
-    await chmod(root, 0o700);
-    const dir = await mkdtemp(join(root, prefix));
-    await chmod(dir, 0o700);
+    const home = dirname(this.dir);
+    const root = join(home, "tmp");
+    await mkdir(root, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
+    await privateFolder(root, home);
+    const dir = join(
+      root,
+      `${prefix}${Buffer.from(crypto.getRandomValues(new Uint8Array(12))).toString("hex")}`,
+    );
+    await mkdir(dir, { mode: 0o700 });
+    await privateFolder(dir, home);
     return dir;
   }
 
