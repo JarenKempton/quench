@@ -1,4 +1,11 @@
-import { harnessById, recordedInstructions, type HarnessId, type Session } from "@quench/history";
+import {
+  harnessById,
+  knownProgram,
+  knownSubcommand,
+  recordedInstructions,
+  type HarnessId,
+  type Session,
+} from "@quench/history";
 import { behaviour, behaviourLabel, type Behaviour } from "@quench/insights";
 import type { Reply, Sender } from "@quench/judge";
 import { plural } from "../format.ts";
@@ -142,12 +149,21 @@ function loaded(
 }
 
 const TOOL = /^[\w.:-]{1,64}$/;
+const SHAPES = new Set(["other command", "several commands"]);
 
 function behaviourKey(b: Behaviour): string {
   const label = behaviourLabel[b.kind];
   if (b.kind !== "retry-loop" && b.kind !== "bad-tool-input") return label;
   const tools = [...new Set(b.tools.map((t) => (TOOL.test(t) ? t : "unnamed tool")))].sort();
-  return `${label}: ${tools.join(", ")}`;
+  const command = b.kind === "retry-loop" ? knownCommand(b.what) : null;
+  return `${label}: ${tools.join(", ")}${command ? ` · ${command}` : ""}`;
+}
+
+function knownCommand(what: string | null): string | null {
+  if (what === null || SHAPES.has(what)) return what;
+  const [program = "", sub, ...rest] = what.split(" ");
+  if (rest.length || knownProgram(program) !== program) return null;
+  return sub === undefined || knownSubcommand(program, sub) === sub ? what : null;
 }
 
 export function contextOf(session: Session): SessionContext {

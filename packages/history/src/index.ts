@@ -29,6 +29,7 @@ export {
   type Scrub,
   type SessionFailure,
 } from "./failures.ts";
+export { knownProgram, knownSubcommand } from "./subcommands.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { launchOf, type Ecosystem, type Launch } from "./launch.ts";
 export {

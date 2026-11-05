@@ -76,7 +76,7 @@ function session(home: string, c: Case) {
           type: "tool_result",
           tool_use_id: id,
           is_error: true,
-          content: `Exit code 1\n${c.error ?? "error: 3 tests failed"}`,
+          content: c.error ?? "Exit code 1\nerror: 3 tests failed",
         })),
       },
     },
@@ -150,7 +150,7 @@ test.each([
     expect(json.recurring).toHaveLength(1);
     const [recurring] = json.recurring;
     expect(recurring).toMatchObject({
-      behaviour: "Same failure 3+ times: Bash",
+      behaviour: "Same failure 3+ times: Bash · bun test",
       corrections: 3,
       fromPeople: 3,
       sessions: 3,
@@ -178,14 +178,16 @@ test("context renders no reply, error or command text, in text or JSON", async (
       reply,
       skill: null,
       failures: 3,
-      error: `Cookie: sid=${CANARY}b`,
+      error: i % 2 ? `Cookie: sid=${CANARY}b` : `Exit code 1\nCookie: sid=${CANARY}b`,
     })),
   );
   const { json, text } = await context(home);
-  expect(json.recurring).toHaveLength(1);
-  expect(json.recurring[0].behaviour).toBe("Same failure 3+ times: Bash");
+  expect(json.recurring.map((r: { behaviour: string }) => r.behaviour).sort()).toEqual([
+    "Same failure 3+ times: Bash",
+    "Same failure 3+ times: Bash · curl",
+  ]);
   expect(JSON.stringify(json)).not.toContain(CANARY);
-  expect(text).toContain("Same failure 3+ times: Bash");
+  expect(text).toContain("Same failure 3+ times: Bash · curl");
   expect(text).not.toContain(CANARY);
   expect(text).not.toContain("Cookie");
 });
