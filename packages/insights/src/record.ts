@@ -1,4 +1,5 @@
 import {
+  knownTool,
   shellReads,
   type FailureKind,
   type HarnessId,
@@ -44,7 +45,6 @@ export type RunRecord = {
   commands: CommandRecord[];
   failures: {
     tool: string;
-    server: string | null;
     kind: FailureKind;
     what: string | null;
     error: string | null;
@@ -93,7 +93,7 @@ export function runRecords(
     subagents: run.subagents,
     commands: commandRecords(run),
     failures: run.calls.flatMap((c) =>
-      c.failure ? [{ tool: c.tool, server: c.server, ...c.failure }] : [],
+      c.failure ? [{ tool: knownTool(c.tool), ...c.failure }] : [],
     ),
     filesRead: unique([...run.filesRead, ...shellFilesRead(run.commands, session.cwd)]),
     prLinks: unique(run.commands.flatMap((c) => c.command?.match(PR_LINK) ?? [])),

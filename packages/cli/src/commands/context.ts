@@ -2,6 +2,7 @@ import {
   harnessById,
   knownProgram,
   knownSubcommand,
+  knownTool,
   recordedInstructions,
   sourceTrace,
   type HarnessId,
@@ -149,13 +150,12 @@ function loaded(
     .sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
 }
 
-const TOOL = /^[\w.:-]{1,64}$/;
 const SHAPES = new Set(["other command", "several commands"]);
 
 function behaviourKey(b: Behaviour): string {
   const label = behaviourLabel[b.kind];
   if (b.kind !== "retry-loop" && b.kind !== "bad-tool-input") return label;
-  const tools = [...new Set(b.tools.map((t) => (TOOL.test(t) ? t : "unnamed tool")))].sort();
+  const tools = [...new Set(b.tools.map(knownTool))].sort();
   const command = b.kind === "retry-loop" ? knownCommand(b.what) : null;
   return `${label}: ${tools.join(", ")}${command ? ` · ${command}` : ""}`;
 }

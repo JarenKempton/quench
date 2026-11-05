@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Jev, VerdictCache } from "@quench/judge";
 import { lines, quench } from "./run.ts";
 
-type Repro = { command: string; output: string; leaks: string[] };
+type Repro = { tool?: string; command: string; output: string; leaks: string[] };
 
 const repros: Repro[] = [
   {
@@ -49,6 +49,12 @@ const repros: Repro[] = [
     leaks: ["qdbq"],
   },
   {
+    tool: "mcp__vault__qmcpq",
+    command: "vault lookup",
+    output: "Error: invalid arguments",
+    leaks: ["qmcpq"],
+  },
+  {
     command: "deploy --token --qsecretq",
     output: "Exit code 1\nrejected --qsecretq",
     leaks: ["qsecretq"],
@@ -68,7 +74,11 @@ function session(): string {
         message: {
           id: `m${n}`,
           model: "model-x",
-          content: [{ type: "tool_use", id: `t${n}`, name: "Bash", input: { command: r.command } }],
+          content: [
+            r.tool
+              ? { type: "tool_use", id: `t${n}`, name: r.tool, input: {} }
+              : { type: "tool_use", id: `t${n}`, name: "Bash", input: { command: r.command } },
+          ],
           usage: { input_tokens: 1, output_tokens: 1 },
         },
       },
@@ -124,15 +134,21 @@ test("corrections and runs --json render no reply or command text from history",
   };
   expect(outputs.corrections).toContain("Latest corrections from people");
   expect(JSON.parse(outputs.correctionsJson).latest).toHaveLength(5);
-  expect(JSON.parse(outputs.causesJson).causes.caused).toHaveLength(9);
+  expect(JSON.parse(outputs.causesJson).causes.caused).toHaveLength(repros.length);
 
   const runs = JSON.parse((await quench(home, "runs", file, "--json")).stdout);
   const records = (await quench(home, "runs", "--all", "--json")).stdout
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  const structural = (list: { commands: unknown; calls?: unknown; failures?: unknown }[]) =>
-    JSON.stringify(list.map((r) => [r.commands, r.calls, r.failures]));
+  const structural = (
+    list: { commands: unknown; calls?: { failure?: unknown }[]; failures?: unknown }[],
+  ) => JSON.stringify(list.map((r) => [r.commands, r.calls?.map((c) => c.failure), r.failures]));
+  const failures = [
+    ...runs.flatMap((r: { calls: { failure?: object }[] }) => r.calls.map((c) => c.failure)),
+    ...records.flatMap((r: { failures: object[] }) => r.failures),
+  ];
+  expect(failures.filter((f) => f && "what" in f && f.what === "other tool")).toHaveLength(2);
   expect(runs.flatMap((r: { commands: object[] }) => r.commands)).toContainEqual({
     program: "curl",
     subcommand: null,

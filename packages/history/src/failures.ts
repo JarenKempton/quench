@@ -12,6 +12,7 @@ import {
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
 import { commandSignature, isChained } from "./shell.ts";
+import { knownTool } from "./subcommands.ts";
 
 export type SessionFailure = {
   kind: Failure["kind"];
@@ -119,7 +120,9 @@ function failureKey(
   const blocked = failure.kind === "blocked";
   const chained = call?.shell?.some((shell) => shell.command && isChained(shell.command));
   return {
-    what: chained ? "several commands" : (signature ?? (call?.shell ? null : (call?.name ?? null))),
+    what: chained
+      ? "several commands"
+      : (signature ?? (call?.shell || !call ? null : knownTool(call.name))),
     error: blocked ? null : (failure.errorClass ?? "other"),
     guard: blocked ? failure.detail : null,
   };

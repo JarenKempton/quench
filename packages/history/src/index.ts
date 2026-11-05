@@ -23,7 +23,7 @@ export { ancestorDirs } from "./steering.ts";
 export { startingContext, type StartPart, type StartingContext } from "./start.ts";
 export type { McpToolLoad } from "./mcp-tools.ts";
 export { failedCall, failureOf, recordedFailures, type SessionFailure } from "./failures.ts";
-export { knownProgram, knownSubcommand } from "./subcommands.ts";
+export { knownProgram, knownSubcommand, knownTool } from "./subcommands.ts";
 export { mcpInventory, type McpServer } from "./mcp.ts";
 export { launchOf, type Ecosystem, type Launch } from "./launch.ts";
 export {
