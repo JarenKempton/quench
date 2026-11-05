@@ -63,7 +63,8 @@ test("setup --judge none --yes runs without a terminal, a hub or a key, and resu
   const run = await quench(home, ["setup", "--judge", "none", "--yes"]);
   expect(run.code).toBe(0);
   expect(run.stdout).toContain("Step 1/5 · Your agents");
-  expect(run.stdout).toMatch(/Claude Code\s+1 session over \d+ days?, in ~\/\.claude/);
+  expect(run.stdout).toMatch(/Claude Code\s+1 session over \d+ days?, in /);
+  expect(run.stdout).toContain(`, in ${join("~", ".claude")}\n`);
   expect(run.stdout).toContain("Step 2/5 · What your sessions start with");
   expect(run.stdout).toContain("No judge: quench corrections stays off");
   expect(run.stdout).toContain("Not available yet: hub pairing arrives with quench connect");
