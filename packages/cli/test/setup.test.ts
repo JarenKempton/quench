@@ -125,7 +125,7 @@ test("a judge that fails its test is not saved", async () => {
   const env = { QUENCH_OPENAI_BASE_URL: baseUrl, QUENCH_OPENAI_MODEL: "small-model" };
   const run = await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env);
   expect(run.code).toBe(1);
-  expect(run.stdout).toContain("Test failed: OpenAI-compatible judge unparseable");
+  expect(run.stdout).toContain("Test failed: openai judge failed: malformed");
   expect(run.stdout).toContain("Setup stopped at judge. Run quench setup to resume there.");
   expect(await Bun.file(join(home, ".quench/config.json")).exists()).toBe(false);
 });

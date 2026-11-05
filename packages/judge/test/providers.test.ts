@@ -89,7 +89,7 @@ test("openai turns malformed answers into errors, never a guess", async () => {
     const { results } = await judged({ body });
     for (const result of results) {
       expect(result).toBeInstanceOf(OpenAIFailed);
-      expect((result as Error).message).toContain("unparseable");
+      expect((result as Error).message).toBe("openai judge failed: malformed");
     }
   }
 });
@@ -182,7 +182,6 @@ test("a request error that echoes the key is redacted", async () => {
   const [result] = await new OpenAIJudge({ baseUrl, model: "m", apiKey, fetch }).classify([
     CANNED_EXCHANGE,
   ]);
-  expect((result as Error).message).toContain("refused Bearer");
   expect(`${(result as Error).message}${(result as Error).stack}`).not.toContain(CANARY);
 });
 
@@ -223,7 +222,8 @@ test("the judge id keeps the whole base URL, so two paths on one host never shar
 
 test("a response over 1 MiB is a failure", async () => {
   const { results } = await judged({ body: completion(good, { pad: "x".repeat(1_100_000) }) });
-  for (const result of results) expect((result as Error).message).toContain("over 1 MiB");
+  for (const result of results)
+    expect((result as Error).message).toBe("openai judge failed: too-large");
 });
 
 test("a cut-off, filtered or refused answer is a failure, never a verdict", async () => {
@@ -267,7 +267,7 @@ test("a redirect is a failure and is never followed, so the body never leaves th
   ]);
   for (const result of results) {
     expect(result).toBeInstanceOf(OpenAIFailed);
-    expect((result as Error).message).toContain("HTTP 307");
+    expect((result as Error).message).toBe("openai judge failed: bad-request (HTTP 307)");
   }
   expect(requests.every((r) => r.path.startsWith("/bounce"))).toBe(true);
   expect(requests.length).toBeLessThanOrEqual(4);

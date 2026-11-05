@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 import { Answer, answerSchema, json, replyPrompt, SYSTEM_PROMPT } from "./questions.ts";
-import { scrub } from "./redact.ts";
+import { failureOf, JudgeFailed, reasonForStatus, type FailureReason } from "./failure.ts";
 import type { Exchange, Judge, Judgment } from "./verdict.ts";
 
 const WORKERS = 4;
@@ -16,12 +16,9 @@ export type OpenAIOptions = {
   timeoutMs?: number;
 };
 
-export class OpenAIFailed extends Error {
-  constructor(
-    readonly reason: "request" | "status" | "unparseable",
-    detail: string,
-  ) {
-    super(`OpenAI-compatible judge ${reason}: ${detail}`);
+export class OpenAIFailed extends JudgeFailed {
+  constructor(reason: FailureReason, status?: number) {
+    super("openai", reason, status === undefined ? null : `HTTP ${status}`);
   }
 }
 
@@ -95,7 +92,7 @@ export class OpenAIJudge implements Judge {
     if (this.#broken) return this.#broken;
     const { apiKey, model, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS } = this.#options;
     const badKey = apiKey === undefined ? null : keyProblem(apiKey);
-    if (badKey) return (this.#broken = new OpenAIFailed("request", badKey));
+    if (badKey) return (this.#broken = new OpenAIFailed("auth"));
     let body: string;
     try {
       const response = await fetch(this.#url, {
@@ -123,34 +120,31 @@ export class OpenAIJudge implements Judge {
       if (status < 200 || status > 299) {
         await response.body?.cancel().catch(() => undefined);
         const failure = new OpenAIFailed(
-          "status",
-          status >= 300 && status <= 399
-            ? `HTTP ${status} redirect, not followed`
-            : `HTTP ${status}`,
+          status >= 300 && status <= 399 ? "bad-request" : reasonForStatus(status),
+          status,
         );
         if ((status >= 300 && status <= 399) || [401, 403, 404].includes(status))
           this.#broken = failure;
         return failure;
       }
       const read = await bounded(response);
-      if (read === null) return new OpenAIFailed("unparseable", "the response was over 1 MiB");
+      if (read === null) return new OpenAIFailed("too-large");
       body = read;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return scrub(new OpenAIFailed("request", message), [apiKey]);
+      return new OpenAIFailed(
+        failureOf("openai", error).reason === "timeout" ? "timeout" : "server",
+      );
     }
     const completion = Completion.safeParse(json(body));
-    if (!completion.success) return new OpenAIFailed("unparseable", "no single chat completion");
+    if (!completion.success) return new OpenAIFailed("malformed");
     this.tokens.input += completion.data.usage?.prompt_tokens ?? 0;
     this.tokens.output += completion.data.usage?.completion_tokens ?? 0;
     const [choice] = completion.data.choices;
-    if (choice?.message.refusal) return new OpenAIFailed("unparseable", "the model refused");
-    if (choice?.finish_reason !== "stop")
-      return new OpenAIFailed("unparseable", "the answer did not finish normally");
+    if (choice?.message.refusal || choice?.finish_reason === "content_filter")
+      return new OpenAIFailed("refused");
+    if (choice?.finish_reason !== "stop") return new OpenAIFailed("malformed");
     const answer = Answer.safeParse(json(choice.message.content ?? ""));
-    return answer.success
-      ? answer.data
-      : new OpenAIFailed("unparseable", "the answer was not exactly a verdict");
+    return answer.success ? answer.data : new OpenAIFailed("malformed");
   }
 }
 

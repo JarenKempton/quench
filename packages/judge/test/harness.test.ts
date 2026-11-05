@@ -123,17 +123,17 @@ posix(
     const prose = await judgeWith({
       answer: `I refuse. Example only: ${verdict} DO NOT USE THIS`,
     });
-    expect(reason((await prose.judge.classify([exchange]))[0])).toBe("unparseable");
+    expect(reason((await prose.judge.classify([exchange]))[0])).toBe("malformed");
     const raw = await judgeWith({ mode: "raw", answer: verdict });
-    expect(reason((await raw.judge.classify([exchange]))[0])).toBe("unparseable");
+    expect(reason((await raw.judge.classify([exchange]))[0])).toBe("malformed");
   },
 );
 
 posix("a failed exit is typed and stops the remaining calls", async () => {
   const { judge, calls } = await judgeWith({ mode: "exit" });
   const failed = await judge.classify([exchange, exchange, exchange, exchange, exchange]);
-  expect(failed.every((f) => reason(f) === "exit")).toBe(true);
-  expect((failed[0] as Error).message).toContain("not logged in");
+  expect(failed.every((f) => reason(f) === "server")).toBe(true);
+  expect((failed[0] as Error).message).toBe("claude judge failed: server (exit 3)");
   expect((await calls()).length).toBeLessThan(5);
 });
 
@@ -167,7 +167,7 @@ posix(
     const { judge, fake } = await judgeWith({ answer: verdict });
     await rm(fake.dir, { recursive: true, force: true, maxRetries: 5 });
     const results = await judge.classify([exchange, exchange]);
-    expect(results.map(reason)).toEqual(["spawn", "spawn"]);
+    expect(results.map(reason)).toEqual(["server", "server"]);
   },
 );
 

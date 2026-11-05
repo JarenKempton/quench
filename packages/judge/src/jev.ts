@@ -1,4 +1,7 @@
 import {
+  APIConnectionError,
+  APIError,
+  APITimeoutError,
   AuthenticationError,
   choice,
   PermissionDeniedError,
@@ -7,6 +10,7 @@ import {
   type Usage,
 } from "@typesafe-ai/sdk";
 import type { CauseInput, CauseJudge } from "./causes.ts";
+import { JudgeFailed, reasonForStatus } from "./failure.ts";
 import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
 import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
@@ -22,13 +26,21 @@ import {
 const MODEL = "jev-latest";
 const WORKERS = 12;
 
-export class KeyRejected extends Error {
-  constructor(
-    readonly status: number,
-    options?: ErrorOptions,
-  ) {
-    super(`TypeSafe rejected the API key (HTTP ${status})`, options);
+export class KeyRejected extends JudgeFailed {
+  constructor(readonly httpStatus: number) {
+    super("jev", "auth", `HTTP ${httpStatus}`);
   }
+}
+
+function jevFailure(error: unknown): JudgeFailed {
+  if (error instanceof JudgeFailed) return error;
+  if (error instanceof AuthenticationError || error instanceof PermissionDeniedError)
+    return new KeyRejected(error.status);
+  if (error instanceof APITimeoutError) return new JudgeFailed("jev", "timeout");
+  if (error instanceof APIConnectionError) return new JudgeFailed("jev", "server");
+  if (error instanceof APIError && typeof error.status === "number")
+    return new JudgeFailed("jev", reasonForStatus(error.status), `HTTP ${error.status}`);
+  return new JudgeFailed("jev", "malformed");
 }
 
 export class Jev implements Judge {
@@ -68,10 +80,9 @@ export class Jev implements Judge {
         confidence: kindResult.answers.kind.confidence,
       };
     } catch (error) {
-      if (error instanceof AuthenticationError || error instanceof PermissionDeniedError) {
-        throw new KeyRejected(error.status, { cause: error });
-      }
-      return error instanceof Error ? error : new Error(String(error));
+      const failure = jevFailure(error);
+      if (failure instanceof KeyRejected) throw failure;
+      return failure;
     }
   }
 
@@ -119,16 +130,20 @@ export class JevThemes implements ThemeJudge {
   }
 
   async assign(input: ThemeInput): Promise<ThemeDecision> {
-    const result = await this.#client.systemOne(
-      {
-        state: input.state,
-        questions: { theme: choice(input.question, input.choices) },
-      },
-      { signal: this.#signal },
-    );
-    this.tokens.input += result.usage.input_tokens ?? 0;
-    this.tokens.output += result.usage.output_tokens ?? 0;
-    return { choice: result.answers.theme.choice, model: result.model };
+    try {
+      const result = await this.#client.systemOne(
+        {
+          state: input.state,
+          questions: { theme: choice(input.question, input.choices) },
+        },
+        { signal: this.#signal },
+      );
+      this.tokens.input += result.usage.input_tokens ?? 0;
+      this.tokens.output += result.usage.output_tokens ?? 0;
+      return { choice: result.answers.theme.choice, model: result.model };
+    } catch (error) {
+      throw jevFailure(error);
+    }
   }
 }
 
@@ -164,9 +179,7 @@ export class JevCauses implements CauseJudge {
       this.tokens.output += result.usage.output_tokens ?? 0;
       return { choice: result.answers.cause.choice, model: result.model };
     } catch (error) {
-      if (error instanceof AuthenticationError || error instanceof PermissionDeniedError)
-        throw new KeyRejected(error.status, { cause: error });
-      throw error;
+      throw jevFailure(error);
     }
   }
 }

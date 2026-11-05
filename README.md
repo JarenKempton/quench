@@ -127,6 +127,9 @@ and keys are redacted from every error any judge reports. Its judge id names
 the full base URL and the model as JSON (`openai/reply-v1/{"baseUrl":…,"model":…}`), so verdicts from different
 endpoints or models never mix. `--judge none` makes no model calls: `corrections` says so and exits
 2, and every other command works as before. An explicit `--judge` always wins over `QUENCH_JUDGE`.
+A judge error, from Jev, `claude` or an OpenAI-compatible endpoint, names only the judge, one fixed
+reason (auth, rate-limit, bad-request, server, timeout, too-large, refused or malformed) and the
+HTTP status or exit code. Nothing a provider sent back, or `claude` printed, is ever shown.
 
 `quench setup` saves the judge you pick, its base URL, model and any key you type (never echoed) in
 `~/.quench/config.json`, created readable only by you (mode 0600). On Windows the file has no POSIX

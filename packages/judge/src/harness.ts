@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { JudgeFailed, type FailureReason } from "./failure.ts";
 import { json, replyPrompt, SYSTEM_PROMPT, verdictIn } from "./questions.ts";
 import type { Exchange, Judge, Judgment } from "./verdict.ts";
 
@@ -66,12 +67,9 @@ export class HarnessUnsupported extends Error {
 
 type Child = Bun.Subprocess<Uint8Array, "pipe", "pipe">;
 
-export class HarnessFailed extends Error {
-  constructor(
-    readonly reason: "spawn" | "timeout" | "exit" | "unparseable",
-    detail: string,
-  ) {
-    super(`${reason}: ${detail}`);
+export class HarnessFailed extends JudgeFailed {
+  constructor(reason: FailureReason, exit?: number) {
+    super("claude", reason, exit === undefined ? null : `exit ${exit}`);
   }
 }
 
@@ -160,49 +158,40 @@ export class HarnessJudge implements Judge {
         stderr: "pipe",
         detached: true,
       });
-    } catch (error) {
-      return failed("spawn", error);
+    } catch {
+      return new HarnessFailed("server");
     }
     let timer: Timer | undefined;
     const deadline = new Promise<HarnessFailed>((done) => {
       timer = setTimeout(() => {
         killGroup(proc);
-        done(new HarnessFailed("timeout", `${LABEL} took over ${this.#timeoutMs / 1000}s`));
+        done(new HarnessFailed("timeout"));
       }, this.#timeoutMs);
     });
     try {
       return await Promise.race([this.#finish(proc), deadline]);
-    } catch (error) {
-      return failed("spawn", error);
+    } catch {
+      return new HarnessFailed("server");
     } finally {
       clearTimeout(timer);
     }
   }
 
   async #finish(proc: Child): Promise<Judgment> {
-    const [stdout, stderr, code] = await Promise.all([
+    const [stdout, , code] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
     if (code !== 0) {
-      this.#broken = new HarnessFailed(
-        "exit",
-        `${LABEL} exited with ${code}: ${stderr.trim().slice(-200)}`,
-      );
+      this.#broken = new HarnessFailed("server", code);
       return this.#broken;
     }
     const envelope = ClaudeResult.safeParse(json(stdout));
-    if (!envelope.success) return new HarnessFailed("unparseable", `${LABEL} printed no result`);
-    return (
-      verdictIn(envelope.data.result) ??
-      new HarnessFailed("unparseable", `${LABEL} did not answer with only a verdict`)
-    );
+    if (!envelope.success) return new HarnessFailed("malformed");
+    return verdictIn(envelope.data.result) ?? new HarnessFailed("malformed");
   }
 }
-
-const failed = (reason: "spawn", error: unknown) =>
-  new HarnessFailed(reason, error instanceof Error ? error.message : String(error));
 
 function killGroup(proc: Child): void {
   try {
