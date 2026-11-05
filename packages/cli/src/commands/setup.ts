@@ -1,13 +1,16 @@
 import { harnesses, type Home } from "@quench/history";
 import {
   CANNED_EXCHANGE,
+  endpointProblem,
   JudgeName,
+  keyProblem,
   provider,
   type JudgeChoice,
   type Judgment,
 } from "@quench/judge";
 import { judgeChoice, readConfig, writeConfig, type Config } from "../config.ts";
 import { plural, shortPath } from "../format.ts";
+import { prompt } from "../prompt.ts";
 import { profile } from "./profile.ts";
 
 export const STEPS = ["agents", "summary", "judge", "hub", "ui"] as const;
@@ -65,15 +68,25 @@ export async function setup(
   const done = new Set(config.setup?.done ?? []);
   const resume = STEPS.findIndex((s) => !done.has(s));
   const start = from ? STEPS.indexOf(from as Step) : Math.max(resume, 0);
+  const reader = prompt();
   const context: Context = {
     home,
     yes: options.yes,
     env: options.env ?? process.env,
     platform: options.platform ?? process.platform,
     judge: options.judge,
-    ask: asker(),
+    ask: reader.ask,
     config,
   };
+  try {
+    return await steps(context, start, done);
+  } finally {
+    reader.close();
+  }
+}
+
+async function steps(context: Context, start: number, done: Set<string>): Promise<number> {
+  const { home } = context;
   for (const [i, step] of STEPS.entries()) {
     if (i < start) continue;
     out(`\nStep ${i + 1}/${STEPS.length} · ${TITLES[step]}\n`);
@@ -159,7 +172,7 @@ async function pickJudge(context: Context): Promise<Outcome> {
       if (context.yes) return "stopped";
       continue;
     }
-    const choice = judgeChoice({ judge: stored }, env);
+    const choice = judgeChoice({ judge: stored }, env, stored.name);
     if (choice instanceof Error) {
       out(`  ${choice.message}\n`);
       if (context.yes) return "stopped";
@@ -175,7 +188,7 @@ async function pickJudge(context: Context): Promise<Outcome> {
     context.config = { ...context.config, judge: stored };
     const path = await writeConfig(context.home.dir, context.config);
     out(
-      `  Saved to ${shortPath(path, context.home.dir)}, readable only by you. QUENCH_JUDGE and the key variables override it.\n`,
+      `  Saved to ${shortPath(path, context.home.dir)}, ${platform === "win32" ? "protected only by your user profile folder's permissions" : "readable only by you"}. QUENCH_JUDGE and the key variables override it.\n`,
     );
     return "done";
   }
@@ -201,6 +214,8 @@ async function details(
     const apiKey = key.typed || !fromEnv ? (key.value ?? previous?.apiKey) : undefined;
     if (!apiKey && !fromEnv)
       return new Error("Jev needs a TypeSafe API key: set TYPESAFE_API_KEY or type it.");
+    const problem = apiKey ? keyProblem(apiKey) : null;
+    if (problem) return new Error(`Jev: ${problem}.`);
     return { name, ...(apiKey ? { apiKey } : {}) };
   }
   if (name === "openai") {
@@ -223,7 +238,8 @@ async function details(
       return new Error(
         "openai needs a base URL and model: type them, or set QUENCH_OPENAI_BASE_URL and QUENCH_OPENAI_MODEL.",
       );
-    if (!URL.canParse(baseUrl)) return new Error(`Base URL is not a URL.`);
+    const problem = endpointProblem(baseUrl) ?? (apiKey ? keyProblem(apiKey) : null);
+    if (problem) return new Error(`openai: ${problem}.`);
     return {
       name,
       ...(base.typed || !env.QUENCH_OPENAI_BASE_URL?.trim() ? { baseUrl } : {}),
@@ -280,18 +296,6 @@ function recommend(env: Env, platform: NodeJS.Platform): JudgeName {
   if (platform !== "win32" && Bun.which("claude", env.PATH === undefined ? {} : { PATH: env.PATH }))
     return "claude";
   return "none";
-}
-
-function asker(): Context["ask"] {
-  let lines: AsyncIterator<string> | undefined;
-  return async (question, hidden = false) => {
-    lines ??= console[Symbol.asyncIterator]();
-    const conceal = hidden && process.stdin.isTTY;
-    out(question + (conceal ? "\x1b[8m" : ""));
-    const next = await lines.next();
-    if (conceal) out("\x1b[28m");
-    return next.done ? null : next.value;
-  };
 }
 
 const out = (text: string) => process.stdout.write(text);

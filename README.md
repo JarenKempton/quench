@@ -118,17 +118,20 @@ tools. `--themes` and `--causes` still use Jev.
 
 `--judge openai` classifies through any OpenAI-compatible endpoint: one `POST /v1/chat/completions`
 per reply with the same clipped prompt and a strict JSON schema. An answer that is not exactly a
-verdict, or any HTTP error, counts as failed and is never guessed; after a 401, 403 or 404 the rest
-are not attempted. Its judge id names the endpoint's host and the model
-(`openai/<host>/<model>/reply-v1`), so verdicts from different endpoints or models never mix.
-`--judge none` makes no model calls: `corrections` says so and exits 2, and every other command
-works as before.
+verdict, a refusal, a `finish_reason` other than `stop`, a response over 1 MiB, or any HTTP error
+counts as failed and is never guessed; after a 401, 403 or 404 the rest are not attempted. The base
+URL must be `https`, or plain `http` to a loopback or private address for a local model. A key a
+header cannot carry is refused before any request, and keys are never printed. Its judge id names
+the full base URL and the model (`openai/<base-url>/<model>/reply-v1`), so verdicts from different
+endpoints or models never mix. `--judge none` makes no model calls: `corrections` says so and exits
+2, and every other command works as before. An explicit `--judge` always wins over `QUENCH_JUDGE`.
 
-`quench setup` saves the judge you pick, its base URL, model and any key you type in
-`~/.quench/config.json`, created readable only by you (mode 0600). With no `--judge`, `corrections`
-uses that choice, else Jev. Environment variables win over the file: `QUENCH_JUDGE`,
-`TYPESAFE_API_KEY`, `QUENCH_OPENAI_BASE_URL`, `QUENCH_OPENAI_MODEL` and `QUENCH_OPENAI_API_KEY`.
-A key that came from the environment is not written to the file.
+`quench setup` saves the judge you pick, its base URL, model and any key you type (never echoed) in
+`~/.quench/config.json`, created readable only by you (mode 0600). On Windows the file has no POSIX
+mode and relies on your user profile folder's permissions. With no `--judge`, `corrections` uses
+that choice, else Jev. Environment variables win over the file: `QUENCH_JUDGE`, `TYPESAFE_API_KEY`,
+`QUENCH_OPENAI_BASE_URL`, `QUENCH_OPENAI_MODEL` and `QUENCH_OPENAI_API_KEY`. A key that came from
+the environment is not written to the file.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or

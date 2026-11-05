@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { JudgeName, type JudgeChoice } from "@quench/judge";
+import { endpointProblem, JudgeName, keyProblem, type JudgeChoice } from "@quench/judge";
 import { z } from "zod";
 
 const Stored = z.object({
@@ -56,7 +56,8 @@ export function judgeChoice(config: Config, env: Env, flag?: string): JudgeChoic
         return new Error(
           "--judge openai needs a base URL and model: run `quench setup judge`, or set QUENCH_OPENAI_BASE_URL and QUENCH_OPENAI_MODEL",
         );
-      if (!URL.canParse(baseUrl)) return new Error("QUENCH_OPENAI_BASE_URL is not a URL");
+      const problem = endpointProblem(baseUrl) ?? (apiKey ? keyProblem(apiKey) : null);
+      if (problem) return new Error(`--judge openai: ${problem}`);
       return { name, baseUrl, model, ...(apiKey ? { apiKey } : {}) };
     }
     case "claude":

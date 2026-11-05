@@ -15,7 +15,9 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   async fetch(request) {
     bodies.push(await request.text());
-    return Response.json({ choices: [{ message: { role: "assistant", content: answer } }] });
+    return Response.json({
+      choices: [{ message: { role: "assistant", content: answer }, finish_reason: "stop" }],
+    });
   },
 });
 afterAll(() => server.stop(true));
@@ -97,7 +99,7 @@ test("setup tests an OpenAI-compatible judge on a canned exchange and keeps its 
   const run = await quench(home, ["setup", "judge"], typed);
   expect(run.stderr).toBe("");
   expect(run.code).toBe(0);
-  const id = `openai/127.0.0.1:${server.port}/small-model/reply-v1`;
+  const id = `openai/${baseUrl}/small-model/reply-v1`;
   expect(run.stdout).toContain(`Test passed: ${id} answered "correction"`);
   expect(run.stdout).not.toContain("sk-local-test");
   expect(bodies).toHaveLength(1);
@@ -149,3 +151,107 @@ test.skipIf(posix)("setup on Windows never offers claude", async () => {
   expect(run.stdout).toContain("Pick one of jev, openai, none, or skip.");
   expect(run.code).toBe(0);
 });
+
+const CANARY = "CANARY9e2f";
+
+test("an explicit --judge none beats QUENCH_JUDGE and never calls a model", async () => {
+  const home = await freshHome();
+  bodies.length = 0;
+  const env = {
+    QUENCH_JUDGE: "openai",
+    QUENCH_OPENAI_BASE_URL: baseUrl,
+    QUENCH_OPENAI_MODEL: "small-model",
+  };
+  const run = await quench(home, ["setup", "judge", "--judge", "none", "--yes"], "", env);
+  expect(run.code).toBe(0);
+  expect((await config(home)).judge).toEqual({ name: "none" });
+  const off = await quench(home, ["corrections", "--judge", "none"], "", env);
+  expect(off.code).toBe(2);
+  expect(bodies).toHaveLength(0);
+});
+
+test("a malformed key or a remote plain-HTTP endpoint is refused without leaking or sending", async () => {
+  const home = await freshHome();
+  bodies.length = 0;
+  const bad = {
+    QUENCH_OPENAI_BASE_URL: baseUrl,
+    QUENCH_OPENAI_MODEL: "small-model",
+    QUENCH_OPENAI_API_KEY: `sk-${CANARY}\u0007`,
+  };
+  const remote = {
+    ...bad,
+    QUENCH_OPENAI_BASE_URL: "http://api.example.com/v1",
+    QUENCH_OPENAI_API_KEY: `sk-${CANARY}`,
+  };
+  for (const env of [bad, remote]) {
+    const runs = [
+      await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env),
+      await quench(home, ["corrections", "--judge", "openai", "--json"], "", env),
+      await quench(home, ["corrections", "--judge", "openai", "--dry-run", "--json"], "", env),
+    ];
+    for (const run of runs) {
+      expect(run.code).toBe(1);
+      expect(run.stdout + run.stderr).not.toContain(CANARY);
+    }
+  }
+  await typedBadKey(home);
+  expect(bodies).toHaveLength(0);
+});
+
+const typedBadKey = async (home: string) => {
+  const typed = `openai\n${baseUrl}\nsmall-model\nsk-${CANARY}\u0001\nskip\n`;
+  const run = await quench(home, ["setup", "judge"], typed);
+  expect(run.stdout + run.stderr).not.toContain(CANARY);
+  expect(run.stdout).toContain("API key has characters a header cannot carry");
+  expect(await Bun.file(join(home, ".quench/config.json")).text()).not.toContain(CANARY);
+};
+
+test.skipIf(!posix)(
+  "in a terminal, a typed key is not echoed and setup exits once it finishes",
+  async () => {
+    const home = await freshHome();
+    answer = '{"kind":"correction","sender":"person","confidence":0.9}';
+    let screen = "";
+    const proc = Bun.spawn(
+      [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "judge"],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: "",
+          CLAUDE_CONFIG_DIR: "",
+          CODEX_HOME: "",
+          PI_CODING_AGENT_DIR: "",
+          TYPESAFE_API_KEY: "",
+          QUENCH_JUDGE: "",
+          QUENCH_OPENAI_BASE_URL: "",
+          QUENCH_OPENAI_MODEL: "",
+          QUENCH_OPENAI_API_KEY: "",
+        },
+        terminal: {
+          cols: 200,
+          rows: 50,
+          data(_terminal, bytes) {
+            screen += new TextDecoder().decode(bytes);
+          },
+        },
+      },
+    );
+    const type = async (prompt: string, text: string) => {
+      for (let i = 0; i < 200 && !screen.includes(prompt); i++) await Bun.sleep(25);
+      expect(screen).toContain(prompt);
+      proc.terminal?.write(text);
+    };
+    await type("Judge [none]", "openai\r");
+    await type("Base URL", `${baseUrl}\r`);
+    await type("Model", "small-model\r");
+    await type("API key", `sk-${CANARY}\r`);
+    const exited = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "hung")]);
+    if (exited === "hung") proc.kill();
+    expect(exited).toBe(0);
+    expect(screen).toContain("Setup finished");
+    expect(screen).not.toContain(CANARY);
+    expect((await config(home)).judge.apiKey).toBe(`sk-${CANARY}`);
+  },
+  20_000,
+);

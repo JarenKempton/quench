@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import {
   CANNED_EXCHANGE,
   completionsUrl,
+  endpointProblem,
   HarnessJudge,
   HarnessUnsupported,
   Jev,
@@ -31,8 +32,8 @@ const server = Bun.serve({
 afterAll(() => server.stop(true));
 
 const baseUrl = `http://127.0.0.1:${server.port}/v1`;
-const completion = (content: string) => ({
-  choices: [{ message: { role: "assistant", content } }],
+const completion = (content: string, extra: object = {}) => ({
+  choices: [{ message: { role: "assistant", content }, finish_reason: "stop", ...extra }],
   usage: { prompt_tokens: 11, completion_tokens: 3 },
 });
 const good = '{"kind":"correction","sender":"person","confidence":0.8}';
@@ -51,7 +52,7 @@ test("openai sends the shared clipped prompt with a strict JSON schema and reads
     { kind: "correction", sender: "person", confidence: 0.8 },
     { kind: "correction", sender: "person", confidence: 0.8 },
   ]);
-  expect(judge.id).toBe(`openai/127.0.0.1:${server.port}/small-model/reply-v1`);
+  expect(judge.id).toBe(`openai/${baseUrl}/small-model/reply-v1`);
   expect(judge.tokens).toEqual({ input: 22, output: 6 });
   const sent = requests[0];
   expect(sent?.path).toBe("/v1/chat/completions");
@@ -120,7 +121,7 @@ test("the factory builds each provider under its own judge id", async () => {
   expect([none.id, await none.create()]).toEqual([null, null]);
 
   const openai = provider({ name: "openai", baseUrl, model: "small-model" });
-  expect(openai.id).toBe(`openai/127.0.0.1:${server.port}/small-model/reply-v1`);
+  expect(openai.id).toBe(`openai/${baseUrl}/small-model/reply-v1`);
   reply = { body: completion(good) };
   expect(await (await openai.create())?.classify([CANNED_EXCHANGE])).toEqual([
     { kind: "correction", sender: "person", confidence: 0.8 },
@@ -144,3 +145,91 @@ test.skipIf(process.platform === "win32")(
     expect(await fakeCalls(fake)).toHaveLength(1);
   },
 );
+
+const CANARY = "CANARY4c1d";
+
+test("a key a header cannot carry is refused before any request, and never printed", async () => {
+  requests.length = 0;
+  for (const apiKey of [
+    `sk-${CANARY}\n`,
+    `sk-${CANARY} x`,
+    `sk-${CANARY}é`,
+    `sk-${CANARY}\u0000`,
+  ]) {
+    const judge = new OpenAIJudge({ baseUrl, model: "m", apiKey });
+    const [result] = await judge.classify([CANNED_EXCHANGE]);
+    expect(result).toBeInstanceOf(OpenAIFailed);
+    expect(`${(result as Error).message}${(result as Error).stack}`).not.toContain(CANARY);
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  }
+  expect(requests).toHaveLength(0);
+});
+
+test("a request error that echoes the key is redacted", async () => {
+  const apiKey = `sk-${CANARY}`;
+  const fetch = (async () => {
+    throw new Error(`refused Bearer ${apiKey}`);
+  }) as unknown as typeof globalThis.fetch;
+  const [result] = await new OpenAIJudge({ baseUrl, model: "m", apiKey, fetch }).classify([
+    CANNED_EXCHANGE,
+  ]);
+  expect((result as Error).message).toContain("refused Bearer");
+  expect(`${(result as Error).message}${(result as Error).stack}`).not.toContain(CANARY);
+});
+
+test("plain HTTP is only for loopback and private addresses", () => {
+  for (const ok of [
+    "http://127.0.0.1:8080/v1",
+    "http://localhost:11434",
+    "http://10.1.2.3/v1",
+    "http://172.16.0.9/v1",
+    "http://192.168.1.20/v1",
+    "http://[::1]:8080",
+    "http://[fd12::1]/v1",
+    "https://api.example.com/v1",
+  ])
+    expect(endpointProblem(ok)).toBeNull();
+  for (const bad of [
+    "http://api.example.com/v1",
+    "http://8.8.8.8/v1",
+    "http://172.32.0.1/v1",
+    "http://my-box.local/v1",
+    "ftp://127.0.0.1/v1",
+    "https://user:pass@api.example.com/v1",
+    "not a url",
+  ])
+    expect(endpointProblem(bad)).not.toBeNull();
+  expect(() => new OpenAIJudge({ baseUrl: "http://api.example.com/v1", model: "m" })).toThrow(
+    "plain HTTP",
+  );
+});
+
+test("the judge id keeps the whole base URL, so two paths on one host never share a cache", () => {
+  const a = OpenAIJudge.idFor({ baseUrl: "https://h/team-a/v1/", model: "m" });
+  const b = OpenAIJudge.idFor({ baseUrl: "https://h/team-b", model: "m" });
+  expect(a).toBe("openai/https://h/team-a/v1/m/reply-v1");
+  expect(b).toBe("openai/https://h/team-b/v1/m/reply-v1");
+  expect(OpenAIJudge.idFor({ baseUrl: "https://h/team-a/v1", model: "n" })).not.toBe(a);
+});
+
+test("a response over 1 MiB is a failure", async () => {
+  const { results } = await judged({ body: completion(good, { pad: "x".repeat(1_100_000) }) });
+  for (const result of results) expect((result as Error).message).toContain("over 1 MiB");
+});
+
+test("a cut-off, filtered or refused answer is a failure, never a verdict", async () => {
+  for (const extra of [
+    { finish_reason: "length" },
+    { finish_reason: "content_filter" },
+    { finish_reason: undefined },
+    { message: { role: "assistant", content: good, refusal: "I can't help with that" } },
+    { message: { role: "assistant", content: null, refusal: "no" } },
+  ]) {
+    const { results } = await judged({ body: completion(good, extra) });
+    for (const result of results) expect(result).toBeInstanceOf(OpenAIFailed);
+  }
+  const { results } = await judged({
+    body: completion(good, { message: { role: "assistant", content: good, refusal: null } }),
+  });
+  expect(results[0]).toEqual({ kind: "correction", sender: "person", confidence: 0.8 });
+});

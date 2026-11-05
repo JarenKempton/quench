@@ -21,6 +21,12 @@ export {
   type Tally,
 } from "./replies.ts";
 export * from "./verdict.ts";
-export { OpenAIFailed, OpenAIJudge, completionsUrl } from "./openai.ts";
+export {
+  completionsUrl,
+  endpointProblem,
+  keyProblem,
+  OpenAIFailed,
+  OpenAIJudge,
+} from "./openai.ts";
 export { JudgeName, provider, type JudgeChoice, type Provider } from "./providers.ts";
 export { CANNED_EXCHANGE } from "./questions.ts";
