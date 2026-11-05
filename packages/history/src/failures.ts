@@ -1,18 +1,23 @@
 import type { Event, Failure, Session } from "./model.ts";
 import {
+  errorClassOf,
+  errorLineOf,
   exitCodeOf,
   failureSummary,
+  firstLineOf,
   mentionsInvalidInput,
   mentionsMissingPath,
   missingPathOf,
   missingProgramOf,
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
-import { commandSignature } from "./shell.ts";
+import { commandSignature, isChained } from "./shell.ts";
 
 export type SessionFailure = {
   kind: Failure["kind"];
   what: string | null;
+  error: string | null;
+  guard: string | null;
   failures: number;
   longestRun: number;
   chars: number;
@@ -23,14 +28,28 @@ type ToolResult = Extract<Event, { type: "tool_result" }>;
 
 const SCANNED = 4000;
 
-export function failureOf(text: string, isError: boolean | null, rejected = false): Failure | null {
+export type Denial = { guard: string } | "rejected" | null;
+
+export function failureOf(
+  text: string,
+  isError: boolean | null,
+  denial: Denial = null,
+): Failure | null {
   const head = text.slice(0, SCANNED);
   const exitCode = exitCodeOf(head);
   if (isError !== true && !exitCode) return null;
+  const failure = classified(head, exitCode, denial);
+  return { ...failure, errorClass: errorClassOf(head, exitCode) };
+}
 
-  if (mentionsInvalidInput(head))
-    return { kind: "invalid-input", detail: failureSummary(head), exitCode };
-  if (rejected) return { kind: "rejected", detail: failureSummary(head), exitCode };
+function classified(head: string, exitCode: number | null, denial: Denial): Failure {
+  const summarised = (kind: Failure["kind"]): Failure => {
+    const line = firstLineOf(head);
+    return { kind, detail: line && failureSummary(line), exitCode, line };
+  };
+  if (denial && denial !== "rejected") return { kind: "blocked", detail: denial.guard, exitCode };
+  if (mentionsInvalidInput(head)) return summarised("invalid-input");
+  if (denial === "rejected") return summarised("rejected");
 
   const missingProgram = missingProgramOf(head);
   if (missingProgram !== null || exitCode === 127)
@@ -40,9 +59,11 @@ export function failureOf(text: string, isError: boolean | null, rejected = fals
   if (missingPath !== null || mentionsMissingPath(head))
     return { kind: "missing-path", detail: missingPath, exitCode };
 
-  if (exitCode) return { kind: "exit-code", detail: null, exitCode };
-  return { kind: "error", detail: failureSummary(head), exitCode };
+  if (exitCode) return { kind: "exit-code", detail: null, exitCode, line: errorLineOf(head) };
+  return summarised("error");
 }
+
+export type Scrub = (text: string) => string;
 
 export function recordedFailures(session: Session): SessionFailure[] {
   const callsById = new Map<string, ToolCall>();
@@ -65,18 +86,17 @@ export function recordedFailures(session: Session): SessionFailure[] {
     }
 
     const call = event.callId === null ? undefined : callsById.get(event.callId);
-    const failed = failedCall(event.failure, call);
-    if (!failed) {
+    const keyed = failureKey(event.failure, call);
+    if (!keyed) {
       breakRun();
       continue;
     }
 
-    const { what } = failed;
-    const key = `${event.failure.kind}\0${what}`;
+    const key = `${event.failure.kind}\0${keyed.what}\0${keyed.error}\0${keyed.guard}`;
     runLength = key === previousKey ? runLength + 1 : 1;
     previousKey = key;
 
-    const row = rowFor(rows, key, event.failure.kind, what);
+    const row = rowFor(rows, key, event.failure.kind, keyed);
     row.failures++;
     row.longestRun = Math.max(row.longestRun, runLength);
     row.chars += event.chars;
@@ -87,10 +107,30 @@ export function recordedFailures(session: Session): SessionFailure[] {
 export function failedCall(
   failure: Failure,
   call: ToolCall | undefined,
+  scrub: Scrub = (text) => text,
 ): { kind: Failure["kind"]; what: string | null } | null {
-  const signature = shellSignatureOf(call);
+  const signature = shellSignatureOf(call, scrub);
   if (isNothingFound(failure, signature)) return null;
-  return { kind: failure.kind, what: whatFailed(failure, call, signature) };
+  return { kind: failure.kind, what: whatFailed(failure, call, signature, scrub) };
+}
+
+function failureKey(
+  failure: Failure,
+  call: ToolCall | undefined,
+): { what: string | null; error: string | null; guard: string | null } | null {
+  const signature = shellSignatureOf(call, (text) => text);
+  if (isNothingFound(failure, signature)) return null;
+  const blocked = failure.kind === "blocked";
+  const chained = call?.shell?.some((shell) => shell.command && isChained(shell.command));
+  return {
+    what: chained ? "several commands" : (signature ?? (call?.shell ? null : (call?.name ?? null))),
+    error: blocked ? null : (failure.errorClass ?? "other"),
+    guard: blocked ? failure.detail : null,
+  };
+}
+
+function scrubbedLine(failure: Failure, scrub: Scrub): string | null {
+  return failure.line ? failureSummary(scrub(failure.line)) : null;
 }
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
@@ -100,10 +140,10 @@ function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   return false;
 }
 
-function shellSignatureOf(call: ToolCall | undefined): string | null {
+function shellSignatureOf(call: ToolCall | undefined, scrub: Scrub): string | null {
   if (call?.shell?.length !== 1) return null;
   const command = call.shell[0]!.command;
-  return command ? commandSignature(command) : null;
+  return command ? commandSignature(scrub(command)) : null;
 }
 
 const NOTHING_FOUND = new Set(["grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "["]);
@@ -117,9 +157,11 @@ function whatFailed(
   failure: Failure,
   call: ToolCall | undefined,
   signature: string | null,
+  scrub: Scrub,
 ): string | null {
-  if (failure.detail !== null) return failure.detail;
-  if (failure.kind === "missing-path" && call?.fileRead) return call.fileRead.path;
+  if (failure.kind !== "exit-code" && failure.line) return scrubbedLine(failure, scrub);
+  if (failure.detail !== null) return scrub(failure.detail);
+  if (failure.kind === "missing-path" && call?.fileRead) return scrub(call.fileRead.path);
   if (signature !== null) return signature;
   if (failure.kind === "exit-code" || failure.kind === "missing-program") return null;
   return call?.name ?? null;
@@ -129,13 +171,15 @@ function rowFor(
   rows: Map<string, SessionFailure>,
   key: string,
   kind: Failure["kind"],
-  what: string | null,
+  keyed: { what: string | null; error: string | null; guard: string | null },
 ): SessionFailure {
   const existing = rows.get(key);
   if (existing) return existing;
   const row: SessionFailure = {
     kind,
-    what: what && intern(what),
+    what: keyed.what && intern(keyed.what),
+    error: keyed.error && intern(keyed.error),
+    guard: keyed.guard && intern(keyed.guard),
     failures: 0,
     longestRun: 0,
     chars: 0,

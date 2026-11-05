@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { win32 } from "node:path";
 
 const EXIT_CODE_PATTERNS = [
   /^Exit code (-?\d+)/gm,
@@ -37,6 +37,13 @@ export function mentionsMissingPath(text: string): boolean {
   return /No such file or directory|File does not exist|ENOENT/i.test(text);
 }
 
+export function errorLineOf(text: string): string | null {
+  const output = /"output"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text)?.[1];
+  return firstLineOf(output === undefined ? text : output.replace(/\\(.)/g, unescaped));
+}
+
+const unescaped = (_: string, c: string) => ({ n: "\n", t: "\t", r: "\r" })[c] ?? c;
+
 export function failureSummary(text: string): string | null {
   const line = firstLineOf(text);
   if (!line) return null;
@@ -48,7 +55,7 @@ export function failureSummary(text: string): string | null {
     .replace(/[.:]$/, "");
 }
 
-function firstLineOf(text: string): string | null {
+export function firstLineOf(text: string): string | null {
   const unwrapped = text
     .replace(/<\/?[a-z_]+>/g, "")
     .replace(/^\s*[\w:]+ hook error:\s*/i, "")
@@ -59,9 +66,40 @@ function firstLineOf(text: string): string | null {
 }
 
 function shortenPaths(line: string): string {
-  return line.replace(/\S*\/\S*/g, (token) => basename(token.replace(/[\]:,.]+$/, "")));
+  return line
+    .replace(/(["'`])([^"'`\n]*[\\/][^"'`\n]*)\1/g, (_, _quote, path: string) => fileOf(path))
+    .replace(/\S*[\\/]\S*/g, fileOf);
 }
+
+const fileOf = (path: string) => win32.basename(path.replace(/^["'`]+|[\]:,.;"'`]+$/g, ""));
 
 function maskVolatile(line: string): string {
   return line.replace(/\b[0-9a-f]{7,}\b/g, "…").replace(/\d+/g, "N");
+}
+
+const ERROR_CLASSES: [string, RegExp][] = [
+  [
+    "auth failed",
+    /\b40[13]\b|unauthori[sz]ed|authentication (?:failed|required)|bad credentials|invalid (?:token|credentials)|permission denied \(publickey/i,
+  ],
+  [
+    "permission denied",
+    /permission denied|\bEACCES\b|\bEPERM\b|operation not permitted|access is denied/i,
+  ],
+  ["timeout", /timed? ?out\b|\bETIMEDOUT\b|deadline exceeded/i],
+  [
+    "network",
+    /could not resolve|\bECONN(?:REFUSED|RESET)\b|\bENOTFOUND\b|connection (?:refused|reset|closed)|network is unreachable|no route to host|name or service not known/i,
+  ],
+  [
+    "not found",
+    /not found|no such file|\bENOENT\b|does not exist|\b404\b|cannot find|could not find/i,
+  ],
+  ["conflict", /conflict|already exists|non-fast-forward|\b409\b|fetch first|\bEEXIST\b/i],
+];
+
+export function errorClassOf(text: string, exitCode: number | null): string {
+  const found = ERROR_CLASSES.find(([, pattern]) => pattern.test(text));
+  if (found) return found[0];
+  return exitCode ? `exit code ${exitCode}` : "other";
 }

@@ -736,7 +736,7 @@ test("profile lists MCP servers sessions called and whether local config has the
   );
 });
 
-test("profile lists failures that repeat in a project, by kind and what failed", async () => {
+test("profile lists hook blocks apart, and failures that repeat by command and first error line", async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-failures-")));
   const project = join(home, "work");
   await mkdir(project, { recursive: true });
@@ -751,6 +751,18 @@ test("profile lists failures that repeat in a project, by kind and what failed",
     cwd: project,
     message: { content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] },
   });
+  const blocked = (id: string, content: string, source: string) => ({
+    ...result(id, content),
+    permissionDecision: {
+      decision: "reject",
+      source,
+      ...(source === "hook" ? { reasonCode: "hook:PreToolUse" } : {}),
+    },
+  });
+  const ssh = (id: string, error: string) => [
+    call(id, "Bash", { command: "ssh box uptime" }),
+    result(id, `Exit code 255\n${error}`),
+  ];
   const missingRead = (id: string) => [
     call(id, "Read", { file_path: join(project, "docs/setup.md") }),
     result(id, "File does not exist."),
@@ -766,14 +778,32 @@ test("profile lists failures that repeat in a project, by kind and what failed",
       result("c", "Exit code 1\nnpm error Missing script: test"),
       ...[1, 2, 3].flatMap((n) => [
         call(`h${n}`, "Bash", { command: "git push --force" }),
-        result(
+        blocked(
           `h${n}`,
           "PreToolUse:Bash hook error: [/hooks/guard.sh]: guard: blocked — force push.",
+          "hook",
         ),
       ]),
+      call("o", "Bash", { command: "git push --force" }),
+      result("o", "PreToolUse:Bash hook error: [/hooks/guard.sh]: guard: blocked — force push."),
+      ...ssh("s1", "ssh: connect to host box port 22: Connection refused"),
+      ...ssh("s2", "git@box: Permission denied (publickey)."),
     ]),
   );
-  await Bun.write(join(home, ".claude/projects/p/two.jsonl"), lines(missingRead("r3")));
+  await Bun.write(
+    join(home, ".claude/projects/p/two.jsonl"),
+    lines([
+      ...missingRead("r3"),
+      ...ssh("s3", "ssh: connect to host box port 22: Connection refused"),
+      ...ssh("s4", "git@box: Permission denied (publickey)."),
+      call("w", "WebFetch", { url: "https://example.com" }),
+      blocked(
+        "w",
+        "Claude requested permissions to use WebFetch, but you haven't granted it yet.",
+        "config",
+      ),
+    ]),
+  );
   const codex = (id: string) =>
     Bun.write(
       join(home, `.codex/sessions/2026/10/20/${id}.jsonl`),
@@ -812,29 +842,50 @@ test("profile lists failures that repeat in a project, by kind and what failed",
   expect(code).toBe(0);
   expect(stdout).toContain(
     [
+      "▍Blocked by hooks and permissions · rules agents keep hitting · last 30 days",
+      "  Guard            Command   Blocks  Sessions  Projects  Agents       Example session",
+      "  PreToolUse hook  git push       3         1  work 3    Claude Code  one",
+      "  permission rule  WebFetch       1         1  work 1    Claude Code  two",
+      "",
       "▍Repeated failures · tool calls that failed the same way · last 30 days",
-      "  Project  Kind             What                         Failures  Sessions  In a row     Output  Agents",
-      "  work     rejected         guard: blocked — force push         3         1         3  225 chars  Claude Code",
-      `  work     no such file     ${p("docs/setup.md")}                       3         2         2   60 chars  Claude Code`,
-      "  work     no such command  pytest                              2         2         1  218 chars  Codex",
-      "  9 failed tool calls in all, returning 545 chars of output.",
+      "  Project  Kind             Command or tool  Error        Failures  Sessions  In a row     Output  Agents       Example session",
+      "  work     no such file     Read             not found           3         2         2   60 chars  Claude Code  one",
+      "  work     no such command  pytest           not found           2         2         1  218 chars  Codex        c1",
+      "  work     exit code        ssh              network             2         2         1  132 chars  Claude Code  one",
+      "  work     exit code        ssh              auth failed         2         2         1  106 chars  Claude Code  one",
+      "  15 failed tool calls in all, returning 935 chars of output.",
     ].join("\n"),
   );
   expect(stdout).not.toContain("grep");
   expect(stdout).not.toContain("npm");
+  expect(stdout).not.toContain("force push");
+  expect(stdout).not.toContain("guard.sh");
+  expect(stdout).not.toContain("--force");
   const json = JSON.parse((await quench(home, "--json")).stdout);
-  expect(json.recordedFailures.failures).toBe(9);
+  expect(json.recordedFailures.failures).toBe(15);
+  expect(json.recordedFailures.blocked[0]).toEqual({
+    guard: "PreToolUse hook",
+    command: "git push",
+    blocks: 3,
+    sessions: 1,
+    projects: [{ root: project, blocks: 3 }],
+    harnesses: ["claude-code"],
+    example: "one",
+  });
   const section = await quench(home, "profile", "failures");
   expect(section.stdout.split("\n")[0]).toBe(
-    "▍Repeated failures · tool calls that failed the same way · last 30 days",
+    "▍Blocked by hooks and permissions · rules agents keep hitting · last 30 days",
   );
   expect(section.stdout).not.toContain("Projects ·");
   expect((await quench(home)).stdout).toContain(
     [
       "▍Worth a look",
-      '  1. "guard: blocked — force push" failed 3× in work',
-      "     1 session · 225 chars of output",
+      '  1. PreToolUse hook blocked "git push" 3×',
+      "     1 session · work",
       "     → quench profile failures",
+      "",
+      '  2. "Read" failed 3× in work',
+      "     not found · 2 sessions · 60 chars of output",
     ].join("\n"),
   );
   const unknown = await quench(home, "profile", "nope");

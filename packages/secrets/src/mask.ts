@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { detectInFile, entropy } from "./detect.ts";
+import { entropy } from "./detect.ts";
+import { rebuilt, secretSpans, type Span } from "./spans.ts";
 
 export type Masker = {
   id(value: string): string;
@@ -41,16 +42,28 @@ export function masker(key: Buffer): Masker {
   const tag = (value: string) => id(value).slice(0, 8);
   const masked = (value: string) => `${value.slice(0, 4)}…${tag(value)}`;
   const scrubbed = (text: string, width = 80) => {
-    const values = new Set(detectInFile(text).map((d) => d.value));
-    for (const value of passwords(text)) values.add(value);
-    let safe = text;
-    for (const value of [...values].sort((a, b) => b.length - a.length))
-      safe = safe.replaceAll(value, masked(value));
-    safe = safe.replace(LONG_WORD, (word) => (entropy(word) >= 3.5 ? masked(word) : word));
+    const shown = (value: string) => (value.length >= 8 ? masked(value) : `…${tag(value)}`);
+    const safe = rebuilt(text, spansOf(text), shown).replace(LONG_WORD, (word) =>
+      entropy(word) >= 3.5 ? masked(word) : word,
+    );
     const line = safe.split(/\s+/).filter(Boolean).join(" ");
     return line.length > width ? `${line.slice(0, width)}…` : line;
   };
   return { id, tag, masked, scrubbed };
+}
+
+export function redacted(text: string): string {
+  return rebuilt(text, spansOf(text), () => "‹secret›");
+}
+
+function spansOf(text: string): Span[] {
+  const spans = secretSpans(text, PASSWORDS);
+  for (const match of text.matchAll(HTPASSWD)) {
+    const value = passwords(match[0]).at(-1);
+    const at = value ? match[0].lastIndexOf(value) : -1;
+    if (value && at !== -1) spans.push([match.index + at, match.index + at + value.length]);
+  }
+  return spans;
 }
 
 export function passwords(text: string): string[] {

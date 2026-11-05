@@ -8,10 +8,12 @@ import {
   detectInFile,
   machineKey,
   masker,
+  redacted,
   sshKeyEncrypted,
   toolConfigFiles,
 } from "../src/index.ts";
 import { goRegex } from "../src/go-regex.ts";
+import { passwords } from "../src/mask.ts";
 import { rules } from "../src/rules.ts";
 
 const FAKE_BODY = "FakeQuenchTestValue0123456789abcdefg";
@@ -152,4 +154,39 @@ test("a jwt issuer loses control characters", () => {
   expect(detect(`token: ${jwt}\n`).map((d) => d.issuer)).toEqual([
     "[2Jhttps://auth.example.testFAKE",
   ]);
+});
+
+test("credential flags are masked whatever their length, without new findings", () => {
+  for (const [text, value] of [
+    ["deploy --token=shortpw", "shortpw"],
+    ["deploy --api-key zzzzzzzzzzzz", "zzzzzzzzzzzz"],
+    ["deploy --client-secret 'ab'", "ab"],
+    ["refused: Authorization: Bearer cnry", "cnry"],
+  ]) {
+    expect(detectInFile(text!)).toEqual([]);
+    expect(passwords(text!)).toEqual([]);
+    expect(redacted(text!)).not.toContain(value!);
+    expect(redacted(text!)).toContain("‹secret›");
+    expect(mask.scrubbed(text!)).not.toContain(value!);
+  }
+  expect(redacted("--password=p --force")).toBe("--password=‹secret› --force");
+});
+
+test("redaction masks each credential slot by position, leaving the text around it intact", () => {
+  for (const [text, safe] of [
+    ["git clone https://user:pw@host/r", "git clone https://user:‹secret›@host/r"],
+    ["git clone https://tok@host/r", "git clone https://‹secret›@host/r"],
+    ["curl -u a:b https://x", "curl -u ‹secret› https://x"],
+    ["curl -uadmin:pw https://x", "curl -u‹secret› https://x"],
+    ["deploy --token=-canary", "deploy --token=‹secret›"],
+    ["deploy --token -canary", "deploy --token ‹secret›"],
+    ["Authorization:ab", "Authorization:‹secret›"],
+    ["Authorization: Bearer ab", "Authorization: Bearer ‹secret›"],
+    ["--password=pass bypass", "--password=‹secret› bypass"],
+    ["GITHUB_TOKEN=x make", "GITHUB_TOKEN=‹secret› make"],
+    ["--api-key 'a b' --force", "--api-key '‹secret›' --force"],
+    ["--password=https://u:pw@host", "--password=‹secret›"],
+    ["pass passive --pass=p bypass", "pass passive --pass=‹secret› bypass"],
+  ])
+    expect(redacted(text!)).toBe(safe!);
 });

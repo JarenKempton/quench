@@ -1,6 +1,7 @@
 import { basename, win32 } from "node:path";
 import { pathStyle } from "./files.ts";
 import { scriptAccesses } from "./scripts.ts";
+import { knownProgram, knownSubcommand } from "./subcommands.ts";
 
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
 
@@ -122,18 +123,32 @@ const SETUP = new Set(["cd", "export", "source", ".", "set", "sleep", "true", "e
 const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee", "column", "jq"]);
 
 export function commandSignature(command: string): string | null {
-  const signatures = segments(command).flatMap((segment) => {
-    const words = segment.words.filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w.text));
-    const program = words[0] && !words[0].dynamic ? basename(words[0].text) : null;
-    if (program && (SETUP.has(program) || FILTERS.has(program))) return [];
-    const sub = words.slice(1).find((w) => !w.text.startsWith("-"));
-    return [
-      program && sub && !sub.dynamic && /^[a-z][a-z0-9:_-]*$/.test(sub.text)
-        ? `${program} ${sub.text}`
-        : program,
-    ];
-  });
-  return signatures.length === 1 ? signatures[0]! : null;
+  if (isChained(command)) return null;
+  const [segment] = segments(command);
+  if (!segment) return null;
+  const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
+  const name =
+    words[0] && !words[0].dynamic
+      ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
+      : null;
+  if (!name || SETUP.has(name) || FILTERS.has(name)) return null;
+  const program = knownProgram(name);
+  const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
+  const sub = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
+  return sub ? `${program} ${sub}` : program;
+}
+
+export const isChained = (command: string): boolean => /&&|[|;\n]/.test(command);
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const ENV_VALUED = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]);
+
+function unwrapped(words: Word[]): Word[] {
+  if (words[0]?.text !== "env") return words;
+  let i = 1;
+  while (words[i] && (words[i]!.text.startsWith("-") || ASSIGNMENT.test(words[i]!.text)))
+    i += ENV_VALUED.has(words[i]!.text) ? 2 : 1;
+  return words.slice(i);
 }
 
 function searchOf(
@@ -266,6 +281,8 @@ function operands(program: string, args: Word[]): Word[] | null {
   return files;
 }
 
+const WINDOWS_PATH = /^(?:[A-Za-z]:|\.{1,2})(?:\\.*)?$/;
+
 function segments(command: string): Segment[] {
   const out: Segment[] = [];
   let segment: Segment = { words: [], inputs: [], piped: false, heredoc: null };
@@ -347,6 +364,9 @@ function segments(command: string): Segment[] {
           i++;
         }
       }
+      i++;
+    } else if (c === "\\" && WINDOWS_PATH.test(word.text) && /[\w.-]/.test(command[i + 1] ?? "")) {
+      word.text += c;
       i++;
     } else if (c === "\\") {
       word.text += command[i + 1] ?? "";
