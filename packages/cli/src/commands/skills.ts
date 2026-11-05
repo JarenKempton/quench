@@ -80,7 +80,7 @@ const LIMITATIONS = [
   "Origin: plugin from an installed plugin; project from a project folder; vendored for skills the agent ships, system folders, and folders that resolve outside your home; user for any other folder in your home. A skill found nowhere on disk now has an unknown origin.",
   "Content version is the fleet tree hash of the whole skill folder on disk now; unknown when it is not a readable SKILL.md folder.",
   "Missing evidence is unknown, never zero: an agent with no recorded listing in the period has unknown counts. Codex loads skills through the shell, so its use counts are a lower bound.",
-  `Loaded and corrected is session co-occurrence from corrections --context: a session loaded a skill when it invoked a listed skill, read its SKILL.md, or ran a shell read of it. A session had a human correction when a cached verdict says a person corrected a run in the period. Shown at 5 or more sessions; co-occurrence, not cause.`,
+  `Loaded and corrected is session co-occurrence from corrections --context: a session loaded a skill when it invoked a listed skill, read its SKILL.md, or ran a shell read of it. A session had a human correction when a cached verdict says a person corrected a run in the period. Sessions with unjudged replies and sessions with no human follow-up are counted apart and never as no correction. Shown at 5 or more sessions with a judged human follow-up; co-occurrence, not cause.`,
 ];
 
 export async function skills(home: Home, rest: string[], options: Options) {

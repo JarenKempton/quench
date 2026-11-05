@@ -11,7 +11,13 @@ const CANARY = "QCANARY9z";
 
 const at = (second: number) => new Date(Date.UTC(2026, 9, 20, 10, 0, second)).toISOString();
 
-type Case = { id: string; skill: string | null; args?: string; reply: string };
+type Case = {
+  id: string;
+  skill: string | null;
+  args?: string;
+  reply: string | null;
+  userRuns?: boolean;
+};
 
 const session = (c: Case) =>
   lines([
@@ -55,7 +61,18 @@ const session = (c: Case) =>
         usage: { input_tokens: 1, output_tokens: 1 },
       },
     },
-    { type: "user", timestamp: at(5), message: { role: "user", content: c.reply } },
+    ...(c.userRuns
+      ? [
+          {
+            type: "user",
+            timestamp: at(6),
+            message: { role: "user", content: `<command-name>/${c.skill}</command-name>` },
+          },
+        ]
+      : []),
+    ...(c.reply === null
+      ? []
+      : [{ type: "user", timestamp: at(5), message: { role: "user", content: c.reply } }]),
   ]);
 
 const skillFile = (name: string, extra = "") =>
@@ -71,7 +88,7 @@ async function fixture(cases: Case[], corrected: string[], uncached: string[] = 
   const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
   for (const c of cases) {
     await Bun.write(join(dir, `${c.id}.jsonl`), session(c));
-    if (uncached.includes(c.id)) continue;
+    if (uncached.includes(c.id) || c.reply === null) continue;
     await cache.remember([
       [
         { assistantSaid: "done", reply: c.reply },
@@ -307,7 +324,36 @@ test("unjudged sessions are counted apart and do not reach the floor", async () 
     sessionsLoaded: 5,
     withHumanCorrection: null,
     unjudgedSessions: 1,
+    noFollowUp: 0,
   });
+});
+
+test("sessions with no human follow-up are counted apart and do not reach the floor", async () => {
+  const home = await fixture(
+    ordinary.map((c) => (c.skill === "verify" ? { ...c, reply: null } : c)),
+    [],
+  );
+  const verify = (await report(home)).json.skills.find(
+    (r: Record) => r.skill === "verify" && r.harness === "claude-code",
+  );
+  expect(verify.coOccurrence).toEqual({
+    basis: "co-occurrence, not cause",
+    sessionsLoaded: 5,
+    withHumanCorrection: null,
+    unjudgedSessions: 0,
+    noFollowUp: 5,
+  });
+});
+
+test("a user run after a model invocation counts as used by the user", async () => {
+  const home = await fixture(
+    ordinary.map((c) => (c.id === "a" ? { ...c, userRuns: true } : c)),
+    [],
+  );
+  const verify = (await report(home)).json.skills.find(
+    (r: Record) => r.skill === "verify" && r.harness === "claude-code",
+  );
+  expect(verify.use).toMatchObject({ used: 5, usedByUser: 1 });
 });
 
 test("--source warnings are a fixed vocabulary, never manifest text", async () => {
