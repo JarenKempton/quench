@@ -13,7 +13,7 @@ import {
 } from "@quench/fleet";
 import { importSkillsRepo } from "@quench/fleet";
 import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo } from "@quench/fleet/disk";
-import { Repo } from "./git.ts";
+import { Repo, type Guard } from "./git.ts";
 import { Store, type Identity } from "./store.ts";
 
 export const EMPTY_FLEET = "version: 1\nskills: {}\n";
@@ -160,12 +160,18 @@ export class Hub {
     return this.pushing;
   }
 
-  async writeFile(base: string, path: string, content: string, message: string) {
+  async writeFile(
+    base: string,
+    path: string,
+    content: string,
+    message: string,
+    guard: Guard = () => {},
+  ) {
     if (path === FLEET_FILE) FleetFile.parse(Bun.YAML.parse(content));
-    return this.committed(await this.repo.commitFile(base, path, content, message));
+    return this.committed(await this.repo.commitFile(base, path, content, message, guard));
   }
 
-  async toggle(base: string, skill: string, machine: string, on: boolean) {
+  async toggle(base: string, skill: string, machine: string, on: boolean, guard: Guard = () => {}) {
     const { fleet } = await this.fleetAt(base);
     if (!own(fleet.skills, skill)) throw new Error(`unknown skill ${skill}`);
     const next = toggled(fleet, skill, machine, on);
@@ -175,12 +181,13 @@ export class Hub {
         FLEET_FILE,
         fleetYaml(next),
         `${on ? "Enable" : "Disable"} ${skill} on ${machine}`,
+        guard,
       ),
     );
   }
 
-  async revert(base: string, commit: string) {
-    return this.committed(await this.repo.revert(base, commit));
+  async revert(base: string, commit: string, guard: Guard = () => {}) {
+    return this.committed(await this.repo.revert(base, commit, guard));
   }
 
   report(identity: Identity, snapshot: Snapshot): MachineState | null {

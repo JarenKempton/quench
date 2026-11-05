@@ -80,6 +80,8 @@ const SETTINGS = ["-c", "core.autocrlf=false", "-c", "core.quotePath=false"];
 
 export class GitError extends Error {}
 
+export type Guard = () => void;
+
 export class StaleHead extends Error {
   constructor(readonly expected: string | null) {
     super("the hub's skills changed since this page loaded; reload and try again");
@@ -197,29 +199,41 @@ export class Repo {
     }
   }
 
-  private async land(base: string | null, tree: string, message: string): Promise<string> {
+  private async land(
+    base: string | null,
+    tree: string,
+    message: string,
+    guard: Guard,
+  ): Promise<string> {
     const parents = base ? ["-p", base] : [];
     const { text: commit } = await this.git(
       ["commit-tree", "--no-gpg-sign", tree, ...parents, "-F", "-"],
       { input: message },
     );
+    guard();
     const { code } = await this.git(["update-ref", BRANCH, commit, base ?? ""], { ok: [0, 128] });
     if (code !== 0) throw new StaleHead(base);
     return commit;
   }
 
-  async commitFile(base: string | null, path: string, content: string, message: string) {
+  async commitFile(
+    base: string | null,
+    path: string,
+    content: string,
+    message: string,
+    guard: Guard = () => {},
+  ) {
     if ((await this.head()) !== base) throw new StaleHead(base);
     const blob = await this.blob(content);
     return this.withIndex(async (env) => {
       await this.git(base ? ["read-tree", base] : ["read-tree", "--empty"], { env });
       await this.git(["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], { env });
       const { text: tree } = await this.git(["write-tree"], { env });
-      return this.land(base, tree, message);
+      return this.land(base, tree, message, guard);
     });
   }
 
-  async revert(base: string, commit: string) {
+  async revert(base: string, commit: string, guard: Guard = () => {}) {
     if ((await this.head()) !== base) throw new StaleHead(base);
     const { text: subject } = await this.git(["log", "-1", "--format=%s", commit]);
     const patch = await this.git(["diff-tree", "-p", "--binary", "--root", commit]);
@@ -229,7 +243,12 @@ export class Repo {
         throw new GitError(`${commit.slice(0, 12)} cannot be reverted cleanly on top of HEAD`);
       });
       const { text: tree } = await this.git(["write-tree"], { env });
-      return this.land(base, tree, `Revert "${subject}"\n\nThis reverts commit ${commit}.\n`);
+      return this.land(
+        base,
+        tree,
+        `Revert "${subject}"\n\nThis reverts commit ${commit}.\n`,
+        guard,
+      );
     });
   }
 

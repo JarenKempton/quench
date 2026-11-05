@@ -40,6 +40,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_active_machine ON machines (name) WHERE re
 CREATE TABLE IF NOT EXISTS failed_attempts (kind TEXT NOT NULL, at INTEGER NOT NULL);
 `;
 
+export class SessionEnded extends Error {
+  constructor() {
+    super("you were signed out before this finished; sign in and try again");
+  }
+}
+
 export type Identity = { id: number; name: string; tokenHash: string };
 
 export type MachineRow = {
@@ -96,6 +102,15 @@ export class Store {
     return !!this.db
       .query("SELECT 1 FROM sessions WHERE token_hash = ? AND expires_at > ?")
       .get(sha256(token), this.now());
+  }
+
+  asOwner<T>(session: string, check: () => boolean, action: () => T): T {
+    return this.db
+      .transaction(() => {
+        if (!this.validSession(session) || !check()) throw new SessionEnded();
+        return action();
+      })
+      .immediate();
   }
 
   endSession(token: string | undefined) {

@@ -336,3 +336,77 @@ test("a snapshot held open across revoke and re-pair cannot overwrite the new ma
   expect((await slow).status).toBe(401);
   expect(hub.hub.store.machineState("laptop")!.generation).toBe(1);
 });
+
+async function heldOwnerPost(
+  hub: Running,
+  owner: Owner,
+  path: string,
+  fields: Record<string, string>,
+) {
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  const body = new URLSearchParams({ csrf: owner.csrf, ...fields }).toString();
+  const response = fetch(`${hub.url}${path}`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      origin: hub.url,
+      cookie: owner.cookie,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode(body.slice(0, 5)));
+        await held;
+        controller.enqueue(new TextEncoder().encode(body.slice(5)));
+        controller.close();
+      },
+    }),
+    duplex: "half",
+    ...tls(hub),
+  } as RequestInit);
+  await Bun.sleep(200);
+  expect((await owner.post("/logout", {})).status).toBe(303);
+  release();
+  return response;
+}
+
+test("an owner action held open across logout does not complete", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const codes = () =>
+    (hub.hub.store.db.query("SELECT COUNT(*) AS n FROM pairing_codes").get() as { n: number }).n;
+  const before = codes();
+  const response = await heldOwnerPost(hub, owner, "/machines", { name: "laptop" });
+  expect(response.status).not.toBe(200);
+  expect(await response.text()).not.toContain("quench connect");
+  expect(codes()).toBe(before);
+});
+
+test("a commit held open across logout does not land", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const base = await hub.hub.head();
+  const response = await heldOwnerPost(hub, owner, "/toggle", {
+    base,
+    skill: "commit-style",
+    machine: "laptop",
+    on: "0",
+  });
+  expect(response.status).not.toBe(303);
+  expect(await hub.hub.head()).toBe(base);
+});
+
+test("an editor save held open across logout does not land", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const base = await hub.hub.head();
+  const content = "x\n";
+  const { sha256 } = await import("@quench/fleet");
+  const response = await heldOwnerPost(hub, owner, "/edit", {
+    path: "notes.txt",
+    base,
+    content,
+    previewed: sha256(content),
+    action: "save",
+  });
+  expect(response.status).not.toBe(303);
+  expect(await hub.hub.head()).toBe(base);
+});

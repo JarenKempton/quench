@@ -9,6 +9,7 @@ import { selfSignedCertificate, spkiPin } from "./cert.ts";
 import { GitError, StaleHead } from "./git.ts";
 import { Hub } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
+import { SessionEnded } from "./store.ts";
 import { connectPage, dashboard, editPage, loginPage, messagePage } from "./ui.ts";
 
 export const MAX_SNAPSHOT_BYTES = 1024 * 1024;
@@ -122,6 +123,8 @@ async function withCsrf(response: Response, token: string) {
   return new Response(html, { status: response.status, headers: response.headers });
 }
 
+type Owned = { now: <T>(action: () => T) => T; guard: () => void };
+
 const PairRequest = z.object({ code: z.string().min(1).max(64) }).strict();
 
 export async function serveHub(options: ServeOptions) {
@@ -173,7 +176,20 @@ export async function serveHub(options: ServeOptions) {
   const publicUrl = (req: Request) => (options.url ?? new URL(req.url).origin).replace(/\/+$/, "");
   const secure = tls ? "; Secure" : "";
 
+  const ended = (error: unknown) => {
+    if (error instanceof SessionEnded) return messagePage("Signed out", error.message, 401);
+    throw error;
+  };
+
+  let queue: Promise<unknown> = Promise.resolve();
+  const serial = <T>(action: () => Promise<T>) => {
+    const run = queue.then(action, action);
+    queue = run.catch(() => undefined);
+    return run;
+  };
+
   const conflict = (error: unknown) => {
+    if (error instanceof SessionEnded) return ended(error);
     if (error instanceof StaleHead) return messagePage("Stale page", error.message, 409);
     if (error instanceof GitError || error instanceof z.ZodError || error instanceof Error)
       return messagePage("Not saved", error.message, 400);
@@ -245,26 +261,31 @@ export async function serveHub(options: ServeOptions) {
         "set-cookie": `${COOKIE}=${hub.store.newSession()}; Path=/; HttpOnly; SameSite=Strict${secure}`,
       });
     }
+    const fields = req.method === "POST" ? await form(req) : new URL(req.url).searchParams;
+    if (!fields) return messagePage("Not saved", "body too large", 413);
     const session = cookie(req);
-    if (!owner(req)) return req.method === "GET" ? loginPage() : redirect("/");
-    const token = csrfToken(session!);
-    if (req.method === "POST") {
-      const fields = await form(req);
-      if (!fields) return messagePage("Not saved", "body too large", 413);
-      if (!sameToken(fields.get("csrf") ?? "", token))
-        return messagePage(
-          "Refused",
-          "this form is missing its session token; reload the page",
-          403,
-        );
-      return withCsrf(await owned(req, path, fields), token);
-    }
-    return withCsrf(await owned(req, path, new URL(req.url).searchParams), token);
+    if (!session || !owner(req))
+      return req.method === "GET" ? loginPage() : ended(new SessionEnded());
+    const token = csrfToken(session);
+    if (req.method === "GET") return withCsrf(await owned(req, path, fields, null), token);
+    const tokenOk = () => sameToken(fields.get("csrf") ?? "", token);
+    if (!tokenOk())
+      return messagePage("Refused", "this form is missing its session token; reload the page", 403);
+    const as: Owned = {
+      now: (action) => hub.store.asOwner(session, tokenOk, action),
+      guard: () => hub.store.asOwner(session, tokenOk, () => undefined),
+    };
+    return serial(() => owned(req, path, fields, as).catch(ended)).then((r) => withCsrf(r, token));
   }
 
-  async function owned(req: Request, path: string, f: URLSearchParams): Promise<Response> {
-    if (path === "/logout") {
-      hub.store.endSession(cookie(req));
+  async function owned(
+    req: Request,
+    path: string,
+    f: URLSearchParams,
+    as: Owned | null,
+  ): Promise<Response> {
+    if (as && path === "/logout") {
+      as.now(() => hub.store.endSession(cookie(req)));
       return redirect("/", {
         "set-cookie": `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secure}`,
       });
@@ -287,16 +308,18 @@ export async function serveHub(options: ServeOptions) {
       const name = MachineName.safeParse(f.get("name"));
       if (!name.success)
         return messagePage("Not added", "machine names are lowercase letters, digits, . _ -", 400);
-      if (hub.store.activeMachine(name.data))
+      const code = as!.now(() =>
+        hub.store.activeMachine(name.data) ? null : hub.store.newPairingCode(name.data),
+      );
+      if (!code)
         return messagePage("Not added", `${name.data} is already paired; revoke it first`, 409);
-      const code = hub.store.newPairingCode(name.data);
       return connectPage(
         name.data,
         `quench connect ${publicUrl(req)} --code ${code}${pin ? ` --pin ${pin}` : ""}`,
       );
     }
     if (path === "/machines/revoke") {
-      hub.store.revoke(f.get("name") ?? "");
+      as!.now(() => hub.store.revoke(f.get("name") ?? ""));
       return redirect("/");
     }
     if (path === "/toggle") {
@@ -304,19 +327,19 @@ export async function serveHub(options: ServeOptions) {
       const base = commitField(f, "base");
       if (!machine.success || !base) return messagePage("Not saved", "bad toggle", 400);
       return hub
-        .toggle(base, f.get("skill") ?? "", machine.data, f.get("on") === "1")
+        .toggle(base, f.get("skill") ?? "", machine.data, f.get("on") === "1", as!.guard)
         .then(() => redirect("/"), conflict);
     }
     if (path === "/revert") {
       const commit = commitField(f, "commit");
       const base = commitField(f, "base");
       if (!commit || !base) return messagePage("Not reverted", "bad commit", 400);
-      return hub.revert(base, commit).then(() => redirect("/"), conflict);
+      return hub.revert(base, commit, as!.guard).then(() => redirect("/"), conflict);
     }
-    return edit(req, f);
+    return edit(req, f, as);
   }
 
-  async function edit(req: Request, f: URLSearchParams) {
+  async function edit(req: Request, f: URLSearchParams, as: Owned | null) {
     const path = f.get("path") ?? "";
     if (!RelativePath.safeParse(path).success || excluded(path))
       return messagePage("Not found", "that path cannot be edited", 400);
@@ -345,7 +368,9 @@ export async function serveHub(options: ServeOptions) {
     const previewed = f.get("previewed");
     if (f.get("action") !== "save" || error || previewed !== sha256(content) || !diff)
       return editPage({ ...fields, diff, previewed: sha256(content), ...(error ? { error } : {}) });
-    return hub.writeFile(base, path, content, `Edit ${path}`).then(() => redirect("/"), conflict);
+    return hub
+      .writeFile(base, path, content, `Edit ${path}`, as!.guard)
+      .then(() => redirect("/"), conflict);
   }
 
   const server = Bun.serve({
