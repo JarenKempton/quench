@@ -15,6 +15,7 @@ import { secrets } from "./commands/secrets.ts";
 import { update } from "./commands/update.ts";
 import { skills } from "./commands/skills.ts";
 import { connect, hub } from "./commands/hub.ts";
+import { skill } from "./commands/skill.ts";
 import { agent } from "./commands/agent.ts";
 import { resolve } from "node:path";
 import { version } from "./version.ts";
@@ -56,6 +57,12 @@ Usage:
                                        bring a skills repo into a new hub with its history, plus one fleet-file commit
   quench connect <https://hub> --code XXXX-XXXX [--pin sha256:…]
                                        pair this machine with a hub and fetch its bundle
+  quench skill list|show <skill> [--json]
+                                       skills the hub assigns to this machine, and one skill's current SKILL.md
+  quench skill diff <skill> <file>     how a local file differs from the hub's SKILL.md
+  quench skill propose <skill> <file> [--base <tree hash>] [--agent <name>] [--harness <id>] [--session <id>]
+                       [--evidence <json>]... [--json]
+                                       propose a new SKILL.md for the owner to review; needs proposal access
   quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
                                        install, update and remove the planned skill folders; refuses if disk changed
   quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
@@ -133,6 +140,10 @@ const { positionals, values } = parseArgs({
     project: { type: "string", multiple: true, default: [] },
     interval: { type: "string", default: "300" },
     once: { type: "boolean", default: false },
+    base: { type: "string" },
+    agent: { type: "string" },
+    harness: { type: "string" },
+    evidence: { type: "string", multiple: true, default: [] },
     candidate: { type: "string" },
     limit: { type: "string" },
     "max-cost": { type: "string" },
@@ -205,8 +216,13 @@ if (!Number.isInteger(themeLimit) || themeLimit < 1 || themeLimit > MAX_THEME_LI
   process.exit(1);
 }
 
-if (values.session.length && command !== "runs" && command !== "corrections") {
-  process.stderr.write("--session is only available for runs and corrections\n");
+if (
+  values.session.length &&
+  command !== "runs" &&
+  command !== "corrections" &&
+  command !== "skill"
+) {
+  process.stderr.write("--session is only available for runs, corrections and skill\n");
   process.exit(1);
 }
 if (command === "runs" && values.session.length > 1) {
@@ -281,6 +297,16 @@ if ((values.code !== undefined || values.pin !== undefined) && command !== "conn
   process.exit(1);
 }
 
+if (
+  (values.base !== undefined ||
+    values.agent !== undefined ||
+    values.harness !== undefined ||
+    values.evidence.length) &&
+  command !== "skill"
+) {
+  process.stderr.write("--base, --agent, --harness and --evidence are only available for skill\n");
+  process.exit(1);
+}
 if (values.scan.length && command !== "profile" && command !== "summary") {
   process.stderr.write("--scan is only available for profile\n");
   process.exit(1);
@@ -429,6 +455,16 @@ switch (command) {
       ...(values.mirror ? { mirror: values.mirror } : {}),
       ...(values["tls-cert"] ? { tlsCert: values["tls-cert"] } : {}),
       ...(values["tls-key"] ? { tlsKey: values["tls-key"] } : {}),
+    });
+    break;
+  case "skill":
+    process.exitCode = await skill(home, rest, {
+      json: values.json,
+      session: values.session,
+      evidence: values.evidence,
+      ...(values.base ? { base: values.base } : {}),
+      ...(values.agent ? { agent: values.agent } : {}),
+      ...(values.harness ? { harness: values.harness } : {}),
     });
     break;
   case "connect":

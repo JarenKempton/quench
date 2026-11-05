@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@quench/fleet": "workspace:*",
+    "@quench/secrets": "workspace:*",
     "zod": "^4.1.0"
   }
 }

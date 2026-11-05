@@ -1,8 +1,9 @@
 import type { FleetFile, MachineState } from "@quench/fleet";
 import type { Commit } from "./git.ts";
 import { placed } from "./hub.ts";
+import type { Flag } from "./review.ts";
 import { skillGrid, versionSection, type CardView, type Desired } from "./skill-views.ts";
-import type { MachineRow } from "./store.ts";
+import type { MachineRow, StoredProposal } from "./store.ts";
 
 export const escape = (text: string) =>
   text.replace(
@@ -14,6 +15,7 @@ const STYLE = `body{font:14px/1.5 system-ui,sans-serif;margin:2rem auto;max-widt
 table{border-collapse:collapse;margin:.5rem 0 1.5rem}td,th{border:1px solid #ddd;padding:.25rem .5rem;text-align:left}
 pre{background:#f5f5f5;padding:.75rem;overflow:auto}textarea{width:100%;font:13px ui-monospace,monospace}
 form{display:inline}code{background:#f5f5f5;padding:.1rem .3rem}.add{color:#060}.del{color:#a00}.err{color:#a00}
+.claim{color:#555;font-style:italic}.flag{font-weight:600}
 .grid td{vertical-align:top}.grid div{white-space:nowrap}small,.n{color:#555;font-size:12px}.warn{color:#a50}
 .card{border:1px solid #ddd;border-radius:4px;padding:.25rem 1rem .75rem;margin:1rem 0}.card.thin{color:#555}
 .basis{font-weight:600}.diff{max-height:24rem}`;
@@ -86,6 +88,8 @@ export function dashboard(input: {
   machines: (Omit<MachineRow, "state"> & { state: MachineState | null })[];
   history: Commit[];
   files: string[];
+  proposals: ProposalSummary[];
+  shipped: string | null;
   desired: Desired;
   cards: CardView[];
 }) {
@@ -101,10 +105,10 @@ export function dashboard(input: {
     },
   );
   const machines = input.machines.length
-    ? `<table><tr><th>Machine</th><th>Paired</th><th>Last seen</th><th>Generation</th><th>Reported state</th><th></th></tr>${input.machines
+    ? `<table><tr><th>Machine</th><th>Paired</th><th>Last seen</th><th>Generation</th><th>Reported state</th><th>Proposals</th><th></th></tr>${input.machines
         .map(
           (m) =>
-            `<tr><td>${escape(m.name)}</td><td>${when(m.paired_at)}</td><td>${when(m.last_seen_at)}</td><td>${m.state?.generation ?? "–"}</td><td>${stateCell(m.state)}</td><td>${button("/machines/revoke", { name: m.name }, "Revoke")}</td></tr>`,
+            `<tr><td>${escape(m.name)}</td><td>${when(m.paired_at)}</td><td>${when(m.last_seen_at)}</td><td>${m.state?.generation ?? "–"}</td><td>${stateCell(m.state)}</td><td>${m.proposals ? `proposals allowed ${button("/machines/propose/revoke", { name: m.name }, "Revoke proposals")}` : button("/machines/propose", { name: m.name }, "Allow proposals")}</td><td>${button("/machines/revoke", { name: m.name }, "Revoke")}</td></tr>`,
         )
         .join("")}</table>`
     : "<p>No machines paired yet.</p>";
@@ -125,19 +129,136 @@ export function dashboard(input: {
   return page(
     "Quench hub",
     `<h1>Quench hub</h1><p>Skills at <code>${head.slice(0, 12)}</code> ${button("/logout", {}, "Sign out")}</p>${warnings}
-<h2>Skills by machine</h2>${grid}
+<h2>Skills by machine</h2>${grid}${input.shipped ? `<p>${button("/skills/shipped", { base: head }, `Add the shipped ${input.shipped} skill`)} so agents can find Quench and propose skill changes.</p>` : ""}
 <h2>Skill versions</h2>${versionSection({ escape, button }, head, input.cards)}
+<h2>Proposals</h2>${proposalList(input.proposals)}
 <h2>Machines</h2>${machines}<form method="post" action="/machines"><label>Add machine <input name="name" pattern="[a-z0-9][a-z0-9._\\-]*" placeholder="laptop" required></label> <button>Add machine</button></form>
 <h2>History</h2>${history}
 <h2>Files</h2>${files}`,
   );
 }
 
-export const connectPage = (machine: string, command: string) =>
+const diffBlock = (diff: string, id: string) =>
+  `<pre id="${id}">${diff
+    .split("\n")
+    .map((l) =>
+      l.startsWith("+") && !l.startsWith("+++")
+        ? `<span class="add">${escape(l)}</span>`
+        : l.startsWith("-") && !l.startsWith("---")
+          ? `<span class="del">${escape(l)}</span>`
+          : escape(l),
+    )
+    .join("\n")}</pre>`;
+
+export const connectPage = (machine: string, command: string, proposals = false) =>
   page(
-    "Add machine",
-    `<h1>Add ${escape(machine)}</h1><p>Run this on ${escape(machine)} within 10 minutes. The code works once.</p><pre id="connect">${escape(command)}</pre><p><a href="/">Back</a></p>`,
+    proposals ? "Allow proposals" : "Add machine",
+    `<h1>${proposals ? "Allow proposals from" : "Add"} ${escape(machine)}</h1><p>Run this on ${escape(machine)} within 10 minutes. The code works once.${proposals ? " It gives agents there a proposal token: they can read and propose changes to skills assigned to this machine, and nothing else." : ""}</p><pre id="connect">${escape(command)}</pre><p><a href="/">Back</a></p>`,
   );
+
+export type ProposalSummary = Pick<
+  StoredProposal,
+  "id" | "skill" | "machine" | "submitted_at" | "approved_at" | "approved_commit"
+> & { stale: boolean };
+
+const status = (p: {
+  approved_at: number | null;
+  approved_commit: string | null;
+  stale: boolean;
+}) =>
+  p.approved_at
+    ? `approved in <code>${escape((p.approved_commit ?? "").slice(0, 12))}</code>`
+    : p.stale
+      ? `<span class="err">stale</span>`
+      : "pending";
+
+const proposalList = (proposals: ProposalSummary[]) =>
+  proposals.length
+    ? `<table><tr><th>Proposal</th><th>Skill</th><th>From machine</th><th>Submitted</th><th>Status</th></tr>${proposals
+        .map(
+          (p) =>
+            `<tr><td><a href="/proposal?id=${p.id}">#${p.id}</a></td><td>${escape(p.skill)}</td><td>${escape(p.machine)}</td><td>${when(p.submitted_at)}</td><td>${status(p)}</td></tr>`,
+        )
+        .join("")}</table>`
+    : "<p>No proposals yet.</p>";
+
+const FLAG_LABELS: Record<Flag["kind"], string> = {
+  url: "new URL",
+  shell: "shell command",
+  script: "script",
+  credential: "credential mention",
+  encoded: "encoded content",
+};
+
+const claim = (value: string | undefined) =>
+  value === undefined
+    ? `<span class="claim">not given</span>`
+    : `${escape(value)} <span class="claim">(claimed, not verified)</span>`;
+
+export function proposalPage(input: {
+  proposal: StoredProposal;
+  head: string;
+  current: { path: string; treeHash: string } | null;
+  diff: string;
+  flags: Flag[];
+  threeWay: string | null;
+  error?: string;
+  status?: number;
+}) {
+  const p = input.proposal;
+  const stale = !input.current || input.current.treeHash !== p.base_tree_hash;
+  const rows: [string, string][] = [
+    ["Skill", escape(p.skill)],
+    ["File", `<code>${escape(input.current?.path ?? p.skill)}/SKILL.md</code>`],
+    ["Machine", `${escape(p.machine)} <span class="claim">(from its proposal token)</span>`],
+    ["Agent", claim(p.claims.agent)],
+    ["Harness", claim(p.claims.harness)],
+    ["Session", claim(p.claims.session)],
+    ["Submitted", when(p.submitted_at)],
+    ["Base tree hash", `<code>${escape(p.base_tree_hash)}</code>`],
+    ["Revision", `<code>${escape(p.revision)}</code>`],
+    ["Status", status({ ...p, stale })],
+  ];
+  const evidence = p.evidence.length
+    ? `<ul id="evidence">${p.evidence
+        .map(
+          (e) =>
+            `<li>${escape(e.kind)} <b>${escape(e.name)}</b>: ${Object.entries(e.counts)
+              .map(([k, n]) => `${escape(k)} ${n}`)
+              .join(", ")}</li>`,
+        )
+        .join("")}</ul>`
+    : `<p id="evidence">No evidence attached. This proposal cites no insight card or eval.</p>`;
+  const flags = input.flags.length
+    ? `<table id="flags"><tr><th>Flag</th><th>Line</th><th>Added text</th></tr>${input.flags
+        .map(
+          (f) =>
+            `<tr><td class="flag">${FLAG_LABELS[f.kind]}</td><td>${f.line}</td><td><code>${escape(f.text)}</code></td></tr>`,
+        )
+        .join("")}</table>`
+    : `<p id="flags">No new URLs, shell commands, scripts, credential mentions or encoded content.</p>`;
+  const decision = p.approved_at
+    ? `<p>Approved and committed in <code>${escape(p.approved_commit ?? "")}</code>.</p>`
+    : stale
+      ? `<p class="err" id="stale">Stale: ${escape(p.skill)} ${input.current ? `changed after this proposal's base (now <code>${escape(input.current.treeHash)}</code>)` : "is no longer in the fleet"}. Approval is blocked and nothing is merged automatically.</p>${
+          input.threeWay === null
+            ? ""
+            : `<h2>3-way diff</h2><p>current on main, the proposal's base, and the proposal, as conflict markers. Shown only; not saved.</p><pre id="three-way">${escape(input.threeWay)}</pre>`
+        }`
+      : `<h2>Approve</h2><form method="post" action="/proposal/approve">${hidden({ id: String(p.id), base: input.head })}<label>Re-enter the owner password <input type="password" name="password" autocomplete="current-password" required></label> <button>Approve and commit</button></form>`;
+  return page(
+    `Proposal #${p.id}`,
+    `<h1>Proposal #${p.id} to ${escape(p.skill)}</h1>${input.error ? `<p class="err">${escape(input.error)}</p>` : ""}
+<p>Written by an agent. Everything it reports about itself is a claim; the machine comes from its token.</p>
+<table>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>
+<h2>Evidence</h2>${evidence}
+<h2>Flags</h2>${flags}
+<h2>Diff against its base</h2>${input.diff ? diffBlock(input.diff, "diff") : "<p>No changes.</p>"}
+${decision}
+<p><a href="/">Back</a></p>`,
+    input.status ?? (input.error ? 400 : 200),
+  );
+}
 
 export const editPage = (input: {
   path: string;
@@ -157,16 +278,7 @@ export const editPage = (input: {
       ? ""
       : input.diff === ""
         ? "<p>No changes.</p>"
-        : `<h2>Diff</h2><pre id="diff">${input.diff
-            .split("\n")
-            .map((l) =>
-              l.startsWith("+") && !l.startsWith("+++")
-                ? `<span class="add">${escape(l)}</span>`
-                : l.startsWith("-") && !l.startsWith("---")
-                  ? `<span class="del">${escape(l)}</span>`
-                  : escape(l),
-            )
-            .join("\n")}</pre>`;
+        : `<h2>Diff</h2>${diffBlock(input.diff, "diff")}`;
   const save =
     input.diff && !input.error
       ? `<button name="action" value="save">Save as one commit</button>`
