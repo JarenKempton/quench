@@ -248,3 +248,43 @@ test("skills whose folders collide on a case-insensitive filesystem are conflict
   ]);
   expect(result.items[0]!.reason).toContain("review");
 });
+
+test("an unavailable project skill is never also removed, and no path is both unavailable and removed", () => {
+  const remote = "github.com/acme/app";
+  const checkout = "~/src/app";
+  const projectRoots = {
+    "claude-code": `${checkout}/.claude/skills`,
+    codex: `${checkout}/.codex/skills`,
+    pi: `${checkout}/.pi/skills`,
+  };
+  const path = `${checkout}/.claude/skills/gone`;
+  const result = plan({
+    bundle: {
+      version: 1,
+      machine: "box",
+      revision: null,
+      skills: {},
+      placements: [],
+      unavailable: [
+        {
+          skill: "gone",
+          harness: "claude-code",
+          scope: { kind: "project", remote },
+          reason: "cannot read skills/gone",
+        },
+      ],
+    },
+    roots,
+    installed: { [path]: { treeHash: H(1), symlink: false, executables: [] } },
+    ledger: [{ ...owns("gone", H(1)), path, location: { scope: "project", remote, checkout } }],
+    warnings: [],
+    projects: [{ remote, checkout, roots: projectRoots }],
+  });
+  expect(result.counts.remove).toBe(0);
+  expect(result.items.map((i) => [i.action, i.path])).toEqual([["unavailable", path]]);
+  const byPath = new Map<string, Set<string>>();
+  for (const item of result.items)
+    if (item.path) byPath.set(item.path, (byPath.get(item.path) ?? new Set()).add(item.action));
+  for (const actions of byPath.values())
+    expect(actions.has("unavailable") && actions.has("remove")).toBe(false);
+});

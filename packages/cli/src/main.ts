@@ -12,6 +12,8 @@ import { sources } from "./commands/sources.ts";
 import { secrets } from "./commands/secrets.ts";
 import { update } from "./commands/update.ts";
 import { skills } from "./commands/skills.ts";
+import { agent } from "./commands/agent.ts";
+import { resolve } from "node:path";
 import { version } from "./version.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
@@ -39,8 +41,15 @@ Usage:
   quench skills [--days 30] [--json] [--source <dir>]
                                        one record per skill, agent and location: origin, listing size, use, corrections
     --source <dir>                     compare installed skills with a skills checkout by tree hash (read-only)
-  quench skills plan --source <dir> --machine <name> --json
+  quench skills plan --source <dir> --machine <name> [--project <dir>] --json
                                        what installing a skills checkout would change on this machine (read-only)
+  quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
+                                       install, update and remove the planned skill folders; refuses if disk changed
+  quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
+                                       conflicts, drift and installation history; exits 1 on conflicts or drift
+    --project <dir>                    also place project-scoped skills into this checkout (repeatable)
+  quench agent install|uninstall|run --source <dir> --machine <name> [--interval 300] [--once]
+                                       a user service that keeps applying the source; never updates itself
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
@@ -90,6 +99,10 @@ const { positionals, values } = parseArgs({
     channel: { type: "string" },
     source: { type: "string" },
     machine: { type: "string" },
+    plan: { type: "string" },
+    project: { type: "string", multiple: true, default: [] },
+    interval: { type: "string", default: "300" },
+    once: { type: "boolean", default: false },
   },
 });
 
@@ -183,8 +196,22 @@ if (values.channel !== undefined && values.channel !== "stable" && values.channe
   process.exit(1);
 }
 
-if ((values.source !== undefined || values.machine !== undefined) && command !== "skills") {
-  process.stderr.write("--source and --machine are only available for skills\n");
+if (
+  (values.source !== undefined || values.machine !== undefined || values.project.length) &&
+  command !== "skills" &&
+  command !== "agent"
+) {
+  process.stderr.write(
+    "--source, --machine and --project are only available for skills and agent\n",
+  );
+  process.exit(1);
+}
+if (values.plan !== undefined && command !== "skills") {
+  process.stderr.write("--plan is only available for skills apply\n");
+  process.exit(1);
+}
+if ((values.once || values.interval !== "300") && command !== "agent") {
+  process.stderr.write("--interval and --once are only available for agent\n");
   process.exit(1);
 }
 
@@ -281,6 +308,21 @@ switch (command) {
         : values["host-history"]
           ? { hostHistory: values["host-history"] }
           : {}),
+      projects: values.project,
+      ...(values.source ? { source: values.source } : {}),
+      ...(values.machine ? { machine: values.machine } : {}),
+      ...(values.plan ? { plan: values.plan } : {}),
+    });
+    break;
+  case "agent":
+    process.exitCode = await agent(home, rest, {
+      projects: values.project,
+      interval: Number(values.interval),
+      once: values.once,
+      homeFlags: Object.keys(HOME_FLAGS).flatMap((flag) => {
+        const dir = values[flag as keyof typeof HOME_FLAGS];
+        return dir ? [`--${flag}`, resolve(dir)] : [];
+      }),
       ...(values.source ? { source: values.source } : {}),
       ...(values.machine ? { machine: values.machine } : {}),
     });
