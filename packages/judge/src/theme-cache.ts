@@ -3,6 +3,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { jsonlLines } from "@quench/history";
 import { z } from "zod";
+import { ModelLabel } from "./response.ts";
 import type { ThemeInput } from "./themes.ts";
 
 /** One semantic grouping decision, not a theme summary or a reply-kind verdict. */
@@ -10,7 +11,7 @@ export const ThemeDecision = z.object({
   /** `new`, `unclear`, or an exemplar ID such as `t0`; checked against the current question's choices. */
   choice: z.string(),
   /** Actual model returned by the grouping service, not the coding-agent model being corrected. */
-  model: z.string().min(1),
+  model: ModelLabel,
 });
 export type ThemeDecision = z.infer<typeof ThemeDecision>;
 

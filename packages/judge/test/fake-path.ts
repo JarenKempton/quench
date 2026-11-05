@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 const script = join(import.meta.dir, "fake-harness.ts");
-export type FakeConfig = { mode?: string; answer?: string; marker?: string };
+export type FakeConfig = { mode?: string; answer?: string; marker?: string; stderr?: string };
 export type Fake = { PATH: string; dir: string; state: string };
 
 export async function fakeHarnessPath(config: FakeConfig = {}): Promise<Fake> {

@@ -11,6 +11,7 @@
     "@quench/history": "workspace:*",
     "@quench/insights": "workspace:*",
     "@quench/judge": "workspace:*",
-    "@quench/secrets": "workspace:*"
+    "@quench/secrets": "workspace:*",
+    "zod": "^4.1.0"
   }
 }

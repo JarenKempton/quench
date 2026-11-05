@@ -359,7 +359,7 @@ test("classification failures remain visible even when known themes group succes
     expect([result.failed, result.newlyJudged, result.themes.failed]).toEqual([1, 0, 0]);
     expect(result.themes.excluded.unclassifiedReplies).toBe(1);
     expect(result.themes.themes[0].corrections).toBe(3);
-    expect(calls).toEqual(["kind", "sender", "theme", "theme", "theme"]);
+    expect(calls).toEqual(["kind", "theme", "theme", "theme"]);
     expect(await Bun.file(cacheFile).text()).toBe(before);
     const themes = await Bun.file(themeFile).text();
     const noKey = await run(home, args);
@@ -371,7 +371,7 @@ test("classification failures remain visible even when known themes group succes
     expect(noKey.stderr).toContain("Classifying missing replies");
     expect(await Bun.file(cacheFile).text()).toBe(before);
     expect(await Bun.file(themeFile).text()).toBe(themes);
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(4);
     const text = await run(home, ["corrections", "--themes", "--days", "36500"], {
       TYPESAFE_API_KEY: "local-test-only",
       TYPESAFE_BASE_URL: server.url.toString(),
@@ -379,7 +379,7 @@ test("classification failures remain visible even when known themes group succes
     expect(text.code).toBe(1);
     expect(text.stdout).toContain("1 unclassified replies (not grouped)");
     expect(text.stdout).toContain("Classification failure:");
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(5);
   } finally {
     await server.stop(true);
   }

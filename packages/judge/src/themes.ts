@@ -1,3 +1,4 @@
+import { JudgeFailed } from "./failure.ts";
 import { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 import type { Reply } from "./replies.ts";
 import type { Exchange } from "./verdict.ts";
@@ -116,7 +117,9 @@ export async function groupCorrections(
         await cache.remember(input, decision);
         newlyGrouped += 1;
       } catch (error) {
-        failures.push(error instanceof Error ? error.message : String(error));
+        failures.push(
+          (error instanceof JudgeFailed ? error : new JudgeFailed("jev", "malformed")).message,
+        );
         stopped = true;
         continue;
       }

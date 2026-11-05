@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Confidence } from "./response.ts";
 
 /** The main purpose of the user's reply to the preceding agent run. */
 export const ReplyKind = z.enum(["correction", "new_request", "approval", "question", "info"]);
@@ -29,7 +30,7 @@ export const Verdict = z.object({
   /** The classifier's authorship guess, not necessarily the final evidence-resolved sender. */
   sender: Sender,
   /** Confidence reported for the reply-kind answer, not confidence in the sender attribution. */
-  confidence: z.number(),
+  confidence: Confidence,
 });
 export type Verdict = z.infer<typeof Verdict>;
 
