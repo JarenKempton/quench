@@ -1,13 +1,6 @@
 import { join } from "node:path";
-import {
-  discoverAll,
-  readSessions,
-  startedAt,
-  type Home,
-  type SessionEnricher,
-} from "@quench/history";
+import { discoverAll, type Home } from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
-import { linkSubagents, runs } from "@quench/insights";
 import {
   HarnessMissing,
   HarnessUnsupported,
@@ -32,9 +25,10 @@ import {
   type Tally,
   type Themes,
 } from "@quench/judge";
-import { reading } from "../progress.ts";
 import { dateOf, latestLine, renderCauses } from "./causes.ts";
-import { contextOf, inContext, renderInContext, type SessionContext } from "./context.ts";
+import { inContext, renderInContext, type SessionContext } from "./context.ts";
+import { scopedReport, scopeRefs, unread, type Scope } from "./scope.ts";
+import { sessionRuns } from "./session-runs.ts";
 import { json, quote, shortPath } from "../format.ts";
 
 const MIN_BUCKET = 15;
@@ -66,11 +60,17 @@ type Options = {
   judge: Provider;
   typesafeKey: string | undefined;
   secrets: string[];
+  scope: Scope | null;
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
   const say = (text: string) => process.stdout.write(redact(text, options.secrets));
   const warn = (text: string) => process.stderr.write(redact(text, options.secrets));
+  const scoped = options.scope ? await scopeRefs(home, options.scope) : null;
+  if (typeof scoped === "string") {
+    warn(`${scoped}\n`);
+    return 1;
+  }
   const chosen = options.judge;
   if (chosen.id === null) {
     warn(NO_JUDGE);
@@ -109,9 +109,15 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const contexts = new Map<string, SessionContext>();
   const since = new Date(Date.now() - options.days * 86_400_000);
   try {
-    sessions = await sessionRuns(home, since, host?.enrich, contexts);
+    const refs = scoped?.refs ?? (await discoverAll(home, since));
+    sessions = await sessionRuns(refs, home.dir, host?.enrich, contexts, scoped !== null);
   } finally {
     host?.close();
+  }
+  const missing = scoped && unread(scoped, sessions);
+  if (missing) {
+    warn(`${missing.label} could not be read as a session\n`);
+    return 1;
   }
   const warnings = host?.warnings ?? [];
   for (const warning of warnings) warn(`${warning}\n`);
@@ -163,45 +169,57 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const path = (file: string) => shortPath(file, home.dir);
   const tokens = replyJudge && "tokens" in replyJudge ? (replyJudge.tokens as Tokens) : null;
   const calls = { label, perReply: callsPerReply, judge: cache.judge };
+  if (scoped && options.json && judged.pending)
+    warn(`${judged.pending} replies in scope are not classified yet and are not listed.\n`);
   say(
-    options.json
-      ? json({
-          days: options.days,
-          judge: cache.judge,
-          newlyJudged: judged.newlyJudged,
-          pending: judged.pending,
-          calls: judged.pending * callsPerReply,
-          failed: judged.failures.length,
-          tokens,
-          warnings,
-          ...summary,
-          ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
-          ...(causes
-            ? {
-                causes: {
-                  ...causes,
-                  tokens: causeJudge?.tokens ?? null,
-                  caused: causes.caused.map((c) => ({ ...example(c.reply), cause: c.cause })),
-                },
-              }
-            : {}),
-          ...(context
-            ? {
-                context: {
-                  ...context,
-                  recurring: context.recurring.map((r) => ({
-                    ...r,
-                    files: r.files.map((f) => ({ ...f, name: path(f.name) })),
-                  })),
-                },
-              }
-            : {}),
-          latest: summary.latest.map(example),
-          latestAutomation: summary.latestAutomation.map(example),
-        })
-      : (themes
-          ? renderThemes(themes, judged, options.days, calls)
-          : render(summary, judged, options.days, cache.judge, tokens, options.cachedOnly, calls)) +
+    scoped && options.json
+      ? json(scopedReport(cache.judge, sessions, judged, causes))
+      : options.json
+        ? json({
+            days: options.days,
+            judge: cache.judge,
+            newlyJudged: judged.newlyJudged,
+            pending: judged.pending,
+            calls: judged.pending * callsPerReply,
+            failed: judged.failures.length,
+            tokens,
+            warnings,
+            ...summary,
+            ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
+            ...(causes
+              ? {
+                  causes: {
+                    ...causes,
+                    tokens: causeJudge?.tokens ?? null,
+                    caused: causes.caused.map((c) => ({ ...example(c.reply), cause: c.cause })),
+                  },
+                }
+              : {}),
+            ...(context
+              ? {
+                  context: {
+                    ...context,
+                    recurring: context.recurring.map((r) => ({
+                      ...r,
+                      files: r.files.map((f) => ({ ...f, name: path(f.name) })),
+                    })),
+                  },
+                }
+              : {}),
+            latest: summary.latest.map(example),
+            latestAutomation: summary.latestAutomation.map(example),
+          })
+        : (themes
+            ? renderThemes(themes, judged, options.days, calls)
+            : render(
+                summary,
+                judged,
+                options.days,
+                cache.judge,
+                tokens,
+                options.cachedOnly,
+                calls,
+              )) +
           (causes ? renderCauses(causes, options.examples) : "") +
           (context ? renderInContext(context, path) : ""),
   );
@@ -220,35 +238,6 @@ export async function corrections(home: Home, options: Options): Promise<number>
     return 2;
   }
   return 0;
-}
-
-export async function sessionRuns(
-  home: Home,
-  since: Date,
-  enrich?: SessionEnricher,
-  contexts?: Map<string, SessionContext>,
-): Promise<SessionRuns[]> {
-  const parents = new Map<string, SessionRuns>();
-  const childStarts = new Map<string, (Date | null)[]>();
-  for await (const outcome of readSessions(await discoverAll(home, since), 4, reading())) {
-    if (!outcome.ok) continue;
-    const s = outcome.session;
-    if (s.parent) {
-      const key = `${s.harness}:${s.parent}`;
-      childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
-    } else {
-      contexts?.set(`${s.harness}:${s.id}`, contextOf(s, home.dir));
-      parents.set(`${s.harness}:${s.id}`, {
-        id: s.id,
-        path: s.path,
-        harness: s.harness,
-        cwd: s.cwd,
-        runs: runs(enrich?.(s) ?? s),
-      });
-    }
-  }
-  for (const [key, session] of parents) linkSubagents(session.runs, childStarts.get(key) ?? []);
-  return [...parents.values()];
 }
 
 type Calls = { label: string; perReply: number; judge: string };

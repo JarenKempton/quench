@@ -78,6 +78,7 @@ profile of every agent and project in your history.
 | `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                      |
 | `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                          |
 | `quench corrections [--dry-run]`                | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`                    |
+| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 1                |
 | `quench steering <project-dir> [--json]`        | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline                       |
 | `quench sources [session-file] [--json]`        | What one session read and loaded; default: the latest session in this folder; offline                  |
 | `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                           |

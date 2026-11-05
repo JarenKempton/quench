@@ -38,6 +38,7 @@ const reply = (text: string, extra: Partial<Reply> = {}, body: Event[] = []): Re
   kind: "correction",
   sender: "person",
   senderSource: "harness",
+  classified: "cached",
   run: runs({
     id: "s",
     harness: "codex",
