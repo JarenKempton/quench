@@ -26,7 +26,7 @@ const absent = (error: NodeJS.ErrnoException) => {
 const owned = (info: Stats) => !POSIX || !process.getuid || info.uid === process.getuid();
 
 const segment = (part: string) =>
-  part !== "" && part !== "." && part !== ".." && !/[/\\\0]/.test(part);
+  part !== "" && part !== "." && part !== ".." && !["/", "\\", "\0"].some((c) => part.includes(c));
 
 const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(12))).toString("hex");
 
