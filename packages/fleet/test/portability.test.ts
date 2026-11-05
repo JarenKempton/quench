@@ -47,6 +47,7 @@ const ledger = (executables: string[]): LedgerEntry[] => [
     location: { scope: "global" },
     kind: "install",
     appliedAt: "2026-11-01T00:00:00Z",
+    sequence: 1,
     gitExclude: null,
   },
 ];

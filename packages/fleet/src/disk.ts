@@ -93,9 +93,19 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
   if (registry === null) return null;
   const overridesDir = join(dir, "hosts", "overrides");
   const overrides: SkillsRepo["overrides"] = {};
+  const root = await realpath(dir);
   const entries = await listing(overridesDir);
-  for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => cmp(a.name, b.name)))
-    overrides[entry.name] = await manifests(join(overridesDir, entry.name));
+  for (const entry of entries.sort((a, b) => cmp(a.name, b.name))) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const path = join(overridesDir, entry.name);
+    if (entry.isSymbolicLink()) {
+      const real = await realpath(path).catch(failed(path));
+      const info = await lstat(real);
+      if (!inside(root, real) || !info.isDirectory())
+        throw new Error(`hosts/overrides/${entry.name} links outside the repo or to a non-folder`);
+    }
+    overrides[entry.name] = await manifests(path);
+  }
   const hosts = await manifests(join(dir, "hosts"));
   const refs = new Set<string>();
   for (const entry of Object.values(
@@ -107,7 +117,6 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
       const ref = line.trim().replace(/^[+-]/, "").trim();
       if (ref.includes("/") && !ref.startsWith("#")) refs.add(ref);
     }
-  const root = await realpath(dir);
   const folders: Record<string, string> = {};
   for (const ref of [...refs].sort(cmp)) {
     const real = await realpath(join(dir, ...ref.split("/"))).catch(() => null);

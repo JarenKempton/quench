@@ -153,6 +153,7 @@ const entry = (kind: LedgerEntry["kind"], treeHash: string, appliedAt: string): 
   location: { scope: "global" },
   kind,
   appliedAt,
+  sequence: Date.parse(appliedAt),
   gitExclude: null,
   executables: [],
 });

@@ -125,6 +125,8 @@ retired with it and live in git history.
   or the machine accepts it, and a denied skill is named in the plan with its reason.
   A skill source must resolve inside the source repo, and any unreadable or unparseable fleet
   file, registry, manifest or override fails the plan; only an absent file counts as empty.
+  Ledger operations are ordered by their sequence number, never by `appliedAt`, which is
+  information only, so a clock rollback cannot change ownership.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

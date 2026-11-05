@@ -10,6 +10,7 @@ export const LedgerEntry = z
     harness: HarnessId,
     location: Location,
     kind: z.enum(["install", "update", "remove"]),
+    sequence: z.number().int().nonnegative(),
     appliedAt: Timestamp,
     gitExclude: z.string().nullable(),
   })
@@ -33,13 +34,12 @@ export type Installation = z.infer<typeof Installation>;
 export const Provenance = z.enum(["ledger-exact", "snapshot-bracketed", "commit-time-approximate"]);
 export type Provenance = z.infer<typeof Provenance>;
 
-const byTime = (entries: LedgerEntry[]) =>
-  [...entries].sort((a, b) => Date.parse(a.appliedAt) - Date.parse(b.appliedAt));
+const inOrder = (entries: LedgerEntry[]) => [...entries].sort((a, b) => a.sequence - b.sequence);
 
 export function installations(entries: LedgerEntry[]): Installation[] {
   const done: Installation[] = [];
   const open = new Map<string, Installation>();
-  for (const { kind, appliedAt, gitExclude: _, ...rest } of byTime(entries)) {
+  for (const { kind, sequence: _, appliedAt, gitExclude: __, ...rest } of inOrder(entries)) {
     const current = open.get(rest.path);
     if (current) done.push({ ...current, to: appliedAt });
     open.delete(rest.path);
@@ -50,6 +50,6 @@ export function installations(entries: LedgerEntry[]): Installation[] {
 
 export function owned(entries: LedgerEntry[]): Map<string, LedgerEntry> {
   const last = new Map<string, LedgerEntry>();
-  for (const entry of byTime(entries)) last.set(entry.path, entry);
+  for (const entry of inOrder(entries)) last.set(entry.path, entry);
   return new Map([...last].filter(([, entry]) => entry.kind !== "remove"));
 }

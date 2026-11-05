@@ -7,6 +7,7 @@ export const HARNESSES = HarnessId.options;
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 export const portableSegment = (part: string) =>
+  part.isWellFormed() &&
   part !== "" &&
   part !== "." &&
   part !== ".." &&
