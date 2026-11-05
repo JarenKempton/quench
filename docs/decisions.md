@@ -9,7 +9,8 @@ retired with it and live in git history.
 
 - **Name: Quench** ([#30](https://github.com/JarenKempton/quench/issues/30)).
 - **Not an orchestrator.** Quench reads what agents did and helps you steer them. It
-  never runs agents.
+  runs agents only for evals the owner starts, in scratch homes with tools, hooks, plugins and
+  MCP off, so replays never reach real history ([#137](https://github.com/JarenKempton/quench/issues/137), amending the earlier "never runs agents").
 - **Local-first.** Everything works offline from files already on the machine. Anything
   that sends data anywhere is opt-in and says what it sends.
 - **No fake numbers.** Every number traces to a file on disk, and estimates are labeled.
@@ -23,6 +24,16 @@ retired with it and live in git history.
   each safe one; an opt-in purge with confirmation may follow once the list is trusted.
 - **Secrets are detect-and-report only** ([#111](https://github.com/JarenKempton/quench/issues/111)).
   Detection is local with the gitleaks ruleset, values are masked, and redaction is a later opt-in.
+- **Quench writes only user-declared skill files** ([#137](https://github.com/JarenKempton/quench/issues/137)).
+  The fleet writes whole skill folders, byte-for-byte as declared, into harness-native skill
+  folders it owns, journaled in a ledger and reversible. Folders it did not write, or that changed
+  since, are conflicts and stay untouched. It never writes model output, harness config,
+  instructions or hooks. Claude Code, Codex and Pi discover skill folders natively, so no config
+  edit is needed.
+- **Agent-written skill content is a proposal until the owner approves it** ([#137](https://github.com/JarenKempton/quench/issues/137)).
+  A proposal names its base tree hash and an immutable revision; the proposing machine comes from
+  its token and agent, harness and session fields are labelled claims. Only owner approval makes
+  it user-declared content the fleet may write.
 - **Users bring their own compute.** Model-backed analysis uses the user's own key, so
   running Quench costs its maintainers nothing per user.
 
@@ -99,6 +110,13 @@ retired with it and live in git history.
 - **Linux, macOS and Windows are all supported and tested** ([#118](https://github.com/JarenKempton/quench/issues/118)).
   CI runs the full check and test suite on Ubuntu, macOS (arm64) and Windows, and a release
   publishes only after the darwin binary runs a real command on a macOS runner.
+- **Fleet contracts live in `packages/fleet`** ([#137](https://github.com/JarenKempton/quench/issues/137)).
+  zod schemas for the fleet file, bundle manifest, ledger, plan, snapshot and proposal, frozen
+  before the hub, agent and UI are built. A skill version is its tree hash: SHA-256 over
+  `<mode> <path>\0<sha256 of bytes>\n` per file, paths with `/` in NFC sorted by UTF-8 bytes,
+  modes `100644`, `100755` (never on Windows) or `120000` for a symlink, hashed by its target and
+  not followed; the skill folder itself is followed; `.git`, `.DS_Store` and `Thumbs.db` are
+  excluded. Plans are deterministic: no timestamps, `~/` paths, the same bytes on every OS.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

@@ -1,0 +1,7 @@
+# Synthetic skills repo used by the fleet importer tests.
+skills:
+  commit-style:     { path: skills/writing/commit-style, scope: portable, status: active }
+  review-checklist: { path: skills/engineering/review-checklist, scope: portable, status: active,
+                      note: wraps the checklist in references/ }
+  deploy-notes:     { path: skills/ops/deploy-notes, scope: work, status: active }
+  scratchpad:       { path: skills/misc/scratchpad, scope: personal, status: inactive }

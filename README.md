@@ -76,6 +76,7 @@ history.
 | `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline      |
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
 | `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
+| `quench skills plan --source <dir>`            | What a skills checkout would change here, with `--machine <name> --json`; read-only   |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message

@@ -1,0 +1,4 @@
+# Skills linked into ~/.claude/skills on every machine.
+skills/writing/commit-style
+skills/engineering/review-checklist
+skills/ops/deploy-notes

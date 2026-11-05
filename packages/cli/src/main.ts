@@ -11,6 +11,7 @@ import { worktrees } from "./commands/worktrees.ts";
 import { sources } from "./commands/sources.ts";
 import { secrets } from "./commands/secrets.ts";
 import { update } from "./commands/update.ts";
+import { skills } from "./commands/skills.ts";
 import { version } from "./version.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
@@ -35,6 +36,8 @@ Usage:
                                        instruction items ranked by recorded load; duplicates, conflicts, stale entries (offline)
     --rules                            also list every bullet and paragraph of each file
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
+  quench skills plan --source <dir> --machine <name> --json
+                                       what installing a skills checkout would change on this machine (read-only)
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
@@ -82,6 +85,8 @@ const { positionals, values } = parseArgs({
     rules: { type: "boolean", default: false },
     history: { type: "string", multiple: true, default: [] },
     channel: { type: "string" },
+    source: { type: "string" },
+    machine: { type: "string" },
   },
 });
 
@@ -175,6 +180,11 @@ if (values.channel !== undefined && values.channel !== "stable" && values.channe
   process.exit(1);
 }
 
+if ((values.source !== undefined || values.machine !== undefined) && command !== "skills") {
+  process.stderr.write("--source and --machine are only available for skills\n");
+  process.exit(1);
+}
+
 if (values.scan.length && command !== "profile" && command !== "summary") {
   process.stderr.write("--scan is only available for profile\n");
   process.exit(1);
@@ -256,6 +266,13 @@ switch (command) {
         : values["host-history"]
           ? { hostHistory: values["host-history"] }
           : {}),
+    });
+    break;
+  case "skills":
+    process.exitCode = await skills(home, rest, {
+      json: values.json,
+      ...(values.source ? { source: values.source } : {}),
+      ...(values.machine ? { machine: values.machine } : {}),
     });
     break;
   case "update":
