@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sha256 } from "@quench/fleet";
 import { clientDir, fetchBundle, postSnapshot, storedBundle, blobPath } from "../src/client.ts";
-import { git, Owner, PASSWORD, skillsSource, snapshot, temp } from "./helpers.ts";
+import { git, Owner, PASSWORD, sharedSource, snapshot, temp } from "./helpers.ts";
 
 const main = join(import.meta.dir, "../../cli/src/main.ts");
 
@@ -54,7 +54,7 @@ afterAll(async () => {
 });
 
 test("hub serve, import, add machine, connect with pin, bundle, snapshot, toggle, revert", async () => {
-  const source = await skillsSource();
+  const source = await sharedSource();
   const hubHome = temp("hub-home");
   const data = join(hubHome, "data");
 
