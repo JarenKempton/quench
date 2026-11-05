@@ -1,12 +1,17 @@
 import {
+  APIConnectionError,
+  APIError,
+  APITimeoutError,
   AuthenticationError,
   choice,
   PermissionDeniedError,
   TypeSafeClient,
   type Fetch,
-  type Usage,
 } from "@typesafe-ai/sdk";
 import type { CauseInput, CauseJudge } from "./causes.ts";
+import { JudgeFailed, reasonForStatus } from "./failure.ts";
+import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
+import { jevAnswer } from "./response.ts";
 import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
   ReplyKind,
@@ -20,16 +25,22 @@ import {
 
 const MODEL = "jev-latest";
 const WORKERS = 12;
-const ASSISTANT_CHARS = 1500;
-const REPLY_CHARS = 2000;
 
-export class KeyRejected extends Error {
-  constructor(
-    readonly status: number,
-    options?: ErrorOptions,
-  ) {
-    super(`TypeSafe rejected the API key (HTTP ${status})`, options);
+export class KeyRejected extends JudgeFailed {
+  constructor(readonly httpStatus: number) {
+    super("jev", "auth", `HTTP ${httpStatus}`);
   }
+}
+
+function jevFailure(error: unknown): JudgeFailed {
+  if (error instanceof JudgeFailed) return error;
+  if (error instanceof AuthenticationError || error instanceof PermissionDeniedError)
+    return new KeyRejected(error.status);
+  if (error instanceof APITimeoutError) return new JudgeFailed("jev", "timeout");
+  if (error instanceof APIConnectionError) return new JudgeFailed("jev", "server");
+  if (error instanceof APIError && typeof error.status === "number")
+    return new JudgeFailed("jev", reasonForStatus(error.status), `HTTP ${error.status}`);
+  return new JudgeFailed("jev", "malformed");
 }
 
 export class Jev implements Judge {
@@ -59,42 +70,48 @@ export class Jev implements Judge {
   async #one(exchange: Exchange): Promise<Judgment> {
     try {
       const { kind, sender } = requests(exchange);
-      const kindResult = await this.#client.systemOne(kind);
-      const senderResult = await this.#client.systemOne(sender);
-      this.#count(kindResult.usage);
-      this.#count(senderResult.usage);
+      const kindAnswer = jevAnswer(
+        await this.#client.systemOne(kind),
+        "kind",
+        ReplyKind.options,
+        MODEL,
+      );
+      const senderAnswer = jevAnswer(
+        await this.#client.systemOne(sender),
+        "sender",
+        Sender.options,
+        MODEL,
+      );
+      for (const answer of [kindAnswer, senderAnswer]) {
+        this.tokens.input += answer.input;
+        this.tokens.output += answer.output;
+      }
       return {
-        kind: ReplyKind.parse(kindResult.answers.kind.choice),
-        sender: Sender.parse(senderResult.answers.sender.choice),
-        confidence: kindResult.answers.kind.confidence,
+        kind: ReplyKind.parse(kindAnswer.choice),
+        sender: Sender.parse(senderAnswer.choice),
+        confidence: kindAnswer.confidence,
       };
     } catch (error) {
-      if (error instanceof AuthenticationError || error instanceof PermissionDeniedError) {
-        throw new KeyRejected(error.status, { cause: error });
-      }
-      return error instanceof Error ? error : new Error(String(error));
+      const failure = jevFailure(error);
+      if (failure instanceof KeyRejected) throw failure;
+      return failure;
     }
-  }
-
-  #count(usage: Usage): void {
-    this.tokens.input += usage.input_tokens ?? 0;
-    this.tokens.output += usage.output_tokens ?? 0;
   }
 }
 
-export const requests = (exchange: Exchange) => ({
-  kind: {
-    state: {
-      assistant_said: tail(exchange.assistantSaid, ASSISTANT_CHARS),
-      user_reply: head(exchange.reply, REPLY_CHARS),
+export const requests = (exchange: Exchange) => {
+  const { assistantSaid, reply } = clipped(exchange);
+  return {
+    kind: {
+      state: { assistant_said: assistantSaid, user_reply: reply },
+      questions: { kind: choice(KIND_QUESTION, replyKindMeaning) },
     },
-    questions: { kind: choice("What is the user's reply mainly doing?", replyKindMeaning) },
-  },
-  sender: {
-    state: { message: head(exchange.reply, REPLY_CHARS) },
-    questions: { sender: choice("Who wrote this message?", senderMeaning) },
-  },
-});
+    sender: {
+      state: { message: reply },
+      questions: { sender: choice(SENDER_QUESTION, senderMeaning) },
+    },
+  };
+};
 
 export class JevThemes implements ThemeJudge {
   static readonly id = `jev/${MODEL}/themes-v1`;
@@ -120,16 +137,21 @@ export class JevThemes implements ThemeJudge {
   }
 
   async assign(input: ThemeInput): Promise<ThemeDecision> {
-    const result = await this.#client.systemOne(
-      {
-        state: input.state,
-        questions: { theme: choice(input.question, input.choices) },
-      },
-      { signal: this.#signal },
-    );
-    this.tokens.input += result.usage.input_tokens ?? 0;
-    this.tokens.output += result.usage.output_tokens ?? 0;
-    return { choice: result.answers.theme.choice, model: result.model };
+    try {
+      const result = await this.#client.systemOne(
+        {
+          state: input.state,
+          questions: { theme: choice(input.question, input.choices) },
+        },
+        { signal: this.#signal },
+      );
+      const answer = jevAnswer(result, "theme", Object.keys(input.choices), MODEL);
+      this.tokens.input += answer.input;
+      this.tokens.output += answer.output;
+      return { choice: answer.choice, model: answer.model };
+    } catch (error) {
+      throw jevFailure(error);
+    }
   }
 }
 
@@ -161,13 +183,12 @@ export class JevCauses implements CauseJudge {
         state: input.state,
         questions: { cause: choice(input.question, input.choices) },
       });
-      this.tokens.input += result.usage.input_tokens ?? 0;
-      this.tokens.output += result.usage.output_tokens ?? 0;
-      return { choice: result.answers.cause.choice, model: result.model };
+      const answer = jevAnswer(result, "cause", Object.keys(input.choices), MODEL);
+      this.tokens.input += answer.input;
+      this.tokens.output += answer.output;
+      return { choice: answer.choice, model: answer.model };
     } catch (error) {
-      if (error instanceof AuthenticationError || error instanceof PermissionDeniedError)
-        throw new KeyRejected(error.status, { cause: error });
-      throw error;
+      throw jevFailure(error);
     }
   }
 }
@@ -178,9 +199,6 @@ const withStreamedBody =
     const response = await fetch(input, init);
     return new Response(response.body?.pipeThrough(new TransformStream()), response);
   };
-
-const head = (text: string, chars: number) => Array.from(text).slice(0, chars).join("");
-const tail = (text: string, chars: number) => Array.from(text).slice(-chars).join("");
 
 async function mapLimit<T, R>(
   items: readonly T[],

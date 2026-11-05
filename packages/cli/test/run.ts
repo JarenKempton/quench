@@ -18,8 +18,12 @@ export async function quench(home: string, ...args: string[]) {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  return { stdout, code };
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, code };
 }
 
 export const lines = (records: object[]) => records.map((r) => JSON.stringify(r)).join("\n") + "\n";

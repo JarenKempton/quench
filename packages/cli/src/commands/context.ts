@@ -12,7 +12,13 @@ import { behaviour, behaviourLabel, type Behaviour } from "@quench/insights";
 import type { Reply, Sender } from "@quench/judge";
 import { plural } from "../format.ts";
 
-export type SessionContext = { skills: string[] | null; files: string[] | null };
+export type SkillLoaded = { name: string; path: string | null };
+
+export type SessionContext = {
+  skills: string[] | null;
+  loads?: SkillLoaded[] | null;
+  files: string[] | null;
+};
 
 export type Loaded = {
   name: string;
@@ -169,13 +175,18 @@ function knownCommand(what: string | null): string | null {
 
 export function contextOf(session: Session, home: string): SessionContext {
   const files = recordedInstructions(session);
-  return { skills: skillsUsed(session, home), files: files && [...new Set(files.map(fileName))] };
+  const loads = skillsLoaded(session, home);
+  return {
+    skills: loads && [...new Set(loads.map((l) => l.name))],
+    loads,
+    files: files && [...new Set(files.map(fileName))],
+  };
 }
 
 const fileName = (f: { path: string | null; directory: string | null; label: string | null }) =>
   f.path ?? `${f.directory ?? "unknown folder"} (${f.label ?? "combined instructions"})`;
 
-function skillsUsed(session: Session, home: string): string[] | null {
+function skillsLoaded(session: Session, home: string): SkillLoaded[] | null {
   const { listings, loads } = sourceTrace(session, home).skills;
   if (!listings.length) return null;
   const listed = new Set(listings.flatMap((l) => l.listed.map((s) => s.name)));
@@ -186,7 +197,7 @@ function skillsUsed(session: Session, home: string): string[] | null {
         (l.how === "read" && l.status === "returned") ||
         (l.how === "shell-read" && l.status === "ran")),
   );
-  return [...new Set(used.map((l) => l.name))];
+  return used.map((l) => ({ name: l.name, path: l.path }));
 }
 
 export function renderInContext(found: InContext, path: (file: string) => string): string {

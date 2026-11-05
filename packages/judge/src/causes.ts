@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { behaviour, behaviourLabel, labelIn, type BehaviourKind } from "@quench/insights";
+import { JudgeFailed } from "./failure.ts";
 import { KeyRejected } from "./jev.ts";
 import { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 import { clipped } from "./themes.ts";
@@ -85,9 +86,9 @@ export async function judgeCauses(
       }
       failed.add(input);
       failures.push(
-        result.status === "rejected"
-          ? String(result.reason?.message ?? result.reason)
-          : `Unknown cause ${result.value.choice}`,
+        result.status === "rejected" && result.reason instanceof JudgeFailed
+          ? result.reason.message
+          : new JudgeFailed("jev", "malformed").message,
       );
     }
   }

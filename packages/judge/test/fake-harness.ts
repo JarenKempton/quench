@@ -7,6 +7,7 @@ const config = JSON.parse(readFileSync(join(dir, "fake.json"), "utf8")) as {
   answer?: string;
   marker?: string;
   bun?: string;
+  stderr?: string;
 };
 const argv = process.argv.slice(2);
 const stdin = await new Response(Bun.stdin.stream()).text();
@@ -16,7 +17,7 @@ appendFileSync(
   `${JSON.stringify({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env) })}\n`,
 );
 if (mode === "exit") {
-  process.stderr.write("not logged in\n");
+  process.stderr.write(config.stderr ?? "not logged in\n");
   process.exit(3);
 }
 if (mode === "slow") await Bun.sleep(2_000);
