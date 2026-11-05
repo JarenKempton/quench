@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, expect, test } from "bun:test";
-import { cpSync, readFileSync, statSync } from "node:fs";
+import { afterEach, expect, test } from "bun:test";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_PROPOSAL_BYTES, type ProposalSubmission } from "@quench/fleet";
 import {
@@ -10,41 +10,18 @@ import {
   pair,
   submitProposal,
 } from "../src/client.ts";
-import { flagsFor, importInto, SHIPPED_SKILL } from "../src/index.ts";
+import { flagsFor, SHIPPED_SKILL } from "../src/index.ts";
 import { MAX_PROPOSALS_PER_WINDOW } from "../src/store.ts";
-import { failure, Owner, skillsSource, startHub, temp, type Running } from "./helpers.ts";
+import { failure, HUB_TIMEOUT, importedData, Owner, startHub, stopHubs, temp } from "./helpers.ts";
 
-const HUB_TEST_MS = 20_000;
-const APPROVAL_TEST_MS = 30_000;
-
-let template = "";
-beforeAll(async () => {
-  template = join(temp("template"), "hub");
-  await importInto(template, await skillsSource());
-  await (await startHub(template)).stop();
-}, HUB_TEST_MS);
-
-const running: Running[] = [];
-const starting: Promise<unknown>[] = [];
-afterEach(async () => {
-  await Promise.allSettled(starting.splice(0));
-  for (const r of running.splice(0)) await r.stop();
-});
+afterEach(stopHubs);
 
 const SKILL = "commit-style";
 const PATH = "skills/writing/commit-style/SKILL.md";
 
-function setup(options: Parameters<typeof startHub>[1] = {}) {
-  const started = start(options);
-  starting.push(started);
-  return started;
-}
-
-async function start(options: Parameters<typeof startHub>[1]) {
-  const data = join(temp("data"), "hub");
-  cpSync(template, data, { recursive: true });
+async function setup(options: Parameters<typeof startHub>[1] = {}) {
+  const data = await importedData();
   const hub = await startHub(data, options);
-  running.push(hub);
   const owner = new Owner(hub.url, hub.cert);
   await owner.login();
   const dir = clientDir(temp("laptop"));
@@ -110,7 +87,7 @@ test(
       (await api("/api/v1/proposals", machineToken, { method: "POST", body: "{}" })).status,
     ).toBe(401);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -160,7 +137,7 @@ test(
     expect((await owner.fetch("/")).status).toBe(200);
     expect(hub.hub.store.machines().map((m) => m.name)).toEqual(["laptop"]);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -221,7 +198,7 @@ test(
     const bundle = await fetchBundle(dir);
     expect(bundle.bundle.manifest.skills[SKILL]!.treeHash).not.toBe(current.treeHash);
   },
-  APPROVAL_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -278,7 +255,7 @@ test(
       (await post(submission(edited(current.content, "one more"), current.treeHash))).status,
     ).toBe(429);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -297,7 +274,7 @@ test(
     expect((await api("/api/v1/skills", fresh)).status).toBe(401);
     expect((await owner.allowProposals("laptop")).code).toBe("");
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -356,7 +333,7 @@ test(
     expect(dashboard).toContain("proposals allowed");
     void hub;
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test("flags only count new URLs and lines the proposal adds", () => {
@@ -398,7 +375,7 @@ test(
     expect(Object.keys(bundle.manifest.skills)).toContain("quench");
     expect((await hubSkill(dir, "quench")).content).toBe(SHIPPED_SKILL.content);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -430,7 +407,7 @@ test(
     expect((await pending).status).toBe(401);
     expect(hub.hub.store.proposals()).toEqual([]);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -456,7 +433,7 @@ test(
         .run("b".repeat(40), receipt.id),
     ).toThrow("already approved");
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -479,7 +456,7 @@ test(
       else process.env.GIT_CONFIG_PARAMETERS = previous;
     }
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 const SECRET = ["gh", "p_", "Q7m4F9x2R8v6L3z5N0p1C4b7D9w2H6k8S3a5"].join("");
@@ -521,7 +498,7 @@ test(
     expect(inClaims.status).toBe(422);
     expect(hub.hub.store.proposals()).toEqual([]);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test("long opaque runs left after decoding are flagged as encoded content", () => {
@@ -553,7 +530,7 @@ test(
     const page = await (await owner.fetch(`/proposal?id=${receipt.id}`)).text();
     expect(page).toContain('<td class="flag">encoded content</td>');
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 const wrap = (text: string, width: number, joiner = "\n") =>
@@ -590,7 +567,7 @@ test(
     }
     expect(hub.hub.store.proposals()).toEqual([]);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test(
@@ -609,7 +586,7 @@ test(
     expect(await response.text()).toContain("too much encoded content");
     expect(hub.hub.store.proposals()).toEqual([]);
   },
-  HUB_TEST_MS,
+  HUB_TIMEOUT,
 );
 
 test("the encoded flag sees runs across line breaks and never depends on decoding", () => {

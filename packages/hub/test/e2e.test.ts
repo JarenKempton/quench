@@ -10,7 +10,7 @@ import {
   PASSWORD,
   quench,
   run,
-  skillsSource,
+  sharedSource,
   snapshot,
   temp,
 } from "./helpers.ts";
@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 
 test("hub serve, import, add machine, connect with pin, bundle, snapshot, toggle, revert", async () => {
-  const source = await skillsSource();
+  const source = await sharedSource();
   const hubHome = temp("hub-home");
   const data = join(hubHome, "data");
 

@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { clientDir } from "../src/client.ts";
-import { git, lines, Owner, PASSWORD, quench, run, skillsSource, temp } from "./helpers.ts";
+import { git, lines, Owner, PASSWORD, quench, run, sharedSource, temp } from "./helpers.ts";
 
 const servers: ReturnType<typeof quench>[] = [];
 afterAll(async () => {
@@ -19,7 +19,7 @@ const field = (html: string, name: string) =>
 test("pair, propose, token approval fails, password approval commits, owner edit makes the next one stale", async () => {
   const hubHome = temp("hub-home");
   const data = join(hubHome, "data");
-  expect((await run(hubHome, ["hub", "import", await skillsSource(), "--data", data])).code).toBe(
+  expect((await run(hubHome, ["hub", "import", await sharedSource(), "--data", data])).code).toBe(
     0,
   );
   const server = quench(hubHome, ["hub", "serve", "--data", data, "--listen", "127.0.0.1:0"], {

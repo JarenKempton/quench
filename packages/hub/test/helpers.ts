@@ -1,7 +1,27 @@
-import { cpSync, mkdtempSync } from "node:fs";
+import { chmodSync, cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Repo } from "../src/git.ts";
+import { importInto } from "../src/hub.ts";
 import { serveHub, type ServeOptions } from "../src/server.ts";
+
+export const HUB_TIMEOUT = 20_000;
+
+const children = new Set<Promise<unknown>>();
+const spawnGit = Object.getOwnPropertyDescriptor(Repo.prototype, "git")!.value as Repo["git"];
+Repo.prototype.git = function (...args: Parameters<typeof spawnGit>) {
+  const child = spawnGit.apply(this, args);
+  children.add(child);
+  void child.then(
+    () => children.delete(child),
+    () => children.delete(child),
+  );
+  return child;
+};
+
+export async function gitChildren() {
+  while (children.size) await Promise.allSettled(children);
+}
 
 export const PASSWORD = "correct horse battery";
 
@@ -57,16 +77,61 @@ export async function skillsSource() {
   return dir;
 }
 
+let shared: Promise<string> | undefined;
+export const sharedSource = () => (shared ??= skillsSource());
+
+let template: Promise<string> | undefined;
+export async function importedData() {
+  template ??= (async () => {
+    const dir = join(temp("template"), "hub");
+    await importInto(dir, await sharedSource());
+    await (await startHub(dir)).stop();
+    return dir;
+  })();
+  const data = join(temp("data"), "hub");
+  cpSync(await template, data, { recursive: true });
+  if (process.platform !== "win32") chmodSync(data, 0o700);
+  return data;
+}
+
 export type Running = Awaited<ReturnType<typeof serveHub>>;
 
+const running = new Set<Running>();
+
 export async function startHub(dataDir: string, options: Partial<ServeOptions> = {}) {
-  return serveHub({
+  const hub = await serveHub({
     dataDir,
     hostname: "127.0.0.1",
     port: 0,
     password: PASSWORD,
     ...options,
   });
+  const stop = hub.stop.bind(hub);
+  let stopped: Promise<void> | undefined;
+  hub.stop = () => {
+    running.delete(hub);
+    return (stopped ??= (async () => {
+      const pending = (hub.hub as unknown as { checkouts: Map<string, Promise<unknown>> })
+        .checkouts;
+      await Promise.allSettled(pending.values());
+      await stop();
+    })());
+  };
+  running.add(hub);
+  return hub;
+}
+
+export async function stopHubs() {
+  for (const hub of running) await hub.stop();
+  await gitChildren();
+}
+
+export async function hubWithSkills(options: Partial<ServeOptions> = {}) {
+  const data = await importedData();
+  const hub = await startHub(data, options);
+  const owner = new Owner(hub.url, hub.cert);
+  await owner.login();
+  return { hub, owner, data };
 }
 
 export class Owner {
