@@ -410,3 +410,153 @@ test("an editor save held open across logout does not land", async () => {
   expect(response.status).not.toBe(303);
   expect(await hub.hub.head()).toBe(base);
 });
+
+function gate<A extends unknown[], R>(target: { [k: string]: unknown }, name: string) {
+  const original = target[name] as (...args: A) => Promise<R>;
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  let entered = () => {};
+  const reached = new Promise<void>((done) => (entered = done));
+  let once = true;
+  target[name] = async (...args: A) => {
+    if (once) {
+      once = false;
+      entered();
+      await held;
+    }
+    return original.apply(target, args);
+  };
+  return { reached, release };
+}
+
+const objectExists = async (gitDir: string, content: string) => {
+  const hash = Bun.spawnSync(["git", "hash-object", "--stdin"], {
+    stdin: new Blob([content]),
+  })
+    .stdout.toString()
+    .trim();
+  const proc = Bun.spawn(["git", "--git-dir", gitDir, "cat-file", "-e", hash], {
+    stderr: "ignore",
+  });
+  return (await proc.exited) === 0;
+};
+
+const formPost = (hub: Running, owner: Owner, path: string, fields: Record<string, string>) =>
+  fetch(`${hub.url}${path}`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      origin: hub.url,
+      cookie: owner.cookie,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ csrf: owner.csrf, ...fields }).toString(),
+    ...tls(hub),
+  });
+
+test("an editor preview never writes git objects", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const content = `preview only ${crypto.randomUUID()}\n`;
+  const base = await hub.hub.head();
+  const preview = await owner.post("/edit", {
+    path: "notes.txt",
+    base,
+    content,
+    action: "preview",
+  });
+  expect(await preview.text()).toContain("+preview only");
+  expect(await objectExists(hub.hub.repo.dir, content)).toBe(false);
+});
+
+test("an owner action queued behind logout runs the guard when it is dequeued", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const base = await hub.hub.head();
+  const { reached, release } = gate(hub.hub as never, "toggle");
+  const first = formPost(hub, owner, "/toggle", {
+    base,
+    skill: "commit-style",
+    machine: "laptop",
+    on: "0",
+  });
+  await reached;
+  const logout = formPost(hub, owner, "/logout", {});
+  await Bun.sleep(50);
+  const content = `queued preview ${crypto.randomUUID()}\n`;
+  const preview = formPost(hub, owner, "/edit", {
+    path: "notes.txt",
+    base,
+    content,
+    action: "preview",
+  });
+  await Bun.sleep(100);
+  release();
+  expect((await first).status).toBe(303);
+  expect((await logout).status).toBe(303);
+  const queued = await preview;
+  expect(queued.status).toBe(401);
+  expect(await queued.text()).not.toContain("queued preview");
+  expect(await objectExists(hub.hub.repo.dir, content)).toBe(false);
+});
+
+test("an owner page paused across logout is not sent", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const { reached, release } = gate(hub.hub as never, "fleetAt");
+  const page = owner.fetch("/");
+  await reached;
+  expect((await formPost(hub, owner, "/logout", {})).status).toBe(303);
+  release();
+  const response = await page;
+  expect(response.status).toBe(401);
+  expect(await response.text()).not.toContain("Skills by machine");
+});
+
+async function pairedLaptop(hub: Running, owner: Owner) {
+  const { code } = await owner.addMachine("laptop");
+  const r = await fetch(`${hub.url}/api/v1/pair`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
+    ...tls(hub),
+  });
+  return ((await r.json()) as { token: string }).token;
+}
+
+const machineGet = (hub: Running, path: string, token: string) =>
+  fetch(`${hub.url}${path}`, { headers: { authorization: `Bearer ${token}` }, ...tls(hub) });
+
+test("a bundle request paused across revoke returns nothing created after it", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const token = await pairedLaptop(hub, owner);
+  const { reached, release } = gate(hub.hub as never, "head");
+  const pending = machineGet(hub, "/api/v1/bundle", token);
+  await reached;
+  expect((await owner.post("/machines/revoke", { name: "laptop" })).status).toBe(303);
+  const secret = `after revoke ${crypto.randomUUID()}\n`;
+  const base = await hub.hub.head();
+  await hub.hub.writeFile(
+    base,
+    "skills/writing/commit-style/SKILL.md",
+    secret,
+    "Change after revoke",
+  );
+  release();
+  const response = await pending;
+  expect(response.status).toBe(401);
+  expect(await response.text()).not.toContain(base);
+});
+
+test("a blob request paused across revoke returns no bytes", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const token = await pairedLaptop(hub, owner);
+  const manifest = (await (await machineGet(hub, "/api/v1/bundle", token)).json()) as {
+    skills: Record<string, { files: { sha256: string }[] }>;
+  };
+  const digest = manifest.skills["commit-style"]!.files[0]!.sha256;
+  const { reached, release } = gate(hub.hub as never, "blob");
+  const pending = machineGet(hub, `/api/v1/blobs/${digest}`, token);
+  await reached;
+  expect((await owner.post("/machines/revoke", { name: "laptop" })).status).toBe(303);
+  release();
+  const response = await pending;
+  expect(response.status).toBe(401);
+  expect(await response.text()).not.toContain("commit");
+});

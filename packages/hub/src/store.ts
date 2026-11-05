@@ -186,6 +186,12 @@ export class Store {
     return { id: row.id, name: row.name, tokenHash };
   }
 
+  stillActive(identity: Identity) {
+    return !!this.db
+      .query("SELECT 1 FROM machines WHERE id = ? AND token_hash = ? AND revoked_at IS NULL")
+      .get(identity.id, identity.tokenHash);
+  }
+
   revoke(name: string) {
     return this.db.transaction(() => {
       const codes = this.db

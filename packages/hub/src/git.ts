@@ -174,20 +174,30 @@ export class Repo {
     return (await this.git(["hash-object", "-w", "--stdin"], { input: content })).text;
   }
 
-  async diff(before: string, after: string, path: string) {
-    const { text } = await this.git([
-      "diff",
-      "--no-color",
-      `--src-prefix=a/`,
-      `--dst-prefix=b/`,
-      before,
-      after,
-    ]);
-    return text.replace(/^(diff --git )a\/\S+ b\/\S+/m, `$1a/${path} b/${path}`);
-  }
-
-  emptyBlob() {
-    return this.blob("");
+  async diff(before: string | null, after: string, path: string) {
+    const dir = await mkdtemp(join(tmpdir(), "quench-hub-diff-"));
+    try {
+      await writeFile(join(dir, "a"), before ?? "");
+      await writeFile(join(dir, "b"), after);
+      const { GIT_DIR: _, ...env } = process.env;
+      const proc = Bun.spawn(
+        ["git", ...SETTINGS, "diff", "--no-index", "--no-color", "--", "a", "b"],
+        { cwd: dir, env, stdout: "pipe", stderr: "pipe" },
+      );
+      const [text, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (code > 1) throw new GitError(`git diff failed: ${stderr.trim()}`);
+      return text
+        .trimEnd()
+        .replace(/^diff --git a\/a b\/b$/m, `diff --git a/${path} b/${path}`)
+        .replace(/^--- a\/a$/m, `--- a/${path}`)
+        .replace(/^\+\+\+ b\/b$/m, `+++ b/${path}`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   private async withIndex<T>(run: (env: Record<string, string>) => Promise<T>) {

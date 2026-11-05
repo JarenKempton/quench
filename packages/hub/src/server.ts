@@ -9,7 +9,7 @@ import { selfSignedCertificate, spkiPin } from "./cert.ts";
 import { GitError, StaleHead } from "./git.ts";
 import { Hub } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
-import { SessionEnded } from "./store.ts";
+import { SessionEnded, type Identity } from "./store.ts";
 import { connectPage, dashboard, editPage, loginPage, messagePage } from "./ui.ts";
 
 export const MAX_SNAPSHOT_BYTES = 1024 * 1024;
@@ -53,6 +53,8 @@ const parseJson = (body: Uint8Array): unknown => {
     return undefined;
   }
 };
+
+const revoked = () => json({ error: "unknown or revoked machine token" }, 401);
 
 const tooLarge = () => json({ error: "body too large" }, 413);
 
@@ -209,7 +211,12 @@ export async function serveHub(options: ServeOptions) {
       return json({ machine: paired.machine, token: paired.token });
     }
     const identity = hub.store.machineFor(bearer(req));
-    if (!identity) return json({ error: "unknown or revoked machine token" }, 401);
+    if (!identity) return revoked();
+    const response = await machineRoute(req, path, identity);
+    return hub.store.stillActive(identity) ? response : revoked();
+  }
+
+  async function machineRoute(req: Request, path: string, identity: Identity): Promise<Response> {
     const machine = identity.name;
     if (path === "/api/v1/bundle" && req.method === "GET") {
       const bundle = await hub.bundle(machine, await hub.head());
@@ -235,7 +242,7 @@ export async function serveHub(options: ServeOptions) {
       if (!parsed.success)
         return json({ error: "invalid snapshot", issues: parsed.error.issues }, 400);
       const state = hub.report(identity, parsed.data);
-      if (!state) return json({ error: "unknown or revoked machine token" }, 401);
+      if (!state) return revoked();
       return json({ machine, state });
     }
     return json({ error: "not found" }, 404);
@@ -267,7 +274,11 @@ export async function serveHub(options: ServeOptions) {
     if (!session || !owner(req))
       return req.method === "GET" ? loginPage() : ended(new SessionEnded());
     const token = csrfToken(session);
-    if (req.method === "GET") return withCsrf(await owned(req, path, fields, null), token);
+    const respond = (response: Response) =>
+      path !== "/logout" && !hub.store.validSession(session)
+        ? ended(new SessionEnded())
+        : withCsrf(response, token);
+    if (req.method === "GET") return respond(await owned(req, path, fields, null).catch(ended));
     const tokenOk = () => sameToken(fields.get("csrf") ?? "", token);
     if (!tokenOk())
       return messagePage("Refused", "this form is missing its session token; reload the page", 403);
@@ -275,7 +286,10 @@ export async function serveHub(options: ServeOptions) {
       now: (action) => hub.store.asOwner(session, tokenOk, action),
       guard: () => hub.store.asOwner(session, tokenOk, () => undefined),
     };
-    return serial(() => owned(req, path, fields, as).catch(ended)).then((r) => withCsrf(r, token));
+    return serial(async () => {
+      as.guard();
+      return respond(await owned(req, path, fields, as));
+    }).catch(ended);
   }
 
   async function owned(
@@ -360,11 +374,7 @@ export async function serveHub(options: ServeOptions) {
       } catch (e) {
         error = `not a valid fleet file: ${(e as Error).message}`;
       }
-    const diff = await hub.repo.diff(
-      before === null ? await hub.repo.emptyBlob() : await hub.repo.blob(before),
-      await hub.repo.blob(content),
-      path,
-    );
+    const diff = await hub.repo.diff(before, content, path);
     const previewed = f.get("previewed");
     if (f.get("action") !== "save" || error || previewed !== sha256(content) || !diff)
       return editPage({ ...fields, diff, previewed: sha256(content), ...(error ? { error } : {}) });
