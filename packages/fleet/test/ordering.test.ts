@@ -6,7 +6,6 @@ import {
   BundleFile,
   installations,
   owned,
-  resolve,
   SkillName,
   treeHash,
   type LedgerEntry,
@@ -21,35 +20,53 @@ const failure = (p: Promise<unknown>) =>
     (error: Error) => error.message,
   );
 
-async function repoWithLinkedOverride(target: (dir: string) => Promise<string>) {
-  const dir = await mkdtemp(join(tmpdir(), "fleet-ov-"));
-  await mkdir(join(dir, "hosts/overrides"), { recursive: true });
+async function repo() {
+  const dir = await mkdtemp(join(tmpdir(), "fleet-hosts-"));
+  await mkdir(join(dir, "hosts"), { recursive: true });
   await writeFile(join(dir, "registry.yaml"), "skills:\n  a: { path: skills/a }\n");
   await writeFile(join(dir, "hosts/claude-global.manifest"), "skills/a\n");
-  const real = await target(dir);
-  await writeFile(join(real, "claude-global.manifest"), "-skills/a\n");
-  const linked = await symlink(real, join(dir, "hosts/overrides/box"), "junction").then(
+  return dir;
+}
+
+const link = (target: string, path: string) =>
+  symlink(target, path, "junction").then(
     () => true,
     () => false,
   );
-  return linked ? dir : null;
-}
 
-test("an override folder that is a symlink inside the repo is followed", async () => {
-  const dir = await repoWithLinkedOverride(async (d) => {
-    await mkdir(join(d, "machines/box"), { recursive: true });
-    return join(d, "machines/box");
-  });
-  if (!dir) return;
-  const { fleet } = await loadFleet(dir);
-  expect(resolve(fleet, "box").placements).toEqual([]);
-  expect(resolve(fleet, "other").placements.map((p) => p.skill)).toEqual(["a"]);
+test("a dangling hosts/overrides link fails the plan instead of reading as absent", async () => {
+  const dir = await repo();
+  if (!(await link(join(dir, "missing"), join(dir, "hosts/overrides")))) return;
+  expect(await failure(loadFleet(dir))).toContain("symlink");
 });
 
-test("an override folder that links outside the repo fails the plan", async () => {
-  const dir = await repoWithLinkedOverride(() => mkdtemp(join(tmpdir(), "fleet-elsewhere-")));
-  if (!dir) return;
-  expect(await failure(loadFleet(dir))).toContain("hosts/overrides/box");
+test("an overrides folder linked from outside the repo fails the plan", async () => {
+  const dir = await repo();
+  const outside = await mkdtemp(join(tmpdir(), "fleet-elsewhere-"));
+  await mkdir(join(outside, "box"));
+  await writeFile(join(outside, "box/claude-global.manifest"), "-skills/a\n");
+  if (!(await link(outside, join(dir, "hosts/overrides")))) return;
+  expect(await failure(loadFleet(dir))).toContain("symlink");
+});
+
+test("any link at or under hosts/ fails the plan, even one that stays inside the repo", async () => {
+  const machine = await repo();
+  await mkdir(join(machine, "hosts/overrides"));
+  await mkdir(join(machine, "machines/box"), { recursive: true });
+  await writeFile(join(machine, "machines/box/claude-global.manifest"), "-skills/a\n");
+  if (!(await link(join(machine, "machines/box"), join(machine, "hosts/overrides/box")))) return;
+  expect(await failure(loadFleet(machine))).toContain("symlink");
+  const file = await repo();
+  await mkdir(join(file, "hosts/overrides/box"), { recursive: true });
+  await writeFile(join(file, "elsewhere.manifest"), "-skills/a\n");
+  const linked = await symlink(
+    join(file, "elsewhere.manifest"),
+    join(file, "hosts/overrides/box/claude-global.manifest"),
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (linked) expect(await failure(loadFleet(file))).toContain("symlink");
 });
 
 const entry = (kind: LedgerEntry["kind"], sequence: number, appliedAt: string): LedgerEntry => ({

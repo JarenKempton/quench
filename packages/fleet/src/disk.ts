@@ -65,13 +65,27 @@ const text = (path: string) =>
     absent(error) ? null : failed(path)(error),
   );
 
-const required = async (path: string) =>
-  (await text(path)) ?? failed(path)({ code: "ENOENT" } as NodeJS.ErrnoException);
+const plain = (
+  path: string,
+  info: { isSymbolicLink(): boolean; isFile(): boolean; isDirectory(): boolean },
+) => {
+  if (info.isSymbolicLink())
+    throw new Error(`${path} is a symlink; the importer does not follow links under hosts/`);
+  if (!info.isFile() && !info.isDirectory())
+    throw new Error(`${path} is not a regular file or folder`);
+};
 
-const listing = (dir: string) =>
-  readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) =>
-    absent(error) ? [] : failed(dir)(error),
+async function folder(dir: string) {
+  const info = await lstat(dir).catch((error: NodeJS.ErrnoException) =>
+    absent(error) ? null : failed(dir)(error),
   );
+  if (!info) return [];
+  plain(dir, info);
+  if (!info.isDirectory()) throw new Error(`${dir} is not a folder`);
+  const entries = await readdir(dir, { withFileTypes: true }).catch(failed(dir));
+  for (const entry of entries) plain(join(dir, entry.name), entry);
+  return entries.sort((a, b) => cmp(a.name, b.name));
+}
 
 export const inside = (root: string, path: string) => {
   const rel = relative(root, path);
@@ -79,12 +93,12 @@ export const inside = (root: string, path: string) => {
 };
 
 async function manifests(dir: string): Promise<Record<string, string>> {
-  const names = (await listing(dir))
-    .filter((e) => e.name.endsWith(".manifest"))
-    .map((e) => e.name)
-    .sort(cmp);
   const found: Record<string, string> = {};
-  for (const name of names) found[basename(name, ".manifest")] = await required(join(dir, name));
+  for (const entry of (await folder(dir)).filter((e) => e.name.endsWith(".manifest"))) {
+    const path = join(dir, entry.name);
+    if (!entry.isFile()) throw new Error(`${path} is not a file`);
+    found[basename(entry.name, ".manifest")] = await readFile(path, "utf8").catch(failed(path));
+  }
   return found;
 }
 
@@ -93,20 +107,9 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
   if (registry === null) return null;
   const overridesDir = join(dir, "hosts", "overrides");
   const overrides: SkillsRepo["overrides"] = {};
-  const root = await realpath(dir);
-  const entries = await listing(overridesDir);
-  for (const entry of entries.sort((a, b) => cmp(a.name, b.name))) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const path = join(overridesDir, entry.name);
-    if (entry.isSymbolicLink()) {
-      const real = await realpath(path).catch(failed(path));
-      const info = await lstat(real);
-      if (!inside(root, real) || !info.isDirectory())
-        throw new Error(`hosts/overrides/${entry.name} links outside the repo or to a non-folder`);
-    }
-    overrides[entry.name] = await manifests(path);
-  }
   const hosts = await manifests(join(dir, "hosts"));
+  for (const entry of (await folder(overridesDir)).filter((e) => e.isDirectory()))
+    overrides[entry.name] = await manifests(join(overridesDir, entry.name));
   const refs = new Set<string>();
   for (const entry of Object.values(
     (Bun.YAML.parse(registry) as { skills?: Record<string, { path?: unknown }> })?.skills ?? {},
@@ -117,6 +120,7 @@ export async function readSkillsRepo(dir: string): Promise<SkillsRepo | null> {
       const ref = line.trim().replace(/^[+-]/, "").trim();
       if (ref.includes("/") && !ref.startsWith("#")) refs.add(ref);
     }
+  const root = await realpath(dir);
   const folders: Record<string, string> = {};
   for (const ref of [...refs].sort(cmp)) {
     const real = await realpath(join(dir, ...ref.split("/"))).catch(() => null);
