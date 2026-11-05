@@ -12,14 +12,23 @@ import {
   type Session,
   type SessionRef,
 } from "@quench/history";
-import { commandRecords, runRecords, runs as runsOf } from "@quench/insights";
+import { openT3History, t3State } from "@quench/history/hosts/t3";
+import {
+  commandRecords,
+  runRecords,
+  runs as runsOf,
+  type FollowUp,
+  type Run,
+} from "@quench/insights";
+import { recordedSender } from "@quench/judge";
 import { json, quote, runFacts } from "../format.ts";
 import { latestSessionIn } from "../latest.ts";
+import { senderJson } from "./scope.ts";
 
 export async function runs(
   home: Home,
   file: string | undefined,
-  options: { json: boolean; session?: string },
+  options: { json: boolean; session?: string; hostHistory?: string | false },
 ): Promise<number> {
   if (options.session) file = (await sessionFile(home, options.session)) ?? undefined;
   else file ??= (await latestSessionIn(home, process.cwd())) ?? undefined;
@@ -42,16 +51,32 @@ export async function runs(
     process.stderr.write(`${path} is not a session any known harness wrote\n`);
     return 1;
   }
-  const list = runsOf(
-    session,
-    sessions.filter((s) => s.parent === session.id),
-  );
+  const host =
+    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
+  let list: Run[];
+  try {
+    list = runsOf(
+      host?.enrich(session) ?? session,
+      sessions.filter((s) => s.parent === session.id),
+    );
+  } finally {
+    host?.close();
+  }
+  for (const warning of host?.warnings ?? []) process.stderr.write(`${warning}\n`);
   if (options.json) {
     const start = startingContext(session);
     process.stdout.write(
       json(
         list.map((run, i) => ({
           ...run,
+          ...prompted(run),
+          ...replied(run),
+          followUps: run.followUps.map((f) => ({
+            agentLines: f.agentLines,
+            replyAt: f.replyAt,
+            replyLine: f.replyLine,
+            ...replied(f),
+          })),
           commands: commandRecords(run),
           ...(i === 0 ? { startingContext: start } : {}),
         })),
@@ -68,6 +93,30 @@ export async function runs(
     .join("\n");
   process.stdout.write(header + body);
   return 0;
+}
+
+function prompted(run: Run) {
+  const { kind, source } = senderJson(
+    recordedSender({
+      text: run.prompt,
+      origin: run.promptOrigin,
+      sender: run.promptSender,
+      command: run.promptCommand,
+    }),
+  );
+  return { promptSender: kind, promptSenderSource: source };
+}
+
+function replied(f: FollowUp) {
+  const { kind, source } = senderJson(
+    recordedSender({
+      text: f.reply,
+      origin: f.replyOrigin,
+      sender: f.replySender,
+      command: f.replyCommand,
+    }),
+  );
+  return { replySender: kind, replySenderSource: source };
 }
 
 async function sessionFile(home: Home, id: string): Promise<string | null> {

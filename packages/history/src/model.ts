@@ -87,7 +87,14 @@ export type PromptTool = { name: string; server: string | null; chars: number; d
 export const mcpServerOf = (name: string): string | null => /^mcp__(.+?)__/.exec(name)?.[1] ?? null;
 
 export type EventKind =
-  | { type: "message"; author: Author; origin: Origin; text: string; sender?: SenderEvidence }
+  | {
+      type: "message";
+      author: Author;
+      origin: Origin;
+      text: string;
+      sender?: SenderEvidence;
+      queued?: true;
+    }
   | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
   | {
       type: "tool_call";

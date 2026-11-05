@@ -193,6 +193,69 @@ test(
 );
 
 test(
+  "skill records in a snapshot take only names, counts and hashes, and survive a snapshot without them",
+  async () => {
+    const { hub, owner } = await hubWithSkills();
+    const { code } = await owner.addMachine("laptop");
+    const { token } = (await (await redeem(hub, code)).json()) as { token: string };
+    const post = (body: unknown) =>
+      api(hub, "/api/v1/snapshot", token, { method: "POST", body: JSON.stringify(body) });
+    const counts = { sessions: 1, judged: 1, withHumanCorrection: 0, unjudged: 0, noFollowUp: 0 };
+    const record = {
+      id: `sha256:${"b".repeat(64)}`,
+      skill: "commit-style",
+      harness: "claude-code",
+      location: "~/.claude/skills/commit-style",
+      origin: "user",
+      contentVersion: `sha256:${"a".repeat(64)}`,
+      listedBy: ["claude-code"],
+      listingChars: 40,
+      recordedListingChars: 40,
+      bodyBytes: 90,
+      use: { sessionsListed: 1, used: 1, usedByUser: 0, lowerBound: false },
+      coOccurrence: {
+        basis: "co-occurrence, not cause",
+        sessionsLoaded: 1,
+        withHumanCorrection: null,
+        unjudgedSessions: 0,
+        noFollowUp: 0,
+      },
+      versions: [
+        {
+          treeHash: `sha256:${"a".repeat(64)}`,
+          from: "2026-10-01T00:00:00.000Z",
+          to: null,
+          loaded: counts,
+          without: counts,
+        },
+      ],
+    };
+    const skills = (records: unknown[]) => ({
+      schemaVersion: 1,
+      days: 30,
+      judge: "jev",
+      records,
+      unrecognised: { recognised: false, count: 0, sessionsListed: 0, used: 0, usedByUser: 0 },
+    });
+    const refused = [
+      { ...record, reply: "the user said no" },
+      { ...record, skill: "<script>alert(1)</script>" },
+      { ...record, location: "~/a\nb" },
+      { ...record, coOccurrence: { ...record.coOccurrence, basis: "cause" } },
+      { ...record, versions: [{ ...record.versions[0], loaded: { ...counts, judged: 0 } }] },
+    ];
+    for (const bad of refused)
+      expect((await post({ ...snapshot(1, {}), skills: skills([bad]) })).status).toBe(400);
+    expect((await post({ ...snapshot(1, {}), skills: skills([record]) })).status).toBe(200);
+    expect((await post(snapshot(2, {}))).status).toBe(200);
+    const state = hub.hub.store.machineState("laptop")!;
+    expect(state.generation).toBe(2);
+    expect(state.skills!.records.map((r) => r.skill)).toEqual(["commit-style"]);
+  },
+  HUB_TIMEOUT,
+);
+
+test(
   "the client refuses a wrong pin and writes no token",
   async () => {
     const { hub, owner } = await hubWithSkills();

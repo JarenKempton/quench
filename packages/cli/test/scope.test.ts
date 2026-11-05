@@ -166,7 +166,7 @@ test(
     const withHost = await quench(home, "corrections", ...scope, "--host-history", host);
     expect(withHost.code).toBe(0);
     const out = JSON.parse(withHost.stdout);
-    expect(out.schemaVersion).toBe(1);
+    expect(out.schemaVersion).toBe(2);
     expect(out.judge).toBe(Jev.id);
     expect(out.summary).toEqual({
       sessionsRead: 2,

@@ -11,7 +11,7 @@ import {
   type Skill,
 } from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
-import { Jev, judgeReplies, VerdictCache, type SessionRuns } from "@quench/judge";
+import { Jev, judgeReplies, VerdictCache, type Reply, type SessionRuns } from "@quench/judge";
 import {
   HARNESSES,
   installations,
@@ -52,6 +52,7 @@ import { renderSkills } from "../skills/render.ts";
 import { sessionKey, type SessionContext } from "./context.ts";
 import { sessionRuns } from "./session-runs.ts";
 import { placeOrigins } from "./profile.ts";
+import { skillsEval, type EvalFlags } from "./skills-eval.ts";
 
 const UNREADABLE = {
   treeHash: `sha256:${"0".repeat(64)}`,
@@ -86,7 +87,7 @@ const display = (home: Home, path: string) => {
       : slashed;
 };
 
-const absolute = (home: Home, path: string) =>
+export const absolute = (home: Home, path: string) =>
   path.startsWith("~/") ? `${home.dir}/${path.slice(2)}` : path;
 
 async function git(dir: string, ...args: string[]) {
@@ -285,6 +286,7 @@ const USAGE = `usage: quench skills [--json] [--days N] [--source <dir>]
        quench skills plan --source <dir> --machine <name> [--project <dir>] --json
        quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
        quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
+       quench skills eval <skill> --candidate <dir> [--limit 5] [--max-cost 1] [--yes] [--json]
 `;
 
 export type SkillsFlags = {
@@ -296,6 +298,7 @@ export type SkillsFlags = {
   days: number;
   cache: boolean;
   hostHistory?: string | false;
+  eval?: Omit<EvalFlags, "json" | "days">;
 };
 
 const write = (value: unknown) => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -307,6 +310,13 @@ const lines = (rows: string[]) => {
 export async function skills(home: Home, rest: string[], flags: SkillsFlags) {
   const [sub] = rest;
   if (sub === undefined) return skillsReport(home, flags);
+  if (sub === "eval")
+    return skillsEval(home, rest.slice(1), {
+      yes: false,
+      ...flags.eval,
+      json: flags.json,
+      days: flags.days,
+    });
   if (!["plan", "apply", "status"].includes(sub) || rest.length !== 1) {
     process.stderr.write(USAGE);
     return 1;
@@ -376,6 +386,36 @@ async function skillsReport(home: Home, options: Options) {
     process.stderr.write(`--source: ${kind}\n`);
     return 1;
   }
+  const { judge, records, unrecognised } = await collectSkills(home, { ...options, source });
+  const compared = source && drift(source, records);
+  process.stdout.write(
+    options.json
+      ? json({
+          schemaVersion: SCHEMA_VERSION,
+          days: options.days,
+          judge,
+          origins: ORIGINS,
+          skills: records,
+          unrecognised,
+          ...(compared ? { source: compared } : {}),
+          limitations: LIMITATIONS,
+        })
+      : renderSkills(records, unrecognised, options.days, judge, compared),
+  );
+  return 0;
+}
+
+export type SkillEvidence = {
+  since: Date;
+  started: ReadonlyMap<string, { harness: HarnessId; at: number; cwd: string | null }>;
+  contexts: ReadonlyMap<string, SessionContext>;
+  replies: readonly Reply[];
+};
+
+export async function collectSkills(
+  home: Home,
+  options: { days: number; cache: boolean; hostHistory?: string | false; source?: Source | null },
+) {
   const since = new Date(Date.now() - options.days * 86_400_000);
   const cache = options.cache ? await placeCache(home.dir) : undefined;
   const { places } = await sessionPlaces(home, since, reading(), cache);
@@ -401,25 +441,21 @@ async function skillsReport(home: Home, options: Options) {
     sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
     recordedHarnesses: new Set(recorded.uses.map((u) => u.harness)),
     roots: await skillRoots(home, places),
-    sourceNames: new Set(source?.skills.keys()),
+    sourceNames: new Set(options.source?.skills.keys()),
     coOccurrence: coOccurrence(replies, contexts, since),
   });
-  const compared = source && drift(source, records);
-  process.stdout.write(
-    options.json
-      ? json({
-          schemaVersion: SCHEMA_VERSION,
-          days: options.days,
-          judge: verdicts.judge,
-          origins: ORIGINS,
-          skills: records,
-          unrecognised,
-          ...(compared ? { source: compared } : {}),
-          limitations: LIMITATIONS,
-        })
-      : renderSkills(records, unrecognised, options.days, verdicts.judge, compared),
-  );
-  return 0;
+  const started = new Map<string, { harness: HarnessId; at: number; cwd: string | null }>();
+  for (const s of sessions) {
+    const times = s.runs.flatMap((r) => (r.startedAt ? [r.startedAt.getTime()] : []));
+    if (times.length)
+      started.set(sessionKey({ harness: s.harness, sessionId: s.id }), {
+        harness: s.harness,
+        at: Math.min(...times),
+        cwd: s.cwd,
+      });
+  }
+  const evidence: SkillEvidence = { since, started, contexts, replies };
+  return { judge: verdicts.judge, records, unrecognised, evidence };
 }
 
 async function skillRoots(home: Home, places: readonly SessionPlace[]): Promise<string[]> {

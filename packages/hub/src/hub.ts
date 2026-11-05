@@ -8,19 +8,25 @@ import {
   resolve,
   sha256,
   treeHash,
+  type HarnessId,
   type MachineState,
   type Snapshot,
+  type TreeHash,
 } from "@quench/fleet";
 import { importSkillsRepo } from "@quench/fleet";
 import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo, readTree } from "@quench/fleet/disk";
 import shippedSkill from "../../../skills/quench/SKILL.md" with { type: "text" };
+import { versionCards, type Reporting } from "./cards.ts";
 import { DataDir } from "./data.ts";
-import { Repo, type Guard } from "./git.ts";
+import { Repo, type Guard, type Version } from "./git.ts";
+import type { CardView, Desired } from "./skill-views.ts";
 import { Store, type Identity } from "./store.ts";
 
 export const SHIPPED_SKILL = { name: "quench", path: "skills/quench", content: shippedSkill };
 
 export type SkillAt = { name: string; path: string; treeHash: string; content: string };
+
+const MAX_DIFF = 40_000;
 
 export const EMPTY_FLEET = "version: 1\nskills: {}\n";
 
@@ -240,6 +246,49 @@ export class Hub {
         `Add the shipped ${name} skill`,
         guard,
       ),
+    );
+  }
+
+  async desired(machines: readonly string[], commit: string): Promise<Desired> {
+    const desired: Desired = new Map();
+    for (const machine of machines) {
+      const skills = new Map<string, Map<HarnessId, TreeHash>>();
+      const { manifest } = await this.bundle(machine, commit);
+      for (const p of manifest.placements)
+        if (p.scope.kind === "global")
+          skills.set(p.skill, (skills.get(p.skill) ?? new Map()).set(p.harness, p.treeHash));
+      desired.set(machine, skills);
+    }
+    return desired;
+  }
+
+  async cards(fleet: FleetFile, machines: readonly Reporting[]): Promise<CardView[]> {
+    const history = new Map<string, Promise<Version[]>>();
+    const versionsOf = (path: string) =>
+      history.get(path) ?? history.set(path, this.repo.versions(path)).get(path)!;
+    return Promise.all(
+      versionCards(machines).map(async (card) => {
+        const source = own(fleet.skills, card.skill);
+        if (!card.shown || !source)
+          return { ...card, path: source?.path ?? null, diff: null, revert: null };
+        const versions = await versionsOf(source.path);
+        const at = (hash: string) => versions.findLast((v) => v.treeHash === hash)?.commit;
+        const [before, after] = [at(card.before), at(card.after)];
+        const change = versions.find(
+          (v, i) => i > 0 && v.treeHash === card.after && versions[i - 1]!.treeHash === card.before,
+        );
+        const diff =
+          before && after ? await this.repo.diffCommits(before, after, source.path) : null;
+        return {
+          ...card,
+          path: source.path,
+          diff:
+            diff && diff.length > MAX_DIFF
+              ? `${diff.slice(0, MAX_DIFF)}\n… diff cut at ${MAX_DIFF} characters`
+              : diff,
+          revert: change && versions.at(-1)?.treeHash === card.after ? change.commit : null,
+        };
+      }),
     );
   }
 

@@ -2,6 +2,7 @@ import type { FleetFile, MachineState } from "@quench/fleet";
 import type { Commit } from "./git.ts";
 import { placed } from "./hub.ts";
 import type { Flag } from "./review.ts";
+import { skillGrid, versionSection, type CardView, type Desired } from "./skill-views.ts";
 import type { MachineRow, StoredProposal } from "./store.ts";
 
 export const escape = (text: string) =>
@@ -14,7 +15,10 @@ const STYLE = `body{font:14px/1.5 system-ui,sans-serif;margin:2rem auto;max-widt
 table{border-collapse:collapse;margin:.5rem 0 1.5rem}td,th{border:1px solid #ddd;padding:.25rem .5rem;text-align:left}
 pre{background:#f5f5f5;padding:.75rem;overflow:auto}textarea{width:100%;font:13px ui-monospace,monospace}
 form{display:inline}code{background:#f5f5f5;padding:.1rem .3rem}.add{color:#060}.del{color:#a00}.err{color:#a00}
-.claim{color:#555;font-style:italic}.flag{font-weight:600}`;
+.claim{color:#555;font-style:italic}.flag{font-weight:600}
+.grid td{vertical-align:top}.grid div{white-space:nowrap}small,.n{color:#555;font-size:12px}.warn{color:#a50}
+.card{border:1px solid #ddd;border-radius:4px;padding:.25rem 1rem .75rem;margin:1rem 0}.card.thin{color:#555}
+.basis{font-weight:600}.diff{max-height:24rem}`;
 
 export const page = (
   title: string,
@@ -42,7 +46,7 @@ const hidden = (fields: Record<string, string>) =>
     .map(([k, v]) => `<input type="hidden" name="${escape(k)}" value="${escape(v)}">`)
     .join("");
 
-const button = (action: string, fields: Record<string, string>, label: string) =>
+export const button = (action: string, fields: Record<string, string>, label: string) =>
   `<form method="post" action="${action}">${hidden(fields)}<button>${escape(label)}</button></form>`;
 
 export const loginPage = (error = "", status = 200) =>
@@ -86,25 +90,20 @@ export function dashboard(input: {
   files: string[];
   proposals: ProposalSummary[];
   shipped: string | null;
+  desired: Desired;
+  cards: CardView[];
 }) {
   const { head, fleet } = input;
-  const names = [
-    ...new Set([...input.machines.map((m) => m.name), ...Object.keys(fleet.machines)]),
-  ].sort();
-  const skills = Object.keys(fleet.skills).sort();
-  const grid = skills.length
-    ? `<table><tr><th>Skill</th>${names.map((n) => `<th>${escape(n)}</th>`).join("")}</tr>${skills
-        .map(
-          (skill) =>
-            `<tr><td><a href="/edit?path=${encodeURIComponent(`${fleet.skills[skill]!.path}/SKILL.md`)}">${escape(skill)}</a></td>${names
-              .map((machine) => {
-                const on = placed(fleet, skill, machine);
-                return `<td>${on ? "on" : "off"} ${button("/toggle", { base: head, skill, machine, on: on ? "0" : "1" }, on ? "Turn off" : "Turn on")}</td>`;
-              })
-              .join("")}</tr>`,
-        )
-        .join("")}</table>`
-    : "<p>No skills yet. Import a skills repo with <code>quench hub import</code>, or add one below.</p>";
+  const grid = skillGrid(
+    { escape, button },
+    {
+      head,
+      fleet,
+      machines: input.machines,
+      desired: input.desired,
+      placed: (skill, machine) => placed(fleet, skill, machine),
+    },
+  );
   const machines = input.machines.length
     ? `<table><tr><th>Machine</th><th>Paired</th><th>Last seen</th><th>Generation</th><th>Reported state</th><th>Proposals</th><th></th></tr>${input.machines
         .map(
@@ -131,6 +130,7 @@ export function dashboard(input: {
     "Quench hub",
     `<h1>Quench hub</h1><p>Skills at <code>${head.slice(0, 12)}</code> ${button("/logout", {}, "Sign out")}</p>${warnings}
 <h2>Skills by machine</h2>${grid}${input.shipped ? `<p>${button("/skills/shipped", { base: head }, `Add the shipped ${input.shipped} skill`)} so agents can find Quench and propose skill changes.</p>` : ""}
+<h2>Skill versions</h2>${versionSection({ escape, button }, head, input.cards)}
 <h2>Proposals</h2>${proposalList(input.proposals)}
 <h2>Machines</h2>${machines}<form method="post" action="/machines"><label>Add machine <input name="name" pattern="[a-z0-9][a-z0-9._\\-]*" placeholder="laptop" required></label> <button>Add machine</button></form>
 <h2>History</h2>${history}

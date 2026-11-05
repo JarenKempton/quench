@@ -98,12 +98,12 @@ test("host evidence is optional, read-only, and leaves transport origins and bou
   expect(await Bun.file(path).bytes()).toEqual(before);
 });
 
-test("joins require a strong session link and unambiguous exact text in both histories within one minute", async () => {
+test("joins require a strong session link and unambiguous exact text in both histories within one hour", async () => {
   const path = await database([
     message("duplicate host"),
     message("duplicate host", { id: "other" }),
     message("duplicate harness"),
-    message("old", { createdAt: "2026-10-20T09:58:00Z" }),
+    message("old", { createdAt: "2026-10-20T08:59:59Z" }),
     message("future", { createdAt: "2026-10-20T10:02:00Z" }),
     message("invalid", { createdAt: "unknown" }),
     message("missing time"),
@@ -143,6 +143,35 @@ test("joins require a strong session link and unambiguous exact text in both his
     } finally {
       ambiguous.close();
     }
+  }
+});
+
+test("repeated text pairs in order when both histories hold it equally often, and attached-image notes are ignored", async () => {
+  const path = await database([
+    message("again", { id: "first", createdBy: "user", creationSource: "web" }),
+    message("again", { id: "second", createdAt: "2026-10-20T10:00:01Z" }),
+    message("queued", { createdAt: "2026-10-20T09:30:00Z" }),
+    message("picture", { attachments: [{ type: "image" }] }),
+    message("no attachment"),
+  ]);
+  const host = openT3History(path);
+  const note = '\n\n[Attached image "a.png" is saved at: /tmp/a.png]';
+  try {
+    const later = { ...say("again"), at: new Date("2026-10-20T10:00:02Z") };
+    const enriched = host.enrich(
+      session([
+        say("again"),
+        later,
+        say("queued"),
+        say(`picture${note}`),
+        say(`no attachment${note}`),
+      ]),
+    );
+    expect(enriched.events.map((e) => (e.type === "message" ? e.sender?.messageId : null))).toEqual(
+      ["first", "second", "queued", "picture", undefined],
+    );
+  } finally {
+    host.close();
   }
 });
 

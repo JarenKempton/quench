@@ -2,6 +2,7 @@ export { VerdictCache } from "./cache.ts";
 export * from "./causes.ts";
 export {
   CHILD_ENV,
+  childEnv,
   HarnessFailed,
   HarnessJudge,
   HarnessMissing,
@@ -13,7 +14,9 @@ export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {
   judgeReplies,
+  recordedSender,
   summarize,
+  type Attribution,
   type Judged,
   type Reply,
   type SessionRuns,

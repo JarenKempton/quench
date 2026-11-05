@@ -1,9 +1,20 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { HARNESSES, owned, Snapshot, type Plan } from "@quench/fleet";
-import { readLedger } from "@quench/fleet/apply";
+import { HARNESSES, owned, Snapshot, SkillReport, type Plan } from "@quench/fleet";
+import { readLedger, type ApplyInput } from "@quench/fleet/apply";
 import type { Home } from "@quench/history";
-import { skillsApply, skillsPlan, stateDir, type SkillsOptions } from "./skills.ts";
+import { SCHEMA_VERSION } from "../skills/records.ts";
+import { withVersions } from "../skills/versions.ts";
+import {
+  absolute,
+  collectSkills,
+  skillsApply,
+  skillsPlan,
+  stateDir,
+  type SkillsOptions,
+} from "./skills.ts";
+
+export const SKILL_DAYS = 30;
 
 export type AgentOptions = SkillsOptions & { interval: number; homeFlags: string[] };
 
@@ -15,10 +26,28 @@ async function previousGeneration(home: Home) {
   return parsed?.success ? parsed.data.generation : 0;
 }
 
+async function skillReport(
+  home: Home,
+  ledger: Awaited<ReturnType<typeof readLedger>>,
+): Promise<SkillReport> {
+  const { judge, records, unrecognised, evidence } = await collectSkills(home, {
+    days: SKILL_DAYS,
+    cache: true,
+  });
+  return SkillReport.parse({
+    schemaVersion: SCHEMA_VERSION,
+    days: SKILL_DAYS,
+    judge,
+    records: withVersions(records, ledger, evidence, (path) => absolute(home, path)),
+    unrecognised,
+  });
+}
+
 function snapshotOf(
   plan: Plan | null,
   ledger: Awaited<ReturnType<typeof readLedger>>,
   generation: number,
+  skills: SkillReport | null,
 ): Snapshot {
   const mine = owned(ledger);
   const harnesses: Snapshot["harnesses"] = {};
@@ -60,14 +89,19 @@ function snapshotOf(
     takenAt: new Date().toISOString(),
     revision: null,
     harnesses,
+    ...(skills ? { skills } : {}),
   });
 }
 
-export async function agentCycle(home: Home, options: SkillsOptions) {
+export async function agentCycle(
+  home: Home,
+  options: SkillsOptions,
+  hooks: Pick<ApplyInput, "now"> = {},
+) {
   const generation = (await previousGeneration(home)) + 1;
   let report;
   try {
-    const outcome = await skillsApply(home, { ...options, planHash: null });
+    const outcome = await skillsApply(home, { ...options, planHash: null }, hooks);
     report = {
       error: null,
       recovered: outcome.recovered,
@@ -89,12 +123,21 @@ export async function agentCycle(home: Home, options: SkillsOptions) {
     };
   }
   const { plan, ...rest } = report;
+  const ledger = await readLedger(stateDir(home));
+  let skills: SkillReport | null = null;
+  let skillsError: string | null = null;
+  try {
+    skills = await skillReport(home, ledger);
+  } catch (error) {
+    skillsError = (error as Error).message;
+  }
   const status = {
     version: 1,
     source: resolve(options.source),
     machine: options.machine,
     ...rest,
-    snapshot: snapshotOf(plan, await readLedger(stateDir(home)), generation),
+    skillsError,
+    snapshot: snapshotOf(plan, ledger, generation, skills),
   };
   const file = statusFile(home);
   await mkdir(dirname(file), { recursive: true });
