@@ -72,3 +72,23 @@ test("a card's baseline covers exactly the machines and harnesses it shows", () 
   expect(card!.sides.before.loaded.sessions).toBe(10);
   expect(card!.shown).toBe(true);
 });
+
+test("a version that comes back is compared at its latest change only, so sessions are not summed twice", () => {
+  const base = state(6, 2);
+  const record = base.skills!.records[0]!;
+  const [a, b] = record.versions!;
+  const interval = (v: typeof a, from: string, to: string | null) => ({ ...v!, from, to });
+  record.versions = [
+    interval(a, "2026-10-01T00:00:00.000Z", "2026-10-05T00:00:00.000Z"),
+    interval(b, "2026-10-05T00:00:00.000Z", "2026-10-10T00:00:00.000Z"),
+    interval(a, "2026-10-10T00:00:00.000Z", "2026-10-15T00:00:00.000Z"),
+    interval(b, "2026-10-15T00:00:00.000Z", null),
+  ];
+  const cards = versionCards([{ name: "laptop", state: base }]);
+  const forward = cards.find((c) => c.before === hash("a"))!;
+  expect(forward.sides.before.loaded.sessions).toBe(6);
+  expect(forward.sides.after.loaded.sessions).toBe(6);
+  expect(forward.sides.before.without.sessions).toBe(2);
+  expect(forward.shown).toBe(false);
+  expect(cards.find((c) => c.before === hash("b"))!.sides.before.loaded.sessions).toBe(6);
+});

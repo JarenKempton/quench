@@ -132,3 +132,25 @@ test("a load counts for the version installed when it happened, not when its ses
   expect(v1!.loaded.sessions).toBe(1);
   expect(v2!.loaded.sessions).toBe(2);
 });
+
+test("a session that loaded two installations of the same version counts for neither", () => {
+  sequence = 0;
+  const ledger = [entry("~/app1", hash("a"), T1), entry("~/app2", hash("a"), T1)];
+  const sessions = evidence([
+    { cwd: null, at: T1 + 1, load: `${HOME}/app1/.claude/skills/tidy/SKILL.md` },
+    { cwd: null, at: T1 + 1, load: `${HOME}/app1/.claude/skills/tidy/SKILL.md` },
+  ]);
+  const second = sessions.contexts.get("claude-code:s1")!;
+  second.loads = [
+    ...second.loads!,
+    { name: "tidy", path: `${HOME}/app2/.claude/skills/tidy/SKILL.md`, at: T1 + 2 },
+  ];
+  const [app1, app2] = withVersions(
+    [record("~/app1/.claude/skills/tidy"), record("~/app2/.claude/skills/tidy")],
+    ledger,
+    sessions,
+    absolute,
+  );
+  expect(app1!.versions![0]!.loaded.sessions).toBe(1);
+  expect(app2!.versions![0]!.loaded.sessions).toBe(0);
+});

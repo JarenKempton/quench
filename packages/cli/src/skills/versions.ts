@@ -58,6 +58,9 @@ export function withVersions<R extends Pick<SkillRecord, "skill" | "harness" | "
       );
       if (target) loaded.add(target);
     }
+    const clashes = (i: Installation) =>
+      [...loaded].some((o) => o.path !== i.path && o.treeHash === i.treeHash);
+    for (const i of [...loaded].filter(clashes)) loaded.delete(i);
     const result = {
       loaded,
       without: loads.length ? null : sole(mine.filter((i) => covers(i, s, s.at))),

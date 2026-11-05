@@ -33,9 +33,12 @@ export function versionCards(machines: readonly Reporting[]): Card[] {
   for (const { name, state } of machines)
     for (const record of state?.skills?.records ?? []) {
       const versions = [...(record.versions ?? [])].sort((a, b) => a.from.localeCompare(b.from));
-      for (let i = 1; i < versions.length; i++) {
+      const compared = new Set<string>();
+      for (let i = versions.length - 1; i > 0; i--) {
         const [was, now] = [versions[i - 1]!, versions[i]!];
         if (was.treeHash === now.treeHash) continue;
+        if (compared.has(`${was.treeHash}\0${now.treeHash}`)) continue;
+        compared.add(`${was.treeHash}\0${now.treeHash}`);
         if (was.loaded.sessions + now.loaded.sessions === 0) continue;
         const key = `${record.skill}\0${was.treeHash}\0${now.treeHash}`;
         const card = cards.get(key) ?? {
