@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { treeHash } from "@quench/fleet";
@@ -20,14 +20,16 @@ const temp = async (name: string) => {
 };
 
 const FAKE = (log: string) => `#!/usr/bin/env bun
-import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 const argv = process.argv.slice(2);
 const prompt = await new Response(Bun.stdin.stream()).text();
 const config = process.env.CLAUDE_CONFIG_DIR;
 const [name] = readdirSync(join(config, "skills"));
 const body = readFileSync(join(config, "skills", name, "SKILL.md"), "utf8");
-appendFileSync(${JSON.stringify(log)}, JSON.stringify({ argv, home: process.env.HOME, config, cwd: process.cwd(), envKeys: Object.keys(process.env).sort(), name }) + "\\n");
+const mode = (p) => (statSync(p).mode & 0o777).toString(8);
+const modes = [join(config, ".."), config, process.env.HOME, process.cwd()].map(mode);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ argv, home: process.env.HOME, config, cwd: process.cwd(), envKeys: Object.keys(process.env).sort(), name, modes }) + "\\n");
 const at = (i) => argv[argv.indexOf(i) + 1];
 const settings = JSON.parse(at("--settings"));
 const plugins = prompt.includes("leak plugin") ? [{ name: "stray" }] : Object.values(settings.enabledPlugins).some(Boolean) ? [{ name: "builtin" }] : [];
@@ -231,6 +233,7 @@ test.skipIf(windows)(
       expect(call.config.startsWith(f.home)).toBe(false);
       expect(call.config.includes("quench-eval-")).toBe(true);
       expect(call.name).toBe("zebra");
+      expect(call.modes).toEqual(["700", "700", "700", "700"]);
       expect(await stat(call.config).catch(() => null)).toBeNull();
     }
     expect(await listing(f.home)).toEqual(before);
@@ -361,5 +364,83 @@ test.skipIf(windows)(
     if (alive) process.kill(-child!.pid, "SIGKILL");
     expect(alive).toBe(false);
     expect(await stat(join(child!.config, "..")).catch(() => null)).toBeNull();
+  },
+);
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const until = async (check: () => Promise<boolean> | boolean, ms = 5000) => {
+  for (let waited = 0; waited < ms; waited += 50) {
+    if (await check()) return true;
+    await Bun.sleep(50);
+  }
+  return false;
+};
+
+test.skipIf(windows)(
+  "abandoned scratch homes are reclaimed, their process groups killed, live ones kept",
+  async () => {
+    const f = await fixture(STANDARD.slice(0, 1));
+    const tmp = await temp("tmp");
+    const gone = Bun.spawn(["true"]);
+    await gone.exited;
+    const sleeper = Bun.spawn(["sleep", "60"], { detached: true, stdout: "ignore" });
+    const home = async (name: string, marker: object | null) => {
+      const dir = join(tmp, `quench-eval-${name}`);
+      await Bun.write(join(dir, "config/sessions/1.key"), "peer token");
+      if (marker) await Bun.write(join(dir, "quench-eval.json"), JSON.stringify(marker));
+      return dir;
+    };
+    const dead = await home("dead", { owner: gone.pid, group: sleeper.pid, createdAt: Date.now() });
+    const old = await home("old", null);
+    await utimes(old, new Date(Date.now() - 7_200_000), new Date(Date.now() - 7_200_000));
+    const kept = await home("live", { owner: process.pid, group: null, createdAt: Date.now() });
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"], {
+      TMPDIR: tmp,
+    });
+    expect(out.code).toBe(0);
+    expect(await stat(dead).catch(() => null)).toBeNull();
+    expect(await stat(old).catch(() => null)).toBeNull();
+    expect(await stat(kept).catch(() => null)).not.toBeNull();
+    expect(await until(() => !alive(sleeper.pid))).toBe(true);
+  },
+);
+
+test.skipIf(windows)(
+  "without a parent-death signal, a watchdog stops the replay when Quench is killed",
+  async () => {
+    const f = await fixture([]);
+    const tmp = await temp("watch");
+    const hang = f.log.replace(/jsonl$/, "hang");
+    const runner = join(f.root, "runner.ts");
+    await Bun.write(
+      runner,
+      `Object.defineProperty(process, "platform", { value: "darwin" });
+const { replay } = await import(${JSON.stringify(join(import.meta.dir, "../src/skills/replay.ts"))});
+await replay({ command: ${JSON.stringify(join(f.bin, "claude"))}, env: { PATH: process.env.PATH, ANTHROPIC_API_KEY: "sk-test-not-real" }, skill: "zebra", tree: [{ path: "SKILL.md", mode: "100644", bytes: new TextEncoder().encode("TRIGGERS") }], prompt: "zebra hang", model: null, budgetUsd: 1 });
+`,
+    );
+    const proc = Bun.spawn(["bun", runner], {
+      env: { PATH: process.env.PATH!, TMPDIR: tmp, HOME: f.home },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(await until(() => Bun.file(hang).exists())).toBe(true);
+    const child = JSON.parse(await Bun.file(hang).text());
+    process.kill(proc.pid, "SIGKILL");
+    await proc.exited;
+    const stopped = await until(() => !alive(child.pid));
+    if (!stopped) process.kill(-child.pid, "SIGKILL");
+    expect(stopped).toBe(true);
+    expect(
+      await until(async () => (await stat(join(child.config, "..")).catch(() => null)) === null),
+    ).toBe(true);
   },
 );
