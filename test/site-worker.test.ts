@@ -73,6 +73,18 @@ test("a plain-http or non-default-port redirect fails closed", async () => {
   }
 });
 
+test("an unparseable redirect location fails closed", async () => {
+  upstream({ [`${latest}/install.sh`]: redirect("https://[invalid") });
+  await failed(await get("https://quench.sh/install.sh"), shFailure);
+});
+
+test("a rejected upstream fetch fails closed", async () => {
+  globalThis.fetch = (async () => {
+    throw new TypeError("network down");
+  }) as unknown as typeof fetch;
+  await failed(await get("https://quench.sh/install.ps1"), psFailure);
+});
+
 test("a redirect loop stops after five hops", async () => {
   upstream({ [`${latest}/install.sh`]: redirect(`${latest}/install.sh`) });
   await failed(await get("https://quench.sh/install.sh"), shFailure);

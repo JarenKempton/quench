@@ -26,7 +26,7 @@ async function download(path: string): Promise<Response | undefined> {
 }
 
 async function installer(path: string, failure: string): Promise<Response> {
-  const asset = await download(path);
+  const asset = await download(path).catch(() => undefined);
   if (!asset)
     return new Response(failure, {
       status: 502,
