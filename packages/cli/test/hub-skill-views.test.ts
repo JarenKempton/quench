@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Snapshot } from "@quench/fleet";
 import { Home } from "@quench/history";
@@ -7,10 +8,7 @@ import { clientDir, pair, postSnapshot } from "@quench/hub/client";
 import { Jev, VerdictCache } from "@quench/judge";
 import { Owner, startHub, type Running } from "../../hub/test/helpers.ts";
 import { agentCycle } from "../src/commands/agent.ts";
-import { cleanup, temp } from "./fleet-scratch.ts";
 import { lines } from "./run.ts";
-
-afterAll(cleanup);
 
 const DAY = 86_400_000;
 const NOW = Date.now();
@@ -114,10 +112,17 @@ async function writeSessions(home: Home, machine: string) {
   }
 }
 
+let root = "";
 let running: Running | null = null;
 afterAll(async () => {
   await running?.stop();
+  if (root) await rm(root, { recursive: true, force: true });
 });
+
+const temp = async (name: string) => {
+  root ||= await mkdtemp(join(tmpdir(), "quench-hub-views-"));
+  return mkdtemp(join(root, `${name}-`));
+};
 
 const short = (hash: string) => hash.slice(7, 15);
 
