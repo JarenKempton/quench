@@ -203,7 +203,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   return 0;
 }
 
-async function sessionRuns(
+export async function sessionRuns(
   home: Home,
   since: Date,
   enrich?: SessionEnricher,

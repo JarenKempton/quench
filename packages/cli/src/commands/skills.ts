@@ -1,6 +1,21 @@
-import { harnessById, type Home } from "@quench/history";
+import { join } from "node:path";
+import { harnessById, sessionPlaces, skillInventory, type Home, type Skill } from "@quench/history";
+import { openT3History, t3State } from "@quench/history/hosts/t3";
+import { Jev, judgeReplies, VerdictCache, type SessionRuns } from "@quench/judge";
 import { HARNESSES, plan, targetPath, type HarnessId, type InstalledState } from "@quench/fleet";
 import { buildBundle, installedTree, loadFleet } from "@quench/fleet/disk";
+import { placeCache } from "../cache.ts";
+import { json } from "../format.ts";
+import { reading } from "../progress.ts";
+import { skillUse } from "../profile/recorded-skills.ts";
+import { splitSkills } from "../profile/setup.ts";
+import { coOccurrence } from "../skills/co-occurrence.ts";
+import { drift } from "../skills/drift.ts";
+import { ORIGINS, SCHEMA_VERSION, skillRecords } from "../skills/records.ts";
+import { renderSkills } from "../skills/render.ts";
+import type { SessionContext } from "./context.ts";
+import { sessionRuns } from "./corrections.ts";
+import { placeOrigins } from "./profile.ts";
 
 export async function userSkillRoot(home: Home, harness: HarnessId): Promise<string> {
   const roots = await harnessById[harness].skills(home, home.dir);
@@ -43,14 +58,30 @@ export async function skillsPlan(home: Home, options: { source: string; machine:
   });
 }
 
-export async function skills(
-  home: Home,
-  rest: string[],
-  options: { source?: string; machine?: string; json: boolean },
-) {
+type Options = {
+  source?: string;
+  machine?: string;
+  json: boolean;
+  days: number;
+  cache: boolean;
+  hostHistory?: string | false;
+};
+
+const LIMITATIONS = [
+  "One record per skill, agent and location. Skills on disk come from each agent's user and system folders now; project skills appear when a session in the period listed them. Listed, used and by you count sessions in the period, by the same rules as profile's recorded skills.",
+  "Origin: plugin from an installed plugin; project from a project folder; vendored for skills the agent ships, system folders, and folders that resolve outside your home; user for any other folder in your home. A skill found nowhere on disk now has an unknown origin.",
+  "Content version is the fleet tree hash of the whole skill folder on disk now; unknown when it is not a readable SKILL.md folder.",
+  "Missing evidence is unknown, never zero: an agent with no recorded listing in the period has unknown counts. Codex loads skills through the shell, so its use counts are a lower bound.",
+  `Loaded and corrected is session co-occurrence from corrections --context: a session loaded a skill when it invoked a listed skill, read its SKILL.md, or ran a shell read of it. A session had a human correction when a cached verdict says a person corrected a run in the period. Shown at 5 or more sessions; co-occurrence, not cause.`,
+];
+
+export async function skills(home: Home, rest: string[], options: Options) {
   const [sub] = rest;
+  if (sub === undefined) return skillsReport(home, options);
   if (sub !== "plan" || rest.length !== 1) {
-    process.stderr.write("usage: quench skills plan --source <dir> --machine <name> --json\n");
+    process.stderr.write(
+      "usage: quench skills [--json] [--days N] [--source <dir>]\n       quench skills plan --source <dir> --machine <name> --json\n",
+    );
     return 1;
   }
   if (!options.source || !options.machine || !options.json) {
@@ -65,4 +96,58 @@ export async function skills(
     process.stderr.write(`${(error as Error).message}\n`);
     return 1;
   }
+}
+
+async function skillsReport(home: Home, options: Options) {
+  if (options.machine) {
+    process.stderr.write("--machine is only available for skills plan\n");
+    return 1;
+  }
+  const since = new Date(Date.now() - options.days * 86_400_000);
+  const cache = options.cache ? await placeCache(home.dir) : undefined;
+  const { places } = await sessionPlaces(home, since, reading(), cache);
+  await cache?.save();
+  const global = new Map<string, Skill>();
+  for (const skill of splitSkills((await skillInventory(home, home.dir)).skills).global)
+    global.set(skill.realPath, skill);
+  const recorded = skillUse(places, await placeOrigins(home, places, global));
+  const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
+  const host =
+    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
+  const contexts = new Map<string, SessionContext>();
+  let sessions: SessionRuns[];
+  try {
+    sessions = await sessionRuns(home, since, host?.enrich, contexts);
+  } finally {
+    host?.close();
+  }
+  const { replies } = await judgeReplies(sessions, verdicts, null);
+  const records = await skillRecords(
+    home,
+    [...global.values()],
+    recorded.uses,
+    recorded.occurrences,
+    coOccurrence(replies, contexts, since),
+  );
+  let compared = null;
+  try {
+    compared = options.source ? await drift(options.source, records) : null;
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n`);
+    return 1;
+  }
+  process.stdout.write(
+    options.json
+      ? json({
+          schemaVersion: SCHEMA_VERSION,
+          days: options.days,
+          judge: verdicts.judge,
+          origins: ORIGINS,
+          skills: records,
+          ...(compared ? { source: compared } : {}),
+          limitations: LIMITATIONS,
+        })
+      : renderSkills(records, options.days, verdicts.judge, compared),
+  );
+  return 0;
 }
