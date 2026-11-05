@@ -94,11 +94,21 @@ function worthALook(result: Profile, homeDir: string): string[] {
       detail: `${never.map((u) => `${u.label} ${u.n}`).join(" · ")} — ranked cut list with a command for each`,
       command: "quench profile skills",
     });
+  const blocked = result.recordedFailures.blocked[0];
+  if (blocked)
+    items.push({
+      headline: `${blocked.guard} blocked ${blocked.command ? `"${blocked.command}" ` : ""}${count(blocked.blocks)}×`,
+      detail: `${plural(blocked.sessions, "session")} · ${blocked.projects
+        .slice(0, 3)
+        .map((p) => projectName(p.root, homeDir))
+        .join(", ")}`,
+      command: "quench profile failures",
+    });
   const top = result.recordedFailures.repeated[0];
   if (top)
     items.push({
       headline: `"${top.what}" failed ${count(top.failures)}× in ${projectName(top.root, homeDir)}`,
-      detail: `${plural(top.sessions, "session")} · ${chars(top.chars)} of output`,
+      detail: `${top.error ? `${top.error} · ` : ""}${plural(top.sessions, "session")} · ${chars(top.chars)} of output`,
       command: "quench profile failures",
     });
   const loads = result.projects

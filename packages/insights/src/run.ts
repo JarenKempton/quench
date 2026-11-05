@@ -1,3 +1,4 @@
+import { redacted } from "@quench/secrets";
 import {
   contextOf,
   failedCall,
@@ -199,7 +200,8 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
           call.ok = event.isError === null ? null : !event.isError;
           call.resultChars = event.chars;
           if (event.loadedTools) call.loadedTools = event.loadedTools;
-          const failed = event.failure && failedCall(event.failure, recorded.get(event.callId!));
+          const failed =
+            event.failure && failedCall(event.failure, recorded.get(event.callId!), redacted);
           if (failed) call.failure = failed;
         }
         break;

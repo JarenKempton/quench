@@ -18,7 +18,7 @@ export async function rankedItems(
   files: SteeringFile[],
   places: readonly SessionPlace[],
   project: string,
-): Promise<{ items: RankedItem[]; coverage: LoadCoverage }> {
+): Promise<{ items: RankedItem[]; coverage: LoadCoverage; here: SessionPlace[] }> {
   const checkouts = new Map<string, ReturnType<typeof checkout>>();
   const checkoutOf = (dir: string) =>
     checkouts.get(dir) ?? checkouts.set(dir, checkout(dir)).get(dir)!;
@@ -40,8 +40,10 @@ export async function rankedItems(
   const root = await rootOf(project);
   const loads = new Map<string, { sessions: number; chars: number }>();
   const coverage: LoadCoverage = { sessions: 0, unrecorded: 0, combinedOnly: 0 };
+  const here: SessionPlace[] = [];
   for (const place of places) {
     if (!place.cwd || (await rootOf(place.cwd)) !== root) continue;
+    here.push(place);
     coverage.sessions++;
     if (!place.instructions) {
       coverage.unrecorded++;
@@ -80,5 +82,5 @@ export async function rankedItems(
     };
   });
   items.sort((a, b) => b.loadedChars - a.loadedChars || b.chars - a.chars);
-  return { items, coverage };
+  return { items, coverage, here };
 }

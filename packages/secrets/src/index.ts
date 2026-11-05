@@ -13,7 +13,7 @@ import { unpinnedSources } from "./unpinned.ts";
 
 export { detect, detectInFile, entropy, type Detection } from "./detect.ts";
 export { printable } from "./issuer.ts";
-export { machineKey, masker, type Masker } from "./mask.ts";
+export { machineKey, masker, redacted, type Masker } from "./mask.ts";
 export { sshKeyEncrypted, toolConfigFiles, type CredentialFile } from "./harvest.ts";
 export type { FileSecrets } from "./configs.ts";
 export type { Footprint } from "./footprints.ts";
