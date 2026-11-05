@@ -1,10 +1,21 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { isIP } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { connect as tlsConnect } from "node:tls";
 import { X509Certificate } from "node:crypto";
 import { z } from "zod";
-import { BundleManifest, MachineName, sha256, type Snapshot } from "@quench/fleet";
+import { BundleManifest, MachineName, sha256, treeHash, type Snapshot } from "@quench/fleet";
+import { readTree } from "@quench/fleet/disk";
 import { spkiPin } from "./cert.ts";
 import { isLoopback } from "./loopback.ts";
 
@@ -30,6 +41,7 @@ const paths = (dir: string) => ({
   token: join(dir, "token"),
   bundle: join(dir, "bundle.json"),
   blobs: join(dir, "blobs"),
+  trees: join(dir, "trees"),
 });
 
 async function atomicWrite(path: string, data: string | Uint8Array, mode = 0o644) {
@@ -177,3 +189,48 @@ export async function postSnapshot(dir: string, snapshot: Snapshot) {
 }
 
 export const blobPath = (dir: string, digest: string) => join(paths(dir).blobs, digest);
+
+async function treeAt(path: string) {
+  const info = await lstat(path).catch(() => null);
+  if (!info || info.isSymbolicLink() || !info.isDirectory()) return null;
+  return treeHash(await readTree(path));
+}
+
+export async function skillFolders(dir: string, manifest: BundleManifest) {
+  const { trees } = paths(dir);
+  await mkdir(trees, { recursive: true });
+  const sources: Record<string, string> = {};
+  for (const [name, skill] of Object.entries(manifest.skills)) {
+    const target = join(trees, skill.treeHash.replace("sha256:", ""));
+    if ((await treeAt(target)) !== skill.treeHash) {
+      const tmp = `${target}.${crypto.randomUUID()}.tmp`;
+      try {
+        await mkdir(tmp);
+        for (const file of skill.files) {
+          const bytes = await readFile(blobPath(dir, file.sha256));
+          if (sha256(bytes) !== file.sha256)
+            throw new Error(`file ${file.sha256} does not match its hash`);
+          const to = join(tmp, ...file.path.split("/"));
+          await mkdir(dirname(to), { recursive: true });
+          if (file.mode === "120000") await symlink(bytes.toString(), to);
+          else
+            await writeFile(to, bytes, {
+              flag: "wx",
+              mode: file.mode === "100755" ? 0o755 : 0o644,
+            });
+        }
+        if ((await treeAt(tmp)) !== skill.treeHash)
+          throw new Error(`${name} does not match its tree hash ${skill.treeHash}`);
+        await rm(target, { recursive: true, force: true });
+        await rename(tmp, target);
+      } finally {
+        await rm(tmp, { recursive: true, force: true });
+      }
+    }
+    sources[name] = target;
+  }
+  const keep = new Set(Object.values(sources).map((path) => path.slice(trees.length + 1)));
+  for (const entry of await readdir(trees))
+    if (!keep.has(entry)) await rm(join(trees, entry), { recursive: true, force: true });
+  return sources;
+}

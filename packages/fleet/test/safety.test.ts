@@ -195,6 +195,20 @@ test("snapshots replace state per harness, only from complete harness state, and
   expect(mergeSnapshot(empty, snap(2, { "claude-code": true }))).toEqual(empty);
 });
 
+test("a snapshot sent after missed polls records how stale the machine was, and the next clears it", () => {
+  const first = mergeSnapshot(null, snap(1, { "claude-code": true }));
+  const late = Snapshot.parse({
+    ...snap(2, { "claude-code": true }),
+    staleSince: "2026-11-04T00:00:00Z",
+  });
+  const caughtUp = mergeSnapshot(first, late);
+  expect(caughtUp.staleness).toEqual({
+    since: "2026-11-04T00:00:00Z",
+    until: "2026-11-05T00:00:00Z",
+  });
+  expect(mergeSnapshot(caughtUp, snap(3, { "claude-code": true })).staleness).toBeUndefined();
+});
+
 test("the executable bit does not change the tree hash, so every OS agrees", async () => {
   const entry = (mode: "100644" | "100755") => [
     { path: "run.sh", mode, bytes: new TextEncoder().encode("x") },

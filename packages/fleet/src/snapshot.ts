@@ -29,6 +29,7 @@ export const Snapshot = z
     revision: z.string().nullable(),
     harnesses: z.partialRecord(HarnessId, HarnessSnapshot),
     skills: SkillReport.optional(),
+    staleSince: Timestamp.optional(),
   })
   .strict();
 export type Snapshot = z.infer<typeof Snapshot>;
@@ -47,6 +48,7 @@ export const MachineState = z
     harnesses: z.partialRecord(HarnessId, HarnessState),
     skills: SkillReport.optional(),
     skillsTakenAt: Timestamp.optional(),
+    staleness: z.object({ since: Timestamp, until: Timestamp }).strict().optional(),
   })
   .strict();
 export type MachineState = z.infer<typeof MachineState>;
@@ -66,5 +68,8 @@ export function mergeSnapshot(previous: MachineState | null, next: Snapshot): Ma
     : previous?.skills
       ? { skills: previous.skills, skillsTakenAt: previous.skillsTakenAt }
       : {};
-  return { generation: next.generation, harnesses, ...skills };
+  const stale = next.staleSince
+    ? { staleness: { since: next.staleSince, until: next.takenAt } }
+    : {};
+  return { generation: next.generation, harnesses, ...skills, ...stale };
 }

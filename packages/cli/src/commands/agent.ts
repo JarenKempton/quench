@@ -1,158 +1,43 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { HARNESSES, owned, Snapshot, SkillReport, type Plan } from "@quench/fleet";
-import { readLedger, type ApplyInput } from "@quench/fleet/apply";
 import type { Home } from "@quench/history";
-import { SCHEMA_VERSION } from "../skills/records.ts";
-import { withVersions } from "../skills/versions.ts";
-import {
-  absolute,
-  collectSkills,
-  skillsApply,
-  skillsPlan,
-  stateDir,
-  type SkillsOptions,
-} from "./skills.ts";
+import { clientDir, loadConnection } from "@quench/hub/client";
+import { agentCycle, applyAndReport, statusFile } from "./agent-cycle.ts";
+import { hubCycle, hubLine } from "./agent-hub.ts";
+import { stateDir } from "./skills.ts";
 
-export const SKILL_DAYS = 30;
+export type AgentOptions = {
+  source?: string;
+  machine?: string;
+  projects?: string[];
+  interval: number;
+  homeFlags: string[];
+};
 
-export type AgentOptions = SkillsOptions & { interval: number; homeFlags: string[] };
-
-export const statusFile = (home: Home) => join(stateDir(home), "status.json");
-
-async function previousGeneration(home: Home) {
-  const text = await readFile(statusFile(home), "utf8").catch(() => null);
-  const parsed = text ? Snapshot.safeParse(JSON.parse(text).snapshot) : null;
-  return parsed?.success ? parsed.data.generation : 0;
-}
-
-async function skillReport(
-  home: Home,
-  ledger: Awaited<ReturnType<typeof readLedger>>,
-): Promise<SkillReport> {
-  const { judge, records, unrecognised, evidence } = await collectSkills(home, {
-    days: SKILL_DAYS,
-    cache: true,
-  });
-  return SkillReport.parse({
-    schemaVersion: SCHEMA_VERSION,
-    days: SKILL_DAYS,
-    judge,
-    records: withVersions(records, ledger, evidence, (path) => absolute(home, path)),
-    unrecognised,
-  });
-}
-
-function snapshotOf(
-  plan: Plan | null,
-  ledger: Awaited<ReturnType<typeof readLedger>>,
-  generation: number,
-  skills: SkillReport | null,
-): Snapshot {
-  const mine = owned(ledger);
-  const harnesses: Snapshot["harnesses"] = {};
-  for (const harness of HARNESSES) {
-    const items = plan?.items.filter((i) => i.harness === harness) ?? [];
-    harnesses[harness] = {
-      complete: plan !== null,
-      conflicts: items.filter((i) => i.action === "conflict").length,
-      installs: items.flatMap((i) => {
-        if (!i.path || !i.installed) return [];
-        const ours = mine.get(i.path);
-        return [
-          {
-            skill: i.skill,
-            path: i.path,
-            location:
-              i.location.scope === "project"
-                ? {
-                    scope: "project" as const,
-                    remote: i.location.remote,
-                    checkout: i.location.checkout ?? "",
-                  }
-                : { scope: "global" as const },
-            treeHash: i.installed.treeHash,
-            state: !ours
-              ? "foreign"
-              : ours.treeHash === i.installed.treeHash
-                ? "owned"
-                : "modified",
-          },
-        ];
-      }),
-    };
-  }
-  return Snapshot.parse({
-    version: 1,
-    id: crypto.randomUUID(),
-    generation,
-    takenAt: new Date().toISOString(),
-    revision: null,
-    harnesses,
-    ...(skills ? { skills } : {}),
-  });
-}
-
-export async function agentCycle(
-  home: Home,
-  options: SkillsOptions,
-  hooks: Pick<ApplyInput, "now"> = {},
-) {
-  const generation = (await previousGeneration(home)) + 1;
-  let report;
-  try {
-    const outcome = await skillsApply(home, { ...options, planHash: null }, hooks);
-    report = {
-      error: null,
-      recovered: outcome.recovered,
-      planHash: outcome.plan.hash ?? null,
-      applied: outcome.applied,
-      conflicts: outcome.conflicts,
-      notes: outcome.notes,
-      plan: await skillsPlan(home, options),
-    };
-  } catch (error) {
-    report = {
-      error: (error as Error).message,
-      recovered: null,
-      planHash: null,
-      applied: [],
-      conflicts: [],
-      notes: [],
-      plan: null,
-    };
-  }
-  const { plan, ...rest } = report;
-  const ledger = await readLedger(stateDir(home));
-  let skills: SkillReport | null = null;
-  let skillsError: string | null = null;
-  try {
-    skills = await skillReport(home, ledger);
-  } catch (error) {
-    skillsError = (error as Error).message;
-  }
-  const status = {
-    version: 1,
-    source: resolve(options.source),
-    machine: options.machine,
-    ...rest,
-    skillsError,
-    snapshot: snapshotOf(plan, ledger, generation, skills),
-  };
-  const file = statusFile(home);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(`${file}.tmp`, `${JSON.stringify(status, null, 2)}\n`);
-  await rename(`${file}.tmp`, file);
-  return status;
-}
+const summary = (status: Awaited<ReturnType<typeof applyAndReport>>) =>
+  status.error
+    ? `error: ${status.error}`
+    : `applied ${status.applied.length}, conflicts ${status.conflicts.length}`;
 
 export async function agentRun(home: Home, options: AgentOptions & { once: boolean }) {
   for (;;) {
-    const status = await agentCycle(home, options);
-    process.stdout.write(
-      `${status.snapshot.takenAt} ${status.error ? `error: ${status.error}` : `applied ${status.applied.length}, conflicts ${status.conflicts.length}`}\n`,
-    );
-    if (options.once) return status.error || status.conflicts.length ? 1 : 0;
+    let line: string;
+    let failed: boolean;
+    if (options.source && options.machine) {
+      const status = await agentCycle(home, {
+        ...options,
+        source: options.source,
+        machine: options.machine,
+      });
+      line = `${status.snapshot.takenAt} ${summary(status)}`;
+      failed = !!status.error || status.conflicts.length > 0;
+    } else {
+      const status = await hubCycle(home, options);
+      line = `${status.snapshot.takenAt} ${summary(status)}${hubLine(status)}`;
+      failed = !!status.error || !!status.hub.error || status.conflicts.length > 0;
+    }
+    process.stdout.write(`${line}\n`);
+    if (options.once) return failed ? 1 : 0;
     await Bun.sleep(options.interval * 1000);
   }
 }
@@ -336,10 +221,8 @@ export async function agentInstall(
     ...selfCommand(),
     "agent",
     "run",
-    "--source",
-    resolve(options.source),
-    "--machine",
-    options.machine,
+    ...(options.source ? ["--source", resolve(options.source)] : []),
+    ...(options.machine ? ["--machine", options.machine] : []),
     ...(options.projects ?? []).flatMap((p) => ["--project", resolve(p)]),
     "--interval",
     String(options.interval),
@@ -377,9 +260,10 @@ export async function agentUninstall(
   return { file: service.file };
 }
 
-const USAGE = `usage: quench agent install --source <dir> --machine <name> [--project <dir>] [--interval 300]
+const USAGE = `usage: quench agent install [--source <dir> --machine <name>] [--project <dir>] [--interval 300]
        quench agent uninstall
-       quench agent run --source <dir> --machine <name> [--project <dir>] [--interval 300] [--once]
+       quench agent run [--source <dir> --machine <name>] [--project <dir>] [--interval 300] [--once]
+       Without --source, the agent follows the hub this machine is paired with (quench connect).
 `;
 
 export async function agent(
@@ -413,13 +297,21 @@ export async function agent(
       process.stdout.write(`removed the Quench agent service (${file})\n`);
       return 0;
     }
-    if (!flags.source || !flags.machine) {
-      process.stderr.write(`agent ${sub} needs --source <dir> and --machine <name>\n`);
+    if (!flags.source !== !flags.machine) {
+      process.stderr.write(
+        `agent ${sub} needs both --source <dir> and --machine <name>, or neither to follow the hub this machine is paired with\n`,
+      );
       return 1;
     }
+    if (!flags.source)
+      await loadConnection(clientDir(home.dir)).catch(() => {
+        throw new Error(
+          "this machine is not paired with a hub; run quench connect first, or pass --source and --machine",
+        );
+      });
     const options = {
-      source: flags.source,
-      machine: flags.machine,
+      ...(flags.source ? { source: flags.source } : {}),
+      ...(flags.machine ? { machine: flags.machine } : {}),
       projects: flags.projects,
       interval: flags.interval,
       homeFlags: flags.homeFlags,

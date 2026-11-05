@@ -102,8 +102,9 @@ export class Repo {
     args: string[],
     options: { input?: string | Uint8Array; env?: Record<string, string>; ok?: number[] } = {},
   ) {
+    const dir = await this.data.existing("skills.git");
     const proc = Bun.spawn(["git", ...SETTINGS, ...args], {
-      env: { ...process.env, ...IDENTITY, GIT_DIR: this.dir, ...options.env },
+      env: { ...process.env, ...IDENTITY, GIT_DIR: dir, ...options.env },
       stdin: options.input === undefined ? "ignore" : new Blob([options.input]),
       stdout: "pipe",
       stderr: "pipe",
@@ -190,6 +191,7 @@ export class Repo {
       await this.data.write([...scratch.parts, "a"], before ?? "");
       await this.data.write([...scratch.parts, "b"], after);
       const { GIT_DIR: _, ...env } = process.env;
+      await this.data.existing(...scratch.parts);
       const proc = Bun.spawn(
         ["git", ...SETTINGS, "diff", "--no-index", "--no-color", "--", "a", "b"],
         { cwd: dir, env, stdout: "pipe", stderr: "pipe" },

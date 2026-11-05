@@ -82,6 +82,26 @@ test(
 );
 
 test(
+  "a <data>/skills.git swapped for a symlink while running stops every git command",
+  async () => {
+    if (!posix) return;
+    const data = await importedData();
+    const hub = await startHub(data);
+    const head = await hub.hub.head();
+    const outside = temp("outside-git");
+    renameSync(join(data, "skills.git"), join(outside, "skills.git"));
+    symlinkSync(join(outside, "skills.git"), join(data, "skills.git"));
+    const before = readdirSync(join(outside, "skills.git")).sort();
+    expect(await failure(hub.hub.head())).toContain("not a plain folder");
+    expect(await failure(hub.hub.writeFile(head, "notes.txt", "x\n", "Add notes"))).toContain(
+      "not a plain folder",
+    );
+    expect(readdirSync(join(outside, "skills.git")).sort()).toEqual(before);
+  },
+  HUB_TIMEOUT,
+);
+
+test(
   "serve and import refuse a data folder that is a symlink",
   async () => {
     if (!posix) return;
