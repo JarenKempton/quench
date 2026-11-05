@@ -278,6 +278,14 @@ session, pairing-code and machine-token hashes, and each machine's last merged s
 - **Client.** `quench connect` keeps `~/.quench/fleet/connection.json`, `token` (0600),
   `bundle.json` and `blobs/<sha256>`, each checked against its hash. #138's agent reuses
   `@quench/hub/client` to poll and post snapshots.
+- **Skill views** (#141). A snapshot may carry `skills`: the `quench skills --json` records
+  (names, counts, hashes; no history text), each with `versions` cut at the ledger's `appliedAt`
+  intervals. Per interval, sessions on that harness that loaded the skill from that folder are
+  counted next to sessions that did not load it at all. The grid shows desired (the machine's
+  bundle) against installed tree hashes, last seen and conflicts, plus per-skill counts. A card
+  sums one tree-hash change across the machines and harnesses that made it, and shows only when
+  both sides have 10 sessions that loaded the skill. Its diff comes from the hub repo (commits
+  whose folder tree hash matches each side); revert offers that commit through `/revert`.
 
 ## Reading at scale
 

@@ -303,15 +303,19 @@ export async function serveHub(options: ServeOptions) {
     if (path === "/") {
       const head = await hub.head();
       const { fleet, warnings } = await hub.fleetAt(head);
+      const machines = hub.store
+        .machines()
+        .map((m) => ({ ...m, state: hub.store.machineState(m.name) }));
+      const names = [...new Set([...machines.map((m) => m.name), ...Object.keys(fleet.machines)])];
       return dashboard({
         head,
         fleet,
         warnings,
-        machines: hub.store
-          .machines()
-          .map((m) => ({ ...m, state: hub.store.machineState(m.name) })),
+        machines,
         history: await hub.repo.log(20),
         files: await hub.repo.files(head),
+        desired: await hub.desired(names, head),
+        cards: await hub.cards(fleet, machines),
       });
     }
     if (path === "/machines") {
