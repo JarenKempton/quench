@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath } from "node:fs/promises";
+import { link, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -357,6 +357,31 @@ test(
     );
     const runs = JSON.parse((await quench(home, "runs", file, "--json")).stdout);
     expect(runs[0]).toMatchObject({ promptLine: 1, agentLines: [2, 2], replyLine: 3 });
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "unscoped corrections count a transcript linked into two folders once",
+  async () => {
+    const { home, claudeFile } = await fixture();
+    const unscoped = [
+      "corrections",
+      "--days",
+      "36500",
+      "--cached-only",
+      "--json",
+      "--no-host-history",
+    ];
+    const before = JSON.parse((await quench(home, ...unscoped)).stdout);
+    await mkdir(join(home, ".claude/projects/elsewhere"), { recursive: true });
+    const linked = join(home, ".claude/projects/elsewhere/aaaa1111.jsonl");
+    await link(claudeFile, linked);
+    const after = JSON.parse((await quench(home, ...unscoped)).stdout);
+    expect(after.fromPeople).toEqual(before.fromPeople);
+    expect(after.fromAutomation).toEqual(before.fromAutomation);
+    const scoped = await quench(home, "corrections", claudeFile, linked, "--cached-only", "--json");
+    expect(JSON.parse(scoped.stdout).summary.sessionsRead).toBe(2);
   },
   cliRunsTimeout,
 );

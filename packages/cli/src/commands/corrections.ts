@@ -97,7 +97,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const since = new Date(Date.now() - options.days * 86_400_000);
   try {
     const refs = scoped?.refs ?? (await discoverAll(home, since));
-    sessions = await sessionRuns(refs, home.dir, host?.enrich, contexts);
+    sessions = await sessionRuns(refs, home.dir, host?.enrich, contexts, scoped !== null);
   } finally {
     host?.close();
   }

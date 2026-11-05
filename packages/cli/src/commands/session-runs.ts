@@ -9,6 +9,7 @@ export async function sessionRuns(
   homeDir: string,
   enrich?: SessionEnricher,
   contexts?: Map<string, SessionContext>,
+  byPath = false,
 ): Promise<SessionRuns[]> {
   const parents = new Map<string, SessionRuns>();
   const childStarts = new Map<string, (Date | null)[]>();
@@ -20,7 +21,7 @@ export async function sessionRuns(
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
       contexts?.set(`${s.harness}:${s.id}`, contextOf(s, homeDir));
-      parents.set(s.path, {
+      parents.set(byPath ? s.path : `${s.harness}:${s.id}`, {
         id: s.id,
         path: s.path,
         harness: s.harness,
