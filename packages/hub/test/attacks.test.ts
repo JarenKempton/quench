@@ -560,3 +560,40 @@ test("a blob request paused across revoke returns no bytes", async () => {
   expect(response.status).toBe(401);
   expect(await response.text()).not.toContain("commit");
 });
+
+test("preview, commits, revert and import write nothing outside the hub's data folder", async () => {
+  const outside = temp("system-tmp");
+  const previous = process.env.TMPDIR;
+  const data = join(temp("data"), "hub");
+  const source = await skillsSource();
+  const { chmodSync, readdirSync, statSync } = await import("node:fs");
+  if (process.platform !== "win32") chmodSync(outside, 0o500);
+  try {
+    process.env.TMPDIR = outside;
+    process.env.TEMP = outside;
+    process.env.TMP = outside;
+    await importInto(data, source);
+    const hub = await startHub(data);
+    running.push(hub);
+    const owner = new Owner(hub.url, hub.cert);
+    await owner.login();
+    const base = await hub.hub.head();
+    const preview = await owner.post("/edit", {
+      path: "notes.txt",
+      base,
+      content: "scratch\n",
+      action: "preview",
+    });
+    expect(await preview.text()).toContain("+scratch");
+    await owner.post("/toggle", { base, skill: "commit-style", machine: "laptop", on: "0" });
+    const toggled = await hub.hub.head();
+    expect(toggled).not.toBe(base);
+    expect((await owner.post("/revert", { base: toggled, commit: toggled })).status).toBe(303);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(readdirSync(join(data, "tmp"))).toEqual([]);
+    if (process.platform !== "win32") expect(statSync(join(data, "tmp")).mode & 0o777).toBe(0o700);
+  } finally {
+    for (const name of ["TMPDIR", "TEMP", "TMP"]) process.env[name] = previous;
+    chmodSync(outside, 0o700);
+  }
+});

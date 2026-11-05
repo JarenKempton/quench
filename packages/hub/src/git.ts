@@ -1,7 +1,6 @@
 import { chmod, lstat, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { excluded, foldCollision, insideFolder } from "@quench/fleet";
-import { tmpdir } from "node:os";
 
 export const BRANCH = "refs/heads/main";
 
@@ -113,6 +112,15 @@ export class Repo {
     return { stdout, text: new TextDecoder().decode(stdout).trim(), code };
   }
 
+  async scratch(prefix: string) {
+    const root = join(dirname(this.dir), "tmp");
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    await chmod(root, 0o700);
+    const dir = await mkdtemp(join(root, prefix));
+    await chmod(dir, 0o700);
+    return dir;
+  }
+
   exists() {
     return Bun.file(join(this.dir, "HEAD")).exists();
   }
@@ -175,7 +183,7 @@ export class Repo {
   }
 
   async diff(before: string | null, after: string, path: string) {
-    const dir = await mkdtemp(join(tmpdir(), "quench-hub-diff-"));
+    const dir = await this.scratch("diff-");
     try {
       await writeFile(join(dir, "a"), before ?? "");
       await writeFile(join(dir, "b"), after);
@@ -201,7 +209,7 @@ export class Repo {
   }
 
   private async withIndex<T>(run: (env: Record<string, string>) => Promise<T>) {
-    const dir = await mkdtemp(join(tmpdir(), "quench-hub-index-"));
+    const dir = await this.scratch("index-");
     try {
       return await run({ GIT_INDEX_FILE: join(dir, "index") });
     } finally {

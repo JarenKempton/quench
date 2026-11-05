@@ -1,5 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, readlink, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   BundleManifest,
@@ -201,7 +200,7 @@ export async function importInto(dataDir: string, source: string) {
     throw new Error(`${dataDir} already has a skills repo; import into a new hub data folder`);
   await mkdir(dataDir, { recursive: true });
   await repo.init();
-  const scratch = await mkdtemp(join(tmpdir(), "quench-hub-import-"));
+  const scratch = await repo.scratch("import-");
   try {
     const head = await repo.fetchHead(source);
     const tree = join(scratch, "tree");
