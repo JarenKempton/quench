@@ -155,6 +155,8 @@ const followUpOf = (segment: Run, before: FollowUp): FollowUp => ({
 
 export function splitRuns(session: Session, turns: boolean): Run[] {
   const segments: Run[] = [emptyRun()];
+  const saidLine = new Map<Run, number | undefined>();
+  const inherited = new Set<Run>();
   let run = segments[0] as Run;
   const byId = new Map<string, ToolCall>();
   const recorded = new Map<string, Extract<Event, { type: "tool_call" }>>();
@@ -188,9 +190,10 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
           run.steering.push(event.text);
         } else if (event.author === "user") {
           run.replyAt = event.at;
+          const before = run;
           run = {
             ...emptyRun(),
-            assistantSaid: event.queued ? run.assistantSaid : null,
+            assistantSaid: event.queued ? before.assistantSaid : null,
             prompt: event.text,
             promptLine: event.line ?? null,
             promptOrigin: event.origin,
@@ -198,12 +201,18 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
             startedAt: event.at,
           };
           segments.push(run);
+          if (event.queued && before.assistantSaid !== null) {
+            saidLine.set(run, saidLine.get(before));
+            inherited.add(run);
+          }
           if (turns) {
             byId.clear();
             recorded.clear();
           }
         } else if (event.author === "assistant") {
           run.assistantSaid = event.text;
+          saidLine.set(run, event.line);
+          inherited.delete(run);
           if (event.text.trim()) run.outcome = event.text;
         }
         break;
@@ -285,6 +294,8 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
     run.endedAt = event.at ?? run.endedAt;
   }
   segments.forEach((segment, i) => {
+    const from = inherited.has(segment) ? saidLine.get(segment) : undefined;
+    if (from !== undefined) segment.agentLines = [from, segment.agentLines?.[1] ?? from];
     const next = segments[i + 1];
     segment.reply = next?.prompt ?? null;
     segment.replyLine = next?.promptLine ?? null;

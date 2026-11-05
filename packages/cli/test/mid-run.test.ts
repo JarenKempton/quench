@@ -486,3 +486,14 @@ test(
   },
   cliRunsTimeout,
 );
+
+test(
+  "a run that inherits agent text across a queued prompt starts its agent lines at that text",
+  async () => {
+    const { report } = await session(onMain.toolOnly!.records, [["working", "fix b"]]);
+    expect(report.corrections.map((c: Correction) => c.locator)).toEqual([
+      { promptLine: 3, agentLines: [2, 5], replyLine: 6 },
+    ]);
+  },
+  cliRunsTimeout,
+);
