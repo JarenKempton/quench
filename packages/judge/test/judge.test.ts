@@ -60,6 +60,25 @@ test("a truncated last line does not swallow the next verdict", async () => {
   expect((await VerdictCache.open(dir, "judge/a")).size).toBe(2);
 });
 
+test("verdicts an older version appends to a shared file after migration are merged in once", async () => {
+  const dir = await cachePath();
+  const shared = join(dir, "judgments.jsonl");
+  await Bun.write(shared, "");
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("one"), verdict]]);
+  const elsewhere = await VerdictCache.open(await cachePath(), "judge/a");
+  await elsewhere.remember([[exchange("late"), verdict]]);
+  await appendFile(shared, await Bun.file(elsewhere.path).text());
+  const before = await Bun.file(shared).text();
+
+  const merged = await VerdictCache.open(dir, "judge/a");
+  expect(merged.get(exchange("late"))).toEqual(verdict);
+  expect(merged.get(exchange("one"))).toEqual(verdict);
+  await VerdictCache.open(dir, "judge/a");
+  expect((await Bun.file(merged.path).text()).trim().split("\n")).toHaveLength(2);
+  expect(await VerdictCache.open(dir, "judge/a", true).then((c) => c.size)).toBe(2);
+  expect(await Bun.file(shared).text()).toBe(before);
+});
+
 test("concurrent first opens migrate once and keep every append", async () => {
   const dir = await cachePath();
   const line = (n: number) => `${JSON.stringify({ judge: "judge/a", key: `k${n}`, verdict })}\n`;

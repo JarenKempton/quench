@@ -25,12 +25,13 @@ export class VerdictCache {
 
   static async open(dir: string, judge: string, readOnly = false): Promise<VerdictCache> {
     const path = join(dir, "judgments", fileName(judge));
-    const own = await Bun.file(path).exists();
-    const legacy = own ? [] : await sharedFiles(dir);
-    const cache = new VerdictCache(path, judge, await read(own ? [path] : legacy, judge), readOnly);
-    if (!readOnly && legacy.length && !(await cache.create())) {
-      return new VerdictCache(path, judge, await read([path], judge), readOnly);
-    }
+    const legacy = await read(await sharedFiles(dir), judge);
+    const own = (await Bun.file(path).exists()) ? await read([path], judge) : null;
+    const missing = [...legacy].filter(([key]) => !own?.has(key));
+    const cache = new VerdictCache(path, judge, new Map([...legacy, ...(own ?? [])]), readOnly);
+    if (readOnly || missing.length === 0) return cache;
+    if (own === null) return (await cache.create()) ? cache : VerdictCache.open(dir, judge);
+    await cache.append(missing.map(([key, v]) => cache.line(key, v)));
     return cache;
   }
 
@@ -50,6 +51,10 @@ export class VerdictCache {
       this.known.set(key, verdict);
       return this.line(key, verdict);
     });
+    await this.append(lines);
+  }
+
+  private async append(lines: string[]): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true });
     const size = await stat(this.path).then(
       (s) => s.size,
