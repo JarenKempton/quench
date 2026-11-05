@@ -77,6 +77,9 @@ history.
 | `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
 | `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
 | `quench skills plan --source <dir>`            | What a skills checkout would change here, with `--machine <name> --json`; read-only   |
+| `quench skills apply --plan <hash>`            | Copies the planned skill folders; foreign or edited folders are left as conflicts     |
+| `quench skills status`                         | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift   |
+| `quench agent install\|uninstall\|run`         | A user service that keeps applying `--source` every `--interval`; never self-updates  |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message

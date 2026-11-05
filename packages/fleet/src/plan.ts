@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { foldKey, own, HarnessId, MachineName, Remote, SkillName, TreeHash } from "./common.ts";
+import {
+  foldKey,
+  own,
+  HarnessId,
+  MachineName,
+  Remote,
+  Sha256,
+  SkillName,
+  TreeHash,
+} from "./common.ts";
+import { sha256 } from "./tree-hash.ts";
 import type { BundleManifest } from "./bundle.ts";
 import { cmp } from "./fleet.ts";
 import { owned, type LedgerEntry } from "./ledger.ts";
@@ -54,9 +64,18 @@ export const Plan = z
     items: z.array(PlanItem),
     counts: z.record(PlanAction, z.number().int().nonnegative()),
     warnings: z.array(z.string()),
+    hash: Sha256.optional(),
   })
   .strict();
 export type Plan = z.infer<typeof Plan>;
+
+export const planHash = ({ hash: _, ...rest }: Plan) => sha256(JSON.stringify(rest));
+
+export type ProjectCheckout = {
+  remote: string;
+  checkout: string;
+  roots: Record<HarnessId, string>;
+};
 
 export type PlanInput = {
   bundle: BundleManifest;
@@ -64,7 +83,12 @@ export type PlanInput = {
   installed: Record<string, InstalledState | undefined>;
   ledger: LedgerEntry[];
   warnings: string[];
+  projects?: ProjectCheckout[];
+  linkedRoots?: string[];
 };
+
+const FOREIGN_LINK =
+  "managed by another writer: a symlink Quench did not create; remove it to hand the folder to Quench";
 
 const where = (item: PlanItem) =>
   item.location.scope === "project" ? `\0${item.location.remote}` : (item.path ?? "");
@@ -77,45 +101,94 @@ export const executablesOf = (bundle: BundleManifest, skill: string) =>
 
 export const targetPath = (root: string, skill: string) => `${root}/${skill}`;
 
-export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput): Plan {
+export function plan({
+  bundle,
+  roots,
+  installed,
+  ledger,
+  warnings,
+  projects = [],
+  linkedRoots = [],
+}: PlanInput): Plan {
   const mine = owned(ledger);
   const items: PlanItem[] = [];
   const wanted = new Set<string>();
-  for (const p of bundle.placements) {
-    if (p.scope.kind === "project") {
-      items.push({
-        skill: p.skill,
-        harness: p.harness,
-        location: { scope: "project", remote: p.scope.remote, checkout: null },
-        path: null,
-        desired: p.treeHash,
-        installed: null,
-        action: "unresolved",
-        reason: "project checkouts are not resolved yet",
-      });
-      continue;
-    }
-    const path = targetPath(roots[p.harness], p.skill);
+  const linked = (path: string) => linkedRoots.some((root) => path.startsWith(`${root}/`));
+  const checkouts = new Set(projects.map((p) => p.checkout));
+  const placed = (
+    skill: string,
+    harness: HarnessId,
+    location: PlanItem["location"],
+    path: string,
+    desired: string,
+  ): PlanItem => {
     wanted.add(path);
     const now = own(installed, path) ?? null;
     const ours = mine.get(path);
-    const action: PlanAction = !now
-      ? "install"
-      : sameState(now, p.treeHash, executablesOf(bundle, p.skill))
-        ? "unchanged"
-        : ours && sameState(now, ours.treeHash, ours.executables)
-          ? "update"
-          : "conflict";
-    items.push({
-      skill: p.skill,
-      harness: p.harness,
-      location: { scope: "global" },
+    const action: PlanAction =
+      linked(path) || now?.symlink
+        ? "conflict"
+        : !now
+          ? "install"
+          : sameState(now, desired, executablesOf(bundle, skill))
+            ? "unchanged"
+            : ours && sameState(now, ours.treeHash, ours.executables)
+              ? "update"
+              : "conflict";
+    return {
+      skill,
+      harness,
+      location,
       path,
-      desired: p.treeHash,
+      desired,
       installed: shown(now),
       action,
-      reason: action === "conflict" ? "installed folder differs and Quench did not write it" : null,
-    });
+      reason:
+        action !== "conflict"
+          ? null
+          : linked(path) || now?.symlink
+            ? FOREIGN_LINK
+            : ours
+              ? "edited since Quench wrote it"
+              : "installed folder differs and Quench did not write it",
+    };
+  };
+  for (const p of bundle.placements) {
+    if (p.scope.kind === "project") {
+      const remote = p.scope.remote;
+      const matching = projects.filter((c) => c.remote === remote);
+      for (const c of matching)
+        items.push(
+          placed(
+            p.skill,
+            p.harness,
+            { scope: "project", remote, checkout: c.checkout },
+            targetPath(c.roots[p.harness], p.skill),
+            p.treeHash,
+          ),
+        );
+      if (!matching.length)
+        items.push({
+          skill: p.skill,
+          harness: p.harness,
+          location: { scope: "project", remote, checkout: null },
+          path: null,
+          desired: p.treeHash,
+          installed: null,
+          action: "unresolved",
+          reason: "project checkouts are not resolved yet",
+        });
+      continue;
+    }
+    items.push(
+      placed(
+        p.skill,
+        p.harness,
+        { scope: "global" },
+        targetPath(roots[p.harness], p.skill),
+        p.treeHash,
+      ),
+    );
   }
   for (const u of bundle.unavailable) {
     const path = u.scope.kind === "global" ? targetPath(roots[u.harness], u.skill) : null;
@@ -135,14 +208,17 @@ export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput):
     });
   }
   for (const [path, entry] of mine) {
-    if (wanted.has(path) || entry.location.scope !== "global") continue;
+    if (wanted.has(path)) continue;
+    if (entry.location.scope !== "global" && !checkouts.has(entry.location.checkout)) continue;
     const now = own(installed, path) ?? null;
     const action =
-      !now || sameState(now, entry.treeHash, entry.executables) ? "remove" : "conflict";
+      !now || (!now.symlink && sameState(now, entry.treeHash, entry.executables))
+        ? "remove"
+        : "conflict";
     items.push({
       skill: entry.skill,
       harness: entry.harness,
-      location: { scope: "global" },
+      location: entry.location,
       path,
       desired: null,
       installed: shown(now),
@@ -169,11 +245,12 @@ export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput):
   const counts = Object.fromEntries(
     PlanAction.options.map((a) => [a, items.filter((i) => i.action === a).length]),
   );
-  return {
+  const result: Plan = {
     version: 1,
     machine: bundle.machine,
     items,
     counts: counts as Plan["counts"],
     warnings,
   };
+  return { ...result, hash: planHash(result) };
 }

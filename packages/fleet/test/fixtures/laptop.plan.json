@@ -80,5 +80,6 @@
   },
   "warnings": [
     "hosts/editor-default.manifest: no supported harness, skipped"
-  ]
+  ],
+  "hash": "c3e5dfc03f702b14114880ad1db6afa86a8ea8aac6f0fdc335b5b3f99fc272bf"
 }
