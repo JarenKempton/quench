@@ -183,6 +183,7 @@ type RunJson = {
   replySender: string;
   replySenderSource: string;
   followUps: {
+    agentLines?: [number, number] | null;
     replyAt: string | null;
     replyLine: number | null;
     replySender: string;
@@ -322,6 +323,7 @@ test(
     const [run] = JSON.parse(out.stdout) as RunJson[];
     expect(run!.followUps).toEqual([
       {
+        agentLines: [2, 2],
         replyAt: at(3),
         replyLine: 4,
         replySender: "unknown",
@@ -382,6 +384,105 @@ test(
       ]),
     ).toEqual([[1, 5, true]]);
     expect(out.stderr).toContain("1 replies in scope are not classified yet");
+  },
+  cliRunsTimeout,
+);
+
+const slash = (second: number) =>
+  user(second, "<command-name>/review</command-name>\n<command-args>now</command-args>", {});
+
+const onMain: Record<string, { records: object[]; judged: [string, string, number][] }> = {
+  streamed: {
+    records: [
+      user(0, "go"),
+      said("m1", 1, "working"),
+      queued(2, "steer", "q1"),
+      said("m1", 3, "done"),
+      user(4, "fix a"),
+    ],
+    judged: [["done", "fix a", 5]],
+  },
+  toolOnly: {
+    records: [
+      user(0, "go"),
+      said("m1", 1, "working"),
+      queued(2, "steer", "q1"),
+      tool("m2", 3),
+      result("m2", 4),
+      user(5, "fix b"),
+    ],
+    judged: [["working", "fix b", 6]],
+  },
+  slashCommand: {
+    records: [
+      user(0, "go"),
+      said("m1", 1, "done"),
+      slash(2),
+      user(3, "fix c"),
+      said("m2", 4, "ok"),
+      user(5, "fix d"),
+    ],
+    judged: [["ok", "fix d", 6]],
+  },
+  delivered: {
+    records: [
+      user(0, "go"),
+      tool("m1", 1),
+      result("m1", 2),
+      queued(1, "next", "q2"),
+      user(3, "next"),
+      said("m2", 4, "ok"),
+      user(5, "fix e"),
+    ],
+    judged: [
+      ["", "next", 5],
+      ["ok", "fix e", 7],
+    ],
+  },
+  midRunLine: {
+    records: [
+      user(0, "go"),
+      said("m1", 1, "looking"),
+      tool("m2", 2),
+      result("m2", 3),
+      user(4, "fix f"),
+      said("m3", 5, "ok"),
+      user(6, "fix g"),
+    ],
+    judged: [
+      ["looking", "fix f", 5],
+      ["ok", "fix g", 7],
+    ],
+  },
+};
+
+test(
+  "every reply main judged hits the verdict main cached for it",
+  async () => {
+    for (const [name, { records, judged }] of Object.entries(onMain)) {
+      const { report } = await session(
+        records,
+        judged.map(([assistantSaid, reply]) => [assistantSaid, reply]),
+      );
+      const hits = (report.corrections as (Correction & { cached: boolean })[])
+        .filter((c) => c.cached)
+        .map((c) => c.locator.replyLine);
+      expect([name, judged.map(([, , line]) => line).filter((l) => !hits.includes(l))]).toEqual([
+        name,
+        [],
+      ]);
+    }
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "a follow-up's agent lines span the agent's work before it",
+  async () => {
+    const { report } = await session(onMain.streamed!.records, [["done", "fix a"]]);
+    expect(report.corrections.map((c: Correction) => c.locator)).toEqual([
+      { promptLine: 1, agentLines: [2, 4], replyLine: 5 },
+    ]);
   },
   cliRunsTimeout,
 );

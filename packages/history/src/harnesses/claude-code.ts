@@ -518,6 +518,7 @@ function queuedPrompt(raw: unknown): EventKind[] {
       author: injected ? "injected" : "user",
       origin: a.origin?.kind === "human" ? "typed" : "unknown",
       text: a.prompt,
+      queued: true,
     },
   ];
 }

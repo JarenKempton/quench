@@ -72,6 +72,7 @@ export async function runs(
           ...prompted(run),
           ...replied(run),
           followUps: run.followUps.map((f) => ({
+            agentLines: f.agentLines,
             replyAt: f.replyAt,
             replyLine: f.replyLine,
             ...replied(f),
