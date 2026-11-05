@@ -9,9 +9,7 @@ import {
   plan,
   proposal,
   ProposalSubmission,
-  replaces,
   resolve,
-  Snapshot,
   treeHash,
   type BundleManifest,
   type LedgerEntry,
@@ -27,7 +25,7 @@ const file = (path: string, content: string, mode: TreeEntry["mode"] = "100644")
 });
 const H = (n: number) => `sha256:${String(n).repeat(64).slice(0, 64)}`;
 
-test("the tree hash spec is frozen: mode, path, NUL, content sha256, newline; sorted by UTF-8 bytes", () => {
+test("the tree hash spec is frozen: hash mode, path, NUL, content sha256, newline; sorted by UTF-8 bytes", () => {
   const entries = [
     file("b.md", "b"),
     file("SKILL.md", "x"),
@@ -37,7 +35,7 @@ test("the tree hash spec is frozen: mode, path, NUL, content sha256, newline; so
     `${mode} ${path}\0${new Bun.CryptoHasher("sha256").update(content).digest("hex")}\n`;
   const spec =
     line("100644", "SKILL.md", "x") +
-    line("100755", "a/c.sh", "#!/bin/sh\n") +
+    line("100644", "a/c.sh", "#!/bin/sh\n") +
     line("100644", "b.md", "b");
   expect(treeHash(entries)).toBe(
     `sha256:${new Bun.CryptoHasher("sha256").update(spec).digest("hex")}`,
@@ -45,9 +43,8 @@ test("the tree hash spec is frozen: mode, path, NUL, content sha256, newline; so
   expect(treeHash([...entries].reverse())).toBe(treeHash(entries));
 });
 
-test("the tree hash covers modes and symlinks, normalises separators and Unicode, and skips exclusions", () => {
+test("the tree hash tells symlinks from files, normalises path separators and Unicode, and skips exclusions", () => {
   const base = [file("SKILL.md", "x")];
-  expect(treeHash([file("SKILL.md", "x", "100755")])).not.toBe(treeHash(base));
   expect(treeHash([file("SKILL.md", "x", "120000")])).not.toBe(treeHash(base));
   expect(
     treeHash([...base, file(".git/HEAD", "ref"), file("a/.DS_Store", ""), file("Thumbs.db", "")]),
@@ -116,9 +113,13 @@ test("the most specific target wins, and exclude wins a tie", () => {
     ],
     { box: { tags: ["work"], person: "sam" }, other: { tags: ["work"] } },
   );
-  expect(resolve(f, "box").map((p) => p.harness)).toEqual(["claude-code", "codex"]);
-  expect(resolve(f, "other").map((p) => p.harness)).toEqual(["claude-code", "pi"]);
-  expect(resolve(f, "unknown").map((p) => p.harness)).toEqual(["claude-code", "codex", "pi"]);
+  expect(resolve(f, "box").placements.map((p) => p.harness)).toEqual(["claude-code", "codex"]);
+  expect(resolve(f, "other").placements.map((p) => p.harness)).toEqual(["claude-code", "pi"]);
+  expect(resolve(f, "unknown").placements.map((p) => p.harness)).toEqual([
+    "claude-code",
+    "codex",
+    "pi",
+  ]);
 });
 
 test("project scope keys on a normalised remote, and the fleet file rejects unknown skills and escaping paths", () => {
@@ -135,7 +136,7 @@ test("project scope keys on a normalised remote, and the fleet file rejects unkn
       mode: "include",
     },
   ]);
-  expect(resolve(f, "box")).toEqual([
+  expect(resolve(f, "box").placements).toEqual([
     { skill: "a", harness: "pi", scope: { kind: "project", remote } },
   ]);
   expect(() =>
@@ -174,12 +175,13 @@ test("the planner updates only what the ledger owns and never overwrites foreign
     version: 1,
     machine: "box",
     revision: null,
-    skills: { [H(2)]: { name: "a", files: [] } },
+    skills: { a: { treeHash: H(2), files: [] } },
     placements: [
       { skill: "a", treeHash: H(2), harness: "claude-code", scope: { kind: "global" } },
       { skill: "a", treeHash: H(2), harness: "codex", scope: { kind: "global" } },
       { skill: "a", treeHash: H(2), harness: "pi", scope: { kind: "project", remote } },
     ],
+    unavailable: [],
   };
   const roots = {
     "claude-code": "~/.claude/skills",
@@ -214,24 +216,6 @@ test("the planner updates only what the ledger owns and never overwrites foreign
     warnings: [],
   });
   expect(edited.items.find((i) => i.path === "~/.claude/skills/old")?.action).toBe("conflict");
-});
-
-test("a snapshot replaces the last only when newer and complete for every harness", () => {
-  const snap = (generation: number, complete: boolean) =>
-    Snapshot.parse({
-      version: 1,
-      id: crypto.randomUUID(),
-      generation,
-      takenAt: "2026-11-05T00:00:00Z",
-      revision: null,
-      harnesses: {
-        "claude-code": { complete: true, installs: [], conflicts: 0 },
-        codex: { complete, installs: [], conflicts: 0 },
-      },
-    });
-  expect(replaces(snap(2, true), snap(1, true))).toBe(true);
-  expect(replaces(snap(2, false), snap(1, true))).toBe(false);
-  expect(replaces(snap(1, true), snap(1, true))).toBe(false);
 });
 
 test("a proposal takes its machine from the token, never the payload, and labels agent fields as claims", () => {

@@ -31,14 +31,14 @@ export function importSkillsRepo(repo: SkillsRepo): { fleet: FleetFile; warnings
   const skills: FleetFile["skills"] = {};
   const byPath = new Map<string, string>();
   for (const [name, entry] of Object.entries(registry.skills)) {
-    skills[name] = { path: entry.path, labels: entry.scope ? [entry.scope] : [] };
+    skills[name] = { path: entry.path, ...(entry.scope ? { scope: entry.scope } : {}) };
     byPath.set(entry.path, name);
   }
   const skillOf = (ref: string) => {
     const name = byPath.get(ref) ?? (skills[leaf(ref)] ? leaf(ref) : null);
     if (name) return name;
     if (!ref.includes("/")) return null;
-    skills[leaf(ref)] = { path: ref, labels: [] };
+    skills[leaf(ref)] = { path: ref };
     byPath.set(ref, leaf(ref));
     warnings.push(`${ref}: not in registry.yaml, imported as ${leaf(ref)}`);
     return leaf(ref);
@@ -71,28 +71,34 @@ export function importSkillsRepo(repo: SkillsRepo): { fleet: FleetFile; warnings
 
   const machines: FleetFile["machines"] = {};
   for (const [machine, hosts] of Object.entries(repo.overrides)) {
-    machines[machine] = { tags: [] };
+    machines[machine] = { tags: [], scopes: [] };
     for (const [host, text] of Object.entries(hosts)) {
       const harness = HOSTS[host.split("-")[0] ?? ""];
       if (!harness) {
         warnings.push(`hosts/overrides/${machine}/${host}.manifest: no supported harness, skipped`);
         continue;
       }
+      const base = new Set([...global].filter(([, h]) => h.includes(harness)).map(([s]) => s));
+      const final = new Set(base);
       for (const line of lines(text)) {
-        const mode = line[0] === "+" ? "include" : line[0] === "-" ? "exclude" : null;
-        const skill = mode && skillOf(line.slice(1).trim());
-        if (!mode || !skill) {
+        const sign = line[0];
+        const skill = (sign === "+" || sign === "-") && skillOf(line.slice(1).trim());
+        if (!skill) {
           warnings.push(`hosts/overrides/${machine}/${host}.manifest: ignored "${line}"`);
           continue;
         }
-        assignments.push({
-          skill,
-          target: { kind: "machine", machine },
-          scope: { kind: "global" },
-          harnesses: [harness],
-          mode,
-        });
+        if (sign === "+") final.add(skill);
+        else final.delete(skill);
       }
+      for (const skill of new Set([...base, ...final]))
+        if (base.has(skill) !== final.has(skill))
+          assignments.push({
+            skill,
+            target: { kind: "machine", machine },
+            scope: { kind: "global" },
+            harnesses: [harness],
+            mode: final.has(skill) ? "include" : "exclude",
+          });
     }
   }
 
@@ -102,6 +108,9 @@ export function importSkillsRepo(repo: SkillsRepo): { fleet: FleetFile; warnings
   return {
     fleet: FleetFile.parse({
       version: 1,
+      openScopes: [
+        ...new Set(Object.values(skills).flatMap((s) => (s.scope ? [s.scope] : []))),
+      ].sort(cmp),
       skills: sortedSkills,
       machines: sortedMachines,
       assignments,

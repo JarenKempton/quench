@@ -31,6 +31,31 @@ export const Snapshot = z
   .strict();
 export type Snapshot = z.infer<typeof Snapshot>;
 
-export const replaces = (next: Snapshot, previous: Snapshot | null) =>
-  (previous === null || next.generation > previous.generation) &&
-  Object.values(next.harnesses).every((h) => h.complete);
+export const HarnessState = z
+  .object({
+    snapshot: HarnessSnapshot,
+    generation: z.number().int().nonnegative(),
+    stale: z.boolean(),
+  })
+  .strict();
+
+export const MachineState = z
+  .object({
+    generation: z.number().int().nonnegative(),
+    harnesses: z.partialRecord(HarnessId, HarnessState),
+  })
+  .strict();
+export type MachineState = z.infer<typeof MachineState>;
+
+export function mergeSnapshot(previous: MachineState | null, next: Snapshot): MachineState {
+  if (previous && next.generation <= previous.generation) return previous;
+  const harnesses: MachineState["harnesses"] = {};
+  for (const harness of HarnessId.options) {
+    const fresh = next.harnesses[harness];
+    const kept = previous?.harnesses[harness];
+    if (fresh?.complete)
+      harnesses[harness] = { snapshot: fresh, generation: next.generation, stale: false };
+    else if (kept) harnesses[harness] = { ...kept, stale: true };
+  }
+  return { generation: next.generation, harnesses };
+}

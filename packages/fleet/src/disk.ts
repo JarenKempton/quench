@@ -28,7 +28,7 @@ export async function readTree(dir: string): Promise<TreeEntry[]> {
         entries.push({
           path,
           mode: "120000",
-          bytes: new TextEncoder().encode(canonicalPath(await readlink(full))),
+          bytes: await readlink(full, { encoding: "buffer" }),
         });
       else if (info.isFile())
         entries.push({
@@ -87,33 +87,40 @@ export async function buildBundle(
   revision: string | null = null,
 ) {
   const warnings: string[] = [];
-  const bundle: BundleManifest = { version: 1, machine, revision, skills: {}, placements: [] };
-  const hashes = new Map<string, string | null>();
-  for (const placement of resolve(fleet, machine).sort(byPlacement)) {
-    if (!hashes.has(placement.skill)) {
-      const path = join(dir, ...fleet.skills[placement.skill]!.path.split("/"));
-      const tree = await readTree(path).catch(() => null);
-      if (!tree?.some((e) => e.path === "SKILL.md")) {
-        warnings.push(
-          `${placement.skill}: no SKILL.md at ${fleet.skills[placement.skill]!.path}, skipped`,
-        );
-        hashes.set(placement.skill, null);
-        continue;
-      }
-      const hash = treeHash(tree);
-      hashes.set(placement.skill, hash);
-      bundle.skills[hash] = {
-        name: placement.skill,
-        files: tree.map((e) => ({
-          path: e.path,
-          mode: e.mode,
-          size: e.bytes.length,
-          sha256: sha256(e.bytes),
-        })),
-      };
+  const bundle: BundleManifest = {
+    version: 1,
+    machine,
+    revision,
+    skills: {},
+    placements: [],
+    unavailable: [],
+  };
+  const { placements, denied } = resolve(fleet, machine);
+  for (const d of denied) warnings.push(`${d.skill} (${d.harness}): ${d.reason}`);
+  const failures = new Map<string, string>();
+  for (const placement of placements.sort(byPlacement)) {
+    const source = fleet.skills[placement.skill]!.path;
+    if (!bundle.skills[placement.skill] && !failures.has(placement.skill)) {
+      const tree = await readTree(join(dir, ...source.split("/"))).then(
+        (t) => (t.some((e) => e.path === "SKILL.md") ? t : `no SKILL.md at ${source}`),
+        (error: Error) => `cannot read ${source}: ${error.message.split(",")[0]}`,
+      );
+      if (typeof tree === "string") failures.set(placement.skill, tree);
+      else
+        bundle.skills[placement.skill] = {
+          treeHash: treeHash(tree),
+          files: tree.map((e) => ({
+            path: e.path,
+            mode: e.mode,
+            size: e.bytes.length,
+            sha256: sha256(e.bytes),
+          })),
+        };
     }
-    const hash = hashes.get(placement.skill);
-    if (hash) bundle.placements.push({ ...placement, treeHash: hash });
+    const failure = failures.get(placement.skill);
+    const skill = bundle.skills[placement.skill];
+    if (failure) bundle.unavailable.push({ ...placement, reason: failure });
+    else if (skill) bundle.placements.push({ ...placement, treeHash: skill.treeHash });
   }
   return { bundle, warnings };
 }

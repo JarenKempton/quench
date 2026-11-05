@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HARNESSES, HarnessId, MachineName, Scope, SkillName } from "./common.ts";
+import { HARNESSES, HarnessId, MachineName, RelativePath, Scope, SkillName } from "./common.ts";
 
 export const Target = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all") }).strict(),
@@ -22,24 +22,24 @@ export type Assignment = z.infer<typeof Assignment>;
 
 export const FleetSkill = z
   .object({
-    path: z
-      .string()
-      .min(1)
-      .refine((p) => !p.startsWith("/") && !p.includes("\\") && !p.split("/").includes(".."), {
-        message: "path must be repo-relative with forward slashes",
-      }),
-    labels: z.array(z.string().min(1)).default([]),
+    path: RelativePath,
+    scope: z.string().min(1).optional(),
   })
   .strict();
 
 export const FleetMachine = z
-  .object({ tags: z.array(z.string().min(1)).default([]), person: z.string().min(1).optional() })
+  .object({
+    tags: z.array(z.string().min(1)).default([]),
+    person: z.string().min(1).optional(),
+    scopes: z.array(z.string().min(1)).default([]),
+  })
   .strict();
 export type FleetMachine = z.infer<typeof FleetMachine>;
 
 export const FleetFile = z
   .object({
     version: z.literal(1),
+    openScopes: z.array(z.string().min(1)).default([]),
     skills: z.record(SkillName, FleetSkill),
     machines: z.record(MachineName, FleetMachine).default({}),
     assignments: z.array(Assignment).default([]),
@@ -58,6 +58,7 @@ export const FleetFile = z
 export type FleetFile = z.infer<typeof FleetFile>;
 
 export type Placement = { skill: string; harness: HarnessId; scope: Scope };
+export type Denied = Placement & { reason: string };
 
 const SPECIFICITY = { all: 0, tag: 1, person: 2, machine: 3 } as const;
 
@@ -69,7 +70,10 @@ const matches = (target: Target, name: string, machine: FleetMachine | undefined
 
 export const scopeKey = (scope: Scope) => (scope.kind === "global" ? "" : scope.remote);
 
-export function resolve(fleet: FleetFile, machineName: string): Placement[] {
+export function resolve(
+  fleet: FleetFile,
+  machineName: string,
+): { placements: Placement[]; denied: Denied[] } {
   const machine = fleet.machines[machineName];
   const winners = new Map<
     string,
@@ -90,10 +94,21 @@ export function resolve(fleet: FleetFile, machineName: string): Placement[] {
       });
     }
   }
-  return [...winners.values()]
+  const included = [...winners.values()]
     .filter((w) => w.mode === "include")
     .map((w) => w.placement)
     .sort(byPlacement);
+  const accepts = (scope: string | undefined) =>
+    !scope || fleet.openScopes.includes(scope) || !!machine?.scopes.includes(scope);
+  return {
+    placements: included.filter((p) => accepts(fleet.skills[p.skill]!.scope)),
+    denied: included
+      .filter((p) => !accepts(fleet.skills[p.skill]!.scope))
+      .map((p) => ({
+        ...p,
+        reason: `scope ${fleet.skills[p.skill]!.scope} is not accepted by ${machineName}`,
+      })),
+  };
 }
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);

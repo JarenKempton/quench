@@ -1,35 +1,33 @@
 {
   "fleet": {
     "version": 1,
+    "openScopes": [
+      "personal",
+      "portable",
+      "work"
+    ],
     "skills": {
       "commit-style": {
         "path": "skills/writing/commit-style",
-        "labels": [
-          "portable"
-        ]
+        "scope": "portable"
       },
       "deploy-notes": {
         "path": "skills/ops/deploy-notes",
-        "labels": [
-          "work"
-        ]
+        "scope": "work"
       },
       "review-checklist": {
         "path": "skills/engineering/review-checklist",
-        "labels": [
-          "portable"
-        ]
+        "scope": "portable"
       },
       "scratchpad": {
         "path": "skills/misc/scratchpad",
-        "labels": [
-          "personal"
-        ]
+        "scope": "personal"
       }
     },
     "machines": {
       "laptop": {
-        "tags": []
+        "tags": [],
+        "scopes": []
       }
     },
     "assignments": [

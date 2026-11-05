@@ -14,7 +14,8 @@
         "treeHash": "sha256:25d2b3c740f0e49e579d1964aa6668a19d9dfbce722695176ac6927dd5f06648",
         "symlink": false
       },
-      "action": "unchanged"
+      "action": "unchanged",
+      "reason": null
     },
     {
       "skill": "review-checklist",
@@ -28,7 +29,8 @@
         "treeHash": "sha256:e0fb25b086f1de1732490a20bab9c004f17b198387833b7d48d4ea1faa80363f",
         "symlink": false
       },
-      "action": "conflict"
+      "action": "conflict",
+      "reason": "installed folder differs and Quench did not write it"
     },
     {
       "skill": "scratchpad",
@@ -39,7 +41,8 @@
       "path": "~/.claude/skills/scratchpad",
       "desired": "sha256:ed4a14b7b587295e5b353fc01f80b94d5e02cc084d9293e91d0f3cf2ec0d35b5",
       "installed": null,
-      "action": "install"
+      "action": "install",
+      "reason": null
     },
     {
       "skill": "commit-style",
@@ -50,7 +53,8 @@
       "path": "~/.codex/skills/commit-style",
       "desired": "sha256:25d2b3c740f0e49e579d1964aa6668a19d9dfbce722695176ac6927dd5f06648",
       "installed": null,
-      "action": "install"
+      "action": "install",
+      "reason": null
     },
     {
       "skill": "commit-style",
@@ -61,7 +65,8 @@
       "path": "~/.pi/agent/skills/commit-style",
       "desired": "sha256:25d2b3c740f0e49e579d1964aa6668a19d9dfbce722695176ac6927dd5f06648",
       "installed": null,
-      "action": "install"
+      "action": "install",
+      "reason": null
     }
   ],
   "counts": {
@@ -70,7 +75,8 @@
     "unchanged": 1,
     "remove": 0,
     "conflict": 1,
-    "unresolved": 0
+    "unresolved": 0,
+    "unavailable": 0
   },
   "warnings": [
     "hosts/editor-default.manifest: no supported harness, skipped"

@@ -5,6 +5,9 @@ export const FileMode = z.enum(["100644", "100755", "120000"]);
 export type FileMode = z.infer<typeof FileMode>;
 
 export type TreeEntry = { path: string; mode: FileMode; bytes: Uint8Array };
+export type HashedEntry = { path: string; mode: FileMode; sha256: string };
+
+export const hashMode = (mode: FileMode) => (mode === "120000" ? "120000" : "100644");
 
 export const EXCLUDED_NAMES = [".git", ".DS_Store", "Thumbs.db"] as const;
 
@@ -30,9 +33,15 @@ export function sortedEntries(entries: TreeEntry[]): TreeEntry[] {
   return sorted;
 }
 
-export function treeHash(entries: TreeEntry[]): TreeHash {
+export const treeHash = (entries: TreeEntry[]): TreeHash =>
+  treeHashOf(
+    sortedEntries(entries).map((e) => ({ path: e.path, mode: e.mode, sha256: sha256(e.bytes) })),
+  );
+
+export function treeHashOf(entries: HashedEntry[]): TreeHash {
   const hasher = new Bun.CryptoHasher("sha256");
-  for (const entry of sortedEntries(entries))
-    hasher.update(`${entry.mode} ${entry.path}\0${sha256(entry.bytes)}\n`);
+  const sorted = [...entries].sort((a, b) => byBytes(a.path, b.path));
+  for (const entry of sorted)
+    hasher.update(`${hashMode(entry.mode)} ${entry.path}\0${entry.sha256}\n`);
   return `sha256:${hasher.digest("hex")}`;
 }

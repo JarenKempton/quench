@@ -114,9 +114,12 @@ retired with it and live in git history.
   zod schemas for the fleet file, bundle manifest, ledger, plan, snapshot and proposal, frozen
   before the hub, agent and UI are built. A skill version is its tree hash: SHA-256 over
   `<mode> <path>\0<sha256 of bytes>\n` per file, paths with `/` in NFC sorted by UTF-8 bytes,
-  modes `100644`, `100755` (never on Windows) or `120000` for a symlink, hashed by its target and
-  not followed; the skill folder itself is followed; `.git`, `.DS_Store` and `Thumbs.db` are
+  mode `120000` for a symlink, hashed by the raw bytes of its target and not followed, else
+  `100644`: the executable bit is not hashed, because Windows cannot read it, and travels only as
+  the bundle file's mode. The skill folder itself is followed; `.git`, `.DS_Store` and `Thumbs.db` are
   excluded. Plans are deterministic: no timestamps, `~/` paths, the same bytes on every OS.
+  A skill's scope is deny-by-default: it reaches a machine only when the fleet opens that scope
+  or the machine accepts it, and a denied skill is named in the plan with its reason.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

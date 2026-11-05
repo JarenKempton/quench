@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HarnessId, MachineName, Remote, SkillName, TreeHash } from "./common.ts";
+import { foldKey, HarnessId, MachineName, Remote, SkillName, TreeHash } from "./common.ts";
 import type { BundleManifest } from "./bundle.ts";
 import { cmp } from "./fleet.ts";
 import { owned, type LedgerEntry } from "./ledger.ts";
@@ -21,6 +21,7 @@ export const PlanAction = z.enum([
   "remove",
   "conflict",
   "unresolved",
+  "unavailable",
 ]);
 export type PlanAction = z.infer<typeof PlanAction>;
 
@@ -33,6 +34,7 @@ export const PlanItem = z
     desired: TreeHash.nullable(),
     installed: Installed.nullable(),
     action: PlanAction,
+    reason: z.string().nullable(),
   })
   .strict();
 export type PlanItem = z.infer<typeof PlanItem>;
@@ -75,6 +77,7 @@ export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput):
         desired: p.treeHash,
         installed: null,
         action: "unresolved",
+        reason: "project checkouts are not resolved yet",
       });
       continue;
     }
@@ -97,11 +100,30 @@ export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput):
       desired: p.treeHash,
       installed: now,
       action,
+      reason: action === "conflict" ? "installed folder differs and Quench did not write it" : null,
+    });
+  }
+  for (const u of bundle.unavailable) {
+    const path = u.scope.kind === "global" ? targetPath(roots[u.harness], u.skill) : null;
+    if (path) wanted.add(path);
+    items.push({
+      skill: u.skill,
+      harness: u.harness,
+      location:
+        u.scope.kind === "global"
+          ? { scope: "global" }
+          : { scope: "project", remote: u.scope.remote, checkout: null },
+      path,
+      desired: null,
+      installed: path ? (installed[path] ?? null) : null,
+      action: "unavailable",
+      reason: u.reason,
     });
   }
   for (const [path, entry] of mine) {
     if (wanted.has(path) || entry.location.scope !== "global") continue;
     const now = installed[path] ?? null;
+    const action = !now || now.treeHash === entry.treeHash ? "remove" : "conflict";
     items.push({
       skill: entry.skill,
       harness: entry.harness,
@@ -109,14 +131,34 @@ export function plan({ bundle, roots, installed, ledger, warnings }: PlanInput):
       path,
       desired: null,
       installed: now,
-      action: !now || now.treeHash === entry.treeHash ? "remove" : "conflict",
+      action,
+      reason: action === "conflict" ? "edited since Quench wrote it" : null,
     });
   }
+  const byFold = new Map<string, PlanItem[]>();
+  for (const item of items)
+    if (item.path)
+      byFold.set(foldKey(item.path), [...(byFold.get(foldKey(item.path)) ?? []), item]);
+  for (const group of byFold.values())
+    if (new Set(group.map((i) => i.path)).size > 1)
+      for (const item of group) {
+        item.action = "conflict";
+        item.reason = `folder collides with ${group
+          .filter((other) => other.path !== item.path)
+          .map((other) => other.path)
+          .join(", ")} on case- or Unicode-insensitive filesystems`;
+      }
   items.sort(
     (a, b) => cmp(a.harness, b.harness) || cmp(a.skill, b.skill) || cmp(where(a), where(b)),
   );
   const counts = Object.fromEntries(
     PlanAction.options.map((a) => [a, items.filter((i) => i.action === a).length]),
   );
-  return { version: 1, machine: bundle.machine, items, counts: counts as Plan["counts"], warnings };
+  return {
+    version: 1,
+    machine: bundle.machine,
+    items,
+    counts: counts as Plan["counts"],
+    warnings,
+  };
 }

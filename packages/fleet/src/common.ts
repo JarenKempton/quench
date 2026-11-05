@@ -23,4 +23,17 @@ export const Location = z.discriminatedUnion("scope", [
 ]);
 export type Location = z.infer<typeof Location>;
 
+export const insideFolder = (path: string) =>
+  path.length > 0 &&
+  !path.includes("\\") &&
+  !path.includes("\0") &&
+  !/^[A-Za-z]:/.test(path) &&
+  path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+
+export const RelativePath = z
+  .string()
+  .refine(insideFolder, { message: "path must stay inside its folder, with forward slashes" });
+
+export const foldKey = (path: string) => path.normalize("NFC").toLowerCase();
+
 export const Timestamp = z.iso.datetime({ offset: true });
