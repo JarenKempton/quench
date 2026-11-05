@@ -1,19 +1,17 @@
-import { rmSync } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { TreeEntry } from "@quench/fleet";
 import { CHILD_ENV, childEnv } from "@quench/judge";
+import {
+  createScratch,
+  reclaimScratch,
+  removeScratch,
+  removeScratchNow,
+  startWatchdog,
+  type Scratch,
+} from "./scratch.ts";
+
+export { reclaimScratch };
 
 export const CREDENTIAL_VARS = [
   "ANTHROPIC_API_KEY",
@@ -28,12 +26,7 @@ export const BUILTIN_PLUGINS = [
   "cc-plugin-plugin-authoring@builtin",
 ];
 
-const PREFIX = "quench-eval-";
-const MARKER = "quench-eval.json";
-const STALE_MS = 3_600_000;
 const PRIVATE = 0o700;
-const WATCH =
-  'while kill -0 "$1" 2>/dev/null; do kill -0 "-$2" 2>/dev/null || exit 0; sleep 0.2; done; kill -KILL "-$2" 2>/dev/null; rm -rf -- "$3"';
 const MAX_TURNS = 3;
 const TIMEOUT_MS = 180_000;
 
@@ -117,7 +110,7 @@ const json = (text: string): Line | null => {
 
 const count = (value: unknown) => (typeof value === "number" ? value : 0);
 
-type Live = { scratch: string; proc: Bun.Subprocess | null; watch: Bun.Subprocess | null };
+type Live = { scratch: Scratch; proc: Bun.Subprocess | null; watch: Bun.Subprocess | null };
 const live = new Set<Live>();
 let guarded = false;
 
@@ -138,54 +131,7 @@ async function stopAll() {
   const running = [...live];
   running.forEach(stop);
   await Promise.all(running.flatMap((run) => (run.proc ? [run.proc.exited] : [])));
-  await Promise.all(
-    running.map((run) => rm(run.scratch, { recursive: true, force: true, maxRetries: 5 })),
-  );
-}
-
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
-type Marker = { owner: number; group: number | null; createdAt: number };
-
-const markerOf = (text: string): Marker | null => {
-  try {
-    const m = JSON.parse(text);
-    return Number.isInteger(m.owner) &&
-      (m.group === null || Number.isInteger(m.group)) &&
-      Number.isFinite(m.createdAt)
-      ? m
-      : null;
-  } catch {
-    return null;
-  }
-};
-
-export async function reclaimScratch(dir = tmpdir(), now = Date.now()) {
-  const uid = process.getuid?.();
-  for (const name of await readdir(dir).catch(() => [])) {
-    if (!name.startsWith(PREFIX)) continue;
-    const path = join(dir, name);
-    const info = await lstat(path).catch(() => null);
-    if (!info?.isDirectory() || (uid !== undefined && info.uid !== uid)) continue;
-    const marker = markerOf(await readFile(join(path, MARKER), "utf8").catch(() => ""));
-    const abandoned = marker
-      ? !alive(marker.owner) || now - marker.createdAt > STALE_MS
-      : now - info.mtimeMs > STALE_MS;
-    if (!abandoned) continue;
-    if (marker?.group && marker.group !== process.pid) {
-      try {
-        process.kill(-marker.group, "SIGKILL");
-      } catch {}
-    }
-    await rm(path, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
-  }
+  await Promise.all(running.map((run) => removeScratch(run.scratch)));
 }
 
 async function guard() {
@@ -199,7 +145,7 @@ async function guard() {
   process.on("exit", () => {
     for (const run of live) {
       stop(run);
-      rmSync(run.scratch, { recursive: true, force: true });
+      removeScratchNow(run.scratch);
     }
   });
   await reclaimScratch();
@@ -211,28 +157,14 @@ const parentDeath = () => {
   return setpriv ? [setpriv, "--pdeathsig", "KILL", "--"] : [];
 };
 
-const watchdog = (group: number, scratch: string) => {
-  const watch = Bun.spawn(
-    ["/bin/sh", "-c", WATCH, "quench-watchdog", String(process.pid), String(group), scratch],
-    { stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true },
-  );
-  watch.unref();
-  return watch;
-};
-
-const mark = (run: Live, marker: Marker) =>
-  writeFile(join(run.scratch, MARKER), JSON.stringify(marker), { mode: 0o600 });
-
 export async function replay(input: ReplayInput): Promise<Replay> {
   await guard();
-  const run: Live = { scratch: await mkdtemp(join(tmpdir(), PREFIX)), proc: null, watch: null };
+  const run: Live = { scratch: await createScratch(), proc: null, watch: null };
   live.add(run);
-  const createdAt = Date.now();
-  const config = join(run.scratch, "config");
-  const home = join(run.scratch, "home");
-  const work = join(run.scratch, "work");
+  const config = join(run.scratch.dir, "config");
+  const home = join(run.scratch.dir, "home");
+  const work = join(run.scratch.dir, "work");
   try {
-    await mark(run, { owner: process.pid, group: null, createdAt });
     for (const dir of [home, work, config]) await mkdir(dir, { recursive: true, mode: PRIVATE });
     await writeTree(join(config, "skills", input.skill), input.tree);
     const env = { ...childEnv(input.env), HOME: home, CLAUDE_CONFIG_DIR: config, [CHILD_ENV]: "1" };
@@ -248,8 +180,7 @@ export async function replay(input: ReplayInput): Promise<Replay> {
       },
     );
     run.proc = proc;
-    run.watch = watchdog(proc.pid, run.scratch);
-    await mark(run, { owner: process.pid, group: proc.pid, createdAt });
+    run.watch = startWatchdog(proc.pid, run.scratch.dir, run.scratch.entry);
     const timer = setTimeout(() => killGroup(proc), input.timeoutMs ?? TIMEOUT_MS);
     try {
       return await read(proc, input.skill, () => killGroup(proc));
@@ -259,7 +190,7 @@ export async function replay(input: ReplayInput): Promise<Replay> {
       await proc.exited;
     }
   } finally {
-    await rm(run.scratch, { recursive: true, force: true, maxRetries: 5 }).catch(() => undefined);
+    await removeScratch(run.scratch);
     live.delete(run);
   }
 }

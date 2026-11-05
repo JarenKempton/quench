@@ -1,10 +1,22 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readdir, rm, stat, utimes } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { treeHash } from "@quench/fleet";
 import { readTree } from "@quench/fleet/disk";
 import { evalSupported } from "../src/skills/eval.ts";
+import { startWatchdog } from "../src/skills/scratch.ts";
 import { lines } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
@@ -385,31 +397,86 @@ const until = async (check: () => Promise<boolean> | boolean, ms = 5000) => {
 };
 
 test.skipIf(windows)(
-  "abandoned scratch homes are reclaimed, their process groups killed, live ones kept",
+  "only homes Quench provably created are reclaimed, and no process is ever killed",
   async () => {
     const f = await fixture(STANDARD.slice(0, 1));
     const tmp = await temp("tmp");
+    const index = join(f.home, ".quench/local/eval-scratch");
+    await mkdir(index, { recursive: true, mode: 0o700 });
     const gone = Bun.spawn(["true"]);
     await gone.exited;
     const sleeper = Bun.spawn(["sleep", "60"], { detached: true, stdout: "ignore" });
-    const home = async (name: string, marker: object | null) => {
+    const token = (n: number) => n.toString(16).padStart(64, "0");
+    const home = async (name: string, marker: object | null, listed: string | null) => {
       const dir = join(tmp, `quench-eval-${name}`);
       await Bun.write(join(dir, "config/sessions/1.key"), "peer token");
       if (marker) await Bun.write(join(dir, "quench-eval.json"), JSON.stringify(marker));
+      if (listed) await Bun.write(join(index, listed), await realpath(dir));
       return dir;
     };
-    const dead = await home("dead", { owner: gone.pid, group: sleeper.pid, createdAt: Date.now() });
-    const old = await home("old", null);
-    await utimes(old, new Date(Date.now() - 7_200_000), new Date(Date.now() - 7_200_000));
-    const kept = await home("live", { owner: process.pid, group: null, createdAt: Date.now() });
+    const ownedDead = await home(
+      "owned-dead",
+      { token: token(1), owner: gone.pid, createdAt: Date.now() },
+      token(1),
+    );
+    const unlisted = await home(
+      "unlisted",
+      { token: token(2), owner: gone.pid, createdAt: Date.now() },
+      null,
+    );
+    const linked = join(tmp, "quench-eval-linked");
+    await mkdir(linked, { mode: 0o700 });
+    await Bun.write(
+      join(tmp, "elsewhere.json"),
+      JSON.stringify({ token: token(3), owner: gone.pid, createdAt: Date.now() }),
+    );
+    await symlink(join(tmp, "elsewhere.json"), join(linked, "quench-eval.json"));
+    await Bun.write(join(index, token(3)), await realpath(linked));
+    const unmarked = await home("unmarked", null, null);
+    await utimes(unmarked, new Date(0), new Date(0));
+    const legacy = await home(
+      "legacy",
+      { owner: gone.pid, group: sleeper.pid, createdAt: 0 },
+      null,
+    );
+    const live = await home(
+      "live",
+      { token: token(4), owner: process.pid, createdAt: Date.now() },
+      token(4),
+    );
+    await Bun.write(join(index, token(5)), join(tmp, "quench-eval-missing"));
     const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"], {
       TMPDIR: tmp,
     });
     expect(out.code).toBe(0);
-    expect(await stat(dead).catch(() => null)).toBeNull();
-    expect(await stat(old).catch(() => null)).toBeNull();
-    expect(await stat(kept).catch(() => null)).not.toBeNull();
-    expect(await until(() => !alive(sleeper.pid))).toBe(true);
+    const exists = async (p: string) => (await lstat(p).catch(() => null)) !== null;
+    expect(await exists(ownedDead)).toBe(false);
+    expect(await exists(join(index, token(1)))).toBe(false);
+    for (const kept of [unlisted, linked, unmarked, legacy, live])
+      expect(await exists(kept)).toBe(true);
+    expect(await exists(join(tmp, "elsewhere.json"))).toBe(true);
+    expect(await exists(join(index, token(4)))).toBe(true);
+    expect(await exists(join(index, token(5)))).toBe(false);
+    expect(alive(sleeper.pid)).toBe(true);
+    sleeper.kill();
+    expect((await readdir(index)).sort()).toEqual([token(3), token(4)]);
+  },
+);
+
+test.skipIf(windows)(
+  "the watchdog removes the home once the replay is gone, even while Quench lives on",
+  async () => {
+    const dir = await temp("watched");
+    const entry = join(await temp("index"), "entry");
+    await Bun.write(entry, dir);
+    const replay = Bun.spawn(["sleep", "0.3"], { detached: true, stdout: "ignore" });
+    startWatchdog(replay.pid, dir, entry);
+    expect(
+      await until(
+        async () =>
+          !(await lstat(dir).catch(() => null)) && !(await lstat(entry).catch(() => null)),
+      ),
+    ).toBe(true);
   },
 );
 
