@@ -100,16 +100,27 @@ export class Store {
     if (token) this.db.query("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
   }
 
-  limited(kind: string) {
-    const row = this.db
-      .query("SELECT COUNT(*) AS n FROM failed_attempts WHERE kind = ? AND at > ?")
-      .get(kind, this.now() - ATTEMPT_WINDOW_MS) as { n: number };
-    return row.n >= MAX_FAILED_ATTEMPTS;
+  attempt(kind: string): number | null {
+    return this.db
+      .transaction(() => {
+        this.db
+          .query("DELETE FROM failed_attempts WHERE at <= ?")
+          .run(this.now() - ATTEMPT_WINDOW_MS);
+        const { n } = this.db
+          .query("SELECT COUNT(*) AS n FROM failed_attempts WHERE kind = ?")
+          .get(kind) as { n: number };
+        if (n >= MAX_FAILED_ATTEMPTS) return null;
+        return Number(
+          this.db
+            .query("INSERT INTO failed_attempts (kind, at) VALUES (?, ?)")
+            .run(kind, this.now()).lastInsertRowid,
+        );
+      })
+      .immediate();
   }
 
-  failed(kind: string) {
-    this.db.query("DELETE FROM failed_attempts WHERE at <= ?").run(this.now() - ATTEMPT_WINDOW_MS);
-    this.db.query("INSERT INTO failed_attempts (kind, at) VALUES (?, ?)").run(kind, this.now());
+  succeeded(attempt: number) {
+    this.db.query("DELETE FROM failed_attempts WHERE rowid = ?").run(attempt);
   }
 
   activeMachine(name: string) {
@@ -131,10 +142,14 @@ export class Store {
     return this.db.transaction(() => {
       const row = this.db
         .query(
-          "UPDATE pairing_codes SET used_at = ?1 WHERE code_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING machine",
+          "UPDATE pairing_codes SET used_at = ?1 WHERE code_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING machine, expires_at",
         )
-        .get(this.now(), hash) as { machine: string } | null;
+        .get(this.now(), hash) as { machine: string; expires_at: number } | null;
       if (!row || this.activeMachine(row.machine)) return null;
+      const revokedSince = this.db
+        .query("SELECT 1 FROM machines WHERE name = ? AND revoked_at > ?")
+        .get(row.machine, row.expires_at - PAIRING_TTL_MS);
+      if (revokedSince) return null;
       const token = randomToken("qm_");
       this.db
         .query("INSERT INTO machines (name, token_hash, paired_at) VALUES (?, ?, ?)")
@@ -154,11 +169,15 @@ export class Store {
   }
 
   revoke(name: string) {
-    return (
-      this.db
+    return this.db.transaction(() => {
+      const codes = this.db
+        .query("UPDATE pairing_codes SET used_at = ? WHERE machine = ? AND used_at IS NULL")
+        .run(this.now(), name).changes;
+      const machines = this.db
         .query("UPDATE machines SET revoked_at = ? WHERE name = ? AND revoked_at IS NULL")
-        .run(this.now(), name).changes > 0
-    );
+        .run(this.now(), name).changes;
+      return codes + machines > 0;
+    })();
   }
 
   machines(): MachineRow[] {

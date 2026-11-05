@@ -1,8 +1,73 @@
-import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, lstat, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { dirname, join, posix } from "node:path";
+import { excluded, foldCollision, insideFolder } from "@quench/fleet";
 import { tmpdir } from "node:os";
 
 export const BRANCH = "refs/heads/main";
+
+const BLOB_MODES = new Set(["100644", "100755", "120000"]);
+
+const TRANSPORTS = [
+  "-c",
+  "protocol.allow=never",
+  "-c",
+  "protocol.https.allow=always",
+  "-c",
+  "protocol.ssh.allow=always",
+  "-c",
+  "protocol.file.allow=always",
+];
+
+export function gitSource(source: string) {
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(source)?.[1]?.toLowerCase();
+  const ok =
+    source !== "" &&
+    !source.startsWith("-") &&
+    !source.includes("::") &&
+    !["\0", "\r", "\n"].some((c) => source.includes(c)) &&
+    (scheme === undefined ? true : scheme === "https" || scheme === "ssh");
+  if (!ok)
+    throw new GitError(
+      `unsupported git source ${JSON.stringify(source)}: use https://, ssh://, git@host:path or a local path`,
+    );
+  return source;
+}
+
+const escapes = (path: string, target: string) => {
+  if (
+    target === "" ||
+    target.includes("\\") ||
+    target.includes("\0") ||
+    target.startsWith("/") ||
+    /^[A-Za-z]:/.test(target)
+  )
+    return true;
+  const resolved = posix.normalize(posix.join(posix.dirname(path), target));
+  return resolved === ".." || resolved.startsWith("../");
+};
+
+async function freshPath(root: string, parts: string[]) {
+  let dir = root;
+  for (const part of parts.slice(0, -1)) {
+    dir = join(dir, part);
+    const info = await lstat(dir).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!info) await mkdir(dir);
+    else if (info.isSymbolicLink() || !info.isDirectory())
+      throw new GitError(`${dir} is not a plain folder`);
+  }
+  const file = join(dir, parts.at(-1)!);
+  if (
+    await lstat(file).then(
+      () => true,
+      () => false,
+    )
+  )
+    throw new GitError(`${file} already exists`);
+  return file;
+}
 
 const IDENTITY = {
   GIT_AUTHOR_NAME: "Quench hub",
@@ -63,7 +128,17 @@ export class Repo {
   }
 
   async fetchHead(source: string) {
-    await this.git(["fetch", "--quiet", "--no-tags", source, "HEAD"]);
+    await this.git([
+      ...TRANSPORTS,
+      "-c",
+      "transfer.fsckObjects=true",
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "--",
+      gitSource(source),
+      "HEAD",
+    ]);
     const { text } = await this.git(["rev-parse", "FETCH_HEAD"]);
     await this.git(["update-ref", BRANCH, text, ""]);
     return text;
@@ -159,44 +234,72 @@ export class Repo {
   }
 
   async materialize(commit: string, target: string) {
-    const { stdout } = await this.git(["ls-tree", "-r", "-z", commit]);
+    const { stdout } = await this.git(["ls-tree", "-r", "-z", "--full-tree", commit]);
     const entries = new TextDecoder()
       .decode(stdout)
       .split("\0")
       .filter(Boolean)
       .map((line) => {
-        const [meta = "", path = ""] = line.split("\t");
-        const [mode = "", type = "", sha = ""] = meta.split(" ");
-        return { mode, type, sha, path };
-      })
-      .filter((e) => e.type === "blob");
+        const tab = line.indexOf("\t");
+        const [mode = "", type = "", sha = ""] = line.slice(0, tab).split(" ");
+        return { mode, type, sha, path: line.slice(tab + 1) };
+      });
+    for (const e of entries) {
+      if (e.type !== "blob" || !BLOB_MODES.has(e.mode))
+        throw new GitError(`${JSON.stringify(e.path)}: unsupported ${e.type} ${e.mode}`);
+      if (!insideFolder(e.path) || excluded(e.path))
+        throw new GitError(`${JSON.stringify(e.path)} is not a valid portable path`);
+    }
+    const collision = foldCollision(entries.map((e) => e.path));
+    if (collision) throw new GitError(`duplicate path ${collision.join(" and ")}`);
     const batch = await this.git(["cat-file", "--batch"], {
       input: entries.map((e) => e.sha).join("\n") + "\n",
     });
-    const staging = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await rm(staging, { recursive: true, force: true });
-    await mkdir(staging, { recursive: true });
-    let offset = 0;
     const out = batch.stdout;
-    for (const entry of entries) {
+    let offset = 0;
+    const files = entries.map((entry) => {
       const newline = out.indexOf(0x0a, offset);
-      const size = Number(new TextDecoder().decode(out.subarray(offset, newline)).split(" ")[2]);
-      const bytes = out.subarray(newline + 1, newline + 1 + size);
-      offset = newline + 1 + size + 1;
-      const file = join(staging, ...entry.path.split("/"));
-      await mkdir(dirname(file), { recursive: true });
-      if (entry.mode === "120000") {
-        await symlink(new TextDecoder().decode(bytes), file).catch(() => undefined);
-        continue;
+      const [sha, type, size] = new TextDecoder().decode(out.subarray(offset, newline)).split(" ");
+      if (sha !== entry.sha || type !== "blob") throw new GitError(`cannot read ${entry.path}`);
+      const bytes = out.subarray(newline + 1, newline + 1 + Number(size));
+      offset = newline + 1 + Number(size) + 1;
+      return { ...entry, bytes };
+    });
+    for (const f of files)
+      if (f.mode === "120000" && escapes(f.path, new TextDecoder().decode(f.bytes)))
+        throw new GitError(`${f.path} links outside the tree`);
+    await mkdir(dirname(target), { recursive: true });
+    const staging = await mkdtemp(`${target}.tmp-`);
+    try {
+      const ordered = [
+        ...files.filter((f) => f.mode !== "120000"),
+        ...files.filter((f) => f.mode === "120000"),
+      ];
+      for (const f of ordered) {
+        const file = await freshPath(staging, f.path.split("/"));
+        if (f.mode === "120000") {
+          await symlink(new TextDecoder().decode(f.bytes), file).catch(() => undefined);
+          continue;
+        }
+        await writeFile(file, f.bytes, { flag: "wx" });
+        if (f.mode === "100755" && process.platform !== "win32") await chmod(file, 0o755);
       }
-      await writeFile(file, bytes);
-      if (entry.mode === "100755" && process.platform !== "win32") await chmod(file, 0o755);
+      await rm(target, { recursive: true, force: true });
+      await rename(staging, target);
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true });
+      throw error;
     }
-    await rm(target, { recursive: true, force: true });
-    await rename(staging, target);
   }
 
   async push(remote: string) {
-    await this.git(["push", "--quiet", remote, `${BRANCH}:${BRANCH}`]);
+    await this.git([
+      ...TRANSPORTS,
+      "push",
+      "--quiet",
+      "--",
+      gitSource(remote),
+      `${BRANCH}:${BRANCH}`,
+    ]);
   }
 }

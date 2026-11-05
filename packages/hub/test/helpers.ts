@@ -71,6 +71,7 @@ export async function startHub(dataDir: string, options: Partial<ServeOptions> =
 
 export class Owner {
   cookie = "";
+  csrf = "";
   constructor(
     readonly url: string,
     readonly cert: string | null,
@@ -93,13 +94,17 @@ export class Owner {
     return this.fetch(path, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(fields).toString(),
+      body: new URLSearchParams({ csrf: this.csrf, ...fields }).toString(),
     });
   }
 
   async login(password = PASSWORD) {
     const response = await this.post("/login", { password });
     this.cookie = (response.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    if (this.cookie) {
+      const html = await (await this.fetch("/")).text();
+      this.csrf = /name="csrf" value="([^"]*)"/.exec(html)?.[1] ?? "";
+    }
     return response;
   }
 

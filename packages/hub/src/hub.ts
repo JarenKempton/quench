@@ -88,7 +88,7 @@ export class Hub {
       const dir = join(this.dataDir, "checkouts", commit);
       ready = this.repo.materialize(commit, dir).then(async () => {
         for (const name of await readdir(join(this.dataDir, "checkouts")))
-          if (name !== commit && !name.endsWith(".tmp") && !this.checkouts.has(name))
+          if (name !== commit && !name.includes(".tmp") && !this.checkouts.has(name))
             await rm(join(this.dataDir, "checkouts", name), { recursive: true, force: true });
         return dir;
       });

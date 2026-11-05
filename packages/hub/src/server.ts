@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -96,6 +97,31 @@ const commitField = (f: URLSearchParams | null, name: string) => {
   return COMMIT.test(value) ? value : null;
 };
 
+const ROUTES: Record<string, string[]> = {
+  "/": ["GET"],
+  "/login": ["POST"],
+  "/logout": ["POST"],
+  "/machines": ["POST"],
+  "/machines/revoke": ["POST"],
+  "/toggle": ["POST"],
+  "/revert": ["POST"],
+  "/edit": ["GET", "POST"],
+};
+
+const csrfToken = (session: string) => sha256(`csrf\0${session}`);
+
+const sameToken = (given: string, expected: string) =>
+  given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+
+async function withCsrf(response: Response, token: string) {
+  if (!response.headers.get("content-type")?.startsWith("text/html")) return response;
+  const html = (await response.text()).replace(
+    /<form method="post"[^>]*>/g,
+    (tag) => `${tag}<input type="hidden" name="csrf" value="${token}">`,
+  );
+  return new Response(html, { status: response.status, headers: response.headers });
+}
+
 const PairRequest = z.object({ code: z.string().min(1).max(64) }).strict();
 
 export async function serveHub(options: ServeOptions) {
@@ -156,16 +182,14 @@ export async function serveHub(options: ServeOptions) {
 
   async function api(req: Request, path: string): Promise<Response> {
     if (path === "/api/v1/pair" && req.method === "POST") {
-      if (hub.store.limited("pair"))
-        return json({ error: "too many attempts; wait and retry" }, 429);
+      const attempt = hub.store.attempt("pair");
+      if (attempt === null) return json({ error: "too many attempts; wait and retry" }, 429);
       const body = await readCapped(req, MAX_PAIR_BYTES);
       if (!body) return tooLarge();
       const parsed = PairRequest.safeParse(parseJson(body));
       const paired = parsed.success ? hub.store.redeem(parsed.data.code) : null;
-      if (!paired) {
-        hub.store.failed("pair");
-        return json({ error: "invalid, used or expired code" }, 401);
-      }
+      if (!paired) return json({ error: "invalid, used or expired code" }, 401);
+      hub.store.succeeded(attempt);
       return json({ machine: paired.machine, token: paired.token });
     }
     const machine = hub.store.machineFor(bearer(req));
@@ -201,26 +225,50 @@ export async function serveHub(options: ServeOptions) {
   }
 
   async function ui(req: Request, path: string): Promise<Response> {
-    if (req.method === "POST" && !sameOrigin(req))
+    const allowed = ROUTES[path];
+    if (!allowed) return messagePage("Not found", "no such page", 404);
+    if (!allowed.includes(req.method))
+      return messagePage("Method not allowed", `${path} accepts ${allowed.join(", ")}`, 405, {
+        allow: allowed.join(", "),
+      });
+    if (req.method !== "GET" && !sameOrigin(req))
       return messagePage("Refused", "cross-origin form submissions are refused", 403);
-    if (path === "/login" && req.method === "POST") {
-      if (hub.store.limited("login")) return loginPage("Too many attempts; wait and retry.");
+    if (path === "/login") {
+      const attempt = hub.store.attempt("login");
+      if (attempt === null) return loginPage("Too many attempts; wait and retry.", 429);
       const fields = await form(req);
-      if (fields && (await hub.store.checkOwner(fields.get("password") ?? "")))
-        return redirect("/", {
-          "set-cookie": `${COOKIE}=${hub.store.newSession()}; Path=/; HttpOnly; SameSite=Strict${secure}`,
-        });
-      hub.store.failed("login");
-      return loginPage("Wrong password.");
+      if (!fields || !(await hub.store.checkOwner(fields.get("password") ?? "")))
+        return loginPage("Wrong password.", 401);
+      hub.store.succeeded(attempt);
+      return redirect("/", {
+        "set-cookie": `${COOKIE}=${hub.store.newSession()}; Path=/; HttpOnly; SameSite=Strict${secure}`,
+      });
     }
+    const session = cookie(req);
     if (!owner(req)) return req.method === "GET" ? loginPage() : redirect("/");
-    if (path === "/logout" && req.method === "POST") {
+    const token = csrfToken(session!);
+    if (req.method === "POST") {
+      const fields = await form(req);
+      if (!fields) return messagePage("Not saved", "body too large", 413);
+      if (!sameToken(fields.get("csrf") ?? "", token))
+        return messagePage(
+          "Refused",
+          "this form is missing its session token; reload the page",
+          403,
+        );
+      return withCsrf(await owned(req, path, fields), token);
+    }
+    return withCsrf(await owned(req, path, new URL(req.url).searchParams), token);
+  }
+
+  async function owned(req: Request, path: string, f: URLSearchParams): Promise<Response> {
+    if (path === "/logout") {
       hub.store.endSession(cookie(req));
       return redirect("/", {
         "set-cookie": `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secure}`,
       });
     }
-    if (path === "/" && req.method === "GET") {
+    if (path === "/") {
       const head = await hub.head();
       const { fleet, warnings } = await hub.fleetAt(head);
       return dashboard({
@@ -234,8 +282,8 @@ export async function serveHub(options: ServeOptions) {
         files: await hub.repo.files(head),
       });
     }
-    if (path === "/machines" && req.method === "POST") {
-      const name = MachineName.safeParse((await form(req))?.get("name"));
+    if (path === "/machines") {
+      const name = MachineName.safeParse(f.get("name"));
       if (!name.success)
         return messagePage("Not added", "machine names are lowercase letters, digits, . _ -", 400);
       if (hub.store.activeMachine(name.data))
@@ -246,34 +294,28 @@ export async function serveHub(options: ServeOptions) {
         `quench connect ${publicUrl(req)} --code ${code}${pin ? ` --pin ${pin}` : ""}`,
       );
     }
-    if (path === "/machines/revoke" && req.method === "POST") {
-      hub.store.revoke((await form(req))?.get("name") ?? "");
+    if (path === "/machines/revoke") {
+      hub.store.revoke(f.get("name") ?? "");
       return redirect("/");
     }
-    if (path === "/toggle" && req.method === "POST") {
-      const f = await form(req);
-      const machine = MachineName.safeParse(f?.get("machine"));
+    if (path === "/toggle") {
+      const machine = MachineName.safeParse(f.get("machine"));
       const base = commitField(f, "base");
-      if (!f || !machine.success || !base) return messagePage("Not saved", "bad toggle", 400);
+      if (!machine.success || !base) return messagePage("Not saved", "bad toggle", 400);
       return hub
         .toggle(base, f.get("skill") ?? "", machine.data, f.get("on") === "1")
         .then(() => redirect("/"), conflict);
     }
-    if (path === "/revert" && req.method === "POST") {
-      const f = await form(req);
+    if (path === "/revert") {
       const commit = commitField(f, "commit");
       const base = commitField(f, "base");
       if (!commit || !base) return messagePage("Not reverted", "bad commit", 400);
       return hub.revert(base, commit).then(() => redirect("/"), conflict);
     }
-    if (path === "/edit") return edit(req);
-    return messagePage("Not found", "no such page", 404);
+    return edit(req, f);
   }
 
-  async function edit(req: Request) {
-    const url = new URL(req.url);
-    const f = req.method === "POST" ? await form(req) : url.searchParams;
-    if (!f) return messagePage("Not saved", "body too large", 413);
+  async function edit(req: Request, f: URLSearchParams) {
     const path = f.get("path") ?? "";
     if (!RelativePath.safeParse(path).success || excluded(path))
       return messagePage("Not found", "that path cannot be edited", 400);

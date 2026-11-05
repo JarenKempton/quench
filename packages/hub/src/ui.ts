@@ -14,7 +14,12 @@ table{border-collapse:collapse;margin:.5rem 0 1.5rem}td,th{border:1px solid #ddd
 pre{background:#f5f5f5;padding:.75rem;overflow:auto}textarea{width:100%;font:13px ui-monospace,monospace}
 form{display:inline}code{background:#f5f5f5;padding:.1rem .3rem}.add{color:#060}.del{color:#a00}.err{color:#a00}`;
 
-export const page = (title: string, body: string, status = 200) =>
+export const page = (
+  title: string,
+  body: string,
+  status = 200,
+  extra: Record<string, string> = {},
+) =>
   new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>${STYLE}</style></head><body>${body}</body></html>`,
     {
@@ -25,6 +30,7 @@ export const page = (title: string, body: string, status = 200) =>
           "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
         "x-frame-options": "DENY",
         "cache-control": "no-store",
+        ...extra,
       },
     },
   );
@@ -37,18 +43,24 @@ const hidden = (fields: Record<string, string>) =>
 const button = (action: string, fields: Record<string, string>, label: string) =>
   `<form method="post" action="${action}">${hidden(fields)}<button>${escape(label)}</button></form>`;
 
-export const loginPage = (error = "") =>
+export const loginPage = (error = "", status = 200) =>
   page(
     "Quench hub",
     `<h1>Quench hub</h1>${error ? `<p class="err">${escape(error)}</p>` : ""}<form method="post" action="/login"><label>Owner password <input type="password" name="password" autofocus required></label> <button>Sign in</button></form>`,
-    error ? 401 : 200,
+    status,
   );
 
-export const messagePage = (title: string, message: string, status: number) =>
+export const messagePage = (
+  title: string,
+  message: string,
+  status: number,
+  headers: Record<string, string> = {},
+) =>
   page(
     title,
     `<h1>${escape(title)}</h1><p class="err">${escape(message)}</p><p><a href="/">Back</a></p>`,
     status,
+    headers,
   );
 
 const when = (ms: number | null) => (ms ? new Date(ms).toISOString() : "never");
