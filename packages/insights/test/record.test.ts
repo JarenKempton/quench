@@ -16,7 +16,7 @@ const think = (secs: number): Event => ({
   type: "inference",
   model: "m",
   effort: null,
-  usage: { input: 0, cacheRead: 10, cacheWrite: 0, output: 1 },
+  usage: { context: 10, input: 0, cacheRead: 10, cacheWrite: 0, output: 1 },
   at: at(secs),
 });
 

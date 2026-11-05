@@ -51,7 +51,7 @@ const reply = (text: string, extra: Partial<Reply> = {}, body: Event[] = []): Re
         type: "inference",
         model: "model-a",
         effort: "high",
-        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
         at: null,
       },
       ...body,

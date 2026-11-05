@@ -154,8 +154,8 @@ test("corrections uses optional host evidence over a cached sender, and degrades
       .map((line) => JSON.stringify(line))
       .join("\n") + "\n",
   );
-  const cacheFile = join(dir, ".quench/local/judgments.jsonl");
-  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  const cache = await VerdictCache.open(join(dir, ".quench/local"), Jev.id);
+  const cacheFile = cache.path;
   await cache.remember([
     [
       { assistantSaid: "done", reply: "no, the other file" },
@@ -267,7 +267,7 @@ test("corrections --cached-only never classifies new replies, so it needs no key
   expect(cached.code).toBe(0);
   const out = JSON.parse(cached.stdout);
   expect([out.pending, out.newlyJudged]).toEqual([1, 0]);
-  expect(await Bun.file(join(dir, ".quench/local/judgments.jsonl")).exists()).toBe(false);
+  expect(await Bun.file(join(dir, ".quench/local/judgments")).exists()).toBe(false);
   expect((await quench("report", "--cached-only")).stderr).toContain(
     "--cached-only is only available for corrections",
   );
@@ -336,7 +336,7 @@ test.skipIf(process.platform === "win32")(
     expect((await fakeCalls(fake)).length).toBe(2);
     expect(await Bun.file(jevCache).text()).toBe(jevLine);
     const own = await VerdictCache.open(
-      join(dir, ".quench/local/judgments-claude.jsonl"),
+      join(dir, ".quench/local"),
       "claude/claude-haiku-5-5/reply-v3",
     );
     expect(own.size).toBe(2);
@@ -377,7 +377,7 @@ test.skipIf(process.platform !== "win32")(
       expect(run.stderr).toContain("--judge claude is not supported on Windows yet; use Jev");
     }
     expect(await fakeCalls(fake)).toEqual([]);
-    expect(await Bun.file(join(dir, ".quench/local/judgments-claude.jsonl")).exists()).toBe(false);
+    expect(await Bun.file(join(dir, ".quench/local/judgments")).exists()).toBe(false);
   },
 );
 

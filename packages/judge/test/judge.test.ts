@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Event, SenderEvidence } from "@quench/history";
@@ -18,8 +18,7 @@ import { requests } from "../src/jev.ts";
 
 const exchange = (reply: string): Exchange => ({ assistantSaid: "done", reply });
 const verdict: Verdict = { kind: "correction", sender: "person", confidence: 1 };
-const cachePath = async () =>
-  join(await mkdtemp(join(tmpdir(), "quench-judge-")), "judgments.jsonl");
+const cachePath = () => mkdtemp(join(tmpdir(), "quench-judge-"));
 
 test("each exchange is remembered across opens, and a new judge id starts clean", async () => {
   const path = await cachePath();
@@ -32,7 +31,137 @@ test("each exchange is remembered across opens, and a new judge id starts clean"
 
   const changed = await VerdictCache.open(path, "judge/v2");
   expect(changed.size).toBe(0);
-  expect(await Bun.file(path).text()).toBe("");
+});
+
+test("switching judges and back keeps both judges' verdicts", async () => {
+  const dir = await cachePath();
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("no"), verdict]]);
+  await (await VerdictCache.open(dir, "judge/b")).remember([[exchange("no"), verdict]]);
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("no"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/b")).get(exchange("no"))).toEqual(verdict);
+});
+
+test("judge ids that differ only in punctuation keep separate caches", async () => {
+  const dir = await cachePath();
+  const shared = `${JSON.stringify({ judge: "judge/a", key: "k", verdict })}\n`;
+  await Bun.write(join(dir, "judgments.jsonl"), shared);
+  await (await VerdictCache.open(dir, "judge_a")).remember([[exchange("yes"), verdict]]);
+  const migrated = await VerdictCache.open(dir, "judge/a");
+  expect(migrated.size).toBe(1);
+  expect(migrated.path).not.toBe((await VerdictCache.open(dir, "judge_a")).path);
+});
+
+test("a truncated last line does not swallow the next verdict", async () => {
+  const dir = await cachePath();
+  const cache = await VerdictCache.open(dir, "judge/a");
+  await cache.remember([[exchange("one"), verdict]]);
+  await appendFile(cache.path, '{"judge":"judge/a","key":"partial');
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("two"), verdict]]);
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(2);
+});
+
+test("verdicts an older version appends to a shared file after migration are merged in once", async () => {
+  const dir = await cachePath();
+  const shared = join(dir, "judgments.jsonl");
+  await Bun.write(shared, "");
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("one"), verdict]]);
+  const elsewhere = await VerdictCache.open(await cachePath(), "judge/a");
+  await elsewhere.remember([[exchange("late"), verdict]]);
+  await appendFile(shared, await Bun.file(elsewhere.path).text());
+  const before = await Bun.file(shared).text();
+
+  const merged = await VerdictCache.open(dir, "judge/a");
+  expect(merged.get(exchange("late"))).toEqual(verdict);
+  expect(merged.get(exchange("one"))).toEqual(verdict);
+  await VerdictCache.open(dir, "judge/a");
+  expect((await Bun.file(merged.path).text()).trim().split("\n")).toHaveLength(2);
+  expect(await VerdictCache.open(dir, "judge/a", true).then((c) => c.size)).toBe(2);
+  expect(await Bun.file(shared).text()).toBe(before);
+});
+
+test("a verdict remembered while a legacy merge is paused beats the migrated one", async () => {
+  const dir = await cachePath();
+  const shared = join(dir, "judgments.jsonl");
+  await Bun.write(shared, "");
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("one"), verdict]]);
+  const other = await VerdictCache.open(dir, "judge/a");
+  const older: Verdict = { kind: "correction", sender: "person", confidence: 0.2 };
+  const newer: Verdict = { kind: "approval", sender: "person", confidence: 0.9 };
+  const elsewhere = await VerdictCache.open(await cachePath(), "judge/a");
+  await elsewhere.remember([[exchange("k"), older]]);
+  await appendFile(shared, await Bun.file(elsewhere.path).text());
+
+  const proto = VerdictCache.prototype as unknown as {
+    append: (this: VerdictCache, lines: string[]) => Promise<void>;
+  };
+  const append = proto.append;
+  proto.append = async function (this: VerdictCache, lines: string[]) {
+    proto.append = append;
+    await other.remember([[exchange("k"), newer]]);
+    return append.call(this, lines);
+  };
+  try {
+    await VerdictCache.open(dir, "judge/a");
+  } finally {
+    proto.append = append;
+  }
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("k"))).toEqual(newer);
+  expect((await VerdictCache.open(dir, "judge/a", true)).get(exchange("k"))).toEqual(newer);
+});
+
+test("migrated entries follow the shared file's latest verdict for a key", async () => {
+  const dir = await cachePath();
+  const shared = join(dir, "judgments.jsonl");
+  const legacyLine = async (v: Verdict) => {
+    const elsewhere = await VerdictCache.open(await cachePath(), "judge/a");
+    await elsewhere.remember([[exchange("k"), v]]);
+    return Bun.file(elsewhere.path).text();
+  };
+  const older: Verdict = { kind: "correction", sender: "person", confidence: 0.2 };
+  const newer: Verdict = { kind: "approval", sender: "person", confidence: 0.9 };
+  await Bun.write(shared, await legacyLine(older));
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("k"))).toEqual(older);
+  await appendFile(shared, await legacyLine(newer));
+
+  const reopened = await VerdictCache.open(dir, "judge/a");
+  expect(reopened.get(exchange("k"))).toEqual(newer);
+  const lines = await Bun.file(reopened.path).text();
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("k"))).toEqual(newer);
+  expect(await Bun.file(reopened.path).text()).toBe(lines);
+});
+
+test("concurrent first opens migrate once and keep every append", async () => {
+  const dir = await cachePath();
+  const line = (n: number) => `${JSON.stringify({ judge: "judge/a", key: `k${n}`, verdict })}\n`;
+  await Bun.write(
+    join(dir, "judgments.jsonl"),
+    Array.from({ length: 15_000 }, (_, n) => line(n)).join(""),
+  );
+  const script = join(import.meta.dir, "remember-one.ts");
+  const procs = Array.from({ length: 8 }, (_, n) =>
+    Bun.spawn(["bun", script, dir, "judge/a", `reply ${n}`], { stderr: "inherit" }),
+  );
+  expect(await Promise.all(procs.map((p) => p.exited))).toEqual(Array(8).fill(0));
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(15_008);
+}, 30_000);
+
+test("a shared verdict file migrates into per-judge files without losing or changing entries", async () => {
+  const dir = await cachePath();
+  const a = await VerdictCache.open(dir, "judge/a");
+  await a.remember([[exchange("one"), verdict]]);
+  const b = await VerdictCache.open(dir, "judge/b");
+  await b.remember([[exchange("two"), verdict]]);
+  const shared = (await Bun.file(a.path).text()) + (await Bun.file(b.path).text()) + "junk\n";
+  await rm(join(dir, "judgments"), { recursive: true });
+  await Bun.write(join(dir, "judgments.jsonl"), shared);
+
+  const readOnly = await VerdictCache.open(dir, "judge/a", true);
+  expect(readOnly.size).toBe(1);
+  expect(await Bun.file(readOnly.path).exists()).toBe(false);
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("one"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/b")).get(exchange("two"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(1);
+  expect(await Bun.file(join(dir, "judgments.jsonl")).text()).toBe(shared);
 });
 
 test("generic sender evidence overrides cached guesses without changing verdicts or run boundaries", async () => {
@@ -52,7 +181,7 @@ test("generic sender evidence overrides cached guesses without changing verdicts
         type: "inference",
         model: null,
         effort: null,
-        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
         at: null,
       },
       { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
@@ -179,7 +308,7 @@ test("host-marked and T3-formatted notices and recorded slash commands skip the 
           type: "inference",
           model: null,
           effort: null,
-          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+          usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
           at: null,
         },
         { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },

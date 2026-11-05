@@ -14,13 +14,30 @@ export type SenderEvidence = {
 export type SessionEnricher = (session: Session) => Session;
 
 export type Usage = {
-  input: number;
-  cacheRead: number;
-  cacheWrite: number;
-  output: number;
+  context: number | null;
+  input: number | null;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+  output: number | null;
 };
 
-export const contextOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
+export const contextOf = (u: Usage) => u.context;
+
+export const sumOf = (...parts: (number | null)[]) =>
+  parts.some((p) => p === null) ? null : (parts as number[]).reduce((a, b) => a + b, 0);
+
+export const knownUsage = (
+  input: number,
+  cacheRead: number,
+  cacheWrite: number,
+  output: number,
+) => ({
+  context: input + cacheRead + cacheWrite,
+  input,
+  cacheRead,
+  cacheWrite,
+  output,
+});
 
 export type CompactionTrigger = "auto" | "manual" | "unknown";
 

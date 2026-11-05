@@ -1,6 +1,8 @@
 import { isInside, pathParts } from "@quench/history";
 import { durationSeconds, type Run } from "@quench/insights";
 
+export const knownTokens = (n: number | null) => (n === null ? "unknown" : tokens(n));
+
 export function tokens(n: number): string {
   if (n < 1_000) return String(n);
   if (n < 1_000_000) return `${(n / 1e3).toFixed(1)}k`;
@@ -24,7 +26,9 @@ export function runFacts(run: Run): string {
   const parts = [
     run.model ?? "unknown model",
     run.effort ?? "effort unknown",
-    `context ${tokens(run.contextStart ?? 0)} → ${tokens(run.contextPeak)}`,
+    run.inferences
+      ? `context ${knownTokens(run.contextStart)} → ${knownTokens(run.contextPeak)}`
+      : "context 0 → 0",
     plural(run.inferences, "model call"),
     plural(run.toolCalls, "tool call"),
   ];

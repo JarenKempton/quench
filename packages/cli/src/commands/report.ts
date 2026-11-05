@@ -7,7 +7,7 @@ import {
   type HarnessReport,
 } from "@quench/insights";
 import { reading } from "../progress.ts";
-import { json, tokens } from "../format.ts";
+import { json, knownTokens, tokens } from "../format.ts";
 
 export async function report(
   home: Home,
@@ -36,10 +36,13 @@ function render(harnesses: HarnessReport[], days: number, unreadable: number): s
       ["Sessions", `${h.sessions} (+${h.subagentSessions} subagent)`],
       ["Agent runs", String(h.runs)],
       ["Model calls", String(h.inferences)],
-      ["Tokens processed", tokens(h.tokensProcessed)],
+      [
+        "Tokens processed",
+        `${knownTokens(h.tokensProcessed)}${h.inferencesWithoutTokens ? `  (${h.inferencesWithoutTokens} model calls without token counts)` : ""}`,
+      ],
       [
         "Starting load",
-        `${spread(h.startingLoad)}  (${Math.round(startingShare(h) * 100)}% of tokens processed)`,
+        `${spread(h.startingLoad)}  (${share(startingShare(h))} of tokens processed)`,
       ],
       ["Peak context", spread(h.peakContext)],
       ["Compactions", `${h.compactions} in ${h.compactedSessions} sessions`],
@@ -72,3 +75,5 @@ function top(counts: Count[]): string {
     .map((c) => `${c.name} ${Math.round((100 * c.count) / total)}%`)
     .join(", ");
 }
+
+const share = (n: number | null) => (n === null ? "unknown share" : `${Math.round(n * 100)}%`);

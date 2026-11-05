@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
-import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { appendFile, link, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { jsonlLines } from "@quench/history";
 import { z } from "zod";
 import { Verdict, type Exchange } from "./verdict.ts";
 
-/** One persisted reply classification in judgments.jsonl, separate from theme-grouping decisions. */
+/** One persisted reply classification in its judge's own file, separate from theme-grouping decisions. */
 const Line = z.object({
   /** Judge identity, including its model and reply-question version. */
   judge: z.string(),
@@ -13,6 +13,8 @@ const Line = z.object({
   key: z.string(),
   /** The original model answer, not the effective sender after harness/host evidence is applied. */
   verdict: Verdict,
+  /** Copied from a shared file; any entry for the same key without this flag wins over it. */
+  migrated: z.literal(true).optional(),
 });
 
 export class VerdictCache {
@@ -23,16 +25,18 @@ export class VerdictCache {
     private readonly readOnly: boolean,
   ) {}
 
-  static async open(path: string, judge: string, readOnly = false): Promise<VerdictCache> {
-    const known = new Map<string, Verdict>();
-    const diagnostics = { lines: 0, unparsed: 0 };
-    if (await Bun.file(path).exists()) {
-      for await (const line of jsonlLines(path, Line, diagnostics)) {
-        if (line.judge === judge) known.set(line.key, line.verdict);
-      }
-    }
+  static async open(dir: string, judge: string, readOnly = false): Promise<VerdictCache> {
+    const path = join(dir, "judgments", fileName(judge));
+    const legacy = merged(await read(await sharedFiles(dir), judge));
+    const own = (await Bun.file(path).exists()) ? await read([path], judge) : null;
+    const missing = [...legacy].filter(
+      ([key, v]) => JSON.stringify(own?.migrated.get(key)) !== JSON.stringify(v),
+    );
+    const known = new Map([...(own?.migrated ?? []), ...legacy, ...(own?.native ?? [])]);
     const cache = new VerdictCache(path, judge, known, readOnly);
-    if (!readOnly && known.size < diagnostics.lines) await cache.rewrite();
+    if (readOnly || missing.length === 0) return cache;
+    if (own === null) return (await cache.create()) ? cache : VerdictCache.open(dir, judge);
+    await cache.append(missing.map(([key, v]) => cache.line(key, v, true)));
     return cache;
   }
 
@@ -52,8 +56,21 @@ export class VerdictCache {
       this.known.set(key, verdict);
       return this.line(key, verdict);
     });
+    await this.append(lines);
+  }
+
+  private async append(lines: string[]): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true });
-    await appendFile(this.path, lines.join(""));
+    const size = await stat(this.path).then(
+      (s) => s.size,
+      () => 0,
+    );
+    const partial =
+      size > 0 &&
+      (await Bun.file(this.path)
+        .slice(size - 1)
+        .text()) !== "\n";
+    await appendFile(this.path, (partial ? "\n" : "") + lines.join(""));
   }
 
   private key(exchange: Exchange): string {
@@ -67,13 +84,48 @@ export class VerdictCache {
     return hash.digest("hex");
   }
 
-  private line(key: string, verdict: Verdict): string {
-    return `${JSON.stringify({ judge: this.judge, key, verdict })}\n`;
+  private line(key: string, verdict: Verdict, migrated = false): string {
+    const fields = { judge: this.judge, key, verdict, ...(migrated ? { migrated } : {}) };
+    return `${JSON.stringify(fields)}\n`;
   }
 
-  private async rewrite(): Promise<void> {
-    const tmp = `${this.path}.${process.pid}.tmp`;
-    await writeFile(tmp, [...this.known].map(([key, v]) => this.line(key, v)).join(""));
-    await rename(tmp, this.path);
+  private async create(): Promise<boolean> {
+    await mkdir(dirname(this.path), { recursive: true });
+    const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(tmp, [...this.known].map(([key, v]) => this.line(key, v, true)).join(""));
+    try {
+      await link(tmp, this.path);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+      throw error;
+    } finally {
+      await unlink(tmp);
+    }
   }
+}
+
+async function sharedFiles(dir: string): Promise<string[]> {
+  const names = await readdir(dir).catch(() => []);
+  return names
+    .filter((name) => /^judgments(-[\w.-]+)?\.jsonl$/.test(name))
+    .map((name) => join(dir, name));
+}
+
+const fileName = (judge: string) =>
+  `${judge.replace(/[^\w.-]+/g, "_")}-${createHash("sha256").update(judge).digest("hex").slice(0, 16)}.jsonl`;
+
+type Loaded = { native: Map<string, Verdict>; migrated: Map<string, Verdict> };
+
+const merged = (loaded: Loaded) => new Map([...loaded.migrated, ...loaded.native]);
+
+async function read(files: string[], judge: string): Promise<Loaded> {
+  const loaded: Loaded = { native: new Map(), migrated: new Map() };
+  for (const file of files) {
+    for await (const line of jsonlLines(file, Line, { lines: 0, unparsed: 0 })) {
+      if (line.judge === judge)
+        (line.migrated ? loaded.migrated : loaded.native).set(line.key, line.verdict);
+    }
+  }
+  return loaded;
 }

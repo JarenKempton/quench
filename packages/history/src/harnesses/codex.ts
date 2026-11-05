@@ -12,7 +12,7 @@ import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type { Diagnostics, Event, EventKind, ShellCommand } from "../model.ts";
-import { mcpServerOf } from "../model.ts";
+import { mcpServerOf, sumOf } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -296,17 +296,20 @@ function eventOf(line: Line, turn: Turn): EventKind | null {
 const compacted = (): EventKind => ({ type: "compaction", trigger: "unknown", tokensBefore: null });
 
 function inference(u: TokenUsage, turn: Turn): EventKind {
-  const cached = u.cached_input_tokens ?? 0;
-  const written = u.cache_write_input_tokens ?? 0;
+  const context = u.input_tokens ?? null;
+  const cacheRead = u.cached_input_tokens ?? null;
+  const cacheWrite = u.cache_write_input_tokens ?? null;
+  const cached = sumOf(cacheRead, cacheWrite);
   return {
     type: "inference",
     model: turn.model,
     effort: turn.effort,
     usage: {
-      input: Math.max(0, (u.input_tokens ?? 0) - cached - written),
-      cacheRead: cached,
-      cacheWrite: written,
-      output: u.output_tokens ?? 0,
+      context,
+      input: context === null || cached === null ? null : Math.max(0, context - cached),
+      cacheRead,
+      cacheWrite,
+      output: u.output_tokens ?? null,
     },
   };
 }

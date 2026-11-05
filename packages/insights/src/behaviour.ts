@@ -1,4 +1,4 @@
-import type { FailureKind } from "@quench/history";
+import { sumOf, type FailureKind } from "@quench/history";
 import { durationSeconds, type Run } from "./run.ts";
 
 export const RETRY_LOOP_FAILURES = 3;
@@ -27,8 +27,7 @@ export const behaviourLabel: Record<BehaviourKind, string> = {
   "costly-run": `${COSTLY_RUN_TOKENS / 1_000_000}M+ tokens processed`,
 };
 
-export const tokensProcessed = (run: Run) =>
-  run.usage.input + run.usage.cacheRead + run.usage.cacheWrite + run.usage.output;
+export const tokensProcessed = (run: Run) => sumOf(run.usage.context, run.usage.output);
 
 export function behaviour(run: Run): Behaviour[] {
   const found: Behaviour[] = [...retryLoops(run)];
@@ -38,7 +37,7 @@ export function behaviour(run: Run): Behaviour[] {
   const seconds = durationSeconds(run);
   if (seconds !== null && seconds >= LONG_RUN_SECONDS) found.push({ kind: "long-run", seconds });
   const tokens = tokensProcessed(run);
-  if (tokens >= COSTLY_RUN_TOKENS) found.push({ kind: "costly-run", tokens });
+  if (tokens !== null && tokens >= COSTLY_RUN_TOKENS) found.push({ kind: "costly-run", tokens });
   return found;
 }
 

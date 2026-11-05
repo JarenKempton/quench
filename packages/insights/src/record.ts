@@ -36,7 +36,7 @@ export type RunRecord = {
   effort: string | null;
   inferences: number;
   contextStart: number | null;
-  contextPeak: number;
+  contextPeak: number | null;
   usage: Usage;
   toolCalls: number;
   toolErrors: number;

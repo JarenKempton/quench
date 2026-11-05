@@ -38,7 +38,7 @@ retired with it and live in git history.
   cover.
 - **Model judgments go through one `Judge` interface** ([#45](https://github.com/JarenKempton/quench/issues/45)).
   `history` and `insights` stay offline. Jev is the first judge, through TypeSafe's own SDK,
-  opt-in via `TYPESAFE_API_KEY`. Verdicts are cached per judge id and input, so a reply is paid
+  opt-in via `TYPESAFE_API_KEY`. Verdicts are cached per judge id and input, one file per judge id, so a reply is paid
   for once. The cache format is the Rust prototype's, so its verdicts carry over.
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
