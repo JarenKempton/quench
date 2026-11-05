@@ -11,6 +11,8 @@ import {
   submitProposal,
 } from "../src/client.ts";
 import { flagsFor, SHIPPED_SKILL } from "../src/index.ts";
+import { DECODE_BUDGET, squeezedViews } from "../src/review.ts";
+import { detectInFile } from "@quench/secrets";
 import { MAX_PROPOSALS_PER_WINDOW } from "../src/store.ts";
 import { failure, HUB_TIMEOUT, importedData, Owner, startHub, stopHubs, temp } from "./helpers.ts";
 
@@ -609,3 +611,82 @@ test("the encoded flag sees runs across line breaks and never depends on decodin
     ),
   ).toEqual([]);
 });
+
+const PROSE = `## Before you commit
+
+Run the checks first, then write the message. Keep the subject under 72 characters,
+in the imperative mood, and explain *why* in the body.
+
+- Use \`feat:\`, \`fix:\` or \`docs:\` as the type.
+- Link the issue with "Closes #123" on its own line.
+- Read https://www.conventionalcommits.org/en/v1.0.0/ for the full rules.
+
+| Type | When to use it |
+| ---- | -------------- |
+| feat | A new feature for the user |
+| fix  | A bug fix the user would notice |
+
+\`\`\`sh
+bun test && bunx tsc --noEmit -p .
+git commit -m "fix(hub): keep proposals outside main"
+\`\`\`
+
+1. Stage only what belongs together.
+2. Re-read the diff before you push; reviewers read it after you.
+`;
+
+test("base64 split into groups of any width is decoded once whitespace is removed", () => {
+  const b64 = Buffer.from(SECRET).toString("base64");
+  for (let width = 1; width <= 24; width++)
+    for (const gap of [" ", "\n", " \n    "]) {
+      const text = `Reference fixture for the parser:\n\n    ${wrap(b64, width, gap)}\n\nKeep it.\n`;
+      const { views, complete } = squeezedViews([text]);
+      expect([width, gap, complete]).toEqual([width, gap, true]);
+      expect([width, gap, views.some((v) => detectInFile(v).length > 0)]).toEqual([
+        width,
+        gap,
+        true,
+      ]);
+    }
+});
+
+test("ordinary markdown prose squeezes to nothing the scan or the cap objects to", () => {
+  const large = PROSE.repeat(Math.floor((60 * 1024) / PROSE.length));
+  for (const text of [PROSE, large]) {
+    const { views, complete } = squeezedViews([text]);
+    expect(complete).toBe(true);
+    expect(views.reduce((n, v) => n + v.length, 0)).toBeLessThan(DECODE_BUDGET);
+    expect(views.flatMap((v) => detectInFile(v))).toEqual([]);
+  }
+  expect(flagsFor("", PROSE).filter((f) => f.kind === "encoded")).toEqual([]);
+});
+
+test(
+  "two-character base64 groups are refused, and ordinary prose is accepted unflagged",
+  async () => {
+    const { hub, dir, proposeToken, api } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const post = (content: string) =>
+      api("/api/v1/proposals", proposeToken, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(submission(content, current.treeHash)),
+      });
+    const pairs = wrap(Buffer.from(SECRET).toString("base64"), 2, " ");
+    const refused = await post(
+      `${current.content}\nReference fixture for the parser whitespace test:\n\n    ${pairs}\n\nKeep whitespace handling unchanged.\n`,
+    );
+    expect(refused.status).toBe(422);
+    expect(await refused.text()).not.toContain(SECRET);
+    expect(hub.hub.store.proposals()).toEqual([]);
+
+    const large = PROSE.repeat(Math.floor((60 * 1024) / PROSE.length));
+    for (const prose of [PROSE, large]) {
+      const accepted = await post(`${current.content}\n${prose}`);
+      expect(accepted.status).toBe(201);
+      const receipt = (await accepted.json()) as { flags: { kind: string }[] };
+      expect(receipt.flags.filter((f) => f.kind === "encoded")).toEqual([]);
+    }
+  },
+  HUB_TIMEOUT,
+);

@@ -20,7 +20,7 @@ import { GitError, StaleHead } from "./git.ts";
 import type { DataDir } from "./data.ts";
 import { Hub, SHIPPED_SKILL } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
-import { binary, decodedViews, flagsFor } from "./review.ts";
+import { addedBlocks, binary, decodedViews, flagsFor, squeezedViews } from "./review.ts";
 import { SessionEnded, type Identity, type Proposer, type StoredProposal } from "./store.ts";
 import {
   connectPage,
@@ -314,7 +314,13 @@ export async function serveHub(options: ServeOptions) {
         415,
       );
     const meta = JSON.stringify([submission.claims, submission.evidence]);
-    const decoded = [submission.content, meta].map(decodedViews);
+    const head = await hub.head();
+    const skill = await hub.assignedSkill(proposer.name, head, submission.skill);
+    if (!skill) return json({ error: "not a skill assigned to this machine" }, 404);
+    const decoded = [
+      ...[submission.content, meta].map(decodedViews),
+      squeezedViews([...addedBlocks(skill.content, submission.content), meta]),
+    ];
     if (decoded.some((d) => !d.complete))
       return json(
         {
@@ -336,9 +342,6 @@ export async function serveHub(options: ServeOptions) {
         },
         422,
       );
-    const head = await hub.head();
-    const skill = await hub.assignedSkill(proposer.name, head, submission.skill);
-    if (!skill) return json({ error: "not a skill assigned to this machine" }, 404);
     if (skill.treeHash !== submission.baseTreeHash)
       return json(
         {

@@ -212,3 +212,50 @@ export const binary = (text: string) =>
   Array.from({ length: text.length }, (_, i) => text.charCodeAt(i)).some(
     (c) => (c < 32 && !TEXT_CONTROLS.has(c)) || c === 127 || c === 0xfffd,
   );
+
+const SQUEEZED_RUN = /[A-Za-z0-9+/_=-]{16,}/g;
+const PRINTABLE_RUN = /[ -~\t]{8,}/g;
+
+const printableRuns = (bytes: Buffer) => bytes.toString("latin1").match(PRINTABLE_RUN) ?? [];
+
+const squeezeOnce = (text: string) =>
+  [...text.replace(/\s+/g, "").matchAll(SQUEEZED_RUN)].flatMap(([raw]) => {
+    const run = raw.replace(/=/g, "");
+    const decoded = [0, 1, 2, 3].map((skip) =>
+      Buffer.from(run.slice(skip).replace(/-/g, "+").replace(/_/g, "/"), "base64"),
+    );
+    if (HEX_ONLY.test(run) && run.length >= 32)
+      decoded.push(...[0, 1].map((skip) => Buffer.from(run.slice(skip), "hex")));
+    return decoded.flatMap(printableRuns);
+  });
+
+export function squeezedViews(texts: string[]): { views: string[]; complete: boolean } {
+  const views: string[] = [];
+  let used = 0;
+  let layer = texts;
+  for (let depth = 0; depth < DECODE_DEPTH && layer.length; depth++) {
+    const next: string[] = [];
+    for (const input of layer)
+      for (const view of squeezeOnce(input)) {
+        used += view.length;
+        if (used > DECODE_BUDGET) return { views, complete: false };
+        next.push(view);
+      }
+    views.push(...next);
+    layer = next;
+  }
+  return { views, complete: true };
+}
+
+export function addedBlocks(base: string, proposed: string): string[] {
+  const blocks: string[][] = [];
+  let open = false;
+  for (const change of lineChanges(base, proposed)) {
+    if (change.kind === "+") {
+      if (!open) blocks.push([]);
+      blocks.at(-1)!.push(change.line);
+      open = true;
+    } else if (change.kind === " ") open = false;
+  }
+  return blocks.map((lines) => lines.join("\n"));
+}
