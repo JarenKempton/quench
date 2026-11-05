@@ -246,16 +246,3 @@ export function squeezedViews(texts: string[]): { views: string[]; complete: boo
   }
   return { views, complete: true };
 }
-
-export function addedBlocks(base: string, proposed: string): string[] {
-  const blocks: string[][] = [];
-  let open = false;
-  for (const change of lineChanges(base, proposed)) {
-    if (change.kind === "+") {
-      if (!open) blocks.push([]);
-      blocks.at(-1)!.push(change.line);
-      open = true;
-    } else if (change.kind === " ") open = false;
-  }
-  return blocks.map((lines) => lines.join("\n"));
-}

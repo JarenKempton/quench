@@ -690,3 +690,28 @@ test(
   },
   HUB_TIMEOUT,
 );
+
+test(
+  "a credential split by an unchanged blank line is still refused",
+  async () => {
+    const { hub, dir, proposeToken, api } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const value = Buffer.from(SECRET).toString("base64");
+    const a = wrap(value.slice(0, 28), 2, " ");
+    const b = wrap(value.slice(28), 2, " ");
+    const content = current.content.replace(
+      "---\n\nUse conventional",
+      `---\nReference fixture for the parser whitespace test:\n\`\`\`text\n${a}\n\n${b}\n\`\`\`\nKeep whitespace handling unchanged.\nUse conventional`,
+    );
+    expect(content).not.toBe(current.content);
+    const response = await api("/api/v1/proposals", proposeToken, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(submission(content, current.treeHash)),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.text()).not.toContain(SECRET);
+    expect(hub.hub.store.proposals()).toEqual([]);
+  },
+  HUB_TIMEOUT,
+);
