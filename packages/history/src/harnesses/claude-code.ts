@@ -416,7 +416,7 @@ export const claudeCode: Harness<"claude-code"> = {
     const events: Event[] = [];
     const inferenceAt = new Map<string, number>();
     const attachments = new Set<string>();
-    const queued = new Map<string, Event>();
+    const queued = new Map<string, Event[]>();
     const delivered = new Set<Event>();
     let cwd: string | null = null;
     let branch: string | null = null;
@@ -444,12 +444,9 @@ export const claudeCode: Harness<"claude-code"> = {
         if (kind.type === "inference") queued.clear();
         const event = { ...kind, at, line: position.line };
         if (kind.type === "message" && kind.author === "user") {
-          const earlier = queued.get(kind.text);
-          if (line.type === "attachment") queued.set(kind.text, event);
-          else if (earlier) {
-            delivered.add(earlier);
-            queued.delete(kind.text);
-          }
+          const waiting = queued.get(kind.text) ?? [];
+          if (line.type === "attachment") queued.set(kind.text, [...waiting, event]);
+          else if (waiting.length) delivered.add(waiting.shift()!);
         }
         events.push(event);
       }

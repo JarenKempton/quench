@@ -182,7 +182,12 @@ type RunJson = {
   promptSenderSource: string;
   replySender: string;
   replySenderSource: string;
-  followUps: { replyLine: number | null; replySender: string; replySenderSource: string }[];
+  followUps: {
+    replyAt: string | null;
+    replyLine: number | null;
+    replySender: string;
+    replySenderSource: string;
+  }[];
 };
 
 test(
@@ -280,6 +285,103 @@ test(
       [1, 1],
       [1, 1],
     ]);
+  },
+  cliRunsTimeout,
+);
+
+async function session(records: object[], verdicts: [string, string][]) {
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-midrun-")));
+  const file = join(home, ".claude/projects/demo/dddd4444.jsonl");
+  await Bun.write(file, lines(records));
+  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
+  await cache.remember(
+    verdicts.map(([assistantSaid, reply]) => [
+      { assistantSaid, reply },
+      { kind: "correction", sender: "person", confidence: 1 },
+    ]),
+  );
+  const out = await quench(
+    home,
+    "corrections",
+    file,
+    "--json",
+    "--cached-only",
+    "--no-host-history",
+  );
+  return { home, file, out, report: JSON.parse(out.stdout) };
+}
+
+test(
+  "runs --json follow-ups carry lines, times and senders but no history text",
+  async () => {
+    const { home, file } = await session(
+      [user(0, "go"), said("m1", 1, "done"), user(2, firstText), user(3, secondText)],
+      [],
+    );
+    const out = await quench(home, "runs", file, "--json", "--no-host-history");
+    const [run] = JSON.parse(out.stdout) as RunJson[];
+    expect(run!.followUps).toEqual([
+      {
+        replyAt: at(3),
+        replyLine: 4,
+        replySender: "unknown",
+        replySenderSource: "none",
+      },
+    ]);
+    expect(out.stdout).not.toContain(secondText);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "identical queued prompts each pair with their own delivery line",
+  async () => {
+    const { report } = await session(
+      [
+        user(0, "go"),
+        said("m1", 1, "done"),
+        queued(2, againText, "q1"),
+        queued(3, againText, "q2"),
+        user(4, againText),
+        user(5, againText),
+        said("m2", 6, "done"),
+        user(7, "next"),
+      ],
+      [
+        ["done", againText],
+        ["done", "next"],
+      ],
+    );
+    expect(report.corrections.map((c: Correction) => [c.runIndex, c.locator.replyLine])).toEqual([
+      [1, 5],
+      [1, 6],
+      [2, 8],
+    ]);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "a follow-up is judged against the agent message as it finished, and a verdict cached on main still hits",
+  async () => {
+    const { report, out } = await session(
+      [
+        user(0, "go"),
+        said("m1", 1, "working"),
+        queued(2, steerText, "q1"),
+        said("m1", 3, "done"),
+        user(4, wrongText),
+      ],
+      [["done", wrongText]],
+    );
+    expect(
+      report.corrections.map((c: Correction & { cached: boolean }) => [
+        c.runIndex,
+        c.locator.replyLine,
+        c.cached,
+      ]),
+    ).toEqual([[1, 5, true]]);
+    expect(out.stderr).toContain("1 replies in scope are not classified yet");
   },
   cliRunsTimeout,
 );

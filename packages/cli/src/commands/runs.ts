@@ -71,7 +71,11 @@ export async function runs(
           ...run,
           ...prompted(run),
           ...replied(run),
-          followUps: run.followUps.map((f) => ({ ...f, ...replied(f) })),
+          followUps: run.followUps.map((f) => ({
+            replyAt: f.replyAt,
+            replyLine: f.replyLine,
+            ...replied(f),
+          })),
           commands: commandRecords(run),
           ...(i === 0 ? { startingContext: start } : {}),
         })),

@@ -32,7 +32,13 @@ export type CommandRecord = CommandShape & { error: string | null };
 
 export type FollowUp = Pick<
   Run,
-  "reply" | "replyAt" | "replyLine" | "replyOrigin" | "replySender" | "replyCommand"
+  | "assistantSaid"
+  | "reply"
+  | "replyAt"
+  | "replyLine"
+  | "replyOrigin"
+  | "replySender"
+  | "replyCommand"
 >;
 
 export type Run = {
@@ -124,12 +130,18 @@ export function runs(
   const kept: Run[] = [];
   for (const segment of splitRuns(session, options.turns ?? false)) {
     if (segment.inferences > 0) kept.push(segment);
-    else if (segment.reply !== null) kept.at(-1)?.followUps.push(followUpOf(segment));
+    else if (segment.reply !== null) {
+      const run = kept.at(-1);
+      run?.followUps.push(
+        followUpOf(segment, run.followUps.at(-1)?.assistantSaid ?? run.assistantSaid),
+      );
+    }
   }
   return linkSubagents(kept, children.map(startedAt));
 }
 
-const followUpOf = (segment: Run): FollowUp => ({
+const followUpOf = (segment: Run, before: string | null): FollowUp => ({
+  assistantSaid: segment.assistantSaid ?? before,
   reply: segment.reply,
   replyAt: segment.replyAt,
   replyLine: segment.replyLine,
