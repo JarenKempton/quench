@@ -314,10 +314,19 @@ export async function serveHub(options: ServeOptions) {
         415,
       );
     const meta = JSON.stringify([submission.claims, submission.evidence]);
+    const decoded = [submission.content, meta].map(decodedViews);
+    if (decoded.some((d) => !d.complete))
+      return json(
+        {
+          error:
+            "too much encoded content to scan in full; nothing was stored. Keep encoded data out of SKILL.md",
+        },
+        422,
+      );
     const findings = [
       ...detectInFile(submission.content, "SKILL.md"),
       ...detect(meta),
-      ...[submission.content, meta].flatMap(decodedViews).flatMap((view) => detectInFile(view)),
+      ...decoded.flatMap((d) => d.views).flatMap((view) => detectInFile(view)),
     ];
     if (findings.length)
       return json(

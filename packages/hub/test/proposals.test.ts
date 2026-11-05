@@ -555,3 +555,80 @@ test(
   },
   HUB_TEST_MS,
 );
+
+const wrap = (text: string, width: number, joiner = "\n") =>
+  text.match(new RegExp(`.{1,${width}}`, "g"))!.join(joiner);
+const stripped = (text: string) => text.replace(/=+$/, "");
+const noise = (length: number) =>
+  Buffer.from(Array.from({ length }, (_, i) => (i * 73 + 11) % 256)).toString("base64");
+
+test(
+  "credentials in wrapped, grouped, padding-stripped or triple-encoded base64 are refused",
+  async () => {
+    const { hub, dir, proposeToken, api } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const b64 = Buffer.from(SECRET).toString("base64");
+    const inputs: Record<string, string> = {
+      "wrapped at 12": wrap(b64, 12),
+      "wrapped at 20 in an indented block": wrap(b64, 20, "\n    "),
+      "groups of 4": wrap(b64, 4, " "),
+      "padding-stripped inside a long run": `${stripped(Buffer.from("x".repeat(301)).toString("base64"))}${stripped(b64)}`,
+      "base64 of hex of percent": Buffer.from(
+        Buffer.from(percent(SECRET)).toString("hex"),
+      ).toString("base64"),
+    };
+    for (const [name, value] of Object.entries(inputs)) {
+      const response = await api("/api/v1/proposals", proposeToken, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          submission(edited(current.content, `Decode this:\n\n    ${value}\n`), current.treeHash),
+        ),
+      });
+      expect([name, response.status]).toEqual([name, 422]);
+      expect(await response.text()).not.toContain(SECRET);
+    }
+    expect(hub.hub.store.proposals()).toEqual([]);
+  },
+  HUB_TEST_MS,
+);
+
+test(
+  "encoded content too large to scan in full is refused",
+  async () => {
+    const { hub, dir, proposeToken, api } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const response = await api("/api/v1/proposals", proposeToken, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        submission(edited(current.content, wrap(noise(30_000), 76)), current.treeHash),
+      ),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.text()).toContain("too much encoded content");
+    expect(hub.hub.store.proposals()).toEqual([]);
+  },
+  HUB_TEST_MS,
+);
+
+test("the encoded flag sees runs across line breaks and never depends on decoding", () => {
+  const encoded = (text: string, base = "") =>
+    flagsFor(base, text).filter((f) => f.kind === "encoded");
+  expect(encoded(`Config:\n${wrap(noise(90), 12)}\n`)).toHaveLength(1);
+  expect(encoded(`Config: ${wrap(noise(90), 4, " ")}\n`)).toHaveLength(1);
+  expect(
+    encoded(`${stripped(Buffer.from("x".repeat(301)).toString("base64"))}${stripped(noise(12))}\n`),
+  ).toHaveLength(1);
+  expect(encoded(`${"Zq7-".repeat(20)}\n`)).toHaveLength(1);
+  expect(encoded(`| --- | --- |\n|${"-".repeat(80)}|\nQUENCH_RELEASE=nightly\n`)).toEqual([]);
+  expect(encoded(`${noise(18)}\n`)).toHaveLength(1);
+  const wrapped = wrap(noise(90), 12);
+  expect(encoded(`${wrapped}\n\n## Notes\n`, `${wrapped}\n`)).toEqual([]);
+  expect(encoded(`${wrapped}\nMore.\n`, `${wrapped}\n`)).toHaveLength(1);
+  expect(
+    encoded(
+      "Keep commit subjects under seventy-two characters.\nUse the review-checklist skill.\nSee skills/writing/commit-style/SKILL.md first.\n",
+    ),
+  ).toEqual([]);
+});

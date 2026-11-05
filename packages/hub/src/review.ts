@@ -51,79 +51,158 @@ const SCRIPT = /^#!|<script\b|\bpowershell\b|\bpython3?\s+-c\b|\bnode\s+-e\b/i;
 const CREDENTIAL =
   /\b(?:api[_ -]?keys?|access[_ -]?keys?|tokens?|secrets?|passwords?|passwd|passphrases?|credentials?|private[_ -]?keys?|ssh[_ -]?keys?|bearer|authorization|cookies?|aws_[a-z_]+|gh[pousr]_|\.env|\.netrc|\.npmrc|id_rsa|id_ed25519|keychain)\b/i;
 
-const BASE64_RUN = /[A-Za-z0-9+/_-]{16,}={0,2}/g;
-const HEX_RUN = /(?:[0-9a-fA-F]{2}){16,}/g;
-const PERCENT_RUN = /(?:%[0-9a-fA-F]{2})+/g;
-const HAS_PERCENT = /%[0-9a-fA-F]{2}/;
-const DECODE_DEPTH = 2;
+export const DECODE_BUDGET = 64 * 1024;
+const DECODE_DEPTH = 3;
+const MIN_DECODE = 16;
+const REGION = /[A-Za-z0-9+/_=-]+(?:\s+[A-Za-z0-9+/_=-]+)*/g;
+const TOKEN = /\S+/g;
+const HEX_ONLY = /^[0-9a-fA-F]+$/;
+const ESCAPE_GAP = /(%[0-9a-fA-F]{2})\s+(?=%[0-9a-fA-F]{2})/g;
+const ESCAPE_RUN = /(?:%[0-9a-fA-F]{2})+/g;
+const HAS_ESCAPE = /%[0-9a-fA-F]{2}/;
+const DENSE = /[A-Z0-9]/g;
+
+type Run = { text: string; start: number; end: number };
+
+const opaqueToken = (token: string) =>
+  /[0-9+/_]/.test(token) || /.[A-Z]/.test(token) || token.length >= 20;
+
+export function opaqueRuns(text: string): Run[] {
+  const runs: Run[] = [];
+  for (const region of text.matchAll(REGION)) {
+    const tokens = [...region[0].matchAll(TOKEN)].map((t) => ({
+      text: t[0].replace(/=/g, ""),
+      start: region.index + t.index,
+      end: region.index + t.index + t[0].length,
+    }));
+    const opaque = tokens.map((t) => t.text !== "" && opaqueToken(t.text));
+    const whole = opaque.filter(Boolean).length >= 0.6 * tokens.length;
+    let current: Run | null = null;
+    tokens.forEach((token, i) => {
+      if (whole || opaque[i]) {
+        current = current
+          ? { text: current.text + token.text, start: current.start, end: token.end }
+          : { ...token };
+      } else if (current) {
+        runs.push(current);
+        current = null;
+      }
+    });
+    if (current) runs.push(current);
+  }
+  return runs.filter((r) => r.text !== "");
+}
 
 const base64Text = (run: string) =>
   [0, 1, 2, 3].map((skip) =>
     Buffer.from(run.slice(skip).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
   );
 
+const hexText = (run: string) =>
+  HEX_ONLY.test(run) && run.length >= 32
+    ? [0, 1].map((skip) => Buffer.from(run.slice(skip), "hex").toString("utf8"))
+    : [];
+
+const escapeLines = (text: string) =>
+  HAS_ESCAPE.test(text)
+    ? text
+        .replace(ESCAPE_GAP, "$1")
+        .split("\n")
+        .filter((line) => HAS_ESCAPE.test(line))
+        .map((line) =>
+          line.replace(ESCAPE_RUN, (run) =>
+            Buffer.from(run.replace(/%/g, ""), "hex").toString("utf8"),
+          ),
+        )
+    : [];
+
 const decodeOnce = (text: string) => [
-  ...[...text.matchAll(HEX_RUN)].map(([run]) => Buffer.from(run, "hex").toString("utf8")),
-  ...[...text.matchAll(BASE64_RUN)].flatMap(([run]) => base64Text(run)),
-  ...(HAS_PERCENT.test(text)
-    ? [
-        text.replace(PERCENT_RUN, (run) =>
-          Buffer.from(run.replace(/%/g, ""), "hex").toString("utf8"),
-        ),
-      ]
-    : []),
+  ...opaqueRuns(text)
+    .filter((run) => run.text.length >= MIN_DECODE)
+    .flatMap((run) => [...hexText(run.text), ...base64Text(run.text)]),
+  ...escapeLines(text),
 ];
 
-export function decodedViews(text: string): string[] {
+export function decodedViews(text: string): { views: string[]; complete: boolean } {
   const views: string[] = [];
+  let used = 0;
   let layer = [text];
   for (let depth = 0; depth < DECODE_DEPTH && layer.length; depth++) {
-    layer = layer.flatMap(decodeOnce).filter((view) => view.length >= 8);
-    views.push(...layer);
+    const next: string[] = [];
+    for (const input of layer)
+      for (const view of decodeOnce(input)) {
+        if (view.length < 8) continue;
+        used += view.length;
+        if (used > DECODE_BUDGET) return { views, complete: false };
+        next.push(view);
+      }
+    views.push(...next);
+    layer = next;
   }
-  return views;
+  return { views, complete: true };
 }
 
-const OPAQUE_RUN = /[A-Za-z0-9+/_-]{24,}={0,2}/g;
-const LONG_HEX = /(?:[0-9a-fA-F]{2}){16,}/;
-const PERCENT_ESCAPES = /(?:%[0-9a-fA-F]{2}){4,}/;
-const DENSE = /[A-Z0-9]/g;
+const PERCENT_ESCAPES = /(?:%[0-9a-fA-F]{2}){4,}/g;
 
-const opaque = (line: string) =>
-  PERCENT_ESCAPES.test(line) ||
-  LONG_HEX.test(line) ||
-  [...line.matchAll(OPAQUE_RUN)].some(
-    ([run]) =>
-      /\d/.test(run) &&
-      /[A-Za-z]/.test(run) &&
-      (run.match(DENSE)?.length ?? 0) / run.length >= 0.3 &&
-      entropy(run) >= 3.5,
+const distinct = (run: string) => new Set(run).size;
+
+const encodedRun = (run: string) =>
+  (run.length >= 64 && distinct(run) >= 4) ||
+  (HEX_ONLY.test(run) && run.length >= 32) ||
+  (run.length >= 20 &&
+    /\d/.test(run) &&
+    /[a-z]/.test(run) &&
+    /[A-Z]/.test(run) &&
+    (run.match(DENSE)?.length ?? 0) / run.length >= 0.25 &&
+    entropy(run) >= 3.8);
+
+function encodedSpans(text: string) {
+  const spans = opaqueRuns(text)
+    .filter((run) => encodedRun(run.text))
+    .map(({ start, end }) => ({ start, end }));
+  const joined = text.replace(
+    ESCAPE_GAP,
+    (gap, escape: string) => escape + " ".repeat(gap.length - escape.length),
   );
+  for (const m of joined.matchAll(PERCENT_ESCAPES))
+    spans.push({ start: m.index, end: m.index + m[0].length });
+  return spans;
+}
 
 const clip = (line: string) => (line.length > 200 ? `${line.slice(0, 200)}…` : line);
 
 export function flagsFor(base: string, proposed: string): Flag[] {
   const known = new Set(base.match(URL_PATTERN) ?? []);
   const flags: Flag[] = [];
+  const added = new Set<number>();
   let fence: "script" | "other" | null = null;
   for (const change of lineChanges(base, proposed)) {
     if (change.kind === "-") continue;
     const { line, at } = change;
     const opens = FENCE.test(line) && fence === null;
-    const added = change.kind === "+";
-    if (added) {
+    if (change.kind === "+") {
+      added.add(at);
       const add = (kind: FlagKind) => flags.push({ kind, line: at, text: clip(line) });
       if ((line.match(URL_PATTERN) ?? []).some((u) => !known.has(u))) add("url");
       if (SHELL.test(line) || (fence === "script" && !FENCE.test(line) && line.trim() !== ""))
         add("shell");
       if (SCRIPT.test(line) || (opens && SCRIPT_FENCE.test(line))) add("script");
       if (CREDENTIAL.test(line)) add("credential");
-      if (opaque(line)) add("encoded");
     }
     if (opens) fence = SCRIPT_FENCE.test(line) ? "script" : "other";
     else if (FENCE.test(line)) fence = null;
   }
-  return flags;
+  const lineAt = (offset: number) => proposed.slice(0, offset).split("\n").length;
+  for (const span of encodedSpans(proposed)) {
+    const first = lineAt(span.start);
+    const last = lineAt(span.end);
+    const line = Array.from({ length: last - first + 1 }, (_, i) => first + i).find((n) =>
+      added.has(n),
+    );
+    if (line !== undefined)
+      flags.push({ kind: "encoded", line, text: clip(proposed.slice(span.start, span.end)) });
+  }
+  return flags.sort((a, b) => a.line - b.line);
 }
 
 const TEXT_CONTROLS = new Set([9, 10, 13]);
