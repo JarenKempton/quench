@@ -35,7 +35,8 @@ import {
 } from "@quench/judge";
 import { reading } from "../progress.ts";
 import { renderCauses } from "./causes.ts";
-import { describe, json, quote, runFacts } from "../format.ts";
+import { contextOf, inContext, renderInContext, type SessionContext } from "./context.ts";
+import { describe, json, quote, runFacts, shortPath } from "../format.ts";
 
 const MIN_BUCKET = 15;
 
@@ -55,6 +56,7 @@ type Options = {
   themes: boolean;
   themeLimit: number;
   causes: boolean;
+  context: boolean;
   cachedOnly: boolean;
   judge: "jev" | HarnessName;
 };
@@ -78,7 +80,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
     );
     return 1;
   }
-  const optIn = options.themes || options.causes;
+  const optIn = options.themes || options.causes || options.context;
   if (asking && !optIn && !replyJudge) {
     process.stderr.write(NO_KEY);
     return 2;
@@ -93,9 +95,10 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const host =
     options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
   let sessions: SessionRuns[];
+  const contexts = new Map<string, SessionContext>();
   const since = new Date(Date.now() - options.days * 86_400_000);
   try {
-    sessions = await sessionRuns(home, since, host?.enrich);
+    sessions = await sessionRuns(home, since, host?.enrich, contexts);
   } finally {
     host?.close();
   }
@@ -137,6 +140,10 @@ export async function corrections(home: Home, options: Options): Promise<number>
     process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
+  const context = options.context
+    ? inContext(judged.replies, contexts, since, options.examples)
+    : null;
+  const path = (file: string) => shortPath(file, home.dir);
   const tokens = replyJudge instanceof Jev ? replyJudge.tokens : null;
   const calls = { label, perReply: callsPerReply };
   process.stdout.write(
@@ -161,13 +168,25 @@ export async function corrections(home: Home, options: Options): Promise<number>
                 },
               }
             : {}),
+          ...(context
+            ? {
+                context: {
+                  ...context,
+                  recurring: context.recurring.map((r) => ({
+                    ...r,
+                    files: r.files.map((f) => ({ ...f, name: path(f.name) })),
+                  })),
+                },
+              }
+            : {}),
           latest: summary.latest.map(example),
           latestAutomation: summary.latestAutomation.map(example),
         })
       : (themes
           ? renderThemes(themes, judged, options.days, calls)
           : render(summary, judged, options.days, cache.judge, tokens, options.cachedOnly, calls)) +
-          (causes ? renderCauses(causes, options.examples) : ""),
+          (causes ? renderCauses(causes, options.examples) : "") +
+          (context ? renderInContext(context, path) : ""),
   );
   if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
   if (
@@ -190,6 +209,7 @@ async function sessionRuns(
   home: Home,
   since: Date,
   enrich?: SessionEnricher,
+  contexts?: Map<string, SessionContext>,
 ): Promise<SessionRuns[]> {
   const parents = new Map<string, SessionRuns>();
   const childStarts = new Map<string, (Date | null)[]>();
@@ -200,6 +220,7 @@ async function sessionRuns(
       const key = `${s.harness}:${s.parent}`;
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
+      contexts?.set(`${s.harness}:${s.id}`, contextOf(s, home.dir));
       parents.set(`${s.harness}:${s.id}`, {
         id: s.id,
         path: s.path,

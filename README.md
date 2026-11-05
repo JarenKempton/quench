@@ -232,6 +232,28 @@ exits with code 1. Each request has a 10-second timeout and no retries.
 cause questions. `--cached-only` skips that step: replies without a verdict stay unclassified, and
 only the corrections already known are asked about.
 
+## What was in context when corrections recur
+
+```sh
+quench corrections --context --cached-only
+quench corrections --context --cached-only --judge claude --json
+```
+
+`--context` groups corrections by the behaviour recorded in the run before each one, with no
+model call. Groups use structural fields only: the behaviour kind (the same failure 3 or more
+times, invalid tool input, a run of 15 minutes or more, 10M or more tokens) and the harness
+tool name, never error or command text. Only corrections whose own timestamp falls inside
+`--days` count. A group that spans 2 or more sessions is listed with its correction count
+(people and agents apart), sessions and dates. It also lists every skill invoked and every
+instruction and memory file loaded in those sessions, each with session and correction counts
+and dates. A skill counts when the harness recorded an invocation or a successful read of its
+listed file, not when a command merely names its path. Combined blocks, such as Codex's
+`AGENTS.md instructions`, are listed per folder. Sessions with no record are counted, never
+filled in from today's files. Evidence is the session id, run and date of the latest
+corrections; no reply text is shown. It reads the verdict cache of the judge you pick, Jev's
+or `--judge claude`'s, and with `--cached-only` asks neither. Being in context is a
+correlation, not a cause. Nothing is edited.
+
 ## Profile
 
 ```sh

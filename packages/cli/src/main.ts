@@ -40,6 +40,7 @@ Usage:
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
+    --context                         recurring corrections with the skills and instruction files in context (read-only)
     --cached-only                     use cached reply verdicts only; never classify new replies
     --judge jev|claude                 who classifies replies: Jev (default, TYPESAFE_API_KEY), or claude -p on your own account
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
@@ -61,6 +62,7 @@ const { positionals, values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     themes: { type: "boolean", default: false },
     causes: { type: "boolean", default: false },
+    context: { type: "boolean", default: false },
     "cached-only": { type: "boolean", default: false },
     "theme-limit": { type: "string" },
     judge: { type: "string", default: "jev" },
@@ -120,6 +122,10 @@ if (values.themes && command !== "corrections") {
 }
 if (values.causes && command !== "corrections") {
   process.stderr.write("--causes is only available for corrections\n");
+  process.exit(1);
+}
+if (values.context && command !== "corrections") {
+  process.stderr.write("--context is only available for corrections\n");
   process.exit(1);
 }
 if (values["cached-only"] && command !== "corrections") {
@@ -229,6 +235,7 @@ switch (command) {
       dryRun: values["dry-run"],
       themes: values.themes,
       causes: values.causes,
+      context: values.context,
       cachedOnly: values["cached-only"],
       judge,
       themeLimit,
