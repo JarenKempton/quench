@@ -168,7 +168,7 @@ test("Claude Code records the request's system prompt, tool definitions and defe
       .join("\n"),
   );
   const [s] = await all(new Home(dir));
-  expect(s?.events.map(({ at: _, ...e }) => e)).toEqual([
+  expect(s?.events.map(({ at: _, line: __, ...e }) => e)).toEqual([
     { type: "deferred_tools", names: ["mcp__s__b"], chars: 9 },
     { type: "mcp_instructions", servers: ["s"], chars: 5 },
     {

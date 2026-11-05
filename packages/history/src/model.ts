@@ -114,7 +114,7 @@ export type EventKind =
   | { type: "deferred_tools"; names: string[]; chars: number }
   | { type: "mcp_instructions"; servers: string[]; chars: number };
 
-export type Event = EventKind & { at: Date | null };
+export type Event = EventKind & { at: Date | null; line?: number };
 
 export function unhandled(event: never): never {
   throw new Error(`unhandled event ${JSON.stringify(event)}`);

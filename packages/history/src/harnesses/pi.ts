@@ -174,7 +174,8 @@ export const pi: Harness<"pi"> = {
     const diagnostics: Diagnostics = { lines: 0, unparsed: 0 };
     const events: Event[] = [];
     let header: z.infer<typeof Line> | undefined;
-    for await (const line of jsonlLines(r.path, Line, diagnostics)) {
+    const position = { line: 0 };
+    for await (const line of jsonlLines(r.path, Line, diagnostics, position)) {
       if (line.type === "session") header ??= line;
       const at = date(line.timestamp);
       const kinds: EventKind[] =
@@ -187,7 +188,7 @@ export const pi: Harness<"pi"> = {
                 ...skillListing(line.systemMessage?.sections),
               ]
             : [];
-      for (const kind of kinds) events.push({ ...kind, at });
+      for (const kind of kinds) events.push({ ...kind, at, line: position.line });
     }
     if (!header) throw new NotASession(r.path, "Pi");
     return {

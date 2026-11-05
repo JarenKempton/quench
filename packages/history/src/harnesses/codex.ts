@@ -216,23 +216,25 @@ export const codex: Harness<"codex"> = {
     const fallbackUsage = new Set<Event>();
     let meta: NonNullable<Line["payload"]> | undefined;
     let hasRecords = false;
-    for await (const line of jsonlLines(r.path, Line, diagnostics)) {
+    const position = { line: 0 };
+    for await (const line of jsonlLines(r.path, Line, diagnostics, position)) {
       if (line.type === "session_meta") meta ??= line.payload ?? undefined;
       hasRecords ||= line.type === "token_usage_record";
       const at = date(line.timestamp);
       const kind = eventOf(line, turn);
+      const where = { at, line: position.line };
       if (kind) {
-        const event = { ...kind, at };
+        const event = { ...kind, ...where };
         if (line.type === "event_msg") fallbackUsage.add(event);
         events.push(event);
       }
       const prompt = promptOf(line);
-      if (prompt) events.push({ ...prompt, at });
+      if (prompt) events.push({ ...prompt, ...where });
       const loaded = instructions(line);
-      if (loaded) events.push({ ...loaded, at });
+      if (loaded) events.push({ ...loaded, ...where });
       const listing = skillListing(line);
-      if (listing) events.push({ ...listing, at });
-      for (const call of mcpCallsOf(line)) events.push({ ...call, at });
+      if (listing) events.push({ ...listing, ...where });
+      for (const call of mcpCallsOf(line)) events.push({ ...call, ...where });
     }
     if (!meta) throw new NotASession(r.path, "Codex");
     return {

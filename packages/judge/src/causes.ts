@@ -41,7 +41,11 @@ export interface CauseJudge {
 
 export type CauseStatus = Cause | "pending" | "failed";
 export type CauseTally = Record<CauseStatus, number>;
-export type CausedCorrection = { reply: Reply; cause: CauseStatus };
+export type CausedCorrection = {
+  reply: Reply;
+  cause: CauseStatus;
+  judged: "cached" | "new" | null;
+};
 
 const BUCKETS = ["Model", "Effort", "Harness"];
 const WORKERS = 8;
@@ -68,6 +72,7 @@ export async function judgeCauses(
   );
   const missing = [...inputs.values()].filter((input) => !cache.get(input));
   const failed = new Set<CauseInput>();
+  const fresh = new Set<CauseInput>();
   const failures: string[] = [];
   let newlyJudged = 0;
   for (let i = 0; judge && i < missing.length; i += WORKERS) {
@@ -80,6 +85,7 @@ export async function judgeCauses(
       if (result.status === "rejected" && result.reason instanceof KeyRejected) throw result.reason;
       if (result.status === "fulfilled" && Cause.safeParse(result.value.choice).success) {
         await cache.remember(input, result.value);
+        fresh.add(input);
         newlyJudged += 1;
         continue;
       }
@@ -99,7 +105,7 @@ export async function judgeCauses(
       : failed.has(input)
         ? "failed"
         : "pending";
-    return { reply, cause };
+    return { reply, cause, judged: decision ? (fresh.has(input) ? "new" : "cached") : null };
   });
   return {
     judge: cache.judge,

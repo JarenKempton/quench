@@ -64,19 +64,20 @@ history.
 
 ## Commands
 
-| Command                                        | What it shows                                                                         |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `quench`                                       | A short summary: what sessions start with, what is worth a look, busiest projects     |
-| `quench profile [section]`                     | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`          |
-| `quench worktrees [--days 30] [--json]`        | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
-| `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort |
-| `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here     |
-| `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`         |
-| `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`   |
-| `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline      |
-| `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline |
-| `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline          |
-| `quench skills plan --source <dir>`            | What a skills checkout would change here, with `--machine <name> --json`; read-only   |
+| Command                                        | What it shows                                                                           |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `quench`                                       | A short summary: what sessions start with, what is worth a look, busiest projects       |
+| `quench profile [section]`                     | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`            |
+| `quench worktrees [--days 30] [--json]`        | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only    |
+| `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort   |
+| `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here       |
+| `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`           |
+| `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`     |
+| `quench corrections <file>... --session <id>`  | Corrections in those sessions only, with transcript line locators; `--json` is schema 1 |
+| `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline        |
+| `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline   |
+| `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline            |
+| `quench skills plan --source <dir>`            | What a skills checkout would change here, with `--machine <name> --json`; read-only     |
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message

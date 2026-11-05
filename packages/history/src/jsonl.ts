@@ -5,18 +5,22 @@ export async function* jsonlLines<T>(
   path: string,
   line: z.ZodType<T>,
   diagnostics: Diagnostics,
+  position: { line: number } = { line: 0 },
 ): AsyncGenerator<T> {
   const decoder = new TextDecoder();
   let carry = "";
+  position.line = 0;
   for await (const chunk of Bun.file(path).stream()) {
     const text = carry + decoder.decode(chunk, { stream: true });
     const rows = text.split("\n");
     carry = rows.pop() ?? "";
     for (const row of rows) {
+      position.line += 1;
       const parsed = parseRow(row, line, diagnostics);
       if (parsed !== undefined) yield parsed;
     }
   }
+  position.line += 1;
   const last = parseRow(carry + decoder.decode(), line, diagnostics);
   if (last !== undefined) yield last;
 }

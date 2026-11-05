@@ -32,6 +32,9 @@ export type CommandRecord = CommandShape & { error: string | null };
 
 export type Run = {
   prompt: string | null;
+  promptLine: number | null;
+  agentLines: [number, number] | null;
+  replyLine: number | null;
   promptOrigin: Origin | null;
   promptSender: SenderEvidence | null;
   promptCommand: boolean;
@@ -62,6 +65,9 @@ export type Run = {
 
 const emptyRun = (): Run => ({
   prompt: null,
+  promptLine: null,
+  agentLines: null,
+  replyLine: null,
   promptOrigin: null,
   promptSender: null,
   promptCommand: false,
@@ -132,6 +138,8 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
       byId.clear();
       recorded.clear();
     }
+    if (event.line !== undefined && !(event.type === "message" && event.author === "user"))
+      run.agentLines = [run.agentLines?.[0] ?? event.line, event.line];
     switch (event.type) {
       case "message":
         if (
@@ -147,6 +155,7 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
           run = {
             ...emptyRun(),
             prompt: event.text,
+            promptLine: event.line ?? null,
             promptOrigin: event.origin,
             promptSender: event.sender ?? null,
             startedAt: event.at,
@@ -241,6 +250,7 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
   segments.forEach((segment, i) => {
     const next = segments[i + 1];
     segment.reply = next?.prompt ?? null;
+    segment.replyLine = next?.promptLine ?? null;
     segment.replyOrigin = next?.promptOrigin ?? null;
     segment.replySender = next?.promptSender ?? null;
     segment.replyCommand = next?.promptCommand ?? false;
