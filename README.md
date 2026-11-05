@@ -22,13 +22,13 @@ Claude Code
 macOS and Linux (x64, arm64):
 
 ```sh
-curl -fsSL https://github.com/JarenKempton/quench/releases/latest/download/install.sh | sh
+curl -fsSL https://quench.sh/install.sh | sh
 ```
 
 Windows x64, in PowerShell 5.1 or later:
 
 ```powershell
-irm https://github.com/JarenKempton/quench/releases/latest/download/install.ps1 | iex
+irm https://quench.sh/install.ps1 | iex
 ```
 
 Each script picks the binary for your machine from the latest stable release, checks it against

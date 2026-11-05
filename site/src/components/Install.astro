@@ -1,7 +1,7 @@
 ---
 import Terminal from "./Terminal.astro";
 
-const base = "https://github.com/JarenKempton/quench/releases/latest/download";
+const base = "https://quench.sh";
 const unix = `curl -fsSL ${base}/install.sh | sh`;
 const platforms = [
   { id: "macos", name: "macOS", command: unix },
