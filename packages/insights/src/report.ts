@@ -10,6 +10,7 @@ export type HarnessReport = {
   subagentSessions: number;
   runs: number;
   inferences: number;
+  inferencesWithoutTokens: number;
   tokensProcessed: number;
   startingLoadTokens: number;
   startingLoad: Distribution;
@@ -51,6 +52,7 @@ class Tally {
   private subagentSessions = 0;
   private runs = 0;
   private inferences = 0;
+  private inferencesWithoutTokens = 0;
   private tokensProcessed = 0;
   private startingLoadTokens = 0;
   private compactions = 0;
@@ -73,20 +75,28 @@ class Tally {
       this.sessions += 1;
       this.runs += runs(s).length;
     }
+    let started = false;
     let first: number | null = null;
     let peak = 0;
+    let peakKnown = true;
     let compacted = false;
     for (const e of s.events) {
       switch (e.type) {
         case "inference": {
           const context = contextOf(e.usage);
-          first ??= context;
+          if (!started) first = context;
+          started = true;
           this.inferences += 1;
-          this.tokensProcessed += context;
-          this.startingLoadTokens += Math.min(first, context);
-          peak = Math.max(peak, context);
           bump(this.models, e.model);
           bump(this.efforts, e.effort);
+          if (context === null) {
+            this.inferencesWithoutTokens += 1;
+            peakKnown = false;
+            break;
+          }
+          this.tokensProcessed += context;
+          if (first !== null) this.startingLoadTokens += Math.min(first, context);
+          peak = Math.max(peak, context);
           break;
         }
         case "compaction":
@@ -114,10 +124,8 @@ class Tally {
       }
     }
     this.compactedSessions += compacted ? 1 : 0;
-    if (!s.parent && first !== null) {
-      this.starts.push(first);
-      this.peaks.push(peak);
-    }
+    if (!s.parent && first !== null) this.starts.push(first);
+    if (!s.parent && started && peakKnown) this.peaks.push(peak);
   }
 
   finish(): HarnessReport {
@@ -127,6 +135,7 @@ class Tally {
       subagentSessions: this.subagentSessions,
       runs: this.runs,
       inferences: this.inferences,
+      inferencesWithoutTokens: this.inferencesWithoutTokens,
       tokensProcessed: this.tokensProcessed,
       startingLoadTokens: this.startingLoadTokens,
       startingLoad: distribution(this.starts),

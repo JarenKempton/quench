@@ -116,7 +116,7 @@ test("corrections and runs --json render no reply or command text from history",
   const home = await realpath(await mkdtemp(join(tmpdir(), "quench-history-text-")));
   const file = join(home, ".claude/projects/demo/s.jsonl");
   await Bun.write(file, session());
-  const cache = await VerdictCache.open(join(home, ".quench/local/judgments.jsonl"), Jev.id);
+  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
   await cache.remember(
     repros.map((r, n) => [
       { assistantSaid: "done", reply: replyTo(r) },

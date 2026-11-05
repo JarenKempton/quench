@@ -79,14 +79,14 @@ history.
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
-before it, and caches each answer in `~/.quench/local/judgments.jsonl` so a reply is paid for once.
+before it, and caches each answer in `~/.quench/local/judgments/`, one file per judge id, so a reply is paid for once.
 `--dry-run` shows how many replies would be sent without sending anything.
 
 Without a TypeSafe key, `--judge claude` classifies each reply through Claude Code, signed in as
 you: one `claude -p` call to `claude-haiku-5-5` per reply, with the prompt on stdin. It sends the
 same clipped text Jev receives, and `--dry-run --judge claude` counts the calls first. The output
-names the judge that ran, and its verdicts are cached in `~/.quench/local/judgments-claude.jsonl`
-under their own judge id, which includes the model, so they never mix with or replace Jev's.
+names the judge that ran, and its verdicts are cached in their own file under their judge id, which
+includes the model, so they never mix with or replace Jev's.
 
 |              | Jev                                    | `--judge claude`                                           |
 | ------------ | -------------------------------------- | ---------------------------------------------------------- |

@@ -21,9 +21,8 @@ import type {
   FileReadResult,
   Origin,
   Session,
-  Usage,
 } from "../model.ts";
-import { mcpServerOf } from "../model.ts";
+import { knownUsage, mcpServerOf } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -576,13 +575,13 @@ function assistant(line: Line): EventKind[] {
   const out: EventKind[] = [];
   const u = line.message?.usage;
   if (u) {
-    const usage: Usage = {
-      input: u.input_tokens ?? 0,
-      cacheRead: u.cache_read_input_tokens ?? 0,
-      cacheWrite: u.cache_creation_input_tokens ?? 0,
-      output: u.output_tokens ?? 0,
-    };
-    if (usage.input + usage.cacheRead + usage.cacheWrite + usage.output > 0) {
+    const usage = knownUsage(
+      u.input_tokens ?? 0,
+      u.cache_read_input_tokens ?? 0,
+      u.cache_creation_input_tokens ?? 0,
+      u.output_tokens ?? 0,
+    );
+    if (usage.context + usage.output > 0) {
       out.push({
         type: "inference",
         model: line.message?.model ?? null,

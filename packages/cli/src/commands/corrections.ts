@@ -41,7 +41,7 @@ const MIN_BUCKET = 15;
 const NO_KEY = `Classifying replies uses Jev (typesafe.ai) with your own key. For each reply to an agent run
 it sends the reply and the last 1,500 characters of the agent message before it.
 Set TYPESAFE_API_KEY to opt in, or pass --dry-run to see what would be sent.
-Answers are cached in ~/.quench/local/judgments.jsonl, so each reply is paid for once.
+Answers are cached per judge in ~/.quench/local/judgments/, so each reply is paid for once.
 Without a key, --judge claude classifies through claude -p and your own Claude account.
 `;
 
@@ -86,7 +86,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const label = harness ? HarnessJudge.label : "Jev";
   const callsPerReply = harness ? 1 : 2;
   const cache = await VerdictCache.open(
-    join(home.dir, `.quench/local/${harness ? `judgments-${harness}` : "judgments"}.jsonl`),
+    join(home.dir, ".quench/local"),
     harness ? HarnessJudge.id : Jev.id,
     replyJudge === null,
   );

@@ -101,11 +101,11 @@ const ordinary: Case[] = [
   { id: "d", reply: "That is wrong too.", skill: "deploy", failures: 0 },
 ];
 
-async function fixture(cases: Case[], cacheFile = ".quench/local/judgments.jsonl", id = Jev.id) {
+async function fixture(cases: Case[], id = Jev.id) {
   const home = await mkdtemp(join(tmpdir(), "quench-cli-context-"));
   const dir = join(home, ".claude/projects/demo");
   await mkdir(dir, { recursive: true });
-  const cache = await VerdictCache.open(join(home, cacheFile), id);
+  const cache = await VerdictCache.open(join(home, ".quench/local"), id);
   for (const c of cases) {
     await Bun.write(join(dir, `${c.id}.jsonl`), session(home, c));
     await cache.remember([
@@ -136,13 +136,13 @@ async function snapshot(dir: string): Promise<string[]> {
 }
 
 test.each([
-  ["Jev", ".quench/local/judgments.jsonl", Jev.id, []],
-  ["claude", ".quench/local/judgments-claude.jsonl", HarnessJudge.id, ["--judge", "claude"]],
+  ["Jev", Jev.id, []],
+  ["claude", HarnessJudge.id, ["--judge", "claude"]],
 ])(
   "context lists every skill and file loaded around a correction that recurs after the same failure, from %s verdicts",
-  async (_, cacheFile, judgeId, flags) => {
+  async (_, judgeId, flags) => {
     if (flags.length && process.platform === "win32") return;
-    const home = await fixture(ordinary, cacheFile, judgeId);
+    const home = await fixture(ordinary, judgeId);
     const before = await snapshot(join(home, ".claude"));
     const { json, text } = await context(home, ...flags);
     expect(await snapshot(join(home, ".claude"))).toEqual(before);

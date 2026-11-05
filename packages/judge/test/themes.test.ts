@@ -37,7 +37,7 @@ const reply = (sessionId: string, text: string, extra: Partial<Reply> = {}): Rep
         type: "inference",
         model: "model-a",
         effort: null,
-        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
         at: new Date("2026-10-20T10:00:00Z"),
       },
       { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },

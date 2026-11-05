@@ -48,8 +48,8 @@ async function fixture() {
     ["c", "done", "Relay: run the checks.", "automation"],
     ["d", "done", "Have you tested it?", null],
   ] as const;
-  const cacheFile = join(home, ".quench/local/judgments.jsonl");
-  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
+  const cacheFile = cache.path;
   for (const [id, assistantSaid, reply, sender] of cases) {
     await Bun.write(
       join(sessions, `${id}.jsonl`),
@@ -100,7 +100,7 @@ test("corrections separate people, automation and unresolved senders without tre
     join(sessions, "e.jsonl"),
     source.replace("Relay: run the checks.", coordination),
   );
-  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
   await cache.remember([
     [
       { assistantSaid: "done", reply: coordination },
@@ -387,7 +387,7 @@ test("classification failures remain visible even when known themes group succes
 
 test("a grouping service failure is reported without reclassifying replies or assuming later memberships", async () => {
   const { home, cacheFile, themeFile } = await fixture();
-  const cache = await VerdictCache.open(cacheFile, Jev.id);
+  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
   await cache.remember([
     [
       { assistantSaid: "done", reply: "Have you tested it?" },

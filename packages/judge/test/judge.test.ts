@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Event, SenderEvidence } from "@quench/history";
@@ -18,8 +18,7 @@ import { requests } from "../src/jev.ts";
 
 const exchange = (reply: string): Exchange => ({ assistantSaid: "done", reply });
 const verdict: Verdict = { kind: "correction", sender: "person", confidence: 1 };
-const cachePath = async () =>
-  join(await mkdtemp(join(tmpdir(), "quench-judge-")), "judgments.jsonl");
+const cachePath = () => mkdtemp(join(tmpdir(), "quench-judge-"));
 
 test("each exchange is remembered across opens, and a new judge id starts clean", async () => {
   const path = await cachePath();
@@ -32,7 +31,33 @@ test("each exchange is remembered across opens, and a new judge id starts clean"
 
   const changed = await VerdictCache.open(path, "judge/v2");
   expect(changed.size).toBe(0);
-  expect(await Bun.file(path).text()).toBe("");
+});
+
+test("switching judges and back keeps both judges' verdicts", async () => {
+  const dir = await cachePath();
+  await (await VerdictCache.open(dir, "judge/a")).remember([[exchange("no"), verdict]]);
+  await (await VerdictCache.open(dir, "judge/b")).remember([[exchange("no"), verdict]]);
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("no"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/b")).get(exchange("no"))).toEqual(verdict);
+});
+
+test("a shared verdict file migrates into per-judge files without losing or changing entries", async () => {
+  const dir = await cachePath();
+  const a = await VerdictCache.open(dir, "judge/a");
+  await a.remember([[exchange("one"), verdict]]);
+  const b = await VerdictCache.open(dir, "judge/b");
+  await b.remember([[exchange("two"), verdict]]);
+  const shared = (await Bun.file(a.path).text()) + (await Bun.file(b.path).text()) + "junk\n";
+  await rm(join(dir, "judgments"), { recursive: true });
+  await Bun.write(join(dir, "judgments.jsonl"), shared);
+
+  const readOnly = await VerdictCache.open(dir, "judge/a", true);
+  expect(readOnly.size).toBe(1);
+  expect(await Bun.file(readOnly.path).exists()).toBe(false);
+  expect((await VerdictCache.open(dir, "judge/a")).get(exchange("one"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/b")).get(exchange("two"))).toEqual(verdict);
+  expect((await VerdictCache.open(dir, "judge/a")).size).toBe(1);
+  expect(await Bun.file(join(dir, "judgments.jsonl")).text()).toBe(shared);
 });
 
 test("generic sender evidence overrides cached guesses without changing verdicts or run boundaries", async () => {
@@ -52,7 +77,7 @@ test("generic sender evidence overrides cached guesses without changing verdicts
         type: "inference",
         model: null,
         effort: null,
-        usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
         at: null,
       },
       { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },
@@ -179,7 +204,7 @@ test("host-marked and T3-formatted notices and recorded slash commands skip the 
           type: "inference",
           model: null,
           effort: null,
-          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+          usage: { context: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
           at: null,
         },
         { type: "message", author: "assistant", origin: "unknown", text: "done", at: null },

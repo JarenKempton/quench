@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  contextOf,
   Home,
   discoverAll,
   inferences,
@@ -89,7 +90,7 @@ describe("Claude Code", () => {
     const calls = inferences(await one("claude-code", "s1")).map((i) => [
       i.model,
       i.effort,
-      i.usage.input + i.usage.cacheRead + i.usage.cacheWrite,
+      contextOf(i.usage),
       i.usage.output,
     ]);
     expect(calls).toEqual([
@@ -188,7 +189,30 @@ describe("Codex", () => {
     expect(messages(s, "user")).toEqual(["Fix the flaky test"]);
     expect(messages(s, "injected")).toHaveLength(3);
     expect(inferences(s).map((i) => [i.model, i.effort, i.usage])).toEqual([
-      ["gpt-6.1-sol", "high", { input: 6804, cacheRead: 11904, cacheWrite: 0, output: 13 }],
+      [
+        "gpt-6.1-sol",
+        "high",
+        { context: 18708, input: 6804, cacheRead: 11904, cacheWrite: 0, output: 13 },
+      ],
+    ]);
+  });
+
+  test("keeps missing token counts unknown instead of zero", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "quench-codex-"));
+    await Bun.write(
+      join(dir, ".codex/sessions/2026/10/20/rollout-2026-10-20T10-00-00-u.jsonl"),
+      [
+        { type: "session_meta", payload: { id: "u", cwd: "/w" } },
+        { type: "token_usage_record", payload: { usage: { input_tokens: 100, output_tokens: 5 } } },
+        { type: "token_usage_record", payload: { usage: { cached_input_tokens: 40 } } },
+      ]
+        .map((r) => JSON.stringify({ timestamp: "2026-10-20T10:00:00Z", ...r }))
+        .join("\n"),
+    );
+    const [s] = await all(new Home(dir));
+    expect(inferences(s!).map((i) => i.usage)).toEqual([
+      { context: 100, input: null, cacheRead: null, cacheWrite: null, output: 5 },
+      { context: null, input: null, cacheRead: 40, cacheWrite: null, output: null },
     ]);
   });
 });
@@ -225,7 +249,7 @@ describe("Pi", () => {
     expect(messages(s, "user")).toEqual(["Rename the module"]);
     expect(messages(s, "injected")).toEqual(["You are Pi."]);
     expect(inferences(s).map((i) => [i.effort, i.usage])).toEqual([
-      ["medium", { input: 1774, cacheRead: 200, cacheWrite: 0, output: 61 }],
+      ["medium", { context: 1974, input: 1774, cacheRead: 200, cacheWrite: 0, output: 61 }],
     ]);
   });
 });

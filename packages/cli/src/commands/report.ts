@@ -36,7 +36,10 @@ function render(harnesses: HarnessReport[], days: number, unreadable: number): s
       ["Sessions", `${h.sessions} (+${h.subagentSessions} subagent)`],
       ["Agent runs", String(h.runs)],
       ["Model calls", String(h.inferences)],
-      ["Tokens processed", tokens(h.tokensProcessed)],
+      [
+        "Tokens processed",
+        `${tokens(h.tokensProcessed)}${h.inferencesWithoutTokens ? `  (${h.inferencesWithoutTokens} model calls without token counts)` : ""}`,
+      ],
       [
         "Starting load",
         `${spread(h.startingLoad)}  (${Math.round(startingShare(h) * 100)}% of tokens processed)`,

@@ -16,16 +16,18 @@ const SIGNALS: [string, (s: Sample) => Placed | null][] = [
   [
     "Context when the reply came",
     (s) =>
-      range(
-        s.run.contextPeak,
-        [
-          [50_000, "under 50k"],
-          [150_000, "50k–150k"],
-          [250_000, "150k–250k"],
-          [400_000, "250k–400k"],
-        ],
-        "400k and up",
-      ),
+      s.run.contextPeak === null
+        ? null
+        : range(
+            s.run.contextPeak,
+            [
+              [50_000, "under 50k"],
+              [150_000, "50k–150k"],
+              [250_000, "150k–250k"],
+              [400_000, "250k–400k"],
+            ],
+            "400k and up",
+          ),
   ],
   [
     "Reply number in the session",

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile, mkdir, readdir, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { jsonlLines } from "@quench/history";
 import { z } from "zod";
 import { Verdict, type Exchange } from "./verdict.ts";
 
-/** One persisted reply classification in judgments.jsonl, separate from theme-grouping decisions. */
+/** One persisted reply classification in its judge's own file, separate from theme-grouping decisions. */
 const Line = z.object({
   /** Judge identity, including its model and reply-question version. */
   judge: z.string(),
@@ -23,16 +23,18 @@ export class VerdictCache {
     private readonly readOnly: boolean,
   ) {}
 
-  static async open(path: string, judge: string, readOnly = false): Promise<VerdictCache> {
+  static async open(dir: string, judge: string, readOnly = false): Promise<VerdictCache> {
+    const path = join(dir, "judgments", `${judge.replace(/[^\w.-]+/g, "_")}.jsonl`);
     const known = new Map<string, Verdict>();
-    const diagnostics = { lines: 0, unparsed: 0 };
-    if (await Bun.file(path).exists()) {
-      for await (const line of jsonlLines(path, Line, diagnostics)) {
+    const own = await Bun.file(path).exists();
+    const legacy = own ? [] : await sharedFiles(dir);
+    for (const file of own ? [path] : legacy) {
+      for await (const line of jsonlLines(file, Line, { lines: 0, unparsed: 0 })) {
         if (line.judge === judge) known.set(line.key, line.verdict);
       }
     }
     const cache = new VerdictCache(path, judge, known, readOnly);
-    if (!readOnly && known.size < diagnostics.lines) await cache.rewrite();
+    if (!readOnly && legacy.length) await cache.rewrite();
     return cache;
   }
 
@@ -72,8 +74,16 @@ export class VerdictCache {
   }
 
   private async rewrite(): Promise<void> {
+    await mkdir(dirname(this.path), { recursive: true });
     const tmp = `${this.path}.${process.pid}.tmp`;
     await writeFile(tmp, [...this.known].map(([key, v]) => this.line(key, v)).join(""));
     await rename(tmp, this.path);
   }
+}
+
+async function sharedFiles(dir: string): Promise<string[]> {
+  const names = await readdir(dir).catch(() => []);
+  return names
+    .filter((name) => /^judgments(-[\w.-]+)?\.jsonl$/.test(name))
+    .map((name) => join(dir, name));
 }

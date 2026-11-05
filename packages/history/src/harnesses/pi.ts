@@ -11,6 +11,7 @@ import { ancestorDirs, type SteeringRoot } from "../steering.ts";
 import { failureOf } from "../failures.ts";
 import { date, jsonlLines, sha256, textOf } from "../jsonl.ts";
 import type { Author, Diagnostics, Event, EventKind } from "../model.ts";
+import { knownUsage } from "../model.ts";
 
 const count = z.number().nullish();
 
@@ -253,13 +254,13 @@ function text(author: Author, content: unknown): EventKind[] {
 
 function assistant(m: Message): EventKind[] {
   const out: EventKind[] = [];
-  const usage = {
-    input: m.usage?.input ?? 0,
-    cacheRead: m.usage?.cacheRead ?? 0,
-    cacheWrite: m.usage?.cacheWrite ?? 0,
-    output: m.usage?.output ?? 0,
-  };
-  if (usage.input + usage.cacheRead + usage.cacheWrite + usage.output > 0) {
+  const usage = knownUsage(
+    m.usage?.input ?? 0,
+    m.usage?.cacheRead ?? 0,
+    m.usage?.cacheWrite ?? 0,
+    m.usage?.output ?? 0,
+  );
+  if (usage.context + usage.output > 0) {
     out.push({ type: "inference", model: m.model ?? null, effort: m.thinkingLevel ?? null, usage });
   }
   for (const raw of Array.isArray(m.content) ? m.content : []) {

@@ -1,6 +1,8 @@
 import {
   commandShape,
   contextOf,
+  knownUsage,
+  sumOf,
   failedCall,
   startedAt,
   unhandled,
@@ -49,7 +51,7 @@ export type Run = {
   effort: string | null;
   inferences: number;
   contextStart: number | null;
-  contextPeak: number;
+  contextPeak: number | null;
   usage: Usage;
   toolCalls: number;
   calls: ToolCall[];
@@ -80,7 +82,7 @@ const emptyRun = (): Run => ({
   inferences: 0,
   contextStart: null,
   contextPeak: 0,
-  usage: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+  usage: knownUsage(0, 0, 0, 0),
   toolCalls: 0,
   calls: [],
   toolErrors: 0,
@@ -161,14 +163,16 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
         break;
       case "inference": {
         const context = contextOf(event.usage);
+        if (run.inferences === 0) run.contextStart = context;
         run.inferences += 1;
-        run.contextStart ??= context;
-        run.contextPeak = Math.max(run.contextPeak, context);
+        run.contextPeak =
+          run.contextPeak === null || context === null ? null : Math.max(run.contextPeak, context);
         run.usage = {
-          input: run.usage.input + event.usage.input,
-          cacheRead: run.usage.cacheRead + event.usage.cacheRead,
-          cacheWrite: run.usage.cacheWrite + event.usage.cacheWrite,
-          output: run.usage.output + event.usage.output,
+          context: sumOf(run.usage.context, event.usage.context),
+          input: sumOf(run.usage.input, event.usage.input),
+          cacheRead: sumOf(run.usage.cacheRead, event.usage.cacheRead),
+          cacheWrite: sumOf(run.usage.cacheWrite, event.usage.cacheWrite),
+          output: sumOf(run.usage.output, event.usage.output),
         };
         run.model = event.model ?? run.model;
         run.effort = event.effort ?? run.effort;

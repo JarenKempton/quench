@@ -44,7 +44,7 @@ test("starting context splits what the first request carried, by source", () => 
         type: "inference",
         model: null,
         effort: null,
-        usage: { input: 5, cacheRead: 90, cacheWrite: 5, output: 1 },
+        usage: { context: 100, input: 5, cacheRead: 90, cacheWrite: 5, output: 1 },
         at: null,
       },
       { type: "prompt", system: 999, tools: [], at: null },

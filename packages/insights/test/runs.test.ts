@@ -16,7 +16,7 @@ const call = (secs: number, context: number, model: string, effort: string): Eve
   type: "inference",
   model,
   effort,
-  usage: { input: 0, cacheRead: context, cacheWrite: 0, output: 10 },
+  usage: { context, input: 0, cacheRead: context, cacheWrite: 0, output: 10 },
   at: at(secs),
 });
 
@@ -165,4 +165,26 @@ test("each run lists its tool calls in order, with server, outcome and result si
     { tool: "exec", server: null, ok: false, resultChars: 9, inScript: false },
     { tool: "get_item", server: "biz", ok: null, resultChars: null, inScript: true },
   ]);
+});
+
+test("unknown token counts stay unknown in run totals and report coverage", () => {
+  const unknown: Event = {
+    type: "inference",
+    model: "m",
+    effort: null,
+    usage: { context: null, input: null, cacheRead: null, cacheWrite: null, output: 3 },
+    at: at(2),
+  };
+  const s = session("u", null, [say(0, "user", "go"), call(1, 100, "m", "high"), unknown]);
+  const [run] = runs(s);
+  expect([run!.contextStart, run!.contextPeak, run!.usage.context, run!.usage.output]).toEqual([
+    100,
+    null,
+    null,
+    13,
+  ]);
+  const report = new ReportBuilder();
+  report.add(s);
+  const [h] = report.finish();
+  expect([h!.inferences, h!.inferencesWithoutTokens, h!.tokensProcessed]).toEqual([2, 1, 100]);
 });

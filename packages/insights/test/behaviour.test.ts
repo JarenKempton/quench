@@ -44,7 +44,7 @@ const run = (body: Event[], end = 5, tokens = 1_000) => {
         type: "inference",
         model: "m",
         effort: null,
-        usage: { input: 0, cacheRead: tokens, cacheWrite: 0, output: 0 },
+        usage: { context: tokens, input: 0, cacheRead: tokens, cacheWrite: 0, output: 0 },
         at: at(1),
       },
       ...body,
