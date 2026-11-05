@@ -21,7 +21,7 @@ export function recordedSkills(session: Session): SessionSkills | null {
           ? namedSkills(event, byPath)
           : [];
     for (const use of uses)
-      if (listed.has(use.name) && !used.has(use.name)) used.set(use.name, use.by);
+      if (listed.has(use.name) && used.get(use.name) !== "user") used.set(use.name, use.by);
   }
   return {
     listed: [...listed.values()].map((skill) => ({

@@ -1,6 +1,17 @@
 import { lstat, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { harnessById, type Home } from "@quench/history";
+import {
+  discoverAll,
+  harnessById,
+  harnesses,
+  sessionPlaces,
+  skillInventory,
+  type Home,
+  type SessionPlace,
+  type Skill,
+} from "@quench/history";
+import { openT3History, t3State } from "@quench/history/hosts/t3";
+import { Jev, judgeReplies, VerdictCache, type SessionRuns } from "@quench/judge";
 import {
   HARNESSES,
   installations,
@@ -29,6 +40,18 @@ import {
   withLock,
   type ApplyInput,
 } from "@quench/fleet/apply";
+import { placeCache } from "../cache.ts";
+import { json } from "../format.ts";
+import { reading } from "../progress.ts";
+import { skillUse } from "../profile/recorded-skills.ts";
+import { splitSkills } from "../profile/setup.ts";
+import { coOccurrence } from "../skills/co-occurrence.ts";
+import { drift, readSource, SourceError, type Source } from "../skills/drift.ts";
+import { ORIGINS, SCHEMA_VERSION, skillRecords } from "../skills/records.ts";
+import { renderSkills } from "../skills/render.ts";
+import { sessionKey, type SessionContext } from "./context.ts";
+import { sessionRuns } from "./session-runs.ts";
+import { placeOrigins } from "./profile.ts";
 
 const UNREADABLE = {
   treeHash: `sha256:${"0".repeat(64)}`,
@@ -224,6 +247,23 @@ export async function skillsApply(
   });
 }
 
+type Options = {
+  source?: string;
+  machine?: string;
+  json: boolean;
+  days: number;
+  cache: boolean;
+  hostHistory?: string | false;
+};
+
+const LIMITATIONS = [
+  "One record per skill, agent and location. Skills on disk come from each agent's user and system folders now; project skills appear when a session in the period listed them. Listed, used and by you count sessions in the period, by the same rules as profile's recorded skills.",
+  "Origin: plugin from an installed plugin; project from a project folder; vendored for skills the agent ships, system folders, and folders that resolve outside your home; user for any other folder in your home. A skill found nowhere on disk now has an unknown origin.",
+  "Content version is the fleet tree hash of the whole skill folder on disk now; unknown when it is not a readable SKILL.md folder.",
+  "Missing evidence is unknown, never zero: an agent with no recorded listing in the period has unknown counts. Codex loads skills through the shell, so its use counts are a lower bound.",
+  `Loaded and corrected is session co-occurrence from corrections --context: a session loaded a skill when it invoked a listed skill, read its SKILL.md, or ran a shell read of it. A session had a human correction when a cached verdict says a person corrected a run in the period. Sessions with unjudged replies and sessions with no human follow-up are counted apart and never as no correction. Shown at 5 or more sessions with a judged human follow-up; co-occurrence, not cause.`,
+];
+
 export async function skillsStatus(home: Home, options: SkillsOptions) {
   const context = await skillsContext(home, options);
   const drift = context.plan.items
@@ -241,7 +281,8 @@ export async function skillsStatus(home: Home, options: SkillsOptions) {
   };
 }
 
-const USAGE = `usage: quench skills plan --source <dir> --machine <name> [--project <dir>] --json
+const USAGE = `usage: quench skills [--json] [--days N] [--source <dir>]
+       quench skills plan --source <dir> --machine <name> [--project <dir>] --json
        quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
        quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
 `;
@@ -252,6 +293,9 @@ export type SkillsFlags = {
   plan?: string;
   projects: string[];
   json: boolean;
+  days: number;
+  cache: boolean;
+  hostHistory?: string | false;
 };
 
 const write = (value: unknown) => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -262,7 +306,8 @@ const lines = (rows: string[]) => {
 
 export async function skills(home: Home, rest: string[], flags: SkillsFlags) {
   const [sub] = rest;
-  if (!sub || !["plan", "apply", "status"].includes(sub) || rest.length !== 1) {
+  if (sub === undefined) return skillsReport(home, flags);
+  if (!["plan", "apply", "status"].includes(sub) || rest.length !== 1) {
     process.stderr.write(USAGE);
     return 1;
   }
@@ -316,4 +361,72 @@ export async function skills(home: Home, rest: string[], flags: SkillsFlags) {
     process.stderr.write(`${(error as Error).message}\n`);
     return 1;
   }
+}
+
+async function skillsReport(home: Home, options: Options) {
+  if (options.machine) {
+    process.stderr.write("--machine is only available for skills plan\n");
+    return 1;
+  }
+  let source: Source | null = null;
+  try {
+    source = options.source ? await readSource(options.source) : null;
+  } catch (error) {
+    const kind = error instanceof SourceError ? error.message : "source could not be read";
+    process.stderr.write(`--source: ${kind}\n`);
+    return 1;
+  }
+  const since = new Date(Date.now() - options.days * 86_400_000);
+  const cache = options.cache ? await placeCache(home.dir) : undefined;
+  const { places } = await sessionPlaces(home, since, reading(), cache);
+  await cache?.save();
+  const global = new Map<string, Skill>();
+  for (const skill of splitSkills((await skillInventory(home, home.dir)).skills).global)
+    global.set(skill.realPath, skill);
+  const recorded = skillUse(places, await placeOrigins(home, places, global));
+  const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
+  const host =
+    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
+  const contexts = new Map<string, SessionContext>();
+  let sessions: SessionRuns[];
+  try {
+    sessions = await sessionRuns(await discoverAll(home, since), home.dir, host?.enrich, contexts);
+  } finally {
+    host?.close();
+  }
+  const { replies } = await judgeReplies(sessions, verdicts, null);
+  const { records, unrecognised } = await skillRecords(home, {
+    onDisk: [...global.values()],
+    occurrences: recorded.occurrences,
+    sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
+    recordedHarnesses: new Set(recorded.uses.map((u) => u.harness)),
+    roots: await skillRoots(home, places),
+    sourceNames: new Set(source?.skills.keys()),
+    coOccurrence: coOccurrence(replies, contexts, since),
+  });
+  const compared = source && drift(source, records);
+  process.stdout.write(
+    options.json
+      ? json({
+          schemaVersion: SCHEMA_VERSION,
+          days: options.days,
+          judge: verdicts.judge,
+          origins: ORIGINS,
+          skills: records,
+          unrecognised,
+          ...(compared ? { source: compared } : {}),
+          limitations: LIMITATIONS,
+        })
+      : renderSkills(records, unrecognised, options.days, verdicts.judge, compared),
+  );
+  return 0;
+}
+
+async function skillRoots(home: Home, places: readonly SessionPlace[]): Promise<string[]> {
+  const dirs = [home.dir, ...new Set(places.flatMap((p) => (p.cwd ? [p.cwd] : [])))];
+  const roots = new Set(harnesses.map((h) => home.of(h.home)));
+  for (const dir of dirs)
+    for (const harness of harnesses)
+      for (const root of await harness.skills(home, dir).catch(() => [])) roots.add(root.path);
+  return [...roots];
 }

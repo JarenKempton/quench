@@ -43,6 +43,9 @@ Usage:
                                        instruction items ranked by recorded load; duplicates, conflicts, stale entries (offline)
     --rules                            also list every bullet and paragraph of each file
   quench sources [session-file] [--json]  recorded file reads and source coverage gaps (offline)
+  quench skills [--days 30] [--json] [--source <dir>]
+                                       one record per skill, agent and location: origin, listing size, use, corrections
+    --source <dir>                     compare installed skills with a skills checkout by tree hash (read-only)
   quench skills plan --source <dir> --machine <name> [--project <dir>] --json
                                        what installing a skills checkout would change on this machine (read-only)
   quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
@@ -342,6 +345,13 @@ switch (command) {
   case "skills":
     process.exitCode = await skills(home, rest, {
       json: values.json,
+      days,
+      cache: !values["no-cache"],
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
       projects: values.project,
       ...(values.source ? { source: values.source } : {}),
       ...(values.machine ? { machine: values.machine } : {}),
