@@ -20,7 +20,7 @@ export async function sessionRuns(
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
       contexts?.set(`${s.harness}:${s.id}`, contextOf(s, homeDir));
-      parents.set(`${s.harness}:${s.id}`, {
+      parents.set(s.path, {
         id: s.id,
         path: s.path,
         harness: s.harness,
@@ -29,6 +29,7 @@ export async function sessionRuns(
       });
     }
   }
-  for (const [key, session] of parents) linkSubagents(session.runs, childStarts.get(key) ?? []);
+  for (const session of parents.values())
+    linkSubagents(session.runs, childStarts.get(`${session.harness}:${session.id}`) ?? []);
   return [...parents.values()];
 }

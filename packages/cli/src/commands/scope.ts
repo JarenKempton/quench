@@ -1,6 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { discoverAll, isInside, readSessions, type Home, type SessionRef } from "@quench/history";
+import {
+  discoverAll,
+  harnessById,
+  harnesses,
+  isInside,
+  readSessions,
+  type Home,
+  type SessionRef,
+} from "@quench/history";
 import { Cause, type Causes, type Judged, type Reply, type SessionRuns } from "@quench/judge";
 
 export type Scope = { files: string[]; sessions: string[] };
@@ -17,28 +25,47 @@ export async function scopeRefs(home: Home, scope: Scope): Promise<ScopedRefs | 
     })),
   );
   const wanted: Wanted[] = [];
+  const tops: SessionRef[] = [];
   for (const file of scope.files) {
     const path = await realpath(resolve(file)).catch(() => null);
     if (!path) return `${file} does not exist`;
-    if (!all.some((r) => r.path === path && !r.parent))
-      return `${file} is not a session any known harness wrote`;
+    const known = all.find((r) => r.path === path && !r.parent)?.harness;
+    const order = [...new Set([...(known ? [known] : []), ...harnesses.map((h) => h.id)])];
+    let ref: SessionRef | null = null;
+    for (const harness of order) {
+      const candidate = { harness, path, modified: null, parent: null };
+      if (await readable(candidate)) {
+        ref = candidate;
+        break;
+      }
+    }
+    if (!ref) return `${file} is not a readable Claude Code, Codex or Pi transcript`;
     wanted.push({ label: file, path });
+    tops.push(ref);
   }
   for (const id of scope.sessions) {
     const candidates = all.filter((r) => !r.parent && basename(r.path).includes(id));
-    let path: string | null = null;
+    let found: SessionRef | null = null;
     for await (const outcome of readSessions(candidates))
-      if (outcome.ok && outcome.session.id === id) path = outcome.session.path;
-    if (!path) return `No session with id ${id} in any harness home`;
-    wanted.push({ label: id, path });
+      if (outcome.ok && outcome.session.id === id)
+        found = candidates.find((r) => r.path === outcome.session.path) ?? null;
+    if (!found) return `No session with id ${id} in any harness home`;
+    if (!(await readable(found)))
+      return `Session ${id} at ${found.path} is not a readable transcript`;
+    wanted.push({ label: id, path: found.path });
+    tops.push(found);
   }
   const paths = new Set(wanted.map((w) => w.path));
-  const refs = all.filter(
-    (r) =>
-      paths.has(r.path) ||
-      (r.parent !== null && [...paths].some((p) => isInside(r.path, p.replace(/\.jsonl$/, "")))),
+  const children = all.filter(
+    (r) => r.parent !== null && [...paths].some((p) => isInside(r.path, p.replace(/\.jsonl$/, ""))),
   );
+  const refs = [...new Map(tops.map((r) => [r.path, r])).values(), ...children];
   return { refs, wanted };
+}
+
+async function readable(ref: SessionRef): Promise<boolean> {
+  const session = await harnessById[ref.harness].read(ref).catch(() => null);
+  return session !== null && session.events.length > 0 && session.diagnostics.unparsed === 0;
 }
 
 export const unread = (scoped: ScopedRefs, sessions: readonly SessionRuns[]) =>

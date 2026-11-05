@@ -253,13 +253,110 @@ test(
 
     const notes = join(home, "notes.jsonl");
     await Bun.write(notes, "not a transcript\n");
-    const foreign = await quench(home, "corrections", notes, "--cached-only", "--json");
-    expect(foreign.code).not.toBe(0);
-    expect(foreign.stderr).toContain(notes);
+    const corrupt = join(home, ".claude/projects/demo/bbbb3333.jsonl");
+    await Bun.write(corrupt, "not json\n{oops\n");
+    const truncated = join(home, ".claude/projects/demo/dddd4444.jsonl");
+    await Bun.write(truncated, claude("go", "done", "no", "relay") + '{"type":"user","mess\n');
+    const empty = join(
+      home,
+      ".codex/sessions/2026/10/20/rollout-2026-10-20T10-00-00-eeee5555.jsonl",
+    );
+    await Bun.write(empty, "\n");
+    for (const bad of [notes, corrupt, truncated, empty]) {
+      const rejected = await quench(home, "corrections", bad, "--cached-only", "--json");
+      expect([bad, rejected.code, rejected.stdout]).toEqual([bad, 1, ""]);
+      expect(rejected.stderr).toContain(bad);
+    }
 
     const unknown = await quench(home, "corrections", "--session", "nope0000", "--cached-only");
     expect(unknown.code).not.toBe(0);
     expect(unknown.stderr).toContain("nope0000");
+  },
+  cliRunsTimeout,
+);
+
+const pi = lines([
+  { type: "session", id: "pppp6666", cwd: "/work/demo", timestamp: at(0), version: 3 },
+  {
+    type: "message",
+    id: "1",
+    timestamp: at(1),
+    message: { role: "user", content: [{ type: "text", text: "rename it" }] },
+  },
+  {
+    type: "message",
+    id: "2",
+    timestamp: at(2),
+    message: {
+      role: "assistant",
+      model: "model-z",
+      content: [{ type: "text", text: "renamed" }],
+      usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+    },
+  },
+  {
+    type: "message",
+    id: "3",
+    timestamp: at(3),
+    message: { role: "user", content: [{ type: "text", text: "thanks" }] },
+  },
+]);
+
+test(
+  "transcripts copied outside harness homes are read by their own format",
+  async () => {
+    const { home, claudeFile, codexFile } = await fixture();
+    const exported = join(home, "exports");
+    const copies = {
+      claude: join(exported, "claude.jsonl"),
+      codex: join(exported, "codex.jsonl"),
+      pi: join(exported, "pi.jsonl"),
+    };
+    await Bun.write(copies.claude, Bun.file(claudeFile));
+    await Bun.write(copies.codex, Bun.file(codexFile));
+    await Bun.write(copies.pi, pi);
+    const args = [copies.claude, copies.codex, copies.pi, "--cached-only", "--json"];
+    const result = await quench(home, "corrections", ...args, "--no-host-history");
+    expect(result.code).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.summary.sessionsRead).toBe(3);
+    expect(
+      (out.corrections as Correction[]).map((c) => [c.harness, c.file, c.locator.replyLine]),
+    ).toEqual([
+      ["claude-code", copies.claude, 5],
+      ["claude-code", copies.claude, 7],
+      ["codex", copies.codex, 8],
+    ]);
+    const both = await quench(
+      home,
+      "corrections",
+      claudeFile,
+      copies.claude,
+      "--cached-only",
+      "--json",
+    );
+    expect(JSON.parse(both.stdout).summary.sessionsRead).toBe(2);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "a slash command prompt is not part of the agent's line range",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-scope-")));
+    const file = join(home, ".claude/projects/demo/ffff7777.jsonl");
+    await Bun.write(
+      file,
+      lines([
+        user(0, "<command-name>/review</command-name>\n<command-args></command-args>", {
+          promptSource: "typed",
+        }),
+        said("m1", 1, "reviewed"),
+        user(2, "no, the other file", { promptSource: "typed" }),
+      ]),
+    );
+    const runs = JSON.parse((await quench(home, "runs", file, "--json")).stdout);
+    expect(runs[0]).toMatchObject({ promptLine: 1, agentLines: [2, 2], replyLine: 3 });
   },
   cliRunsTimeout,
 );

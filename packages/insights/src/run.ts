@@ -138,7 +138,10 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
       byId.clear();
       recorded.clear();
     }
-    if (event.line !== undefined && !(event.type === "message" && event.author === "user"))
+    const fromUser =
+      (event.type === "message" && event.author === "user") ||
+      (event.type === "invocation" && event.by === "user");
+    if (event.line !== undefined && !fromUser)
       run.agentLines = [run.agentLines?.[0] ?? event.line, event.line];
     switch (event.type) {
       case "message":
