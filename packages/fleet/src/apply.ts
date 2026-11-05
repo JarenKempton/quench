@@ -1,44 +1,96 @@
 import {
   lstat,
   mkdir,
+  readdir,
   readFile,
   readlink,
   realpath,
   rename,
   rm,
   rmdir,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { hostname } from "node:os";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
 import type { BundleManifest } from "./bundle.ts";
-import { own, TreeHash } from "./common.ts";
-import { installedTree } from "./disk.ts";
+import { own, Sha256, TreeHash } from "./common.ts";
+import { installedTree, readTree } from "./disk.ts";
 import { LedgerEntry, owned } from "./ledger.ts";
-import { executablesOf, type Plan, type PlanItem, type ProjectCheckout } from "./plan.ts";
-import { sha256, treeHash } from "./tree-hash.ts";
+import {
+  executablesOf,
+  type InstalledState,
+  type Plan,
+  type PlanItem,
+  type ProjectCheckout,
+} from "./plan.ts";
+import { FileMode, sha256, treeHash } from "./tree-hash.ts";
 
-const Exclude = z.object({ file: z.string(), line: z.string() }).strict();
+export class Conflict extends Error {}
+
+const Exclude = z.object({ file: z.string(), line: z.string(), added: z.boolean() }).strict();
+type Exclude = z.infer<typeof Exclude>;
 
 export const JournalOp = z
   .object({
     sequence: z.number().int().nonnegative(),
     kind: z.enum(["install", "update", "remove"]),
     path: z.string(),
+    base: z.string(),
+    work: z.string(),
+    token: z.string(),
     stage: z.string().nullable(),
     backup: z.string(),
-    desired: TreeHash,
+    desired: TreeHash.nullable(),
+    previous: TreeHash.nullable(),
+    files: z.array(z.object({ path: z.string(), mode: FileMode, sha256: Sha256 }).strict()),
     exclude: Exclude.nullable(),
   })
   .strict();
 export type JournalOp = z.infer<typeof JournalOp>;
+
+export const MARKER = ".quench-owner";
+const LOCK_LIMIT_MS = 60 * 60 * 1000;
+const BREAKER_LIMIT_MS = 60 * 1000;
 
 export const statePaths = (state: string) => ({
   ledger: join(state, "ledger.json"),
   journal: join(state, "journal.json"),
   lock: join(state, "lock"),
 });
+
+const probe = (path: string) =>
+  lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
+    throw error;
+  });
+
+type Want = "dir" | "absent" | "dir?" | "file?";
+
+export async function guard(base: string, path: string, want: Want) {
+  const rel = relative(base, path);
+  if (isAbsolute(rel) || rel.split(/[\\/]/)[0] === "..")
+    throw new Conflict(`${path} is outside ${base}`);
+  const parts = rel ? rel.split(sep) : [];
+  let at = base;
+  for (let i = 0; i <= parts.length; i++) {
+    if (i > 0) at = join(at, parts[i - 1]!);
+    const last = i === parts.length;
+    const info = await probe(at);
+    if (!info) {
+      if (want !== "dir") return;
+      throw new Conflict(`${at} is missing`);
+    }
+    if (info.isSymbolicLink())
+      throw new Conflict(`${at} is a symlink Quench did not create; it is never followed`);
+    const ok = last && want === "file?" ? info.isFile() : info.isDirectory();
+    if (!ok)
+      throw new Conflict(`${at} is not a regular ${last && want === "file?" ? "file" : "folder"}`);
+    if (last && want === "absent") throw new Conflict(`${at} already exists`);
+  }
+}
 
 export async function inspect(path: string) {
   const info = await lstat(path).catch(() => null);
@@ -48,16 +100,24 @@ export async function inspect(path: string) {
   return installedTree(path);
 }
 
-const exists = (path: string) =>
-  lstat(path).then(
-    () => true,
-    () => false,
-  );
+const matches = (
+  now: InstalledState | undefined,
+  hash: string | null | undefined,
+  executables: string[] | null,
+) =>
+  hash
+    ? !!now &&
+      !now.symlink &&
+      now.treeHash === hash &&
+      (now.executables === null ||
+        executables === null ||
+        now.executables.join("\0") === executables.join("\0"))
+    : !now;
 
 async function writeAtomic(path: string, text: string) {
   await mkdir(dirname(path), { recursive: true });
-  const temp = `${path}.${process.pid}.tmp`;
-  await writeFile(temp, text);
+  const temp = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  await writeFile(temp, text, { flag: "wx" });
   await rename(temp, path);
 }
 
@@ -95,92 +155,197 @@ const alive = (pid: number) => {
   }
 };
 
+const LockInfo = z
+  .object({ pid: z.number().int().positive(), host: z.string(), startedAt: z.iso.datetime() })
+  .strict();
+
+const busy = (detail: string) => new Error(`another apply is running (${detail})`);
+
+async function breakStale(lock: string) {
+  const breaker = `${lock}.break`;
+  const claim = () => writeFile(breaker, String(process.pid), { flag: "wx" });
+  const claimed = await claim().then(
+    () => true,
+    async (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+      const since = await stat(breaker).then(
+        (s) => Date.now() - s.mtimeMs,
+        () => 0,
+      );
+      if (since < BREAKER_LIMIT_MS) return false;
+      await rm(breaker, { force: true });
+      return claim().then(
+        () => true,
+        () => false,
+      );
+    },
+  );
+  if (!claimed) throw busy("another process is checking the lock");
+  try {
+    const text = await readFile(lock, "utf8").catch(() => null);
+    if (text === null) return;
+    let info;
+    try {
+      info = LockInfo.parse(JSON.parse(text));
+    } catch {
+      throw busy(`${lock} is not complete yet; remove it only if no apply is running`);
+    }
+    const dead = info.host === hostname() && !alive(info.pid);
+    const old = Date.now() - Date.parse(info.startedAt) > LOCK_LIMIT_MS;
+    if (!dead && !old) throw busy(`pid ${info.pid} on ${info.host}`);
+    if ((await readFile(lock, "utf8").catch(() => null)) === text) await rm(lock, { force: true });
+  } finally {
+    await rm(breaker, { force: true });
+  }
+}
+
 export async function withLock<T>(state: string, work: () => Promise<T>): Promise<T> {
   await mkdir(state, { recursive: true });
   const { lock } = statePaths(state);
-  const take = () => writeFile(lock, String(process.pid), { flag: "wx" });
+  const mine = JSON.stringify({
+    pid: process.pid,
+    host: hostname(),
+    startedAt: new Date().toISOString(),
+  });
+  const take = () => writeFile(lock, mine, { flag: "wx" });
   await take().catch(async (error: NodeJS.ErrnoException) => {
     if (error.code !== "EEXIST") throw error;
-    const pid = Number(await readFile(lock, "utf8").catch(() => ""));
-    if (pid && alive(pid)) throw new Error(`another apply is running (pid ${pid})`);
-    await rm(lock, { force: true });
-    await take();
+    await breakStale(lock);
+    await take().catch((again: NodeJS.ErrnoException) => {
+      throw again.code === "EEXIST" ? busy("lock taken") : again;
+    });
   });
   try {
     return await work();
   } finally {
-    await rm(lock, { force: true });
+    if ((await readFile(lock, "utf8").catch(() => null)) === mine) await rm(lock, { force: true });
   }
 }
 
-const excludeLines = async (file: string) =>
-  (await readFile(file, "utf8").catch(() => "")).split(/\r?\n/);
+const excludeConflict = (error: unknown) =>
+  error instanceof Conflict ? new Conflict(`.git/info/exclude: ${error.message}`) : error;
 
-async function addExclude({ file, line }: z.infer<typeof Exclude>) {
-  const lines = await excludeLines(file);
-  if (lines.includes(line)) return;
-  const text = lines.join("\n");
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
+async function guardExclude(file: string) {
+  await guard(dirname(dirname(file)), file, "file?").catch((error) => {
+    throw excludeConflict(error);
+  });
 }
 
-async function dropExclude({ file, line }: z.infer<typeof Exclude>, ledger: LedgerEntry[]) {
-  if ([...owned(ledger).values()].some((e) => e.gitExclude === line)) return;
-  const lines = await excludeLines(file);
-  if (lines.includes(line)) await writeFile(file, lines.filter((l) => l !== line).join("\n"));
+async function excludeHas({ file, line }: { file: string; line: string }) {
+  await guardExclude(file);
+  return (await readFile(file, "utf8").catch(() => "")).split(/\r?\n/).includes(line);
+}
+
+async function addExclude({ file, line }: Exclude) {
+  await guardExclude(file);
+  const text = await readFile(file, "utf8").catch(() => "");
+  if (text.split(/\r?\n/).includes(line)) return;
+  await writeAtomic(file, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
+  await guardExclude(file);
+}
+
+async function dropExclude({ file, line, added }: Exclude, ledger: LedgerEntry[]) {
+  if (!added || [...owned(ledger).values()].some((e) => e.gitExclude === line)) return;
+  await guardExclude(file);
+  const lines = (await readFile(file, "utf8").catch(() => "")).split(/\r?\n/);
+  if (lines.includes(line)) await writeAtomic(file, lines.filter((l) => l !== line).join("\n"));
+  await guardExclude(file);
 }
 
 const removeTree = (path: string) => rm(path, { recursive: true, force: true });
 
-const tidy = async (op: JournalOp) => {
-  await removeTree(op.backup);
-  if (op.stage) await removeTree(op.stage);
-  await rmdir(dirname(op.backup)).catch(() => undefined);
-};
+async function stagedByUs(op: JournalOp) {
+  const tree = await readTree(op.stage!).catch(() => null);
+  if (!tree) return false;
+  const files = new Map(op.files.map((f) => [f.path, f]));
+  return tree.every((entry) => {
+    const file = files.get(entry.path);
+    return (
+      !!file &&
+      file.sha256 === sha256(entry.bytes) &&
+      (file.mode === "120000") === (entry.mode === "120000")
+    );
+  });
+}
+
+async function tidy(op: JournalOp) {
+  if (!(await probe(op.work))) return;
+  const conflict = (why: string) =>
+    new Conflict(
+      `conflict: ${why}; Quench left it in place (interrupted ${op.kind} of ${op.path})`,
+    );
+  await guard(op.base, op.work, "dir");
+  const marker = await readFile(join(op.work, MARKER), "utf8").catch(() => null);
+  const names = (await readdir(op.work)).filter((n) => n !== MARKER);
+  if (marker !== op.token && (marker !== null || names.length))
+    throw conflict(`${op.work} is not marked as created by this apply`);
+  for (const name of names) {
+    const path = join(op.work, name);
+    await guard(op.base, path, "dir");
+    if (path === op.backup) {
+      if ((await inspect(path))?.treeHash !== op.previous) throw conflict(`${path} changed`);
+    } else if (path === op.stage) {
+      if (!(await stagedByUs(op))) throw conflict(`${path} changed`);
+    } else throw conflict(`${path} was not created by Quench`);
+    await removeTree(path);
+  }
+  await rm(join(op.work, MARKER), { force: true });
+  await rmdir(op.work);
+}
 
 export async function recover(state: string): Promise<string | null> {
   const op = await readJournal(state);
   if (!op) return null;
   const ledger = await readLedger(state);
+  const conflict = (why: string) =>
+    new Conflict(
+      `conflict: ${why}; Quench left it in place (interrupted ${op.kind} of ${op.path})`,
+    );
+  const wrap = async (step: () => Promise<void>) =>
+    step().catch((error) => {
+      throw error instanceof Conflict && !error.message.startsWith("conflict:")
+        ? conflict(error.message)
+        : error;
+    });
   if (ledger.some((e) => e.sequence === op.sequence)) {
-    if (op.kind === "remove" && op.exclude) await dropExclude(op.exclude, ledger);
-  } else {
-    if (await exists(op.backup)) {
-      if (await exists(op.path)) {
-        const now = await inspect(op.path);
-        if (op.kind === "remove" || now?.treeHash !== op.desired)
-          throw new Error(
-            `cannot recover ${op.path}: it changed after an interrupted apply; the earlier copy is at ${op.backup}`,
-          );
-        await removeTree(op.path);
+    if (op.kind === "remove" && op.exclude) await wrap(() => dropExclude(op.exclude!, ledger));
+  } else
+    await wrap(async () => {
+      if (await probe(op.backup)) {
+        await guard(op.base, op.backup, "dir");
+        if (await probe(op.path)) {
+          await guard(op.base, op.path, "dir");
+          if (!op.desired || (await inspect(op.path))?.treeHash !== op.desired)
+            throw conflict(`${op.path} changed after the interrupted apply`);
+          await removeTree(op.path);
+        }
+        await guard(op.base, op.path, "absent");
+        await rename(op.backup, op.path);
+        await guard(op.base, op.path, "dir");
+      } else if (op.kind === "install" && (await probe(op.path))) {
+        await guard(op.base, op.path, "dir");
+        if ((await inspect(op.path))?.treeHash === op.desired) await removeTree(op.path);
       }
-      await rename(op.backup, op.path);
-    } else if (
-      op.kind === "install" &&
-      (await exists(op.path)) &&
-      (await inspect(op.path))?.treeHash === op.desired
-    )
-      await removeTree(op.path);
-    if (op.kind === "install" && op.exclude) await dropExclude(op.exclude, ledger);
-  }
-  await tidy(op);
+      if (op.kind === "install" && op.exclude) await dropExclude(op.exclude, ledger);
+    });
+  await wrap(() => tidy(op));
   await writeJournal(state, null);
   return `recovered an interrupted ${op.kind} of ${op.path}`;
 }
 
-async function stage(dir: string, skill: BundleManifest["skills"][string], source: string) {
-  await removeTree(dir);
-  await mkdir(dir, { recursive: true });
-  for (const file of skill.files) {
+async function stage(op: JournalOp, source: string) {
+  await mkdir(op.stage!);
+  for (const file of op.files) {
     const from = join(source, ...file.path.split("/"));
-    const to = join(dir, ...file.path.split("/"));
+    const to = join(op.stage!, ...file.path.split("/"));
     await mkdir(dirname(to), { recursive: true });
+    await guard(op.work, dirname(to), "dir");
     const bytes =
       file.mode === "120000" ? await readlink(from, { encoding: "buffer" }) : await readFile(from);
     if (sha256(bytes) !== file.sha256)
       throw new Error(`${from} changed since the plan; plan again`);
     if (file.mode === "120000") await symlink(bytes.toString(), to);
-    else await writeFile(to, bytes, { mode: file.mode === "100755" ? 0o755 : 0o644 });
+    else await writeFile(to, bytes, { flag: "wx", mode: file.mode === "100755" ? 0o755 : 0o644 });
   }
 }
 
@@ -190,98 +355,147 @@ export type ApplyInput = {
   sources: Record<string, string>;
   state: string;
   absolute: (path: string) => string;
+  installed: Record<string, InstalledState | undefined>;
   projects?: (ProjectCheckout & { exclude: string })[];
   now?: () => string;
   interrupt?: (step: "staged" | "backed-up" | "swapped" | "committed") => void | Promise<void>;
 };
 
+export type ApplyResult = {
+  applied: PlanItem[];
+  conflicts: { path: string; reason: string }[];
+};
+
 export const ACTIONABLE = ["install", "update", "remove"] as const;
 
-const same = (now: { treeHash: string; symlink: boolean } | undefined, item: PlanItem) =>
-  item.installed
-    ? now?.treeHash === item.installed.treeHash && now.symlink === item.installed.symlink
-    : !now;
-
-export async function applyPlan(input: ApplyInput): Promise<PlanItem[]> {
-  const { plan, bundle, sources, state, absolute, interrupt } = input;
-  const now = input.now ?? (() => new Date().toISOString());
-  let ledger = await readLedger(state);
-  const applied: PlanItem[] = [];
-  for (const item of plan.items) {
+export async function applyPlan(input: ApplyInput): Promise<ApplyResult> {
+  const result: ApplyResult = { applied: [], conflicts: [] };
+  for (const item of input.plan.items) {
     if (!(ACTIONABLE as readonly string[]).includes(item.action) || !item.path) continue;
-    const kind = item.action as JournalOp["kind"];
-    const path = absolute(item.path);
-    const ours = owned(ledger).get(item.path);
-    const sequence = ledger.reduce((max, e) => Math.max(max, e.sequence), 0) + 1;
-    const work = join(dirname(path), ".quench-stage");
-    const at = item.location;
-    const checkout =
-      at.scope === "project" ? input.projects?.find((p) => p.checkout === at.checkout) : undefined;
-    const exclude = checkout
-      ? {
-          file: checkout.exclude,
-          line: `/${relative(absolute(checkout.checkout), path).replaceAll("\\", "/")}/`,
-        }
-      : null;
-    const op: JournalOp = {
-      sequence,
-      kind,
-      path,
-      stage: kind === "remove" ? null : join(work, `${item.skill}.${sequence}.new`),
-      backup: join(work, `${item.skill}.${sequence}.old`),
-      desired: (item.desired ?? ours?.treeHash)!,
-      exclude,
-    };
-    await mkdir(work, { recursive: true });
-    await writeJournal(state, op);
-    if (op.stage) {
-      const skill = own(bundle.skills, item.skill)!;
-      await stage(op.stage, skill, own(sources, item.skill)!);
-      if ((await installedTree(op.stage))?.treeHash !== item.desired)
-        throw new Error(`${item.skill} staged with a different tree hash; plan again`);
-      await interrupt?.("staged");
+    try {
+      await applyItem(input, item);
+      result.applied.push(item);
+    } catch (error) {
+      if (!(error instanceof Conflict)) throw error;
+      result.conflicts.push({ path: item.path, reason: error.message });
+      await recover(input.state);
     }
-    if (!same(await inspect(path), item))
-      throw new Error(`${item.path} changed since the plan; plan again`);
-    if (await exists(path)) {
-      await rename(path, op.backup);
-      await interrupt?.("backed-up");
-    }
-    if (op.stage) {
-      await rename(op.stage, path);
-      await interrupt?.("swapped");
-      if (exclude) await addExclude(exclude);
-    }
-    const location =
-      item.location.scope === "project"
-        ? {
-            scope: "project" as const,
-            remote: item.location.remote,
-            checkout: item.location.checkout!,
-          }
-        : { scope: "global" as const };
-    ledger = [
-      ...ledger,
-      {
-        path: item.path,
-        skill: item.skill,
-        treeHash: op.desired,
-        executables:
-          kind === "remove" ? (ours?.executables ?? []) : executablesOf(bundle, item.skill),
-        harness: item.harness,
-        location: ours?.location ?? location,
-        kind,
-        sequence,
-        appliedAt: now(),
-        gitExclude: exclude?.line ?? null,
-      },
-    ];
-    await writeLedger(state, ledger);
-    await interrupt?.("committed");
-    if (kind === "remove" && exclude) await dropExclude(exclude, ledger);
-    await tidy(op);
-    await writeJournal(state, null);
-    applied.push(item);
   }
-  return applied;
+  return result;
+}
+
+async function applyItem(input: ApplyInput, item: PlanItem) {
+  const { bundle, state, absolute, interrupt } = input;
+  const ledger = await readLedger(state);
+  const kind = item.action as JournalOp["kind"];
+  const path = absolute(item.path!);
+  const root = dirname(path);
+  const ours = owned(ledger).get(item.path!);
+  const at = item.location;
+  const checkout =
+    at.scope === "project" ? input.projects?.find((p) => p.checkout === at.checkout) : undefined;
+  if (at.scope === "project" && !checkout)
+    throw new Conflict(`${item.path}: checkout ${at.checkout} was not given`);
+  const base = checkout ? absolute(checkout.checkout) : root;
+  const line = checkout ? `/${relative(base, path).replaceAll("\\", "/")}/` : null;
+  const planned = own(input.installed, item.path!);
+  const desiredModes = kind === "remove" ? null : executablesOf(bundle, item.skill);
+  const token = crypto.randomUUID();
+  const work = join(root, `.quench-stage-${token}`);
+  const sequence = ledger.reduce((max, e) => Math.max(max, e.sequence), 0) + 1;
+  const op: JournalOp = {
+    sequence,
+    kind,
+    path,
+    base,
+    work,
+    token,
+    stage: kind === "remove" ? null : join(work, "new"),
+    backup: join(work, "old"),
+    desired: kind === "remove" ? null : item.desired,
+    previous: planned?.treeHash ?? null,
+    files:
+      kind === "remove"
+        ? []
+        : own(bundle.skills, item.skill)!.files.map((f) => ({
+            path: f.path,
+            mode: f.mode,
+            sha256: f.sha256,
+          })),
+    exclude:
+      kind === "remove"
+        ? ours?.gitExclude && checkout
+          ? { file: checkout.exclude, line: ours.gitExclude, added: true }
+          : null
+        : checkout && line
+          ? {
+              file: checkout.exclude,
+              line,
+              added: !(await excludeHas({ file: checkout.exclude, line }).catch((e) => {
+                throw excludeConflict(e);
+              })),
+            }
+          : null,
+  };
+  await guard(base, root, kind === "remove" ? "dir" : "dir?");
+  await mkdir(root, { recursive: true });
+  await guard(base, root, "dir");
+  await guard(base, work, "absent");
+  await writeJournal(state, op);
+  await mkdir(work);
+  await writeFile(join(work, MARKER), token, { flag: "wx" });
+  await guard(base, work, "dir");
+  if (op.stage) {
+    await stage(op, own(input.sources, item.skill)!);
+    if (!matches(await inspect(op.stage), op.desired, desiredModes))
+      throw new Error(`${item.skill} staged with a different tree hash or mode; plan again`);
+    await interrupt?.("staged");
+  }
+  await guard(base, path, planned ? "dir" : "absent");
+  if (!matches(await inspect(path), planned?.treeHash, planned?.executables ?? null))
+    throw new Conflict(`${item.path} changed since the plan`);
+  if (planned) {
+    await guard(base, op.backup, "absent");
+    await rename(path, op.backup);
+    await interrupt?.("backed-up");
+    await guard(base, op.backup, "dir");
+    await guard(base, path, "absent");
+  }
+  if (op.stage) {
+    await guard(base, op.stage, "dir");
+    await guard(base, path, "absent");
+    await rename(op.stage, path);
+    await interrupt?.("swapped");
+    await guard(base, path, "dir");
+    if (!matches(await inspect(path), op.desired, desiredModes))
+      throw new Conflict(`${item.path} changed during the swap`);
+    if (op.exclude?.added)
+      await addExclude(op.exclude).catch((e) => {
+        throw excludeConflict(e);
+      });
+  }
+  const location =
+    at.scope === "project"
+      ? { scope: "project" as const, remote: at.remote, checkout: at.checkout! }
+      : { scope: "global" as const };
+  const next = [
+    ...ledger,
+    {
+      path: item.path!,
+      skill: item.skill,
+      treeHash: (op.desired ?? ours?.treeHash)!,
+      executables: desiredModes ?? ours?.executables ?? [],
+      harness: item.harness,
+      location: ours?.location ?? location,
+      kind,
+      sequence,
+      appliedAt: (input.now ?? (() => new Date().toISOString()))(),
+      gitExclude: kind === "remove" ? (ours?.gitExclude ?? null) : op.exclude?.added ? line : null,
+    },
+  ];
+  await writeLedger(state, next);
+  await interrupt?.("committed");
+  if (kind === "remove" && op.exclude) await dropExclude(op.exclude, next);
+  await tidy(op);
+  await writeJournal(state, null);
 }

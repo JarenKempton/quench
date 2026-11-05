@@ -69,7 +69,8 @@ export const Plan = z
   .strict();
 export type Plan = z.infer<typeof Plan>;
 
-export const planHash = ({ hash: _, ...rest }: Plan) => sha256(JSON.stringify(rest));
+export const planHash = ({ hash: _, ...rest }: Plan, modes: (string[] | null)[]) =>
+  sha256(JSON.stringify({ plan: rest, modes }));
 
 export type ProjectCheckout = {
   remote: string;
@@ -191,21 +192,38 @@ export function plan({
     );
   }
   for (const u of bundle.unavailable) {
-    const path = u.scope.kind === "global" ? targetPath(roots[u.harness], u.skill) : null;
-    if (path) wanted.add(path);
-    items.push({
-      skill: u.skill,
-      harness: u.harness,
-      location:
-        u.scope.kind === "global"
-          ? { scope: "global" }
-          : { scope: "project", remote: u.scope.remote, checkout: null },
-      path,
-      desired: null,
-      installed: path ? shown(own(installed, path) ?? null) : null,
-      action: "unavailable",
-      reason: u.reason,
-    });
+    const scope = u.scope;
+    const places: { location: PlanItem["location"]; path: string | null }[] =
+      scope.kind === "global"
+        ? [{ location: { scope: "global" }, path: targetPath(roots[u.harness], u.skill) }]
+        : projects
+            .filter((c) => c.remote === scope.remote)
+            .map((c) => ({
+              location: { scope: "project", remote: scope.remote, checkout: c.checkout },
+              path: targetPath(c.roots[u.harness], u.skill),
+            }));
+    if (!places.length)
+      places.push({
+        location: {
+          scope: "project",
+          remote: (scope as { remote: string }).remote,
+          checkout: null,
+        },
+        path: null,
+      });
+    for (const { location, path } of places) {
+      if (path) wanted.add(path);
+      items.push({
+        skill: u.skill,
+        harness: u.harness,
+        location,
+        path,
+        desired: null,
+        installed: path ? shown(own(installed, path) ?? null) : null,
+        action: "unavailable",
+        reason: u.reason,
+      });
+    }
   }
   for (const [path, entry] of mine) {
     if (wanted.has(path)) continue;
@@ -252,5 +270,6 @@ export function plan({
     counts: counts as Plan["counts"],
     warnings,
   };
-  return { ...result, hash: planHash(result) };
+  const modes = items.map((i) => (i.desired ? executablesOf(bundle, i.skill) : null));
+  return { ...result, hash: planHash(result, modes) };
 }

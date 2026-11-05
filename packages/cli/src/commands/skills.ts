@@ -139,6 +139,7 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
       sources,
       state,
       absolute: (path: string) => absolute(home, path),
+      installed,
       projects,
     } satisfies ApplyInput,
     ledger,
@@ -172,12 +173,12 @@ export async function skillsApply(
       throw new Error(
         `${recovered ? `${recovered}; ` : ""}disk or source changed since plan ${options.planHash}; run skills plan again`,
       );
-    const applied = await applyPlan({ ...context.apply, ...hooks });
+    const result = await applyPlan({ ...context.apply, ...hooks });
     return {
       plan: context.plan,
       recovered,
-      applied: applied.map((i) => ({ path: i.path!, action: i.action })),
-      conflicts: conflictsOf(context.plan),
+      applied: result.applied.map((i) => ({ path: i.path!, action: i.action })),
+      conflicts: [...conflictsOf(context.plan), ...result.conflicts],
       notes: context.notes,
     };
   });

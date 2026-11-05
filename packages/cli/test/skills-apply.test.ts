@@ -1,16 +1,17 @@
 import { afterAll, expect, test } from "bun:test";
 import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readlink,
-  rm,
-  stat,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+  cleanup,
+  claude,
+  git,
+  link,
+  planAndApply,
+  setup,
+  V1,
+  V2,
+  windows,
+  writeSource,
+} from "./fleet-scratch.ts";
+import { lstat, mkdir, readdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { installations } from "@quench/fleet";
 import { readJournal, readLedger } from "@quench/fleet/apply";
@@ -24,70 +25,10 @@ import {
 } from "../src/commands/agent.ts";
 import { skillsApply, skillsPlan, skillsStatus, stateDir } from "../src/commands/skills.ts";
 
-const scratch: string[] = [];
-afterAll(() => Promise.all(scratch.map((d) => rm(d, { recursive: true, force: true }))));
+afterAll(cleanup);
 
-const temp = async (name: string) => {
-  const dir = await mkdtemp(join(tmpdir(), `quench-apply-${name}-`));
-  scratch.push(dir);
-  return dir;
-};
-
-const windows = process.platform === "win32";
-
-type Skills = Record<string, Record<string, string>>;
-type Assign = { skill: string; harnesses?: string[] | "all"; remote?: string };
-
-async function writeSource(dir: string, skills: Skills, assign: Assign[]) {
-  await rm(dir, { recursive: true, force: true });
-  for (const [name, files] of Object.entries(skills))
-    for (const [path, text] of Object.entries(files)) {
-      const full = join(dir, "skills", name, path);
-      await mkdir(dirname(full), { recursive: true });
-      await writeFile(full, text, { mode: path.endsWith(".sh") ? 0o755 : 0o644 });
-    }
-  const fleet = {
-    version: 1,
-    skills: Object.fromEntries(Object.keys(skills).map((n) => [n, { path: `skills/${n}` }])),
-    assignments: assign.map((a) => ({
-      skill: a.skill,
-      target: { kind: "all" },
-      scope: a.remote ? { kind: "project", remote: a.remote } : { kind: "global" },
-      harnesses: a.harnesses ?? "all",
-      mode: "include",
-    })),
-  };
-  await writeFile(join(dir, "quench-fleet.yaml"), JSON.stringify(fleet));
-}
-
-const V1: Skills = {
-  alpha: { "SKILL.md": "# alpha v1\n", "run.sh": "#!/bin/sh\necho v1\n" },
-  beta: { "SKILL.md": "# beta\n", "notes/a.md": "beta notes\n" },
-};
-const V2: Skills = {
-  ...V1,
-  alpha: { "SKILL.md": "# alpha v2\n", "run.sh": "#!/bin/sh\necho v2\n" },
-};
-
-async function setup(
-  skills: Skills = V1,
-  assign: Assign[] = [{ skill: "alpha" }, { skill: "beta" }],
-) {
-  const dir = await temp("home");
-  const home = new Home(join(dir, "home"), {});
-  await mkdir(home.dir, { recursive: true });
-  const source = join(dir, "source");
-  await writeSource(source, skills, assign);
-  return { dir, home, source, options: { source, machine: "laptop", projects: [] as string[] } };
-}
-
-const claude = (home: Home, skill: string, file = "SKILL.md") =>
-  join(home.dir, ".claude/skills", skill, file);
-
-const planAndApply = async (home: Home, options: Parameters<typeof skillsPlan>[1]) => {
-  const plan = await skillsPlan(home, options);
-  return skillsApply(home, { ...options, planHash: plan.hash! });
-};
+const leftovers = async (home: Home) =>
+  (await readdir(join(home.dir, ".claude/skills"))).filter((n) => n.startsWith(".quench"));
 
 test("apply installs whole skill folders into every harness and records sequence, tree hash and time", async () => {
   const { home, options } = await setup();
@@ -111,7 +52,7 @@ test("apply installs whole skill folders into every harness and records sequence
   expect(status.conflicts).toEqual([]);
   expect(status.drift).toEqual([]);
   expect(status.installations.filter((i) => i.to === null)).toHaveLength(6);
-  expect(await lstat(join(home.dir, ".claude/skills/.quench-stage")).catch(() => null)).toBeNull();
+  expect(await leftovers(home)).toEqual([]);
 });
 
 test("apply refuses a plan hash once disk has changed since the plan", async () => {
@@ -191,9 +132,7 @@ for (const step of ["staged", "backed-up", "swapped", "committed"] as const)
     const done = await planAndApply(home, options);
     expect(done.conflicts).toEqual([]);
     expect(await readFile(claude(home, "alpha"), "utf8")).toBe("# alpha v2\n");
-    expect(
-      await lstat(join(home.dir, ".claude/skills/.quench-stage")).catch(() => null),
-    ).toBeNull();
+    expect(await leftovers(home)).toEqual([]);
     const status = await skillsStatus(home, options);
     expect(status.drift).toEqual([]);
     expect(status.conflicts).toEqual([]);
@@ -224,8 +163,6 @@ test("applying an earlier source rolls back and the ledger keeps every interval 
   expect(installations(await readLedger(stateDir(home))).every((s) => s.to !== null)).toBe(true);
 });
 
-const link = (target: string, path: string) => symlink(target, path, windows ? "junction" : "dir");
-
 test("a symlink left by another linker is a conflict and apply refuses to take the folder", async () => {
   const { dir, home, source, options } = await setup();
   const linker = join(dir, "linker-checkout", "alpha");
@@ -253,11 +190,6 @@ test("a symlink left by another linker is a conflict and apply refuses to take t
   const status = await skillsStatus(home, options);
   expect(status.conflicts.length).toBeGreaterThan(0);
 });
-
-async function git(cwd: string, ...args: string[]) {
-  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
-  expect(await proc.exited).toBe(0);
-}
 
 test("project installs go into the checkout, add a .git/info/exclude entry and record it", async () => {
   const { dir, home, options } = await setup(V1, [
