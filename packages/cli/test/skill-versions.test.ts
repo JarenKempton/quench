@@ -26,7 +26,7 @@ const entry = (checkout: string | null, treeHash: string, at: number): LedgerEnt
   gitExclude: null,
 });
 
-type Session = { cwd: string | null; at: number; load: "unnamed" | string | null };
+type Session = { cwd: string | null; at: number; load: string | null };
 
 function evidence(sessions: Session[]): SkillEvidence {
   const started = new Map<string, { harness: "claude-code"; at: number; cwd: string | null }>();
@@ -58,7 +58,7 @@ test("an unnamed load counts once, toward the only installation whose scope cove
     ...[0, 1, 2, 3, 4, 5].map((i) => ({
       cwd: `${HOME}/app${(i % 2) + 1}/src`,
       at: T1 + day + i,
-      load: "unnamed" as const,
+      load: "unnamed",
     })),
     { cwd: `${HOME}/elsewhere`, at: T1 + day, load: "unnamed" },
     { cwd: null, at: T1 + day, load: "unnamed" },
