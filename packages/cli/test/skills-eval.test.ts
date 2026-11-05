@@ -33,10 +33,16 @@ const settings = JSON.parse(at("--settings"));
 const plugins = prompt.includes("leak plugin") ? [{ name: "stray" }] : Object.values(settings.enabledPlugins).some(Boolean) ? [{ name: "builtin" }] : [];
 const out = (v) => process.stdout.write(JSON.stringify(v) + "\\n");
 out({ type: "system", subtype: "init", tools: at("--tools").split(","), mcp_servers: [], plugins, skills: [name] });
+if (prompt.includes("hang")) {
+  appendFileSync(${JSON.stringify(log)}.replace(/jsonl$/, "hang"), JSON.stringify({ pid: process.pid, config }) + "\\n");
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+}
 const triggered = body.includes("TRIGGERS") && prompt.includes("zebra");
-if (triggered) out({ type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill: name } }] } });
+if (triggered) out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_1", name: "Skill", input: { skill: name } }] } });
+if (triggered && prompt.includes("deny")) out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_1", is_error: true, content: "Permission to use Bash has been denied." }] } });
 out({ type: "assistant", message: { content: [{ type: "text", text: "reply about " + prompt }] } });
-out({ type: "result", subtype: "success", is_error: false, result: "answer to " + prompt, total_cost_usd: 0.001, usage: { input_tokens: 10, cache_read_input_tokens: 1000 + (triggered ? body.length : 0), cache_creation_input_tokens: 0, output_tokens: 20 } });
+out({ type: "result", subtype: "success", is_error: false, result: "answer to " + prompt, total_cost_usd: prompt.includes("costly") ? 0.75 : 0.001, usage: { input_tokens: 10, cache_read_input_tokens: 1000 + (triggered ? body.length : 0), cache_creation_input_tokens: 0, output_tokens: 20 } });
 `;
 
 const at = (day: number, second = 0) =>
@@ -291,3 +297,69 @@ test.skipIf(windows)("a replay that loads a plugin is stopped and counted as fai
   expect(result.prompts[0].current).toEqual({ failed: "isolation not confirmed: plugins loaded" });
   expect(result.summary).toMatchObject({ failed: 1, wins: 0, exclusionRate: null });
 });
+
+test.skipIf(windows)("no replay starts once the next one could pass the spend cap", async () => {
+  const f = await fixture([
+    { id: "c1", day: 20, text: "zebra costly one", skill: "zebra" },
+    { id: "c2", day: 21, text: "zebra costly two", skill: "zebra" },
+  ]);
+  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+  expect(out.code).toBe(0);
+  const seen = await calls(f.log);
+  expect(seen).toHaveLength(1);
+  expect(seen[0].argv[seen[0].argv.indexOf("--max-budget-usd") + 1]).toBe("1.0000");
+  const result = JSON.parse(out.stdout);
+  expect(result.summary).toMatchObject({ notRun: 2, stopped: "spend cap reached" });
+  expect(result.summary.spentUsd).toBeCloseTo(0.75);
+});
+
+test.skipIf(windows)("a skill that errors when it runs never wins or ties", async () => {
+  const f = await fixture([{ id: "d1", day: 20, text: "zebra deny shell", skill: "zebra" }]);
+  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+  expect(out.code).toBe(0);
+  const result = JSON.parse(out.stdout);
+  expect(result.prompts[0].current).toMatchObject({ triggered: true, errored: true });
+  expect(result.prompts[0].outcome).toBe("errored");
+  expect(result.summary).toMatchObject({ wins: 0, ties: 0, losses: 0, errored: 1 });
+});
+
+test.skipIf(windows)(
+  "an interrupt stops the replay's process group and removes its scratch home",
+  async () => {
+    const f = await fixture([{ id: "h1", day: 20, text: "zebra hang", skill: "zebra" }]);
+    const proc = Bun.spawn(
+      ["bun", main, "skills", "eval", "zebra", "--candidate", f.candidate, "--yes", "--json"],
+      {
+        env: {
+          PATH: `${f.bin}:${process.env.PATH}`,
+          HOME: f.home,
+          TMPDIR: process.env.TMPDIR ?? tmpdir(),
+          ANTHROPIC_API_KEY: "sk-test-not-real",
+        },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const hang = f.log.replace(/jsonl$/, "hang");
+    let child: { pid: number; config: string } | null = null;
+    for (let i = 0; i < 500 && !child; i++) {
+      child = (await Bun.file(hang).exists()) ? JSON.parse(await Bun.file(hang).text()) : null;
+      if (!child) await Bun.sleep(10);
+    }
+    expect(child).not.toBeNull();
+    process.kill(proc.pid, "SIGINT");
+    expect(await proc.exited).toBe(130);
+    const alive = (() => {
+      try {
+        process.kill(child!.pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (alive) process.kill(-child!.pid, "SIGKILL");
+    expect(alive).toBe(false);
+    expect(await stat(join(child!.config, "..")).catch(() => null)).toBeNull();
+  },
+);

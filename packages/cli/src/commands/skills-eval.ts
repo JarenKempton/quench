@@ -14,7 +14,9 @@ import {
   MAX_COST,
   MAX_PROMPTS,
   rowJson,
+  runCost,
   selectPrompts,
+  SPEND_STOP,
   summarise,
   type Row,
 } from "../skills/eval.ts";
@@ -147,22 +149,31 @@ async function run(
 
   const rows: Row[] = selection.prompts.map((p) => ({ prompt: p, current: null, candidate: null }));
   let spent = 0;
-  for (const row of rows) {
-    if (spent >= maxCost) break;
+  let priciest = 0;
+  let stopped: string | null = null;
+  run: for (const row of rows)
     for (const side of ["current", "candidate"] as const) {
+      const version = side === "current" ? current : candidate;
+      const next = Math.max(runCost(row.prompt, version.bytes) ?? 0, priciest);
+      if (spent + next > maxCost) {
+        stopped = SPEND_STOP;
+        break run;
+      }
       const result = await replay({
         command: command!,
         env,
         skill: skill!,
-        tree: (side === "current" ? current : candidate).tree,
+        tree: version.tree,
         prompt: row.prompt.text,
         model: row.prompt.model,
+        budgetUsd: maxCost - spent,
       });
       row[side] = result;
-      if (result.ok && result.costUsd !== null) spent += result.costUsd;
+      const paid = result.ok ? (result.costUsd ?? 0) : 0;
+      spent += paid;
+      priciest = Math.max(priciest, paid);
     }
-  }
-  const summary = summarise(rows);
+  const summary = summarise(rows, stopped);
   const hashes = { current: current.hash, candidate: candidate.hash };
   process.stdout.write(
     flags.json

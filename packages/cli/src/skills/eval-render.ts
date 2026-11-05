@@ -67,7 +67,7 @@ const column = (r: Replay | null) => {
   if (!r.ok) return { facts: [`failed: ${r.reason}`], text: "" };
   return {
     facts: [
-      `triggered ${r.triggered ? "yes" : "no"}`,
+      `triggered ${r.triggered ? "yes" : "no"}${r.errored ? ", errored" : ""}`,
       `tokens ${tokens(r.tokens)}`,
       `cost ${usd(r.costUsd)}`,
     ],
@@ -125,8 +125,13 @@ export function renderResults(
     "",
     `Wins ${summary.wins} · losses ${summary.losses} · ties ${summary.ties}`,
     `Excluded ${summary.excluded} (current replay did not reproduce the trigger) · exclusion rate ${rate}`,
+    ...(summary.errored
+      ? [`Errored ${summary.errored} (the skill failed when it ran; never a win or tie)`]
+      : []),
     ...(summary.failed ? [`Failed ${summary.failed}`] : []),
-    ...(summary.notRun ? [`Not run ${summary.notRun} (spend cap reached)`] : []),
+    ...(summary.notRun
+      ? [`Not run ${summary.notRun}${summary.stopped ? ` (${summary.stopped})` : ""}`]
+      : []),
     `Spent ${usd(summary.spentUsd)} as reported by claude -p`,
     "Win: the candidate triggers and uses at least 10% fewer tokens than the current version; loss: it does not trigger or uses 10% more; otherwise a tie. No judge reads the answers.",
     "",

@@ -92,6 +92,18 @@ export function selectPrompts(
 
 export type Estimate = { tokens: number; usd: number | null; unpriced: string[] };
 
+export const SPEND_STOP = "spend cap reached";
+
+const priceOf = (model: string | null) => (model ? PRICES[model] : undefined);
+
+const runTokens = (p: EvalPrompt, bytes: number) =>
+  TURNS * (BASE_TOKENS + Math.ceil(p.text.length / 4) + Math.ceil(bytes / 4));
+
+export function runCost(p: EvalPrompt, bytes: number): number | null {
+  const price = priceOf(p.model);
+  return price ? (runTokens(p, bytes) * price.input + OUTPUT_TOKENS * price.output) / 1e6 : null;
+}
+
 export function estimate(
   prompts: readonly EvalPrompt[],
   currentBytes: number,
@@ -102,22 +114,23 @@ export function estimate(
   const unpriced = new Set<string>();
   for (const p of prompts)
     for (const bytes of [currentBytes, candidateBytes]) {
-      const input = TURNS * (BASE_TOKENS + Math.ceil(p.text.length / 4) + Math.ceil(bytes / 4));
-      tokens += input + OUTPUT_TOKENS;
-      const price = p.model ? PRICES[p.model] : undefined;
-      if (!price) unpriced.add(p.model ?? "the account default model");
-      else if (usd !== null) usd += (input * price.input + OUTPUT_TOKENS * price.output) / 1e6;
+      tokens += runTokens(p, bytes) + OUTPUT_TOKENS;
+      const cost = runCost(p, bytes);
+      if (cost === null) unpriced.add(p.model ?? "the account default model");
+      else if (usd !== null) usd += cost;
     }
   return { tokens, usd: unpriced.size ? null : usd, unpriced: [...unpriced] };
 }
 
-export type Outcome = "win" | "loss" | "tie" | "excluded" | "failed" | "not run";
+export type Outcome = "win" | "loss" | "tie" | "excluded" | "errored" | "failed" | "not run";
 
 export function outcomeOf(current: Replay | null, candidate: Replay | null): Outcome {
   if (!current || !candidate) return "not run";
   if (!current.ok) return "failed";
+  if (current.errored) return "errored";
   if (!current.triggered) return "excluded";
   if (!candidate.ok) return "failed";
+  if (candidate.errored) return "errored";
   if (!candidate.triggered) return "loss";
   if (candidate.tokens < current.tokens * (1 - TIE_BAND)) return "win";
   if (candidate.tokens > current.tokens * (1 + TIE_BAND)) return "loss";
@@ -126,8 +139,8 @@ export function outcomeOf(current: Replay | null, candidate: Replay | null): Out
 
 export type Row = { prompt: EvalPrompt; current: Replay | null; candidate: Replay | null };
 
-export function summarise(rows: readonly Row[]) {
-  const tally = { win: 0, loss: 0, tie: 0, excluded: 0, failed: 0, "not run": 0 };
+export function summarise(rows: readonly Row[], stopped: string | null) {
+  const tally = { win: 0, loss: 0, tie: 0, excluded: 0, errored: 0, failed: 0, "not run": 0 };
   for (const row of rows) tally[outcomeOf(row.current, row.candidate)]++;
   const reproducible = tally.win + tally.loss + tally.tie + tally.excluded;
   const spentUsd = rows
@@ -138,10 +151,12 @@ export function summarise(rows: readonly Row[]) {
     losses: tally.loss,
     ties: tally.tie,
     excluded: tally.excluded,
+    errored: tally.errored,
     failed: tally.failed,
     notRun: tally["not run"],
     exclusionRate: reproducible ? tally.excluded / reproducible : null,
     spentUsd,
+    stopped,
   };
 }
 
@@ -149,7 +164,7 @@ const side = (r: Replay | null) =>
   r === null
     ? null
     : r.ok
-      ? { triggered: r.triggered, tokens: r.tokens, costUsd: r.costUsd }
+      ? { triggered: r.triggered, errored: r.errored, tokens: r.tokens, costUsd: r.costUsd }
       : { failed: r.reason };
 
 export const rowJson = (row: Row) => ({
