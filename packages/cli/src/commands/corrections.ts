@@ -27,7 +27,7 @@ import {
 } from "@quench/judge";
 import { dateOf, latestLine, renderCauses } from "./causes.ts";
 import { inContext, renderInContext, type SessionContext } from "./context.ts";
-import { scopedReport, scopeRefs, unread, type Scope } from "./scope.ts";
+import { SCHEMA_VERSION, scopedReport, scopeRefs, unread, type Scope } from "./scope.ts";
 import { sessionRuns } from "./session-runs.ts";
 import { json, quote, shortPath } from "../format.ts";
 
@@ -176,6 +176,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
       ? json(scopedReport(cache.judge, sessions, judged, causes))
       : options.json
         ? json({
+            schemaVersion: SCHEMA_VERSION,
             days: options.days,
             judge: cache.judge,
             newlyJudged: judged.newlyJudged,
@@ -366,6 +367,7 @@ const share = (t: Tally) =>
 const example = (r: Reply) => ({
   harness: r.harness,
   sessionId: r.sessionId,
+  runIndex: r.position,
   position: r.position,
   date: dateOf(r),
   kind: r.kind,

@@ -131,6 +131,7 @@ test("corrections separate people, automation and unresolved senders without tre
   expect(out.latestAutomation[0]).toEqual({
     harness: "claude-code",
     sessionId: "c",
+    runIndex: 1,
     position: 1,
     date: "2026-10-20",
     kind: "correction",

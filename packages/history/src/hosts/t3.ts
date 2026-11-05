@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Home } from "../home.ts";
-import type { HarnessId, SenderEvidence, Session, SessionEnricher } from "../model.ts";
+import type { Event, HarnessId, SenderEvidence, Session, SessionEnricher } from "../model.ts";
 
 /** T3's projected link between a host conversation and a harness-native session. */
 const ProviderThread = z.object({
@@ -42,6 +42,7 @@ const Message = z.object({
   notification: z.unknown().optional(),
   /** Present on T3's delegated-task results sent to the parent thread. */
   delegatedCompletion: z.unknown().optional(),
+  attachments: z.array(z.unknown()).nullish(),
 });
 
 const drivers: Readonly<Record<string, HarnessId>> = {
@@ -50,7 +51,7 @@ const drivers: Readonly<Record<string, HarnessId>> = {
   pi: "pi",
 };
 
-const MAX_DELIVERY_MS = 60_000;
+const MAX_DELIVERY_MS = 60 * 60_000;
 
 export const t3State = (home: Home) => join(home.dir, ".t3", "userdata", "statev2.sqlite");
 
@@ -130,34 +131,50 @@ function enrichSession(
     if (message.threadId !== threadId || message.role !== "user") continue;
     byText.set(message.text, [...(byText.get(message.text) ?? []), message]);
   }
-  const counts = new Map<string, number>();
+  for (const list of byText.values()) list.sort((a, b) => time(a) - time(b));
+  const sent = new Map<string, Extract<Event, { type: "message" }>[]>();
   for (const event of session.events) {
-    if (event.type === "message" && event.author === "user") {
-      counts.set(event.text, (counts.get(event.text) ?? 0) + 1);
-    }
+    if (event.type !== "message" || event.author !== "user") continue;
+    const key = hostText(event.text, byText);
+    if (key !== null) sent.set(key, [...(sent.get(key) ?? []), event]);
+  }
+  const senders = new Map<Event, SenderEvidence>();
+  for (const [text, events] of sent) {
+    const messages = byText.get(text)!;
+    if (messages.length !== events.length) continue;
+    events.forEach((event, i) => {
+      const message = messages[i]!;
+      const delay = event.at ? event.at.getTime() - time(message) : NaN;
+      const sender = senderOf(message);
+      if (
+        sender &&
+        !event.sender &&
+        event.origin !== "typed" &&
+        event.origin !== "scheduled" &&
+        Number.isFinite(delay) &&
+        delay >= 0 &&
+        delay <= MAX_DELIVERY_MS
+      )
+        senders.set(event, sender);
+    });
   }
   return {
     ...session,
     events: session.events.map((event) => {
-      if (
-        event.type !== "message" ||
-        event.author !== "user" ||
-        !event.at ||
-        event.sender ||
-        event.origin === "typed" ||
-        event.origin === "scheduled" ||
-        counts.get(event.text) !== 1
-      )
-        return event;
-      const matches = byText.get(event.text);
-      if (matches?.length !== 1) return event;
-      const message = matches[0] as z.infer<typeof Message>;
-      const delay = event.at.getTime() - Date.parse(message.createdAt);
-      if (!Number.isFinite(delay) || delay < 0 || delay > MAX_DELIVERY_MS) return event;
-      const sender = senderOf(message);
+      const sender = senders.get(event);
       return sender ? { ...event, sender } : event;
     }),
   };
+}
+
+const time = (message: z.infer<typeof Message>) => Date.parse(message.createdAt);
+
+const ATTACHED = /(?:\n\n\[Attached image "[^"\n]*" is saved at: [^\n]*\])+$/;
+
+function hostText(text: string, byText: Map<string, z.infer<typeof Message>[]>): string | null {
+  if (byText.has(text)) return text;
+  const bare = text.replace(ATTACHED, "");
+  return bare !== text && byText.get(bare)?.every((m) => m.attachments?.length) ? bare : null;
 }
 
 function senderOf(message: z.infer<typeof Message>): SenderEvidence | null {

@@ -30,6 +30,11 @@ export type RunCommand = ShellCommand & { call: number };
 
 export type CommandRecord = CommandShape & { error: string | null };
 
+export type FollowUp = Pick<
+  Run,
+  "reply" | "replyAt" | "replyLine" | "replyOrigin" | "replySender" | "replyCommand"
+>;
+
 export type Run = {
   prompt: string | null;
   promptLine: number | null;
@@ -43,6 +48,7 @@ export type Run = {
   replyOrigin: Origin | null;
   replySender: SenderEvidence | null;
   replyCommand: boolean;
+  followUps: FollowUp[];
   assistantSaid: string | null;
   outcome: string | null;
   steering: string[];
@@ -76,6 +82,7 @@ const emptyRun = (): Run => ({
   replyOrigin: null,
   replySender: null,
   replyCommand: false,
+  followUps: [],
   assistantSaid: null,
   outcome: null,
   steering: [],
@@ -114,11 +121,22 @@ export function runs(
   children: readonly Session[] = [],
   options: { turns?: boolean } = {},
 ): Run[] {
-  return linkSubagents(
-    splitRuns(session, options.turns ?? false).filter((s) => s.inferences > 0),
-    children.map(startedAt),
-  );
+  const kept: Run[] = [];
+  for (const segment of splitRuns(session, options.turns ?? false)) {
+    if (segment.inferences > 0) kept.push(segment);
+    else if (segment.reply !== null) kept.at(-1)?.followUps.push(followUpOf(segment));
+  }
+  return linkSubagents(kept, children.map(startedAt));
 }
+
+const followUpOf = (segment: Run): FollowUp => ({
+  reply: segment.reply,
+  replyAt: segment.replyAt,
+  replyLine: segment.replyLine,
+  replyOrigin: segment.replyOrigin,
+  replySender: segment.replySender,
+  replyCommand: segment.replyCommand,
+});
 
 export function splitRuns(session: Session, turns: boolean): Run[] {
   const segments: Run[] = [emptyRun()];

@@ -113,7 +113,7 @@ test("corrections asks for a key before sending anything, and a dry run never co
   const dry = await quench("corrections", "--days", "36500", "--dry-run", "--json");
   expect(dry.code).toBe(0);
   const out = JSON.parse(dry.stdout);
-  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([0, 0, null]);
+  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([2, 0, null]);
   expect([out.senderSources.harness, out.fromPeople.kinds.new_request]).toEqual([1, 1]);
   expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
 });

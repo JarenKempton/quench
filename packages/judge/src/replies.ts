@@ -1,4 +1,4 @@
-import type { HarnessId } from "@quench/history";
+import type { HarnessId, Origin, SenderEvidence } from "@quench/history";
 import { signals, type Run, type Signal } from "@quench/insights";
 import type { VerdictCache } from "./cache.ts";
 import { ReplyKind, type Exchange, type Judge, type Sender, type Verdict } from "./verdict.ts";
@@ -33,17 +33,19 @@ export async function judgeReplies(
 ): Promise<Judged> {
   const asked = sessions.flatMap((session) =>
     session.runs.flatMap((run, i) =>
-      run.reply === null
-        ? []
-        : [
-            {
-              session,
-              position: i + 1,
-              run,
-              exchange: exchangeOf(run, run.reply),
-              preset: presetKind(run, run.reply),
-            },
-          ],
+      [run, ...run.followUps.map((f) => ({ ...run, ...f }))].flatMap((replied) =>
+        replied.reply === null
+          ? []
+          : [
+              {
+                session,
+                position: i + 1,
+                run: replied,
+                exchange: exchangeOf(replied, replied.reply),
+                preset: presetKind(replied, replied.reply),
+              },
+            ],
+      ),
     ),
   );
   const unknown = asked.flatMap((a) => (a.preset || cache.get(a.exchange) ? [] : [a.exchange]));
@@ -104,16 +106,34 @@ function presetKind(run: Run, reply: string): ReplyKind | null {
   return null;
 }
 
-function senderOf(run: Run, verdict: Verdict | undefined): Pick<Reply, "sender" | "senderSource"> {
-  if (run.replyOrigin === "typed") return { sender: "person", senderSource: "harness" };
-  if (run.replyOrigin === "scheduled") return { sender: "automation", senderSource: "harness" };
-  if (run.replySender) return { sender: run.replySender.sender, senderSource: "host" };
-  const reply = run.reply ?? "";
-  if (isT3Notice(reply)) return { sender: "automation", senderSource: "host" };
-  if (run.replyCommand) return { sender: "person", senderSource: "harness" };
-  return verdict
-    ? { sender: verdict.sender, senderSource: "judge" }
-    : { sender: null, senderSource: "unknown" };
+export type Said = {
+  text: string | null;
+  origin: Origin | null;
+  sender: SenderEvidence | null;
+  command: boolean;
+};
+
+export type Attribution = Pick<Reply, "sender" | "senderSource">;
+
+export function recordedSender(said: Said): Attribution {
+  if (said.origin === "typed") return { sender: "person", senderSource: "harness" };
+  if (said.origin === "scheduled") return { sender: "automation", senderSource: "harness" };
+  if (said.sender) return { sender: said.sender.sender, senderSource: "host" };
+  if (said.text !== null && isT3Notice(said.text))
+    return { sender: "automation", senderSource: "host" };
+  if (said.command) return { sender: "person", senderSource: "harness" };
+  return { sender: null, senderSource: "unknown" };
+}
+
+function senderOf(run: Run, verdict: Verdict | undefined): Attribution {
+  const recorded = recordedSender({
+    text: run.reply,
+    origin: run.replyOrigin,
+    sender: run.replySender,
+    command: run.replyCommand,
+  });
+  if (recorded.sender !== null || !verdict) return recorded;
+  return { sender: verdict.sender, senderSource: "judge" };
 }
 
 export type Tally = { replies: number; judged: number; kinds: Record<ReplyKind, number> };

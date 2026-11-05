@@ -33,7 +33,7 @@ Usage:
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
   quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
-  quench runs [session-file | --session <id>] [--json]
+  quench runs [session-file | --session <id>] [--json] [--host-history <sqlite-file> | --no-host-history]
                                        one session as prompt → what the agent did → your reply
   quench runs --all --json [--history <dir>]
                                        every run of every session, one JSON object per line
@@ -426,6 +426,11 @@ switch (command) {
     process.exitCode = await runs(home, rest[0], {
       json: values.json,
       ...(values.session[0] ? { session: values.session[0] } : {}),
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
     });
     break;
   default:
