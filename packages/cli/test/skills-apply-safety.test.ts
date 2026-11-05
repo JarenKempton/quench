@@ -243,7 +243,8 @@ for (;;) {
     Bun.spawn([process.execPath, script, state, log], { stdout: "ignore", stderr: "pipe" }),
   );
   const codes = await Promise.all(procs.map((p) => p.exited));
-  expect(codes.every((c) => c === 0)).toBe(true);
+  const errors = await Promise.all(procs.map((p) => new Response(p.stderr).text()));
+  expect(errors.filter((_, i) => codes[i] !== 0)).toEqual([]);
   const lines = (await readFile(log, "utf8")).trim().split("\n");
   expect(lines).toHaveLength(48);
   for (let i = 0; i < lines.length; i += 2) {
