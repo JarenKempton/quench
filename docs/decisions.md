@@ -125,8 +125,9 @@ retired with it and live in git history.
   or the machine accepts it, and a denied skill is named in the plan with its reason.
   A skill source must resolve inside the source repo, and any unreadable or unparseable fleet
   file, registry, manifest or override fails the plan; only an absent file counts as empty.
-  The importer follows no links under `hosts/`: a symlink there, dangling or not, or anything
-  other than a regular file or folder, fails the plan.
+  The importer follows no links in its input (`registry.yaml`, the fleet file, `hosts/` and its
+  overrides): each path is checked with `lstat` first, and a symlink, dangling or not, or anything
+  other than a regular file or folder fails the plan without being opened.
   Ledger operations are ordered by their sequence number, never by `appliedAt`, which is
   information only, so a clock rollback cannot change ownership.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:

@@ -60,27 +60,34 @@ const failed = (path: string) => (error: NodeJS.ErrnoException) => {
   throw new Error(`cannot read ${path}: ${error.code ?? error.message}`);
 };
 
-const text = (path: string) =>
-  readFile(path, "utf8").catch((error: NodeJS.ErrnoException) =>
-    absent(error) ? null : failed(path)(error),
-  );
-
 const plain = (
   path: string,
   info: { isSymbolicLink(): boolean; isFile(): boolean; isDirectory(): boolean },
 ) => {
   if (info.isSymbolicLink())
-    throw new Error(`${path} is a symlink; the importer does not follow links under hosts/`);
+    throw new Error(`${path} is a symlink; the importer does not follow links in its input`);
   if (!info.isFile() && !info.isDirectory())
     throw new Error(`${path} is not a regular file or folder`);
 };
 
-async function folder(dir: string) {
-  const info = await lstat(dir).catch((error: NodeJS.ErrnoException) =>
-    absent(error) ? null : failed(dir)(error),
+const kind = async (path: string) => {
+  const info = await lstat(path).catch((error: NodeJS.ErrnoException) =>
+    absent(error) ? null : failed(path)(error),
   );
+  if (info) plain(path, info);
+  return info;
+};
+
+async function text(path: string) {
+  const info = await kind(path);
+  if (!info) return null;
+  if (!info.isFile()) throw new Error(`${path} is not a file`);
+  return readFile(path, "utf8").catch(failed(path));
+}
+
+async function folder(dir: string) {
+  const info = await kind(dir);
   if (!info) return [];
-  plain(dir, info);
   if (!info.isDirectory()) throw new Error(`${dir} is not a folder`);
   const entries = await readdir(dir, { withFileTypes: true }).catch(failed(dir));
   for (const entry of entries) plain(join(dir, entry.name), entry);
