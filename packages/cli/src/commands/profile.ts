@@ -134,7 +134,7 @@ export async function profile(
   return 0;
 }
 
-async function placeOrigins(
+export async function placeOrigins(
   home: Home,
   places: readonly SessionPlace[],
   globalSkills: Map<string, Skill>,

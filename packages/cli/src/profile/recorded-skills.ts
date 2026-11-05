@@ -34,8 +34,10 @@ export type Occurrence = {
   name: string;
   target: string;
   origin: SkillOrigin;
+  path: string | null;
   chars: number | null;
   used: boolean;
+  byUser: boolean;
 };
 
 export type PlaceOrigin = (place: SessionPlace, skill: ListedSkill) => SkillOrigin;
@@ -79,8 +81,10 @@ export function skillUse(places: readonly SessionPlace[], originOf: PlaceOrigin)
           name: listed.name,
           target,
           origin,
+          path: listed.path,
           chars: listed.chars,
           used: used.has(listed.name),
+          byUser: used.get(listed.name) === "user",
         });
       }
     }
