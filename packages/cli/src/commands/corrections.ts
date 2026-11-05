@@ -220,7 +220,7 @@ async function sessionRuns(
       const key = `${s.harness}:${s.parent}`;
       childStarts.set(key, [...(childStarts.get(key) ?? []), startedAt(s)]);
     } else {
-      contexts?.set(`${s.harness}:${s.id}`, contextOf(s));
+      contexts?.set(`${s.harness}:${s.id}`, contextOf(s, home.dir));
       parents.set(`${s.harness}:${s.id}`, {
         id: s.id,
         path: s.path,

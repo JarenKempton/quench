@@ -3,6 +3,7 @@ import {
   knownProgram,
   knownSubcommand,
   recordedInstructions,
+  sourceTrace,
   type HarnessId,
   type Session,
 } from "@quench/history";
@@ -166,33 +167,26 @@ function knownCommand(what: string | null): string | null {
   return sub === undefined || knownSubcommand(program, sub) === sub ? what : null;
 }
 
-export function contextOf(session: Session): SessionContext {
+export function contextOf(session: Session, home: string): SessionContext {
   const files = recordedInstructions(session);
-  return { skills: skillsUsed(session), files: files && [...new Set(files.map(fileName))] };
+  return { skills: skillsUsed(session, home), files: files && [...new Set(files.map(fileName))] };
 }
 
 const fileName = (f: { path: string | null; directory: string | null; label: string | null }) =>
   f.path ?? `${f.directory ?? "unknown folder"} (${f.label ?? "combined instructions"})`;
 
-function skillsUsed(session: Session): string[] | null {
-  const listings = session.events.flatMap((e) => (e.type === "skills" ? e.listed : []));
-  const nameByPath = new Map(listings.flatMap((s) => (s.path ? [[s.path, s.name]] : [])));
-  const succeeded = new Set(
-    session.events.flatMap((e) =>
-      e.type === "tool_result" && e.callId !== null && e.isError === false ? [e.callId] : [],
-    ),
+function skillsUsed(session: Session, home: string): string[] | null {
+  const { listings, loads } = sourceTrace(session, home).skills;
+  if (!listings.length) return null;
+  const listed = new Set(listings.flatMap((l) => l.listed.map((s) => s.name)));
+  const used = loads.filter(
+    (l) =>
+      listed.has(l.name) &&
+      (l.how === "invoked" ||
+        (l.how === "read" && l.status === "returned") ||
+        (l.how === "shell-read" && l.status === "ran")),
   );
-  const used = new Set<string>();
-  let recorded = listings.length > 0;
-  for (const e of session.events) {
-    if (e.type === "invocation") {
-      recorded = true;
-      used.add(e.name);
-    }
-    const read = e.type === "tool_call" && e.fileRead ? nameByPath.get(e.fileRead.path) : undefined;
-    if (read && e.type === "tool_call" && e.id !== null && succeeded.has(e.id)) used.add(read);
-  }
-  return recorded ? [...used] : null;
+  return [...new Set(used.map((l) => l.name))];
 }
 
 export function renderInContext(found: InContext, path: (file: string) => string): string {

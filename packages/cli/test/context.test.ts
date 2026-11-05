@@ -176,7 +176,7 @@ test("context renders no reply, error or command text, in text or JSON", async (
     leaks.map((reply, i) => ({
       id: `leak${i}`,
       reply,
-      skill: null,
+      skill: `Cookie: sid=${CANARY}g`,
       failures: 3,
       error: i % 2 ? `Cookie: sid=${CANARY}b` : `Exit code 1\nCookie: sid=${CANARY}b`,
     })),
@@ -208,9 +208,13 @@ const listed = (path: string) => ({
   listed: [{ name: "verify", path, chars: 1 }],
 });
 
-test("a skill counts only when invoked or read successfully, never from a command naming its path", () => {
+test("a skill counts only when listed and invoked, read or run through the shell successfully", () => {
   const path = "/skills/verify/SKILL.md";
-  const of = (events: object[]) => contextOf({ events } as unknown as Session).skills;
+  const of = (events: object[], harness = "codex") =>
+    contextOf(
+      { harness, cwd: "/", events, diagnostics: { unparsed: 0 } } as unknown as Session,
+      "/home",
+    ).skills;
   const call = (id: string, extra: object) => ({
     type: "tool_call",
     at: null,
@@ -218,26 +222,28 @@ test("a skill counts only when invoked or read successfully, never from a comman
     name: "x",
     ...extra,
   });
-  const result = (callId: string, isError: boolean) => ({
+  const result = (callId: string, isError: boolean | null, extra: object = {}) => ({
     type: "tool_result",
     at: null,
     callId,
     isError,
     chars: 1,
+    ...extra,
   });
-  expect(
-    of([
-      listed(path),
-      call("1", { shell: [{ command: `echo ${path}`, workdir: null }] }),
-      result("1", false),
-    ]),
-  ).toEqual([]);
-  expect(of([listed(path), call("1", { fileRead: { path } }), result("1", true)])).toEqual([]);
-  expect(of([listed(path), call("1", { fileRead: { path } }), result("1", false)])).toEqual([
+  const shell = (command: string) => ({ shell: [{ command, workdir: "/" }] });
+  expect(of([listed(path), call("1", shell(`echo ${path}`)), result("1", null)])).toEqual([]);
+  expect(of([listed(path), call("1", shell(`cat ${path}`)), result("1", true)])).toEqual([]);
+  expect(of([listed(path), call("1", shell(`cat ${path}`)), result("1", null)])).toEqual([
     "verify",
   ]);
-  expect(of([{ type: "invocation", at: null, name: "deploy", by: "user" }])).toEqual(["deploy"]);
-  expect(of([])).toBeNull();
+  const read = call("1", { fileRead: { path } });
+  const returned = { fileRead: { path, returnedTextChars: 1 } };
+  expect(of([listed(path), read, result("1", true)], "claude-code")).toEqual([]);
+  expect(of([listed(path), read, result("1", false, returned)], "claude-code")).toEqual(["verify"]);
+  const invoked = (name: string) => ({ type: "invocation", at: null, name, by: "model" });
+  expect(of([listed(path), invoked("verify")])).toEqual(["verify"]);
+  expect(of([listed(path), invoked(`Cookie: sid=${CANARY}g`)])).toEqual([]);
+  expect(of([invoked("verify")])).toBeNull();
 });
 
 test("combined instruction blocks from different folders stay separate and say what they are", () => {
@@ -249,12 +255,18 @@ test("combined instruction blocks from different folders stay separate and say w
     textChars: 1,
     textDiffersFromFile: null,
   });
-  const files = contextOf({
-    events: [
-      { type: "instructions", at: null, unreadable: 0, files: [block("/historical/x")] },
-      { type: "instructions", at: null, unreadable: 0, files: [block("/historical/y")] },
-    ],
-  } as unknown as Session).files;
+  const files = contextOf(
+    {
+      events: [
+        { type: "instructions", at: null, unreadable: 0, files: [block("/historical/x")] },
+        { type: "instructions", at: null, unreadable: 0, files: [block("/historical/y")] },
+      ],
+      harness: "codex",
+      diagnostics: { unparsed: 0 },
+      cwd: "/",
+    } as unknown as Session,
+    "/home",
+  ).files;
   expect(files).toEqual([
     "/historical/x (AGENTS.md instructions)",
     "/historical/y (AGENTS.md instructions)",
