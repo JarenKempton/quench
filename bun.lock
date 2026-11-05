@@ -19,6 +19,7 @@
       "dependencies": {
         "@quench/fleet": "workspace:*",
         "@quench/history": "workspace:*",
+        "@quench/hub": "workspace:*",
         "@quench/insights": "workspace:*",
         "@quench/judge": "workspace:*",
         "@quench/secrets": "workspace:*",
@@ -41,6 +42,14 @@
       "devDependencies": {
         "@anthropic-ai/sdk": "^1.0.0",
         "@earendil-works/pi-coding-agent": "^1.3.0",
+      },
+    },
+    "packages/hub": {
+      "name": "@quench/hub",
+      "version": "0.0.0",
+      "dependencies": {
+        "@quench/fleet": "workspace:*",
+        "zod": "^4.1.0",
       },
     },
     "packages/insights": {
@@ -477,6 +486,8 @@
     "@quench/fleet": ["@quench/fleet@workspace:packages/fleet"],
 
     "@quench/history": ["@quench/history@workspace:packages/history"],
+
+    "@quench/hub": ["@quench/hub@workspace:packages/hub"],
 
     "@quench/insights": ["@quench/insights@workspace:packages/insights"],
 

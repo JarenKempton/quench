@@ -137,6 +137,13 @@ retired with it and live in git history.
   other than a regular file or folder fails the plan without being opened.
   Ledger operations are ordered by their sequence number, never by `appliedAt`, which is
   information only, so a clock rollback cannot change ownership.
+- **The hub keeps desired state in git and nothing else** ([#139](https://github.com/JarenKempton/quench/issues/139)).
+  Skills and the fleet file live only in the hub's internal git repo; SQLite holds credential
+  hashes and reported state, never assignments. Every change is a compare-and-swap commit on
+  HEAD, and rollback is a revert commit. Machines hold no repo credentials: they receive only the
+  files of their own assigned skills, keyed by hash, and their identity comes from their token.
+  A self-signed hub is trusted by SPKI pin; verification is never turned off for requests, and
+  plain HTTP is loopback only.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

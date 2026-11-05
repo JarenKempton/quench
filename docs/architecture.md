@@ -8,6 +8,7 @@ packages/insights   pure functions over sessions: runs, reports, signals
 packages/judge      opt-in model judgments about runs, behind the Judge interface
 packages/secrets    offline credential detection over history, configs and files on disk
 packages/fleet      fleet contracts (zod), tree hashes, the importer and the read-only skills planner
+packages/hub        the fleet hub server (`quench hub serve`) and its client (`quench connect`)
 packages/cli        the `quench` command; composition and formatting
 ```
 
@@ -251,6 +252,32 @@ spec alone; versions to pin to come from the local npx cache. Git hooks come fro
 blob reachable from any ref once (`git rev-list --all --objects` into `git cat-file --batch`) and
 runs the same detection with gitleaks' global path allowlist; diffs were too slow on repos that
 rewrite large files.
+
+## Fleet hub
+
+`packages/hub` is the control plane for #135. Desired state lives only in a bare git repo,
+`<data>/skills.git`, driven by the system `git`: plain skill folders plus `quench-fleet.yaml`.
+SQLite (`<data>/hub.sqlite`, `bun:sqlite`) holds what git must not: the owner password hash,
+session, pairing-code and machine-token hashes, and each machine's last merged snapshot.
+
+- **Commits.** Every toggle, editor save and revert is one commit built with plumbing in a
+  temporary index (`read-tree`, `update-index` or `apply --cached -R`, `write-tree`,
+  `commit-tree`), then landed with `update-ref main <new> <base>`, so a page rendered from an
+  older HEAD is rejected with 409. `--mirror <remote>` pushes `main` after every commit.
+- **Bundles.** Each commit is materialized byte-for-byte from `ls-tree` and `cat-file --batch`
+  (no checkout filters), and `buildBundle` from `packages/fleet` builds the machine's manifest.
+  Its id is the SHA-256 of the manifest JSON, sent as the ETag. A file is served by its SHA-256
+  only when it belongs to that machine's bundle at HEAD.
+- **Pairing.** An 8-character code (40 bits), stored hashed, single-use, 10 minutes, behind a
+  10-failures-per-10-minutes limit, is exchanged for a per-machine token, stored hashed. Every API
+  call takes its machine from the token. Revoking one machine invalidates its token alone.
+- **TLS.** Without `--tls-cert`, the hub makes a self-signed P-256 certificate on first run and
+  shows its SPKI SHA-256 as `--pin`. `quench connect` reads the certificate once, compares the
+  pin before sending anything, then trusts only that certificate for every request with normal
+  verification. Plain HTTP is accepted on loopback only, by both sides.
+- **Client.** `quench connect` keeps `~/.quench/fleet/connection.json`, `token` (0600),
+  `bundle.json` and `blobs/<sha256>`, each checked against its hash. #138's agent reuses
+  `@quench/hub/client` to poll and post snapshots.
 
 ## Reading at scale
 

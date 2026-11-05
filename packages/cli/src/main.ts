@@ -14,6 +14,7 @@ import { sources } from "./commands/sources.ts";
 import { secrets } from "./commands/secrets.ts";
 import { update } from "./commands/update.ts";
 import { skills } from "./commands/skills.ts";
+import { connect, hub } from "./commands/hub.ts";
 import { agent } from "./commands/agent.ts";
 import { resolve } from "node:path";
 import { version } from "./version.ts";
@@ -48,6 +49,13 @@ Usage:
     --source <dir>                     compare installed skills with a skills checkout by tree hash (read-only)
   quench skills plan --source <dir> --machine <name> [--project <dir>] --json
                                        what installing a skills checkout would change on this machine (read-only)
+  quench hub serve [--data <dir>] [--listen <host:port>] [--url <public url>] [--mirror <git remote>]
+                   [--tls-cert <pem> --tls-key <pem> | --http]
+                                       run the fleet hub; first run needs QUENCH_HUB_PASSWORD (--http: loopback only)
+  quench hub import <git-url|path> [--data <dir>]
+                                       bring a skills repo into a new hub with its history, plus one fleet-file commit
+  quench connect <https://hub> --code XXXX-XXXX [--pin sha256:…]
+                                       pair this machine with a hub and fetch its bundle
   quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
                                        install, update and remove the planned skill folders; refuses if disk changed
   quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
@@ -109,6 +117,15 @@ const { positionals, values } = parseArgs({
     channel: { type: "string" },
     source: { type: "string" },
     machine: { type: "string" },
+    data: { type: "string" },
+    listen: { type: "string" },
+    http: { type: "boolean", default: false },
+    url: { type: "string" },
+    mirror: { type: "string" },
+    "tls-cert": { type: "string" },
+    "tls-key": { type: "string" },
+    code: { type: "string" },
+    pin: { type: "string" },
     plan: { type: "string" },
     project: { type: "string", multiple: true, default: [] },
     interval: { type: "string", default: "300" },
@@ -235,6 +252,16 @@ if (values.plan !== undefined && command !== "skills") {
 }
 if ((values.once || values.interval !== "300") && command !== "agent") {
   process.stderr.write("--interval and --once are only available for agent\n");
+  process.exit(1);
+}
+
+const HUB_FLAGS = ["data", "listen", "http", "url", "mirror", "tls-cert", "tls-key"] as const;
+if (HUB_FLAGS.some((f) => values[f] !== undefined && values[f] !== false) && command !== "hub") {
+  process.stderr.write(`--${HUB_FLAGS.join(", --")} are only available for hub\n`);
+  process.exit(1);
+}
+if ((values.code !== undefined || values.pin !== undefined) && command !== "connect") {
+  process.stderr.write("--code and --pin are only available for connect\n");
   process.exit(1);
 }
 
@@ -369,6 +396,23 @@ switch (command) {
       }),
       ...(values.source ? { source: values.source } : {}),
       ...(values.machine ? { machine: values.machine } : {}),
+    });
+    break;
+  case "hub":
+    process.exitCode = await hub(home, rest, {
+      http: values.http,
+      ...(values.data ? { data: values.data } : {}),
+      ...(values.listen ? { listen: values.listen } : {}),
+      ...(values.url ? { url: values.url } : {}),
+      ...(values.mirror ? { mirror: values.mirror } : {}),
+      ...(values["tls-cert"] ? { tlsCert: values["tls-cert"] } : {}),
+      ...(values["tls-key"] ? { tlsKey: values["tls-key"] } : {}),
+    });
+    break;
+  case "connect":
+    process.exitCode = await connect(home, rest, {
+      ...(values.code ? { code: values.code } : {}),
+      ...(values.pin ? { pin: values.pin } : {}),
     });
     break;
   case "update":

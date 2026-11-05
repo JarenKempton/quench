@@ -68,25 +68,37 @@ profile of every agent and project in your history.
 
 ## Commands
 
-| Command                                        | What it shows                                                                           |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `quench`                                       | A short summary: what sessions start with, what is worth a look, busiest projects       |
-| `quench setup [step] [--judge <name>] [--yes]` | Find agents, show the summary, pick and test a judge; resumable, every step skippable   |
-| `quench profile [section]`                     | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`            |
-| `quench worktrees [--days 30] [--json]`        | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only    |
-| `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort   |
-| `quench runs [session-file \| --session <id>]` | One session as prompt → what the agent did → your reply; default: latest one here       |
-| `quench runs --all --json [--history <dir>]`   | Every run of every session as JSON lines, per machine folder with `--history`           |
-| `quench corrections [--dry-run]`               | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`     |
-| `quench corrections <file>... --session <id>`  | Corrections in those sessions only, with transcript line locators; `--json` is schema 1 |
-| `quench steering <project-dir> [--json]`       | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline        |
-| `quench sources [session-file] [--json]`       | What one session read and loaded; default: the latest session in this folder; offline   |
-| `quench secrets [--repo-history] [--json]`     | Exposed credentials, risky permissions, unpinned sources, git hooks; offline            |
-| `quench skills [--source <dir>] [--json]`      | One record per skill, agent and location: origin, use, tree hash, drift; read-only      |
-| `quench skills plan --source <dir>`            | What a skills checkout would change here, with `--machine <name> --json`; read-only     |
-| `quench skills apply --plan <hash>`            | Copies the planned skill folders; foreign or edited folders are left as conflicts       |
-| `quench skills status`                         | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift     |
-| `quench agent install\|uninstall\|run`         | A user service that keeps applying `--source` every `--interval`; never self-updates    |
+| Command                                         | What it shows                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `quench`                                        | A short summary: what sessions start with, what is worth a look, busiest projects                      |
+| `quench setup [step] [--judge <name>] [--yes]`  | Find agents, show the summary, pick and test a judge; resumable, every step skippable                  |
+| `quench profile [section]`                      | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`                           |
+| `quench worktrees [--days 30] [--json]`         | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only                   |
+| `quench report [--days 30] [--json]`            | Per harness: starting load, peak context, compactions, tool errors, models and effort                  |
+| `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                      |
+| `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                          |
+| `quench corrections [--dry-run]`                | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`                    |
+| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 1                |
+| `quench steering <project-dir> [--json]`        | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline                       |
+| `quench sources [session-file] [--json]`        | What one session read and loaded; default: the latest session in this folder; offline                  |
+| `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                           |
+| `quench hub serve` / `quench hub import <repo>` | The fleet hub: skills in git, toggles, editor, pairing, bundles; first run needs `QUENCH_HUB_PASSWORD` |
+| `quench connect <https://hub> --code … --pin …` | Pair this machine with a hub and fetch the bundle of skills assigned to it                             |
+| `quench skills [--source <dir>] [--json]`       | One record per skill, agent and location: origin, use, tree hash, drift; read-only                     |
+| `quench skills plan --source <dir>`             | What a skills checkout would change here, with `--machine <name> --json`; read-only                    |
+| `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                      |
+| `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
+| `quench agent install\|uninstall\|run`          | A user service that keeps applying `--source` every `--interval`; never self-updates                   |
+
+The hub's data folder (`--data`, default `~/.quench/hub`) must be private to the user that runs it: the hub creates it 0700 and refuses to start if it is a link, owned by someone else, readable by group or others, or contains any symlink.
+
+The hub also ships as a Docker image built from this repo (`docker build -t quench-hub .`); it
+uses the image's system `git` for its internal skills repo and keeps everything under `/data`:
+
+```sh
+docker run --rm -v quench-hub:/data quench-hub import https://github.com/you/skills.git
+docker run -d -p 8443:8443 -v quench-hub:/data -e QUENCH_HUB_PASSWORD=… quench-hub serve --url https://hub.lan:8443
+```
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
