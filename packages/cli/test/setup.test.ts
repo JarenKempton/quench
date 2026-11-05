@@ -146,7 +146,7 @@ test("setup stops cleanly without answers, and rejects unknown steps and judges"
 
 test.skipIf(posix)("setup on Windows never offers claude", async () => {
   const home = await freshHome();
-  const run = await quench(home, ["setup", "judge"], "claude\nskip\n");
+  const run = await quench(home, ["setup", "judge"], "claude\nskip\n\n");
   expect(run.stdout).not.toContain("claude -p, signed in as you");
   expect(run.stdout).toContain("Pick one of jev, openai, none, or skip.");
   expect(run.code).toBe(0);
