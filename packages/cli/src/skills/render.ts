@@ -54,19 +54,15 @@ export function renderSkills(
     "",
     heading(`Skills loaded and human corrections in the same session · ${BASIS}`),
   ];
-  const seen = new Set<string>();
-  const shown = records.filter((r) => {
-    if (seen.has(r.skill) || r.coOccurrence.withHumanCorrection === null) return false;
-    seen.add(r.skill);
-    return true;
-  });
-  if (!shown.length) lines.push(`  No skill was loaded in ${MIN_SESSIONS} or more sessions.`);
+  const shown = records.filter((r) => r.coOccurrence.withHumanCorrection !== null);
+  if (!shown.length)
+    lines.push(`  No skill was loaded in ${MIN_SESSIONS} or more judged sessions.`);
   for (const r of shown)
     lines.push(
-      `  ${r.skill}  ${count(r.coOccurrence.sessionsLoaded)} sessions loaded it · ${count(r.coOccurrence.withHumanCorrection!)} had a human correction · ${count(r.coOccurrence.unjudgedSessions!)} not judged yet`,
+      `  ${r.skill} · ${harnessById[r.harness].label} · ${r.location}  ${count(r.coOccurrence.sessionsLoaded)} sessions loaded it · ${count(r.coOccurrence.withHumanCorrection!)} had a human correction · ${count(r.coOccurrence.unjudgedSessions)} not judged yet`,
     );
   lines.push(
-    `  Shown at ${MIN_SESSIONS} or more sessions. Verdicts from the ${judge} cache only; no model is called.`,
+    `  Shown at ${MIN_SESSIONS} or more judged sessions of the same skill, agent and location. Verdicts from the ${judge} cache only; no model is called.`,
   );
   if (drift) lines.push("", ...renderDrift(drift));
   return `${lines.join("\n")}\n`;
@@ -83,6 +79,6 @@ function renderDrift(drift: Drift): string[] {
     ...(drift.notCompared.length
       ? [`  Not compared, unreadable: ${list(drift.notCompared.map(at)) || "none"}`]
       : []),
-    ...drift.warnings.map((w) => `  Warning: ${w}`),
+    ...drift.warnings.map((w) => `  Warning: ${w.kind} ×${w.count}`),
   ];
 }

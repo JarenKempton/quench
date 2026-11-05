@@ -61,7 +61,7 @@ const session = (c: Case) =>
 const skillFile = (name: string, extra = "") =>
   `---\nname: ${name}\ndescription: ${name} things${extra}\n---\nBody of ${name}.\n`;
 
-async function fixture(cases: Case[], corrected: string[]) {
+async function fixture(cases: Case[], corrected: string[], uncached: string[] = []) {
   const home = await mkdtemp(join(tmpdir(), "quench-cli-skills-"));
   for (const name of ["verify", "deploy"])
     await Bun.write(join(home, ".claude/skills", name, "SKILL.md"), skillFile(name));
@@ -71,6 +71,7 @@ async function fixture(cases: Case[], corrected: string[]) {
   const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
   for (const c of cases) {
     await Bun.write(join(dir, `${c.id}.jsonl`), session(c));
+    if (uncached.includes(c.id)) continue;
     await cache.remember([
       [
         { assistantSaid: "done", reply: c.reply },
@@ -131,7 +132,6 @@ test("one record per skill, agent and location, with tree hash, use and co-occur
   const verify = records.find((r) => r.skill === "verify" && r.harness === "claude-code")!;
   expect(records.filter((r) => r.skill === "verify")).toHaveLength(1);
   expect(verify).toMatchObject({
-    id: "verify|claude-code|~/.claude/skills/verify",
     location: "~/.claude/skills/verify",
     origin: "user",
     listedBy: ["claude-code"],
@@ -144,6 +144,8 @@ test("one record per skill, agent and location, with tree hash, use and co-occur
       unjudgedSessions: 0,
     },
   });
+  expect(verify.id).toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect((await report(home)).json.skills.find((r: Record) => r.id === verify.id)).toBeTruthy();
   expect(verify.contentVersion).toBe(treeHash(await readTree(join(home, ".claude/skills/verify"))));
   const deploy = records.find((r) => r.skill === "deploy")!;
   expect(deploy.coOccurrence).toMatchObject({ sessionsLoaded: 1, withHumanCorrection: null });
@@ -205,4 +207,121 @@ test("no skill name, argument, description or reply text from history reaches th
   expect(JSON.stringify(json)).not.toContain(CANARY);
   expect(text).not.toContain(CANARY);
   expect(text).not.toContain("Cookie");
+});
+
+async function codexSession(home: string, id: string, entries: string[]) {
+  const codex = join(home, ".codex");
+  const block = [
+    "<skills_instructions>",
+    "### Skill roots",
+    `- \`r0\` = \`${join(codex, "skills")}\``,
+    `- \`r1\` = \`${join(codex, "plugins/cache")}\``,
+    "### Available skills",
+    ...entries,
+    "</skills_instructions>",
+  ].join("\n");
+  await Bun.write(
+    join(codex, `sessions/2026/10/20/${id}.jsonl`),
+    lines([
+      { type: "session_meta", payload: { id, cwd: home } },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "developer",
+          content: [{ type: "input_text", text: block }],
+        },
+      },
+    ]),
+  );
+}
+
+test("a recorded path that is not on disk now never becomes a location or id", async () => {
+  const home = await fixture(ordinary, []);
+  await Bun.write(
+    join(home, ".codex/plugins/cache/debug/sample/1.0/skills/hello/SKILL.md"),
+    skillFile("hello"),
+  );
+  await codexSession(home, "c1", [
+    `- leak: Leak (file: r0/Cookie: sid=${CANARY}p/leak/SKILL.md)`,
+    `- sample:hello: Hello (file: r1/debug/sample/Cookie: sid=${CANARY}q/skills/hello/SKILL.md)`,
+  ]);
+  const { json, text } = await report(home);
+  const records: Record[] = json.skills;
+  expect(records.find((r) => r.skill === "leak")).toMatchObject({
+    harness: "codex",
+    location: "recorded-only",
+    origin: null,
+  });
+  expect(records.find((r) => r.skill === "sample:hello")).toMatchObject({
+    location: "plugin:sample@debug",
+    contentVersion: null,
+  });
+  expect(JSON.stringify(json)).not.toContain(CANARY);
+  expect(text).not.toContain(CANARY);
+});
+
+test("plugin skills at different version folders stay separate records", async () => {
+  const home = await fixture(ordinary, []);
+  const cache = join(home, ".codex/plugins/cache/debug/sample");
+  await Bun.write(join(cache, "1.0/skills/hello/SKILL.md"), skillFile("hello"));
+  await Bun.write(join(cache, "2.0/skills/hello/SKILL.md"), skillFile("hello", " longer"));
+  await codexSession(home, "c1", [
+    "- sample:hello: Hello (file: r1/debug/sample/1.0/skills/hello/SKILL.md)",
+  ]);
+  await codexSession(home, "c2", [
+    "- sample:hello: Hello (file: r1/debug/sample/2.0/skills/hello/SKILL.md)",
+  ]);
+  const hello = (await report(home)).json.skills.filter((r: Record) => r.skill === "sample:hello");
+  expect(hello.map((r: Record) => [r.location, r.use.sessionsListed, r.bodyBytes])).toEqual([
+    ["~/.codex/plugins/cache/debug/sample/1.0/skills/hello", 1, skillFile("hello").length],
+    [
+      "~/.codex/plugins/cache/debug/sample/2.0/skills/hello",
+      1,
+      skillFile("hello", " longer").length,
+    ],
+  ]);
+  expect(hello[0].contentVersion).not.toBe(hello[1].contentVersion);
+  expect(hello.every((r: Record) => r.origin === "plugin")).toBe(true);
+});
+
+test("co-occurrence counts only the record's own sessions", async () => {
+  const home = await fixture(ordinary, ["a", "c"]);
+  await Bun.write(join(home, ".codex/skills/verify/SKILL.md"), skillFile("verify", " codex"));
+  await codexSession(home, "c1", ["- verify: Verify (file: r0/verify/SKILL.md)"]);
+  const records: Record[] = (await report(home)).json.skills;
+  const codex = records.find((r) => r.skill === "verify" && r.harness === "codex")!;
+  expect(codex.use.sessionsListed).toBe(1);
+  expect(codex.coOccurrence).toMatchObject({ sessionsLoaded: 0, withHumanCorrection: null });
+  const claude = records.find((r) => r.skill === "verify" && r.harness === "claude-code")!;
+  expect(claude.coOccurrence).toMatchObject({ sessionsLoaded: 5, withHumanCorrection: 2 });
+});
+
+test("unjudged sessions are counted apart and do not reach the floor", async () => {
+  const home = await fixture(ordinary, ["a"], ["e"]);
+  const verify = (await report(home)).json.skills.find(
+    (r: Record) => r.skill === "verify" && r.harness === "claude-code",
+  );
+  expect(verify.coOccurrence).toEqual({
+    basis: "co-occurrence, not cause",
+    sessionsLoaded: 5,
+    withHumanCorrection: null,
+    unjudgedSessions: 1,
+  });
+});
+
+test("--source warnings are a fixed vocabulary, never manifest text", async () => {
+  const home = await fixture(ordinary, []);
+  const source = await mkdtemp(join(tmpdir(), "quench-cli-skills-source-"));
+  await Bun.write(join(source, "skills/verify/SKILL.md"), skillFile("verify"));
+  await Bun.write(join(source, "registry.yaml"), "skills:\n  verify: { path: skills/verify }\n");
+  await Bun.write(join(source, "hosts/claude-global.manifest"), "verify\n");
+  await Bun.write(
+    join(source, "hosts/overrides/m/claude-global.manifest"),
+    `Cookie: sid=${CANARY}r\n`,
+  );
+  const { json, text } = await report(home, "--source", source);
+  expect(json.source.warnings).toEqual([{ kind: "ignored-line", count: 1 }]);
+  expect(JSON.stringify(json)).not.toContain(CANARY);
+  expect(text).not.toContain(CANARY);
 });

@@ -8,44 +8,43 @@ export type CoOccurrence = {
   basis: typeof BASIS;
   sessionsLoaded: number;
   withHumanCorrection: number | null;
-  unjudgedSessions: number | null;
+  unjudgedSessions: number;
 };
 
 type Outcome = "human" | "unknown" | "none";
+
+const RANK: Record<Outcome, number> = { none: 0, unknown: 1, human: 2 };
 
 export function coOccurrence(
   replies: readonly Reply[],
   contexts: ReadonlyMap<string, SessionContext>,
   since: Date,
-): (skill: string) => CoOccurrence {
+): (skill: string, sessions: readonly string[]) => CoOccurrence {
   const outcomes = new Map<string, Outcome>();
   for (const reply of replies) {
-    if (!reply.run.replyAt || reply.run.replyAt < since) continue;
-    const key = sessionKey(reply);
-    const outcome: Outcome =
-      reply.kind === "correction" && reply.sender === "person"
+    if (reply.run.replyAt && reply.run.replyAt < since) continue;
+    const outcome: Outcome = !reply.run.replyAt
+      ? "unknown"
+      : reply.kind === "correction" && reply.sender === "person"
         ? "human"
         : reply.kind === null || (reply.kind === "correction" && reply.sender === null)
           ? "unknown"
           : "none";
-    const known = outcomes.get(key);
-    if (known === "human" || (known === "unknown" && outcome === "none")) continue;
-    outcomes.set(key, outcome);
+    const key = sessionKey(reply);
+    if (RANK[outcome] > RANK[outcomes.get(key) ?? "none"]) outcomes.set(key, outcome);
   }
-  const sessionsBySkill = new Map<string, string[]>();
-  for (const [key, context] of contexts)
-    for (const skill of context.skills ?? [])
-      sessionsBySkill.set(skill, [...(sessionsBySkill.get(skill) ?? []), key]);
-  return (skill) => {
-    const sessions = sessionsBySkill.get(skill) ?? [];
-    const shown = sessions.length >= MIN_SESSIONS;
-    const count = (outcome: Outcome) =>
-      shown ? sessions.filter((key) => outcomes.get(key) === outcome).length : null;
+  return (skill, sessions) => {
+    const loaded = [...new Set(sessions)].filter((key) =>
+      contexts.get(key)?.skills?.includes(skill),
+    );
+    const of = (outcome: Outcome) =>
+      loaded.filter((key) => (outcomes.get(key) ?? "none") === outcome).length;
+    const unjudged = of("unknown");
     return {
       basis: BASIS,
-      sessionsLoaded: sessions.length,
-      withHumanCorrection: count("human"),
-      unjudgedSessions: count("unknown"),
+      sessionsLoaded: loaded.length,
+      withHumanCorrection: loaded.length - unjudged >= MIN_SESSIONS ? of("human") : null,
+      unjudgedSessions: unjudged,
     };
   };
 }

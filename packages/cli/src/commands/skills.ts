@@ -1,5 +1,13 @@
 import { join } from "node:path";
-import { harnessById, sessionPlaces, skillInventory, type Home, type Skill } from "@quench/history";
+import {
+  harnessById,
+  harnesses,
+  sessionPlaces,
+  skillInventory,
+  type Home,
+  type SessionPlace,
+  type Skill,
+} from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
 import { Jev, judgeReplies, VerdictCache, type SessionRuns } from "@quench/judge";
 import { HARNESSES, plan, targetPath, type HarnessId, type InstalledState } from "@quench/fleet";
@@ -13,7 +21,7 @@ import { coOccurrence } from "../skills/co-occurrence.ts";
 import { drift } from "../skills/drift.ts";
 import { ORIGINS, SCHEMA_VERSION, skillRecords } from "../skills/records.ts";
 import { renderSkills } from "../skills/render.ts";
-import type { SessionContext } from "./context.ts";
+import { sessionKey, type SessionContext } from "./context.ts";
 import { sessionRuns } from "./corrections.ts";
 import { placeOrigins } from "./profile.ts";
 
@@ -122,13 +130,14 @@ async function skillsReport(home: Home, options: Options) {
     host?.close();
   }
   const { replies } = await judgeReplies(sessions, verdicts, null);
-  const records = await skillRecords(
-    home,
-    [...global.values()],
-    recorded.uses,
-    recorded.occurrences,
-    coOccurrence(replies, contexts, since),
-  );
+  const records = await skillRecords(home, {
+    onDisk: [...global.values()],
+    occurrences: recorded.occurrences,
+    sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
+    recordedHarnesses: new Set(recorded.uses.map((u) => u.harness)),
+    roots: await skillRoots(home, places),
+    coOccurrence: coOccurrence(replies, contexts, since),
+  });
   let compared = null;
   try {
     compared = options.source ? await drift(options.source, records) : null;
@@ -150,4 +159,13 @@ async function skillsReport(home: Home, options: Options) {
       : renderSkills(records, options.days, verdicts.judge, compared),
   );
   return 0;
+}
+
+async function skillRoots(home: Home, places: readonly SessionPlace[]): Promise<string[]> {
+  const dirs = [home.dir, ...new Set(places.flatMap((p) => (p.cwd ? [p.cwd] : [])))];
+  const roots = new Set(harnesses.map((h) => home.of(h.home)));
+  for (const dir of dirs)
+    for (const harness of harnesses)
+      for (const root of await harness.skills(home, dir).catch(() => [])) roots.add(root.path);
+  return [...roots];
 }

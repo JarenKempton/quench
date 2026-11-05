@@ -11,8 +11,27 @@ export type Drift = {
   installedNotInSource: (Installed & { contentVersion: TreeHash | null })[];
   contentDiffers: (Installed & { installed: TreeHash; source: TreeHash })[];
   notCompared: Installed[];
-  warnings: string[];
+  warnings: { kind: WarningKind; count: number }[];
 };
+
+const WARNINGS = [
+  ["not-substituted", /: registry has .* at .*, not substituted$/],
+  ["not-in-registry", /: not in registry\.yaml, imported as /],
+  ["unsupported-host", /\.manifest: no supported harness, skipped$/],
+  ["imported-as-global", /\.manifest: imported as global$/],
+  ["ignored-line", /\.manifest: ignored "/],
+] as const;
+
+type WarningKind = (typeof WARNINGS)[number][0] | "other";
+
+function warningKinds(warnings: readonly string[]): Drift["warnings"] {
+  const counts = new Map<WarningKind, number>();
+  for (const warning of warnings) {
+    const kind = WARNINGS.find(([, pattern]) => pattern.test(warning))?.[0] ?? "other";
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return [...counts].map(([kind, count]) => ({ kind, count }));
+}
 
 export async function drift(dir: string, records: readonly SkillRecord[]): Promise<Drift> {
   const { folders, warnings } = await sourceSkills(dir);
@@ -38,7 +57,7 @@ export async function drift(dir: string, records: readonly SkillRecord[]): Promi
     installedNotInSource: [],
     contentDiffers: [],
     notCompared: [],
-    warnings,
+    warnings: warningKinds(warnings),
   };
   for (const r of installed) {
     const at = { skill: r.skill, harness: r.harness, location: r.location };
