@@ -52,6 +52,7 @@ import { renderSkills } from "../skills/render.ts";
 import { sessionKey, type SessionContext } from "./context.ts";
 import { sessionRuns } from "./session-runs.ts";
 import { placeOrigins } from "./profile.ts";
+import { skillsEval, type EvalFlags } from "./skills-eval.ts";
 
 const UNREADABLE = {
   treeHash: `sha256:${"0".repeat(64)}`,
@@ -285,6 +286,7 @@ const USAGE = `usage: quench skills [--json] [--days N] [--source <dir>]
        quench skills plan --source <dir> --machine <name> [--project <dir>] --json
        quench skills apply --source <dir> --machine <name> --plan <hash> [--project <dir>] [--json]
        quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
+       quench skills eval <skill> --candidate <dir> [--limit 5] [--max-cost 1] [--yes] [--json]
 `;
 
 export type SkillsFlags = {
@@ -296,6 +298,7 @@ export type SkillsFlags = {
   days: number;
   cache: boolean;
   hostHistory?: string | false;
+  eval?: Omit<EvalFlags, "json" | "days">;
 };
 
 const write = (value: unknown) => process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -307,6 +310,13 @@ const lines = (rows: string[]) => {
 export async function skills(home: Home, rest: string[], flags: SkillsFlags) {
   const [sub] = rest;
   if (sub === undefined) return skillsReport(home, flags);
+  if (sub === "eval")
+    return skillsEval(home, rest.slice(1), {
+      yes: false,
+      ...flags.eval,
+      json: flags.json,
+      days: flags.days,
+    });
   if (!["plan", "apply", "status"].includes(sub) || rest.length !== 1) {
     process.stderr.write(USAGE);
     return 1;
