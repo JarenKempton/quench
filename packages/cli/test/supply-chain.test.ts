@@ -79,6 +79,9 @@ async function fakeHome() {
   return { home, project };
 }
 
+let built: ReturnType<typeof fakeHome> | undefined;
+const sharedHome = () => (built ??= fakeHome());
+
 async function run(home: string, ...args: string[]) {
   const proc = Bun.spawn(["bun", main, "secrets", "--no-host-history", ...args], {
     env: {
@@ -101,7 +104,7 @@ async function run(home: string, ...args: string[]) {
 }
 
 test("secrets lists unpinned MCP servers and skill sources with the form to pin to", async () => {
-  const { home } = await fakeHome();
+  const { home } = await sharedHome();
   const report = JSON.parse(await run(home, "--json"));
   expect(
     report.unpinned.map((s: Record<string, string>) => [
@@ -125,7 +128,7 @@ test("secrets lists unpinned MCP servers and skill sources with the form to pin 
 });
 
 test("secrets lists executable git hooks in session repos and flags unknown ones", async () => {
-  const { home, project } = await fakeHome();
+  const { home, project } = await sharedHome();
   const report = JSON.parse(await run(home, "--json"));
   expect(report.hooks.map((h: Record<string, string>) => [h.project, h.hook, h.manager])).toEqual([
     [project, "commit-msg", "husky"],
@@ -140,7 +143,7 @@ test("secrets lists executable git hooks in session repos and flags unknown ones
 });
 
 test("secrets scans repo history only with --repo-history and masks what it finds", async () => {
-  const { home, project } = await fakeHome();
+  const { home, project } = await sharedHome();
   const first = Bun.spawnSync(["git", "-C", project, "rev-list", "--max-parents=0", "HEAD"])
     .stdout.toString()
     .trim();
