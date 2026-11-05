@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { importInto, MAX_FAILED_ATTEMPTS } from "../src/index.ts";
-import { DataDir } from "../src/data.ts";
+import { contains, DataDir } from "../src/data.ts";
 import { Repo } from "../src/git.ts";
 import {
   failure,
@@ -626,14 +626,14 @@ test("scratch folders are fresh, private, and inside the data folder", async () 
   const data = join(temp("data"), "hub");
   const repo = new Repo(await DataDir.open(data));
   await repo.init();
-  const { lstatSync, realpathSync } = await import("node:fs");
+  const { lstatSync } = await import("node:fs");
   const a = (await repo.scratch("diff-")).path;
   const b = (await repo.scratch("diff-")).path;
   expect(a).not.toBe(b);
   for (const dir of [a, b]) {
     const info = lstatSync(dir);
     expect(info.isDirectory() && !info.isSymbolicLink()).toBe(true);
-    expect(realpathSync(dir).startsWith(realpathSync(data))).toBe(true);
+    expect(contains(data, dir)).toBe(true);
     if (process.platform !== "win32") expect(info.mode & 0o777).toBe(0o700);
   }
 });

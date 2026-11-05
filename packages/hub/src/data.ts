@@ -1,15 +1,5 @@
-import { constants, type Stats } from "node:fs";
-import {
-  lstat,
-  mkdir,
-  open,
-  readdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  symlink,
-} from "node:fs/promises";
+import { constants, realpathSync, type Stats } from "node:fs";
+import { lstat, mkdir, open, readdir, readFile, rename, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 export class UnsafeDataDir extends Error {}
@@ -27,6 +17,17 @@ const owned = (info: Stats) => !POSIX || !process.getuid || info.uid === process
 
 const segment = (part: string) =>
   part !== "" && part !== "." && part !== ".." && !["/", "\\", "\0"].some((c) => part.includes(c));
+
+const segments = (path: string) => {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return POSIX ? parts : parts.map((p) => p.toLowerCase());
+};
+
+export const contains = (root: string, path: string) => {
+  const base = segments(realpathSync.native(root));
+  const inner = segments(realpathSync.native(path));
+  return base.length <= inner.length && base.every((part, i) => inner[i] === part);
+};
 
 const random = () => Buffer.from(crypto.getRandomValues(new Uint8Array(12))).toString("hex");
 
@@ -47,7 +48,7 @@ export class DataDir {
       throw new UnsafeDataDir(
         `${dir} must be private to the hub user (mode 0700); run chmod 700 ${dir}`,
       );
-    const data = new DataDir(await realpath(dir));
+    const data = new DataDir(realpathSync.native(dir));
     for (const name of DERIVED) {
       const derived = await lstat(join(data.root, name)).catch(absent);
       if (derived && (derived.isSymbolicLink() || !derived.isDirectory()))
@@ -76,7 +77,7 @@ export class DataDir {
 
   private async plainDir(path: string) {
     const info = await lstat(path);
-    if (info.isSymbolicLink() || !info.isDirectory() || !owned(info))
+    if (info.isSymbolicLink() || !info.isDirectory() || !owned(info) || !contains(this.root, path))
       throw new UnsafeDataDir(`${path} is not a plain folder of the hub's own`);
   }
 
