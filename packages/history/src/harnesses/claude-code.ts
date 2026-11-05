@@ -644,11 +644,26 @@ function denial(line: Line, text: string, single: boolean): Denial {
   return rejected(text) ? "rejected" : null;
 }
 
+const HOOK_EVENTS = new Set([
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PermissionRequest",
+  "UserPromptSubmit",
+  "Notification",
+  "Stop",
+  "SubagentStart",
+  "SubagentStop",
+  "PreCompact",
+  "SessionStart",
+  "SessionEnd",
+]);
+
 function guardOf(line: Line): string {
   const decision = line.permissionDecision;
   if (decision?.source === "hook") {
-    const event = /^hook:([A-Za-z]{1,32})$/.exec(decision.reasonCode ?? "")?.[1];
-    return event ? `${event} hook` : "hook";
+    const event = decision.reasonCode?.replace(/^hook:/, "");
+    return event && HOOK_EVENTS.has(event) ? `${event} hook` : "hook";
   }
   if (decision?.source === "config") return "permission rule";
   return line.toolDenialKind === "automode-blocked" ? "auto mode" : "permission rule";

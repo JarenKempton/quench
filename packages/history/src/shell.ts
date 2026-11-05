@@ -1,7 +1,7 @@
 import { basename, win32 } from "node:path";
 import { pathStyle } from "./files.ts";
 import { scriptAccesses } from "./scripts.ts";
-import { knownSubcommand } from "./subcommands.ts";
+import { knownProgram, knownSubcommand } from "./subcommands.ts";
 
 export type ShellReadBase = "absolute" | "home" | "cd" | "workdir" | "session folder";
 
@@ -123,23 +123,22 @@ const SETUP = new Set(["cd", "export", "source", ".", "set", "sleep", "true", "e
 const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee", "column", "jq"]);
 
 export function commandSignature(command: string): string | null {
-  const [segment, ...more] = segments(command);
-  if (!segment || more.length) return null;
+  if (isChained(command)) return null;
+  const [segment] = segments(command);
+  if (!segment) return null;
   const words = unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
   const name =
     words[0] && !words[0].dynamic
       ? win32.basename(words[0].text).replace(/\.(exe|cmd|bat)$/i, "")
       : null;
-  const program = name && /^[A-Za-z0-9._+-]{1,40}$/.test(name) ? name : null;
-  if (!program || SETUP.has(program) || FILTERS.has(program)) return null;
+  if (!name || SETUP.has(name) || FILTERS.has(name)) return null;
+  const program = knownProgram(name);
   const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
   const sub = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
   return sub ? `${program} ${sub}` : program;
 }
 
-export function isChained(command: string): boolean {
-  return segments(command).length > 1;
-}
+export const isChained = (command: string): boolean => /&&|[|;\n]/.test(command);
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const ENV_VALUED = new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]);

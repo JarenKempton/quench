@@ -7,7 +7,14 @@ import { lines, quench } from "./run.ts";
 const token = ["ghp", "R7tK2mQ9xV4bN8cL1zW6yH3jF5dS0aP2eG7u"].join("_");
 const hook = "PreToolUse:Bash hook error: [guard.sh]: guard: blocked";
 
-type Repro = { name: string; command: string; output: string; leaks: string[]; blocked?: true };
+type Repro = {
+  name: string;
+  command: string;
+  output: string;
+  leaks: string[];
+  blocked?: true;
+  decision?: object;
+};
 
 const repros: Repro[] = [
   {
@@ -128,6 +135,41 @@ const repros: Repro[] = [
     blocked: true,
   },
   {
+    name: "a token as the executable",
+    command: "/opt/qexecsecretq --run",
+    output: "Exit code 1\nfailed",
+    leaks: ["qexecsecretq"],
+  },
+  {
+    name: "a hook reasonCode that is not a known event",
+    command: "git push",
+    output: `${hook} push`,
+    leaks: ["qreasonsecretq"],
+    blocked: true,
+    decision: { decision: "reject", source: "hook", reasonCode: "hook:qreasonsecretq" },
+  },
+  {
+    name: "quote tricks around a chain",
+    command: "$'can\\'t' && qquotechainq push",
+    output: `${hook} push`,
+    leaks: ["qquotechainq"],
+    blocked: true,
+  },
+  {
+    name: "a trailing semicolon",
+    command: "qsemiq push;",
+    output: `${hook} push`,
+    leaks: ["qsemiq"],
+    blocked: true,
+  },
+  {
+    name: "a trailing newline",
+    command: "qnewlineq push\n",
+    output: `${hook} push`,
+    leaks: ["qnewlineq"],
+    blocked: true,
+  },
+  {
     name: "hook refusal naming a user:pass@host URL",
     command: "git push https://user:qhrq@example.test/r.git",
     output: `${hook} https://user:qhrq@example.test`,
@@ -166,7 +208,9 @@ test("no credential from a command, error or refusal reaches profile, steering, 
     {
       type: "user",
       cwd: project,
-      ...(r.blocked ? { permissionDecision: { decision: "reject", source: "hook" } } : {}),
+      ...(r.blocked
+        ? { permissionDecision: r.decision ?? { decision: "reject", source: "hook" } }
+        : {}),
       message: {
         content: [{ type: "tool_result", tool_use_id: `t${n}`, content: r.output, is_error: true }],
       },

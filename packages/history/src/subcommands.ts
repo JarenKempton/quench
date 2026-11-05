@@ -18,6 +18,15 @@ const subcommands = new Map(
   Object.entries(KNOWN).map(([tool, names]) => [tool, new Set(names.split(" "))]),
 );
 
+const PROGRAMS = new Set([
+  ...Object.keys(KNOWN),
+  ..."bunx npx pip3 node deno python python3 pytest ruff tsc vp eslint prettier make cmake curl wget ssh scp rsync rg grep egrep sed awk cat ls find mkdir rm cp mv touch chmod chown ln tar unzip zip jq yq diff patch psql sqlite3 mysql redis-cli aws gcloud az terraform helm brew apt systemctl journalctl ps kill pkill pgrep lsof df du stat file which bash sh zsh pwsh powershell cmd".split(
+    " ",
+  ),
+]);
+
+export const knownProgram = (name: string): string => (PROGRAMS.has(name) ? name : "other command");
+
 export function knownSubcommand(program: string, word: string | undefined): string | null {
   if (!word || !/^[a-z][a-z0-9-]{0,24}$/.test(word)) return null;
   return subcommands.get(program)?.has(word) ? word : null;
