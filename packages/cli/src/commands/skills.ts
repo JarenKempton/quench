@@ -397,7 +397,7 @@ async function skillsReport(home: Home, options: Options) {
 
 export type SkillEvidence = {
   since: Date;
-  started: ReadonlyMap<string, { harness: HarnessId; at: number }>;
+  started: ReadonlyMap<string, { harness: HarnessId; at: number; cwd: string | null }>;
   contexts: ReadonlyMap<string, SessionContext>;
   replies: readonly Reply[];
 };
@@ -434,13 +434,14 @@ export async function collectSkills(
     sourceNames: new Set(options.source?.skills.keys()),
     coOccurrence: coOccurrence(replies, contexts, since),
   });
-  const started = new Map<string, { harness: HarnessId; at: number }>();
+  const started = new Map<string, { harness: HarnessId; at: number; cwd: string | null }>();
   for (const s of sessions) {
     const times = s.runs.flatMap((r) => (r.startedAt ? [r.startedAt.getTime()] : []));
     if (times.length)
       started.set(sessionKey({ harness: s.harness, sessionId: s.id }), {
         harness: s.harness,
         at: Math.min(...times),
+        cwd: s.cwd,
       });
   }
   const evidence: SkillEvidence = { since, started, contexts, replies };

@@ -36,6 +36,7 @@ export function versionCards(machines: readonly Reporting[]): Card[] {
       for (let i = 1; i < versions.length; i++) {
         const [was, now] = [versions[i - 1]!, versions[i]!];
         if (was.treeHash === now.treeHash) continue;
+        if (was.loaded.sessions + now.loaded.sessions === 0) continue;
         const key = `${record.skill}\0${was.treeHash}\0${now.treeHash}`;
         const card = cards.get(key) ?? {
           skill: record.skill,
@@ -54,8 +55,7 @@ export function versionCards(machines: readonly Reporting[]): Card[] {
         add(card.sides.before.without, was.without);
         add(card.sides.after.loaded, now.loaded);
         add(card.sides.after.without, now.without);
-        const seen = was.loaded.sessions + now.loaded.sessions > 0;
-        if (seen && !card.places.some((p) => p.machine === name && p.harness === record.harness))
+        if (!card.places.some((p) => p.machine === name && p.harness === record.harness))
           card.places.push({ machine: name, harness: record.harness });
       }
     }
