@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { treeHash } from "@quench/fleet";
 import { readTree } from "@quench/fleet/disk";
+import type { Session } from "@quench/history";
 import { Jev, VerdictCache } from "@quench/judge";
+import { contextOf } from "../src/commands/context.ts";
+import { coOccurrence } from "../src/skills/co-occurrence.ts";
 import { lines, quench } from "./run.ts";
 
 const CANARY = "QCANARY9z";
@@ -233,7 +236,10 @@ test("no skill name, argument, description or reply text from history reaches th
   expect(text).not.toContain("Cookie");
 });
 
-test("a listed name with no skill on disk or in --source is hashed, never shown", async () => {
+const noHashes = (json: { skills: Record[] }) =>
+  expect(json.skills.filter((r) => r.skill.startsWith("sha256:"))).toEqual([]);
+
+test("a listed name with no skill on disk or in --source folds into one unrecognised entry", async () => {
   const leak = `Cookie: sid=${CANARY}g`;
   const listed = ["verify", leak, "ghost", `x${CANARY}h`.repeat(20)];
   const home = await fixture(
@@ -241,11 +247,15 @@ test("a listed name with no skill on disk or in --source is hashed, never shown"
     [],
   );
   const { json, text } = await report(home);
-  const hidden = json.skills.filter((r: Record) => r.location === "recorded-only");
-  expect(hidden).toHaveLength(3);
-  expect(hidden.every((r: Record) => /^sha256:[0-9a-f]{64}$/.test(r.skill))).toBe(true);
-  expect(hidden.every((r: Record) => r.origin === null && r.contentVersion === null)).toBe(true);
-  expect(json.skills.map((r: Record) => r.skill)).not.toContain("ghost");
+  expect(json.skills.map((r: Record) => r.skill)).toEqual(["deploy", "solo", "verify"]);
+  noHashes(json);
+  expect(json.unrecognised).toEqual({
+    recognised: false,
+    count: 3,
+    sessionsListed: 7,
+    used: 1,
+    usedByUser: 0,
+  });
   expect(JSON.stringify(json)).not.toContain(CANARY);
   expect(text).not.toContain(CANARY);
   expect(text).not.toContain("Cookie");
@@ -329,18 +339,33 @@ test("a recorded path that is not on disk now never becomes a location or id", a
     `- sample:hello: Hello (file: r1/debug/sample/Cookie: sid=${CANARY}q/skills/hello/SKILL.md)`,
   ]);
   const { json, text } = await report(home);
-  const records: Record[] = json.skills;
-  const hashed = (name: string) =>
-    `sha256:${new Bun.CryptoHasher("sha256").update(name).digest("hex")}`;
-  expect(records.find((r) => r.skill === hashed("leak"))).toMatchObject({
-    harness: "codex",
-    location: "recorded-only",
-    origin: null,
-  });
-  expect(records.find((r) => r.skill === hashed("sample:hello"))).toMatchObject({
-    location: "plugin:sample@debug",
-    contentVersion: null,
-  });
+  expect(
+    json.skills.filter((r: Record) => r.harness === "codex").map((r: Record) => r.skill),
+  ).toEqual(["solo"]);
+  noHashes(json);
+  expect(json.unrecognised).toMatchObject({ recognised: false, count: 2, sessionsListed: 1 });
+  expect(JSON.stringify(json)).not.toContain(CANARY);
+  expect(text).not.toContain(CANARY);
+});
+
+test("a namespace is shown only when it is the installed plugin's folder", async () => {
+  const home = await fixture(ordinary, []);
+  await Bun.write(join(home, ".codex/skills/verify/SKILL.md"), skillFile("verify"));
+  await Bun.write(
+    join(home, ".codex/plugins/cache/debug/sample/1.0/skills/hello/SKILL.md"),
+    skillFile("hello"),
+  );
+  await codexSession(home, "c1", [
+    `- sk_live_${CANARY}s:verify: Verify (file: r0/verify/SKILL.md)`,
+    `- other${CANARY}t:hello: Hello (file: r1/debug/sample/1.0/skills/hello/SKILL.md)`,
+    "- sample:hello: Hello (file: r1/debug/sample/1.0/skills/hello/SKILL.md)",
+  ]);
+  const { json, text } = await report(home);
+  expect(
+    json.skills.filter((r: Record) => r.harness === "codex").map((r: Record) => r.skill),
+  ).toEqual(["sample:hello", "solo", "verify"]);
+  expect(json.unrecognised).toMatchObject({ count: 2, sessionsListed: 1 });
+  noHashes(json);
   expect(JSON.stringify(json)).not.toContain(CANARY);
   expect(text).not.toContain(CANARY);
 });
@@ -437,4 +462,38 @@ test("--source warnings are a fixed vocabulary, never manifest text", async () =
   expect(json.source.warnings).toEqual([{ kind: "ignored-line", count: 1 }]);
   expect(JSON.stringify(json)).not.toContain(CANARY);
   expect(text).not.toContain(CANARY);
+});
+
+test("a load counts only toward the version whose path it read", () => {
+  const v1 = "/c/plugins/cache/debug/sample/1.0/skills/hello";
+  const v2 = "/c/plugins/cache/debug/sample/2.0/skills/hello";
+  const listing = (folder: string) => ({
+    type: "skills",
+    at: null,
+    chars: 1,
+    listed: [{ name: "sample:hello", path: `${folder}/SKILL.md`, chars: 1 }],
+  });
+  const context = contextOf(
+    {
+      harness: "codex",
+      cwd: "/",
+      diagnostics: { unparsed: 0 },
+      events: [
+        listing(v1),
+        listing(v2),
+        {
+          type: "tool_call",
+          at: null,
+          id: "1",
+          name: "x",
+          shell: [{ command: `cat ${v1}/SKILL.md`, workdir: "/" }],
+        },
+        { type: "tool_result", at: null, callId: "1", isError: null, chars: 1 },
+      ],
+    } as unknown as Session,
+    "/home",
+  );
+  const of = coOccurrence([], new Map([["codex:s", context]]), new Date(0));
+  expect(of("sample:hello", ["codex:s"], [v2]).sessionsLoaded).toBe(0);
+  expect(of("sample:hello", ["codex:s"], [v1]).sessionsLoaded).toBe(1);
 });

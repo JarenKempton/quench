@@ -56,7 +56,18 @@ type Draft = {
   listedChars: number[];
   used: number;
   usedByUser: number;
+  usedIn: Set<string>;
+  byUserIn: Set<string>;
+  folders: Set<string>;
   verified: boolean;
+};
+
+export type Unrecognised = {
+  recognised: false;
+  count: number;
+  sessionsListed: number;
+  used: number;
+  usedByUser: number;
 };
 
 export type RecordInputs = {
@@ -66,7 +77,11 @@ export type RecordInputs = {
   recordedHarnesses: ReadonlySet<HarnessId>;
   roots: readonly string[];
   sourceNames: ReadonlySet<string>;
-  coOccurrence: (skill: string, sessions: readonly string[]) => CoOccurrence;
+  coOccurrence: (
+    skill: string,
+    sessions: readonly string[],
+    folders: readonly string[],
+  ) => CoOccurrence;
 };
 
 export const display = (homeDir: string, path: string) => {
@@ -117,15 +132,13 @@ const MAX_NAME = 128;
 const validName = (name: string) =>
   name.length <= MAX_NAME && name.split(":").every((part) => SkillName.safeParse(part).success);
 
-const shownName = (d: Draft, sourceNames: ReadonlySet<string>) =>
-  validName(d.skill) && (d.verified || sourceNames.has(d.skill))
-    ? d.skill
-    : `sha256:${sha256(d.skill)}`;
-
 const keyOf = (r: { skill: string; harness: HarnessId; location: string }) =>
   `${r.harness}\0${r.skill}\0${r.location}`;
 
-export async function skillRecords(home: Home, inputs: RecordInputs): Promise<SkillRecord[]> {
+export async function skillRecords(
+  home: Home,
+  inputs: RecordInputs,
+): Promise<{ records: SkillRecord[]; unrecognised: Unrecognised }> {
   const homes = [home.dir, await realpath(home.dir).catch(() => home.dir)];
   const onDiskNow = new Map<string, Promise<boolean>>();
   const known = (path: string) =>
@@ -149,11 +162,17 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
   ): Promise<{ location: string; folder: string | null; verified: boolean }> => {
     const folder = origin.kind === "folder" ? origin.path : path && skillFolder(path);
     const onDisk = folder !== null && (await known(folder));
+    const parts = name.split(":");
+    const leafMatches = onDisk && leaf(folder) === parts.at(-1);
     const named =
       onDisk &&
       ((origin.kind === "folder" && harness === "claude-code") ||
         diskNames.has(name) ||
-        leaf(folder) === name.split(":").at(-1));
+        (parts.length === 1 && leafMatches) ||
+        (parts.length === 2 &&
+          origin.kind === "plugin" &&
+          parts[0] === origin.plugin.split("@")[0] &&
+          leafMatches));
     if (origin.kind === "built-in")
       return {
         location: "built-in",
@@ -179,14 +198,28 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
   const diskNames = new Set(inputs.onDisk.map((s) => s.name));
 
   const drafts = new Map<string, Draft>();
-  const draftOf = (base: Omit<Draft, "sessions" | "listedChars" | "used" | "usedByUser">) => {
+  const draftOf = (
+    base: Omit<
+      Draft,
+      "sessions" | "listedChars" | "used" | "usedByUser" | "usedIn" | "byUserIn" | "folders"
+    >,
+  ) => {
     const found = drafts.get(keyOf(base));
     if (found) {
       found.verified ||= base.verified;
       return found;
     }
     return drafts
-      .set(keyOf(base), { ...base, sessions: [], listedChars: [], used: 0, usedByUser: 0 })
+      .set(keyOf(base), {
+        ...base,
+        sessions: [],
+        listedChars: [],
+        used: 0,
+        usedByUser: 0,
+        usedIn: new Set(),
+        byUserIn: new Set(),
+        folders: new Set(base.folder ? [base.folder] : []),
+      })
       .get(keyOf(base))!;
   };
   for (const skill of inputs.onDisk)
@@ -213,10 +246,22 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
       listingChars: null,
       bodyBytes: null,
     });
-    draft.sessions.push(inputs.sessionKeys[o.session]!);
+    const session = inputs.sessionKeys[o.session]!;
+    draft.sessions.push(session);
+    if (place.folder) {
+      draft.folders.add(place.folder);
+      if (o.origin.kind === "folder") draft.folders.add(o.origin.path);
+      if (o.path) draft.folders.add(skillFolder(o.path));
+    }
     if (o.chars !== null) draft.listedChars.push(o.chars);
-    if (o.used) draft.used++;
-    if (o.byUser) draft.usedByUser++;
+    if (o.used) {
+      draft.used++;
+      draft.usedIn.add(session);
+    }
+    if (o.byUser) {
+      draft.usedByUser++;
+      draft.byUserIn.add(session);
+    }
   }
 
   const hashes = new Map<string, Promise<TreeHash | null>>();
@@ -231,13 +276,23 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
         ),
       )
       .get(folder)!;
+  const recognised = (d: Draft) =>
+    validName(d.skill) && (d.verified || inputs.sourceNames.has(d.skill));
+  const hidden = [...drafts.values()].filter((d) => !recognised(d));
+  const unrecognised: Unrecognised = {
+    recognised: false,
+    count: hidden.length,
+    sessionsListed: new Set(hidden.flatMap((d) => d.sessions)).size,
+    used: new Set(hidden.flatMap((d) => [...d.usedIn])).size,
+    usedByUser: new Set(hidden.flatMap((d) => [...d.byUserIn])).size,
+  };
   const records = await Promise.all(
-    [...drafts.values()].map(async (d) => {
+    [...drafts.values()].filter(recognised).map(async (d) => {
       const recorded = inputs.recordedHarnesses.has(d.harness);
       const counted = recorded && harnessById[d.harness].skillUse;
       return {
         id: `sha256:${sha256(`${d.skill}\0${d.harness}\0${d.location}`)}`,
-        skill: shownName(d, inputs.sourceNames),
+        skill: d.skill,
         harness: d.harness,
         location: d.location,
         origin: d.origin,
@@ -251,12 +306,12 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
           usedByUser: counted ? d.usedByUser : null,
           lowerBound: d.harness === "codex",
         },
-        coOccurrence: inputs.coOccurrence(d.skill, d.sessions),
+        coOccurrence: inputs.coOccurrence(d.skill, d.sessions, [...d.folders]),
       };
     }),
   );
   const order = harnesses.map((h) => h.id);
-  return records
+  const shown = records
     .map((r) => ({
       ...r,
       listedBy: order.filter((h) =>
@@ -275,4 +330,5 @@ export async function skillRecords(home: Home, inputs: RecordInputs): Promise<Sk
         order.indexOf(a.harness) - order.indexOf(b.harness) ||
         a.location.localeCompare(b.location),
     );
+  return { records: shown, unrecognised };
 }

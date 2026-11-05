@@ -138,7 +138,7 @@ async function skillsReport(home: Home, options: Options) {
     host?.close();
   }
   const { replies } = await judgeReplies(sessions, verdicts, null);
-  const records = await skillRecords(home, {
+  const { records, unrecognised } = await skillRecords(home, {
     onDisk: [...global.values()],
     occurrences: recorded.occurrences,
     sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
@@ -156,10 +156,11 @@ async function skillsReport(home: Home, options: Options) {
           judge: verdicts.judge,
           origins: ORIGINS,
           skills: records,
+          unrecognised,
           ...(compared ? { source: compared } : {}),
           limitations: LIMITATIONS,
         })
-      : renderSkills(records, options.days, verdicts.judge, compared),
+      : renderSkills(records, unrecognised, options.days, verdicts.judge, compared),
   );
   return 0;
 }

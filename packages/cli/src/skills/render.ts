@@ -4,7 +4,7 @@ import { chars, count, table } from "../format.ts";
 import { list } from "../profile/skill-cuts.ts";
 import { BASIS, MIN_SESSIONS } from "./co-occurrence.ts";
 import type { Drift } from "./drift.ts";
-import type { SkillRecord } from "./records.ts";
+import type { SkillRecord, Unrecognised } from "./records.ts";
 
 const unknown = (n: number | null, lowerBound = false) =>
   n === null ? "unknown" : `${lowerBound && n ? "≥" : ""}${count(n)}`;
@@ -15,6 +15,7 @@ const version = (hash: string | null) => (hash ? hash.slice(7, 19) : "unknown");
 
 export function renderSkills(
   records: readonly SkillRecord[],
+  unrecognised: Unrecognised,
   days: number,
   judge: string,
   drift: Drift | null,
@@ -50,6 +51,11 @@ export function renderSkills(
       ],
       [3, 4, 5, 6, 7],
     ),
+    ...(unrecognised.count
+      ? [
+          `  ${count(unrecognised.count)} unrecognised entries, not on disk now and not in --source, not named: listed in ${count(unrecognised.sessionsListed)} sessions · used in ${count(unrecognised.used)} · by you in ${count(unrecognised.usedByUser)}`,
+        ]
+      : []),
     "  Listed, used and by you count sessions. ≥ marks a lower bound: Codex loads skills through the shell.",
     "",
     heading(`Skills loaded and human corrections in the same session · ${BASIS}`),
