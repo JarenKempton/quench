@@ -33,7 +33,7 @@ const MARKER = "quench-eval.json";
 const STALE_MS = 3_600_000;
 const PRIVATE = 0o700;
 const WATCH =
-  'while kill -0 "$1" 2>/dev/null; do kill -0 -- "-$2" 2>/dev/null || exit 0; sleep 0.2; done; kill -KILL -- "-$2" 2>/dev/null; rm -rf -- "$3"';
+  'while kill -0 "$1" 2>/dev/null; do kill -0 "-$2" 2>/dev/null || exit 0; sleep 0.2; done; kill -KILL "-$2" 2>/dev/null; rm -rf -- "$3"';
 const MAX_TURNS = 3;
 const TIMEOUT_MS = 180_000;
 
