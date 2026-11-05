@@ -1,4 +1,4 @@
-import { harnessById, type HarnessId } from "@quench/history";
+import { harnessById, recordedInstructions, type HarnessId, type Session } from "@quench/history";
 import { behaviour, behaviourLabel, type Behaviour } from "@quench/insights";
 import type { Reply, Sender } from "@quench/judge";
 import { plural } from "../format.ts";
@@ -19,7 +19,6 @@ export type Evidence = {
   position: number;
   date: string | null;
   sender: Sender;
-  excerpt: string | null;
 };
 
 export type Recurring = {
@@ -38,6 +37,7 @@ export type Recurring = {
 
 export type InContext = {
   corrections: number;
+  outsideWindow: number;
   withoutBehaviour: number;
   singleSession: number;
   recurring: Recurring[];
@@ -48,12 +48,13 @@ type Correction = { reply: Reply & { sender: Sender }; date: string | null; key:
 export function inContext(
   replies: readonly Reply[],
   contexts: ReadonlyMap<string, SessionContext>,
-  excerpt: (text: string) => string | null,
+  since: Date,
   examples: number,
 ): InContext {
-  const corrections = replies.filter(
+  const attributed = replies.filter(
     (r): r is Reply & { sender: Sender } => r.kind === "correction" && r.sender !== null,
   );
+  const corrections = attributed.filter((r) => r.run.replyAt && r.run.replyAt >= since);
   const groups = new Map<string, Correction[]>();
   let withoutBehaviour = 0;
   for (const reply of corrections) {
@@ -64,10 +65,11 @@ export function inContext(
       groups.set(name, [...(groups.get(name) ?? []), { reply, date, key: sessionKey(reply) }]);
   }
   const recurring = [...groups]
-    .map(([name, group]) => summarize(name, group, contexts, excerpt, examples))
+    .map(([name, group]) => summarize(name, group, contexts, examples))
     .sort((a, b) => b.sessions - a.sessions || b.corrections - a.corrections);
   return {
     corrections: corrections.length,
+    outsideWindow: attributed.length - corrections.length,
     withoutBehaviour,
     singleSession: recurring.filter((r) => r.sessions < 2).length,
     recurring: recurring.filter((r) => r.sessions >= 2),
@@ -81,7 +83,6 @@ function summarize(
   name: string,
   group: Correction[],
   contexts: ReadonlyMap<string, SessionContext>,
-  excerpt: (text: string) => string | null,
   examples: number,
 ): Recurring {
   const sessions = [...new Set(group.map((c) => c.key))];
@@ -108,7 +109,6 @@ function summarize(
         position: reply.position,
         date,
         sender: reply.sender,
-        excerpt: reply.run.reply === null ? null : excerpt(reply.run.reply),
       })),
   };
 }
@@ -141,34 +141,56 @@ function loaded(
     .sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
 }
 
+const TOOL = /^[\w.:-]{1,64}$/;
+
 function behaviourKey(b: Behaviour): string {
   const label = behaviourLabel[b.kind];
-  switch (b.kind) {
-    case "retry-loop":
-      return `${label}: ${b.failure} on ${b.what ?? b.tools.join(", ")}`;
-    case "bad-tool-input":
-      return `${label}: ${b.tools.join(", ")}`;
-    default:
-      return label;
-  }
+  if (b.kind !== "retry-loop" && b.kind !== "bad-tool-input") return label;
+  const tools = [...new Set(b.tools.map((t) => (TOOL.test(t) ? t : "unnamed tool")))].sort();
+  return `${label}: ${tools.join(", ")}`;
 }
 
-export function renderInContext(
-  found: InContext,
-  scrub: (text: string) => string,
-  path: (file: string) => string,
-): string {
+export function contextOf(session: Session): SessionContext {
+  const files = recordedInstructions(session);
+  return { skills: skillsUsed(session), files: files && [...new Set(files.map(fileName))] };
+}
+
+const fileName = (f: { path: string | null; directory: string | null; label: string | null }) =>
+  f.path ?? `${f.directory ?? "unknown folder"} (${f.label ?? "combined instructions"})`;
+
+function skillsUsed(session: Session): string[] | null {
+  const listings = session.events.flatMap((e) => (e.type === "skills" ? e.listed : []));
+  const nameByPath = new Map(listings.flatMap((s) => (s.path ? [[s.path, s.name]] : [])));
+  const succeeded = new Set(
+    session.events.flatMap((e) =>
+      e.type === "tool_result" && e.callId !== null && e.isError === false ? [e.callId] : [],
+    ),
+  );
+  const used = new Set<string>();
+  let recorded = listings.length > 0;
+  for (const e of session.events) {
+    if (e.type === "invocation") {
+      recorded = true;
+      used.add(e.name);
+    }
+    const read = e.type === "tool_call" && e.fileRead ? nameByPath.get(e.fileRead.path) : undefined;
+    if (read && e.type === "tool_call" && e.id !== null && succeeded.has(e.id)) used.add(read);
+  }
+  return recorded ? [...used] : null;
+}
+
+export function renderInContext(found: InContext, path: (file: string) => string): string {
   const lines = [
     "",
     "Recurring corrections and what was in context",
-    `${found.corrections} corrections with an attributed sender · ${found.withoutBehaviour} had no behaviour signal in the run before · ${found.singleSession} behaviours recurred in one session only`,
+    `${found.corrections} corrections with an attributed sender in the period (${found.outsideWindow} outside it or undated) · ${found.withoutBehaviour} had no behaviour signal in the run before · ${found.singleSession} behaviours recurred in one session only`,
     "Grouped by the behaviour recorded in the run before each correction, across 2+ sessions.",
   ];
   if (!found.recurring.length) lines.push("  None in the processed evidence.");
   for (const r of found.recurring) {
     lines.push(
       "",
-      `  ${scrub(r.behaviour)}`,
+      `  ${r.behaviour}`,
       `    ${plural(r.corrections, "correction")} (people ${r.fromPeople} · agents ${r.fromAutomation}) · ${r.sessions} sessions · ${span(r)}`,
       `    Skills invoked${gap(r.unrecorded.skills, r.sessions)}:${list(r.skills, r.sessions, (name) => name)}`,
       `    Instruction and memory files loaded${gap(r.unrecorded.files, r.sessions)}:${list(r.files, r.sessions, path)}`,
@@ -176,7 +198,7 @@ export function renderInContext(
     );
     for (const e of r.evidence)
       lines.push(
-        `      ${e.date ?? "undated"} · ${e.sender} · ${harnessById[e.harness].label} ${e.sessionId} run ${e.position}${e.excerpt === null ? "" : `  "${e.excerpt}"`}`,
+        `      ${e.date ?? "undated"} · ${e.sender} · ${harnessById[e.harness].label} ${e.sessionId} run ${e.position}`,
       );
   }
   lines.push(
@@ -194,14 +216,10 @@ const gap = (missing: number, of: number) =>
 
 function list(items: Loaded[], sessions: number, show: (name: string) => string): string {
   if (!items.length) return " none recorded";
-  const shared = items.filter((i) => i.sessions >= 2);
-  const once = items.length - shared.length;
-  return (
-    shared
-      .map(
-        (i) =>
-          `\n      ${show(i.name)}  ${i.sessions}/${sessions} sessions · ${plural(i.corrections, "correction")} · ${span(i)}`,
-      )
-      .join("") + (once ? `\n      ${once} more in one session each` : "")
-  );
+  return items
+    .map(
+      (i) =>
+        `\n      ${show(i.name)}  ${i.sessions}/${sessions} sessions · ${plural(i.corrections, "correction")} · ${span(i)}`,
+    )
+    .join("");
 }

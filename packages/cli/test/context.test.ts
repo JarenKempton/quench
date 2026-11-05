@@ -2,25 +2,36 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Session } from "@quench/history";
 import { HarnessJudge, Jev, VerdictCache } from "@quench/judge";
+import { contextOf } from "../src/commands/context.ts";
 import { lines, quench } from "./run.ts";
 
-const SECRET = "ghp_" + "Ab3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6";
+const CANARY = "QCANARY7x";
+const leaks = [
+  `{\\"token\\":\\"${CANARY}a\\"}`,
+  `Cookie: sid=${CANARY}b`,
+  `https://${CANARY}c:pw@example.com/repo`,
+  `curl -u ${CANARY}d:${CANARY}e https://example.com`,
+  `oathtool deadbeef${CANARY}f`,
+];
 
 const at = (second: number) => new Date(Date.UTC(2026, 9, 20, 10, 0, second)).toISOString();
 
-function session(id: string, home: string, reply: string, skill: string | null, failures: number) {
-  const calls = Array.from({ length: failures }, (_, i) => `${id}-call-${i}`);
+type Case = { id: string; reply: string; skill: string | null; failures: number; error?: string };
+
+function session(home: string, c: Case) {
+  const calls = Array.from({ length: c.failures }, (_, i) => `${c.id}-call-${i}`);
   return lines([
     {
       type: "attachment",
-      sessionId: id,
+      sessionId: c.id,
       timestamp: at(0),
       attachment: {
         type: "instructions",
         files: [
           { path: join(home, ".claude/CLAUDE.md"), type: "User", content: "Run tests first." },
-          ...(id === "a"
+          ...(c.id === "a"
             ? [{ path: join(home, "work/CLAUDE.md"), type: "Project", content: "Use Bun." }]
             : []),
         ],
@@ -40,17 +51,17 @@ function session(id: string, home: string, reply: string, skill: string | null, 
       type: "assistant",
       timestamp: at(2),
       message: {
-        id: `${id}-m1`,
+        id: `${c.id}-m1`,
         model: "model-x",
         content: [
-          ...(skill
-            ? [{ type: "tool_use", id: `${id}-skill`, name: "Skill", input: { skill } }]
+          ...(c.skill
+            ? [{ type: "tool_use", id: `${c.id}-skill`, name: "Skill", input: { skill: c.skill } }]
             : []),
-          ...calls.map((cid) => ({
+          ...calls.map((id) => ({
             type: "tool_use",
-            id: cid,
+            id,
             name: "Bash",
-            input: { command: "bun test" },
+            input: { command: c.error ? `curl -u ${CANARY}d:${CANARY}e x` : "bun test" },
           })),
         ],
         usage: { input_tokens: 1, output_tokens: 1 },
@@ -61,11 +72,11 @@ function session(id: string, home: string, reply: string, skill: string | null, 
       timestamp: at(3),
       message: {
         role: "user",
-        content: calls.map((cid) => ({
+        content: calls.map((id) => ({
           type: "tool_result",
-          tool_use_id: cid,
+          tool_use_id: id,
           is_error: true,
-          content: "Exit code 1\nerror: 3 tests failed",
+          content: `Exit code 1\n${c.error ?? "error: 3 tests failed"}`,
         })),
       },
     },
@@ -73,37 +84,48 @@ function session(id: string, home: string, reply: string, skill: string | null, 
       type: "assistant",
       timestamp: at(4),
       message: {
-        id: `${id}-m2`,
+        id: `${c.id}-m2`,
         model: "model-x",
         content: [{ type: "text", text: "done" }],
         usage: { input_tokens: 1, output_tokens: 1 },
       },
     },
-    { type: "user", timestamp: at(5), message: { role: "user", content: reply } },
+    { type: "user", timestamp: at(5), message: { role: "user", content: c.reply } },
   ]);
 }
 
-async function fixture(cacheFile: string, judgeId: string) {
+const ordinary: Case[] = [
+  { id: "a", reply: "No, you skipped the failing tests again.", skill: "verify", failures: 3 },
+  { id: "b", reply: "Wrong, the tests still fail.", skill: null, failures: 3 },
+  { id: "c", reply: "Stop, the tests are still failing.", skill: "verify", failures: 3 },
+  { id: "d", reply: "That is wrong too.", skill: "deploy", failures: 0 },
+];
+
+async function fixture(cases: Case[], cacheFile = ".quench/local/judgments.jsonl", id = Jev.id) {
   const home = await mkdtemp(join(tmpdir(), "quench-cli-context-"));
   const dir = join(home, ".claude/projects/demo");
   await mkdir(dir, { recursive: true });
-  const cases = [
-    ["a", "No, you skipped the failing tests again.", "verify", 3],
-    ["b", `Wrong: the token ${SECRET} must not be printed.`, null, 3],
-    ["c", "Stop, the tests are still failing.", "verify", 3],
-    ["d", "That is wrong too.", "deploy", 0],
-  ] as const;
-  const cache = await VerdictCache.open(join(home, cacheFile), judgeId);
-  for (const [id, reply, skill, failures] of cases) {
-    await Bun.write(join(dir, `${id}.jsonl`), session(id, home, reply, skill, failures));
+  const cache = await VerdictCache.open(join(home, cacheFile), id);
+  for (const c of cases) {
+    await Bun.write(join(dir, `${c.id}.jsonl`), session(home, c));
     await cache.remember([
       [
-        { assistantSaid: "done", reply },
+        { assistantSaid: "done", reply: c.reply },
         { kind: "correction", sender: "person", confidence: 1 },
       ],
     ]);
   }
   return home;
+}
+
+async function context(home: string, ...flags: string[]) {
+  const args = ["corrections", "--context", "--cached-only", "--days", "36500", ...flags];
+  const json = JSON.parse((await quench(home, ...args, "--json")).stdout).context;
+  const { stdout } = await quench(home, ...args);
+  return {
+    json,
+    text: stdout.slice(stdout.indexOf("Recurring corrections and what was in context")),
+  };
 }
 
 type Loaded = { name: string; sessions: number; corrections: number; first: string };
@@ -117,42 +139,122 @@ test.each([
   ["Jev", ".quench/local/judgments.jsonl", Jev.id, []],
   ["claude", ".quench/local/judgments-claude.jsonl", HarnessJudge.id, ["--judge", "claude"]],
 ])(
-  "context lists what was loaded around a correction that recurs after the same failure, from %s verdicts",
+  "context lists every skill and file loaded around a correction that recurs after the same failure, from %s verdicts",
   async (_, cacheFile, judgeId, flags) => {
     if (flags.length && process.platform === "win32") return;
-    const home = await fixture(cacheFile, judgeId);
+    const home = await fixture(ordinary, cacheFile, judgeId);
     const before = await snapshot(join(home, ".claude"));
-    const args = ["corrections", "--context", "--cached-only", "--days", "36500", ...flags];
-    const out = JSON.parse((await quench(home, ...args, "--json")).stdout);
+    const { json, text } = await context(home, ...flags);
     expect(await snapshot(join(home, ".claude"))).toEqual(before);
-    expect(out.context).toMatchObject({ corrections: 4, withoutBehaviour: 1, singleSession: 0 });
-    expect(out.context.recurring).toHaveLength(1);
-    const [recurring] = out.context.recurring;
+    expect(json).toMatchObject({ corrections: 4, outsideWindow: 0, withoutBehaviour: 1 });
+    expect(json.recurring).toHaveLength(1);
+    const [recurring] = json.recurring;
     expect(recurring).toMatchObject({
+      behaviour: "Same failure 3+ times: Bash",
       corrections: 3,
       fromPeople: 3,
       sessions: 3,
       first: "2026-10-20",
       last: "2026-10-20",
     });
-    expect(recurring.behaviour).toContain("Same failure 3+ times");
     expect(recurring.skills.map((s: Loaded) => [s.name, s.sessions])).toEqual([["verify", 2]]);
-    expect(recurring.files.map((f: Loaded) => [f.name, f.sessions])).toEqual([
-      [`~${join(home, ".claude/CLAUDE.md").slice(home.length)}`, 3],
-      [expect.stringContaining("CLAUDE.md"), 1],
+    expect(recurring.files.map((f: Loaded) => [f.name, f.sessions, f.corrections])).toEqual([
+      [`~${join(home, ".claude/CLAUDE.md").slice(home.length)}`, 3, 3],
+      [`~${join(home, "work/CLAUDE.md").slice(home.length)}`, 1, 1],
     ]);
-    const excerpts = recurring.evidence.map((e: { excerpt: string | null }) => e.excerpt);
-    expect(excerpts).toContain("Stop, the tests are still failing.");
-    expect(excerpts).toContain(null);
-    expect(JSON.stringify(out.context)).not.toContain(SECRET);
-    expect(JSON.stringify(out.context)).not.toContain(SECRET.slice(4, 20));
-
-    const { stdout } = await quench(home, ...args);
-    const text = stdout.slice(stdout.indexOf("Recurring corrections and what was in context"));
-    expect(text).toContain("Same failure 3+ times");
+    expect(recurring.evidence.map((e: object) => Object.keys(e).sort())).toEqual(
+      Array(3).fill(["date", "harness", "position", "sender", "sessionId"]),
+    );
     expect(text).toMatch(/verify {2}2\/3 sessions · 2 corrections · 2026-10-20/);
-    expect(text).toContain("1 more in one session each");
+    expect(text).toMatch(/work.CLAUDE\.md {2}1\/3 sessions · 1 correction · 2026-10-20/);
     expect(text).toContain("correlation, not a cause");
-    expect(text).not.toContain(SECRET);
   },
 );
+
+test("context renders no reply, error or command text, in text or JSON", async () => {
+  const home = await fixture(
+    leaks.map((reply, i) => ({
+      id: `leak${i}`,
+      reply,
+      skill: null,
+      failures: 3,
+      error: `Cookie: sid=${CANARY}b`,
+    })),
+  );
+  const { json, text } = await context(home);
+  expect(json.recurring).toHaveLength(1);
+  expect(json.recurring[0].behaviour).toBe("Same failure 3+ times: Bash");
+  expect(JSON.stringify(json)).not.toContain(CANARY);
+  expect(text).toContain("Same failure 3+ times: Bash");
+  expect(text).not.toContain(CANARY);
+  expect(text).not.toContain("Cookie");
+});
+
+test("context counts only corrections inside --days, by the correction's own time", async () => {
+  const home = await fixture(ordinary);
+  const out = JSON.parse(
+    (await quench(home, "corrections", "--context", "--cached-only", "--days", "1", "--json"))
+      .stdout,
+  ).context;
+  expect(out).toMatchObject({ corrections: 0, outsideWindow: 4, recurring: [] });
+});
+
+const listed = (path: string) => ({
+  type: "skills",
+  at: null,
+  chars: 1,
+  listed: [{ name: "verify", path, chars: 1 }],
+});
+
+test("a skill counts only when invoked or read successfully, never from a command naming its path", () => {
+  const path = "/skills/verify/SKILL.md";
+  const of = (events: object[]) => contextOf({ events } as unknown as Session).skills;
+  const call = (id: string, extra: object) => ({
+    type: "tool_call",
+    at: null,
+    id,
+    name: "x",
+    ...extra,
+  });
+  const result = (callId: string, isError: boolean) => ({
+    type: "tool_result",
+    at: null,
+    callId,
+    isError,
+    chars: 1,
+  });
+  expect(
+    of([
+      listed(path),
+      call("1", { shell: [{ command: `echo ${path}`, workdir: null }] }),
+      result("1", false),
+    ]),
+  ).toEqual([]);
+  expect(of([listed(path), call("1", { fileRead: { path } }), result("1", true)])).toEqual([]);
+  expect(of([listed(path), call("1", { fileRead: { path } }), result("1", false)])).toEqual([
+    "verify",
+  ]);
+  expect(of([{ type: "invocation", at: null, name: "deploy", by: "user" }])).toEqual(["deploy"]);
+  expect(of([])).toBeNull();
+});
+
+test("combined instruction blocks from different folders stay separate and say what they are", () => {
+  const block = (directory: string) => ({
+    path: null,
+    directory,
+    label: "AGENTS.md instructions",
+    textSha256: directory,
+    textChars: 1,
+    textDiffersFromFile: null,
+  });
+  const files = contextOf({
+    events: [
+      { type: "instructions", at: null, unreadable: 0, files: [block("/historical/x")] },
+      { type: "instructions", at: null, unreadable: 0, files: [block("/historical/y")] },
+    ],
+  } as unknown as Session).files;
+  expect(files).toEqual([
+    "/historical/x (AGENTS.md instructions)",
+    "/historical/y (AGENTS.md instructions)",
+  ]);
+});
