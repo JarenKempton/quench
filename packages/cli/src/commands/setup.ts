@@ -317,7 +317,7 @@ async function hub(context: Context): Promise<Outcome> {
     return "skipped";
   }
   for (;;) {
-    const answer = await context.ask("  Paste the quench connect line (or skip): ");
+    const answer = await context.ask("  Paste the quench connect line (or skip): ", true);
     if (answer === null) return "stopped";
     if (!answer.trim() || answer.trim() === "skip") return "skipped";
     const parsed = connectLine(answer);

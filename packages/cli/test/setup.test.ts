@@ -246,7 +246,8 @@ test.skipIf(!posix)(
     await type("Base URL", `${baseUrl}\r`);
     await type("Model", "small-model\r");
     await type("API key", `sk-${CANARY}\r`);
-    await type("Paste the quench connect line", "\r");
+    await type("Paste the quench connect line", `--code ${CANARY}\r`);
+    await type("paste the whole line", "\r");
     const exited = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "hung")]);
     if (exited === "hung") proc.kill();
     expect(exited).toBe(0);
