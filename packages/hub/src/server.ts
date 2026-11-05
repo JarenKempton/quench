@@ -639,6 +639,7 @@ export async function serveHub(options: ServeOptions) {
     async stop() {
       await server.stop(true);
       await hub.mirrored();
+      await hub.repo.settled();
       hub.close();
     },
   };
