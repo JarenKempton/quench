@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { Home, harnessById } from "@quench/history";
-import { HarnessName, THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
+import { provider, THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
+import { setup, STEPS } from "./commands/setup.ts";
+import { judgeChoice, readConfig, secretsIn, typesafeKey } from "./config.ts";
 import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
 import { allRuns, runs } from "./commands/runs.ts";
@@ -21,6 +23,9 @@ const USAGE = `quench — see what your coding agents load, what it costs, and h
 Usage:
   quench --version                     the installed version
   quench update [--channel stable|nightly]  install the newest release of your channel, or switch channel
+  quench setup [step] [--judge none] [--yes]
+                                       find your agents, show the summary, pick a judge; resumes where it stopped
+                                       steps: ${STEPS.join(", ")}; --yes takes each recommended answer
   quench [--days 30] [--scan <dir>]   a short summary: what sessions start with and what is worth a look
   quench profile [section] [--days 30] [--scan <dir>] [--json]
                                        every table, or one section: ${SECTIONS.join(", ")}
@@ -54,7 +59,9 @@ Usage:
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
     --context                         recurring corrections with the skills and instruction files in context (read-only)
     --cached-only                     use cached reply verdicts only; never classify new replies
-    --judge jev|claude                 who classifies replies: Jev (default, TYPESAFE_API_KEY), or claude -p on your own account
+    --judge jev|claude|openai|none     who classifies replies: the one quench setup picked, else Jev (TYPESAFE_API_KEY);
+                                       claude -p on your own account; an OpenAI-compatible endpoint
+                                       (QUENCH_OPENAI_BASE_URL, QUENCH_OPENAI_MODEL, QUENCH_OPENAI_API_KEY); or none
     --host-history <sqlite-file>        optional local T3 provenance (default: ~/.t3/userdata/statev2.sqlite)
     --no-host-history                  use harness metadata and model judgments only
 
@@ -77,7 +84,8 @@ const { positionals, values } = parseArgs({
     context: { type: "boolean", default: false },
     "cached-only": { type: "boolean", default: false },
     "theme-limit": { type: "string" },
-    judge: { type: "string", default: "jev" },
+    judge: { type: "string" },
+    yes: { type: "boolean", short: "y", default: false },
     "host-history": { type: "string" },
     "no-host-history": { type: "boolean", default: false },
     "repo-history": { type: "boolean", default: false },
@@ -150,15 +158,15 @@ if (values["cached-only"] && command !== "corrections") {
   process.stderr.write("--cached-only is only available for corrections\n");
   process.exit(1);
 }
-const judge = values.judge === "jev" ? "jev" : HarnessName.safeParse(values.judge).data;
-if (values.judge !== "jev" && command !== "corrections") {
-  process.stderr.write("--judge is only available for corrections\n");
+if (values.judge !== undefined && command !== "corrections" && command !== "setup") {
+  process.stderr.write("--judge is only available for corrections and setup\n");
   process.exit(1);
 }
-if (!judge) {
-  process.stderr.write("--judge must be jev or claude\n");
+if (values.yes && command !== "setup") {
+  process.stderr.write("--yes is only available for setup\n");
   process.exit(1);
 }
+const config = await readConfig(home.dir);
 if (values["theme-limit"] !== undefined && !values.themes) {
   process.stderr.write("--theme-limit requires --themes\n");
   process.exit(1);
@@ -264,7 +272,24 @@ switch (command) {
   case "report":
     process.exitCode = await report(home, { days, json: values.json });
     break;
-  case "corrections":
+  case "setup":
+    process.exitCode = await setup(home, rest[0], {
+      ...(values.judge === undefined ? {} : { judge: values.judge }),
+      yes: values.yes,
+    });
+    break;
+  case "corrections": {
+    const choice = judgeChoice(config, process.env, values.judge);
+    const jevKey = typesafeKey(config, process.env);
+    const invalid = [choice, ...(values.themes || values.causes ? [jevKey] : [])].find(
+      (value) => value instanceof Error,
+    );
+    if (invalid instanceof Error) {
+      process.stderr.write(`${invalid.message}\n`);
+      process.exitCode = 1;
+      break;
+    }
+    if (choice instanceof Error) break;
     process.exitCode = await corrections(home, {
       days,
       examples,
@@ -274,7 +299,9 @@ switch (command) {
       causes: values.causes,
       context: values.context,
       cachedOnly: values["cached-only"],
-      judge,
+      judge: provider(choice),
+      typesafeKey: jevKey instanceof Error ? undefined : jevKey,
+      secrets: secretsIn(config, process.env),
       themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }
@@ -283,6 +310,7 @@ switch (command) {
           : {}),
     });
     break;
+  }
   case "secrets":
     process.exitCode = await secrets(home, {
       json: values.json,

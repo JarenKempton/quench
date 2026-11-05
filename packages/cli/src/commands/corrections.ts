@@ -9,19 +9,20 @@ import {
 import { openT3History, t3State } from "@quench/history/hosts/t3";
 import { linkSubagents, runs } from "@quench/insights";
 import {
-  HarnessJudge,
   HarnessMissing,
-  type HarnessName,
   HarnessUnsupported,
   Jev,
   JevCauses,
   JevThemes,
+  type Judge,
+  type Provider,
   judgeCauses,
   type CauseInput,
   groupCorrections,
   ThemeCache,
   judgeReplies,
   KeyRejected,
+  redact,
   summarize,
   VerdictCache,
   type Judged,
@@ -42,7 +43,13 @@ const NO_KEY = `Classifying replies uses Jev (typesafe.ai) with your own key. Fo
 it sends the reply and the last 1,500 characters of the agent message before it.
 Set TYPESAFE_API_KEY to opt in, or pass --dry-run to see what would be sent.
 Answers are cached per judge in ~/.quench/local/judgments/, so each reply is paid for once.
-Without a key, --judge claude classifies through claude -p and your own Claude account.
+Without a key, --judge claude classifies through claude -p and your own Claude account,
+and --judge openai through any OpenAI-compatible endpoint. Run quench setup to pick one.
+`;
+
+const NO_JUDGE = `Reply classification is off: the judge is none, so no model is called.
+Inventory, drift, costs and behaviour (quench, profile, report, runs, steering) work without one.
+Pick a judge with quench setup judge, or pass --judge jev|claude|openai.
 `;
 
 type Options = {
@@ -56,38 +63,44 @@ type Options = {
   causes: boolean;
   context: boolean;
   cachedOnly: boolean;
-  judge: "jev" | HarnessName;
+  judge: Provider;
+  typesafeKey: string | undefined;
+  secrets: string[];
 };
 
-type ReplyJudge = Jev | HarnessJudge;
-
 export async function corrections(home: Home, options: Options): Promise<number> {
-  const harness = options.judge === "jev" ? null : options.judge;
-  if (harness && process.platform === "win32") {
-    process.stderr.write(`${new HarnessUnsupported(process.platform).message}\n`);
+  const say = (text: string) => process.stdout.write(redact(text, options.secrets));
+  const warn = (text: string) => process.stderr.write(redact(text, options.secrets));
+  const chosen = options.judge;
+  if (chosen.id === null) {
+    warn(NO_JUDGE);
+    return 2;
+  }
+  if (chosen.name === "claude" && process.platform === "win32") {
+    warn(`${new HarnessUnsupported(process.platform).message}\n`);
     return 1;
   }
   const asking = !options.dryRun && !options.cachedOnly;
-  let replyJudge: ReplyJudge | null = null;
+  let replyJudge: Judge | null = null;
   try {
-    replyJudge = !asking ? null : harness ? await HarnessJudge.create() : Jev.fromEnv();
+    replyJudge = asking ? await chosen.create() : null;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
-    process.stderr.write(
+    warn(
       `${error.message}${error instanceof HarnessMissing ? `. Install it or pick another --judge.` : ""}\n`,
     );
     return 1;
   }
   const optIn = options.themes || options.causes || options.context;
   if (asking && !optIn && !replyJudge) {
-    process.stderr.write(NO_KEY);
+    warn(NO_KEY);
     return 2;
   }
-  const label = harness ? HarnessJudge.label : "Jev";
-  const callsPerReply = harness ? 1 : 2;
+  const label = chosen.label;
+  const callsPerReply = chosen.callsPerReply;
   const cache = await VerdictCache.open(
     join(home.dir, ".quench/local"),
-    harness ? HarnessJudge.id : Jev.id,
+    chosen.id,
     replyJudge === null,
   );
   const host =
@@ -101,17 +114,20 @@ export async function corrections(home: Home, options: Options): Promise<number>
     host?.close();
   }
   const warnings = host?.warnings ?? [];
-  for (const warning of warnings) process.stderr.write(`${warning}\n`);
+  for (const warning of warnings) warn(`${warning}\n`);
   let judged: Judged;
   try {
     judged = await judgeReplies(sessions, cache, replyJudge);
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
-    process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
+    warn(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
   const summary = summarize(judged.replies, options.examples);
-  const themeJudge = options.themes && !options.dryRun ? JevThemes.fromEnv() : null;
+  const themeJudge =
+    options.themes && !options.dryRun && options.typesafeKey
+      ? new JevThemes(options.typesafeKey)
+      : null;
   const themes = options.themes
     ? await groupCorrections(
         judged.replies,
@@ -120,7 +136,10 @@ export async function corrections(home: Home, options: Options): Promise<number>
         { limit: options.themeLimit, examples: options.examples, since },
       )
     : null;
-  const causeJudge = options.causes && !options.dryRun ? JevCauses.fromEnv() : null;
+  const causeJudge =
+    options.causes && !options.dryRun && options.typesafeKey
+      ? new JevCauses(options.typesafeKey)
+      : null;
   let causes = null;
   try {
     causes = options.causes
@@ -135,16 +154,16 @@ export async function corrections(home: Home, options: Options): Promise<number>
       : null;
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
-    process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
+    warn(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
   const context = options.context
     ? inContext(judged.replies, contexts, since, options.examples)
     : null;
   const path = (file: string) => shortPath(file, home.dir);
-  const tokens = replyJudge instanceof Jev ? replyJudge.tokens : null;
-  const calls = { label, perReply: callsPerReply };
-  process.stdout.write(
+  const tokens = replyJudge && "tokens" in replyJudge ? (replyJudge.tokens as Tokens) : null;
+  const calls = { label, perReply: callsPerReply, judge: cache.judge };
+  say(
     options.json
       ? json({
           days: options.days,
@@ -195,7 +214,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
       themes?.blocked ||
       causes?.pending)
   ) {
-    process.stderr.write(
+    warn(
       "Classifying missing replies, grouping and asking causes use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview each stage.\n",
     );
     return 2;
@@ -232,13 +251,14 @@ async function sessionRuns(
   return [...parents.values()];
 }
 
-type Calls = { label: string; perReply: number };
+type Calls = { label: string; perReply: number; judge: string };
+type Tokens = Jev["tokens"];
 
 function renderThemes(themes: Themes, judged: Judged, days: number, calls: Calls): string {
   const recurring = themes.themes.filter((t) => t.recurring);
   const lines = [
     `Last ${days} days · correction themes · ${themes.judge}`,
-    `Reply classification by ${calls.label}: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
+    `Reply classification by ${calls.judge}: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
     `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
     `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
@@ -283,7 +303,7 @@ function render(
   judged: Judged,
   days: number,
   judge: string,
-  tokens: Jev["tokens"] | null,
+  tokens: Tokens | null,
   cachedOnly: boolean,
   calls: Calls,
 ): string {
@@ -341,7 +361,10 @@ function render(
     );
   }
   if (tokens && judged.newlyJudged) {
-    lines.push("", `Jev used ${tokens.input} input and ${tokens.output} output tokens this run.`);
+    lines.push(
+      "",
+      `${calls.label} used ${tokens.input} input and ${tokens.output} output tokens this run.`,
+    );
   }
   const failure = judged.failures[0];
   if (failure) lines.push("", `First failure: ${failure.message}`);

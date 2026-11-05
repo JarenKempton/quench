@@ -51,6 +51,13 @@ retired with it and live in git history.
   `history` and `insights` stay offline. Jev is the first judge, through TypeSafe's own SDK,
   opt-in via `TYPESAFE_API_KEY`. Verdicts are cached per judge id and input, one file per judge id, so a reply is paid
   for once. The cache format is the Rust prototype's, so its verdicts carry over.
+- **Judges are pluggable providers** ([#140](https://github.com/JarenKempton/quench/issues/140)).
+  Jev, the user's own `claude`, any OpenAI-compatible endpoint, or none, all behind `Judge`. They
+  share one set of reply questions outside any provider. Each provider's id names its model (and
+  endpoint host for OpenAI-compatible ones), every judge-derived number names that id, and rates
+  never mix judges. Themes and causes stay Jev-only until another provider passes their fixtures.
+  `none` turns off model calls only. The choice and any typed key live in a 0600 config file that
+  environment variables override.
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
 - **Hosts enrich history; they do not redefine harnesses.** Optional local host adapters add

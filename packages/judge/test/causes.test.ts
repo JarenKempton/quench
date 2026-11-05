@@ -7,6 +7,7 @@ import { runs } from "@quench/insights";
 import {
   JevCauses,
   judgeCauses,
+  JudgeFailed,
   KeyRejected,
   ThemeCache,
   type CauseInput,
@@ -138,13 +139,13 @@ test("failed and unknown answers stay visible and are not cached; a rejected key
   const judge = {
     id: JevCauses.id,
     cause: async (input: CauseInput) => {
-      if (input.state.correction.reply === "boom") throw new Error("timeout");
+      if (input.state.correction.reply === "boom") throw new JudgeFailed("jev", "timeout");
       return { choice: "made_up", model: "jev-test" };
     },
   };
   const causes = await judgeCauses([reply("boom"), reply("odd")], await open(file), judge);
   expect(causes.caused.map((c) => c.cause)).toEqual(["failed", "failed"]);
-  expect(causes.failures).toEqual(["timeout", "Unknown cause made_up"]);
+  expect(causes.failures).toEqual(["jev judge failed: timeout", "jev judge failed: malformed"]);
   expect(await Bun.file(file).exists()).toBe(false);
   const rejected = {
     id: JevCauses.id,

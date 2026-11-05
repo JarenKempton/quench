@@ -349,10 +349,10 @@ test.skipIf(process.platform === "win32")(
     expect(missing.code).toBe(1);
     expect(missing.stderr).toContain("claude was not found on PATH");
     expect((await quench("report", "--judge", "claude")).stderr).toContain(
-      "--judge is only available for corrections",
+      "--judge is only available for corrections and setup",
     );
     expect((await quench("corrections", "--judge", "gpt")).stderr).toContain(
-      "--judge must be jev or claude",
+      "--judge must be jev, claude, openai or none",
     );
   },
 );
