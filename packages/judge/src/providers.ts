@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { HarnessJudge } from "./harness.ts";
 import { Jev } from "./jev.ts";
-import { OpenAIJudge } from "./openai.ts";
+import { keyProblem, OpenAIJudge } from "./openai.ts";
+import { scrub, type Secrets } from "./redact.ts";
 import type { Judge } from "./verdict.ts";
 
 export const JudgeName = z.enum(["jev", "claude", "openai", "none"]);
@@ -33,7 +34,11 @@ export function provider(
         id: Jev.id,
         label: "Jev",
         callsPerReply: 2,
-        create: async () => (choice.apiKey ? new Jev(choice.apiKey) : null),
+        create: async () => {
+          if (!choice.apiKey) return null;
+          checked(choice.apiKey);
+          return scrubbed(new Jev(choice.apiKey), [choice.apiKey]);
+        },
       };
     case "claude":
       return {
@@ -41,19 +46,40 @@ export function provider(
         id: HarnessJudge.id,
         label: HarnessJudge.label,
         callsPerReply: 1,
-        create: () => HarnessJudge.create(env, undefined, platform),
+        create: async () => scrubbed(await HarnessJudge.create(env, undefined, platform), []),
       };
     case "openai": {
-      const judge = new OpenAIJudge(choice);
+      const judge = scrubbed(new OpenAIJudge(choice), [choice.apiKey]);
       return {
         name: "openai",
         id: judge.id,
         label: judge.label,
         callsPerReply: 1,
-        create: async () => judge,
+        create: async () => {
+          if (choice.apiKey) checked(choice.apiKey);
+          return judge;
+        },
       };
     }
     case "none":
       return { name: "none", id: null, label: "none", callsPerReply: 0, create: async () => null };
   }
+}
+
+function checked(key: string): void {
+  const problem = keyProblem(key);
+  if (problem) throw new Error(problem);
+}
+
+function scrubbed<J extends Judge>(judge: J, secrets: Secrets): J {
+  const classify = judge.classify.bind(judge);
+  return Object.assign(judge, {
+    classify: async (exchanges: Parameters<Judge["classify"]>[0]) => {
+      try {
+        return (await classify(exchanges)).map((judgment) => scrub(judgment, secrets));
+      } catch (error) {
+        throw scrub(error, secrets);
+      }
+    },
+  });
 }

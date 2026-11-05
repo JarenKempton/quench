@@ -4,7 +4,7 @@ import { Home, harnessById } from "@quench/history";
 import { provider, THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
 import { corrections } from "./commands/corrections.ts";
 import { setup, STEPS } from "./commands/setup.ts";
-import { judgeChoice, readConfig, typesafeKey } from "./config.ts";
+import { judgeChoice, readConfig, secretsIn, typesafeKey } from "./config.ts";
 import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
 import { report } from "./commands/report.ts";
 import { allRuns, runs } from "./commands/runs.ts";
@@ -253,11 +253,16 @@ switch (command) {
     break;
   case "corrections": {
     const choice = judgeChoice(config, process.env, values.judge);
-    if (choice instanceof Error) {
-      process.stderr.write(`${choice.message}\n`);
+    const jevKey = typesafeKey(config, process.env);
+    const invalid = [choice, ...(values.themes || values.causes ? [jevKey] : [])].find(
+      (value) => value instanceof Error,
+    );
+    if (invalid instanceof Error) {
+      process.stderr.write(`${invalid.message}\n`);
       process.exitCode = 1;
       break;
     }
+    if (choice instanceof Error) break;
     process.exitCode = await corrections(home, {
       days,
       examples,
@@ -268,7 +273,8 @@ switch (command) {
       context: values.context,
       cachedOnly: values["cached-only"],
       judge: provider(choice),
-      typesafeKey: typesafeKey(config, process.env),
+      typesafeKey: jevKey instanceof Error ? undefined : jevKey,
+      secrets: secretsIn(config, process.env),
       themeLimit,
       ...(values["no-host-history"]
         ? { hostHistory: false as const }

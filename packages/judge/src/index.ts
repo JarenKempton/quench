@@ -30,3 +30,4 @@ export {
 } from "./openai.ts";
 export { JudgeName, provider, type JudgeChoice, type Provider } from "./providers.ts";
 export { CANNED_EXCHANGE } from "./questions.ts";
+export { redact, scrub, type Secrets } from "./redact.ts";

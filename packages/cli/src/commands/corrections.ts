@@ -22,6 +22,7 @@ import {
   ThemeCache,
   judgeReplies,
   KeyRejected,
+  redact,
   summarize,
   VerdictCache,
   type Judged,
@@ -64,16 +65,19 @@ type Options = {
   cachedOnly: boolean;
   judge: Provider;
   typesafeKey: string | undefined;
+  secrets: string[];
 };
 
 export async function corrections(home: Home, options: Options): Promise<number> {
+  const say = (text: string) => process.stdout.write(redact(text, options.secrets));
+  const warn = (text: string) => process.stderr.write(redact(text, options.secrets));
   const chosen = options.judge;
   if (chosen.id === null) {
-    process.stderr.write(NO_JUDGE);
+    warn(NO_JUDGE);
     return 2;
   }
   if (chosen.name === "claude" && process.platform === "win32") {
-    process.stderr.write(`${new HarnessUnsupported(process.platform).message}\n`);
+    warn(`${new HarnessUnsupported(process.platform).message}\n`);
     return 1;
   }
   const asking = !options.dryRun && !options.cachedOnly;
@@ -82,14 +86,14 @@ export async function corrections(home: Home, options: Options): Promise<number>
     replyJudge = asking ? await chosen.create() : null;
   } catch (error) {
     if (!(error instanceof Error)) throw error;
-    process.stderr.write(
+    warn(
       `${error.message}${error instanceof HarnessMissing ? `. Install it or pick another --judge.` : ""}\n`,
     );
     return 1;
   }
   const optIn = options.themes || options.causes || options.context;
   if (asking && !optIn && !replyJudge) {
-    process.stderr.write(NO_KEY);
+    warn(NO_KEY);
     return 2;
   }
   const label = chosen.label;
@@ -110,13 +114,13 @@ export async function corrections(home: Home, options: Options): Promise<number>
     host?.close();
   }
   const warnings = host?.warnings ?? [];
-  for (const warning of warnings) process.stderr.write(`${warning}\n`);
+  for (const warning of warnings) warn(`${warning}\n`);
   let judged: Judged;
   try {
     judged = await judgeReplies(sessions, cache, replyJudge);
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
-    process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
+    warn(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
   const summary = summarize(judged.replies, options.examples);
@@ -150,7 +154,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
       : null;
   } catch (error) {
     if (!(error instanceof KeyRejected)) throw error;
-    process.stderr.write(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
+    warn(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
   const context = options.context
@@ -159,7 +163,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const path = (file: string) => shortPath(file, home.dir);
   const tokens = replyJudge && "tokens" in replyJudge ? (replyJudge.tokens as Tokens) : null;
   const calls = { label, perReply: callsPerReply, judge: cache.judge };
-  process.stdout.write(
+  say(
     options.json
       ? json({
           days: options.days,
@@ -210,7 +214,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
       themes?.blocked ||
       causes?.pending)
   ) {
-    process.stderr.write(
+    warn(
       "Classifying missing replies, grouping and asking causes use Jev. Set TYPESAFE_API_KEY to opt in, or use --dry-run to preview each stage.\n",
     );
     return 2;

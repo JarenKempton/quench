@@ -9,6 +9,8 @@ import {
   OpenAIFailed,
   OpenAIJudge,
   provider,
+  redact,
+  scrub,
   type Exchange,
 } from "../src/index.ts";
 import { fakeCalls, fakeHarnessPath } from "./fake-path.ts";
@@ -19,12 +21,17 @@ let reply: Reply = { body: {} };
 const server = Bun.serve({
   port: 0,
   hostname: "127.0.0.1",
-  async fetch(request) {
+  async fetch(request): Promise<Response> {
     requests.push({
       path: new URL(request.url).pathname,
       auth: request.headers.get("authorization"),
       body: (await request.json()) as Record<string, unknown>,
     });
+    if (new URL(request.url).pathname.startsWith("/bounce"))
+      return new Response(null, {
+        status: 307,
+        headers: { location: `http://127.0.0.1:${server.port}/landed` },
+      });
     const body = typeof reply.body === "string" ? reply.body : JSON.stringify(reply.body);
     return new Response(body, { status: reply.status ?? 200 });
   },
@@ -32,6 +39,8 @@ const server = Bun.serve({
 afterAll(() => server.stop(true));
 
 const baseUrl = `http://127.0.0.1:${server.port}/v1`;
+const idOf = (base: string, model: string) =>
+  `openai/reply-v1/${JSON.stringify({ baseUrl: base, model })}`;
 const completion = (content: string, extra: object = {}) => ({
   choices: [{ message: { role: "assistant", content }, finish_reason: "stop", ...extra }],
   usage: { prompt_tokens: 11, completion_tokens: 3 },
@@ -52,7 +61,7 @@ test("openai sends the shared clipped prompt with a strict JSON schema and reads
     { kind: "correction", sender: "person", confidence: 0.8 },
     { kind: "correction", sender: "person", confidence: 0.8 },
   ]);
-  expect(judge.id).toBe(`openai/${baseUrl}/small-model/reply-v1`);
+  expect(judge.id).toBe(idOf(baseUrl, "small-model"));
   expect(judge.tokens).toEqual({ input: 22, output: 6 });
   const sent = requests[0];
   expect(sent?.path).toBe("/v1/chat/completions");
@@ -121,7 +130,7 @@ test("the factory builds each provider under its own judge id", async () => {
   expect([none.id, await none.create()]).toEqual([null, null]);
 
   const openai = provider({ name: "openai", baseUrl, model: "small-model" });
-  expect(openai.id).toBe(`openai/${baseUrl}/small-model/reply-v1`);
+  expect(openai.id).toBe(idOf(baseUrl, "small-model"));
   reply = { body: completion(good) };
   expect(await (await openai.create())?.classify([CANNED_EXCHANGE])).toEqual([
     { kind: "correction", sender: "person", confidence: 0.8 },
@@ -207,8 +216,8 @@ test("plain HTTP is only for loopback and private addresses", () => {
 test("the judge id keeps the whole base URL, so two paths on one host never share a cache", () => {
   const a = OpenAIJudge.idFor({ baseUrl: "https://h/team-a/v1/", model: "m" });
   const b = OpenAIJudge.idFor({ baseUrl: "https://h/team-b", model: "m" });
-  expect(a).toBe("openai/https://h/team-a/v1/m/reply-v1");
-  expect(b).toBe("openai/https://h/team-b/v1/m/reply-v1");
+  expect(a).toBe(idOf("https://h/team-a/v1", "m"));
+  expect(b).toBe(idOf("https://h/team-b/v1", "m"));
   expect(OpenAIJudge.idFor({ baseUrl: "https://h/team-a/v1", model: "n" })).not.toBe(a);
 });
 
@@ -232,4 +241,69 @@ test("a cut-off, filtered or refused answer is a failure, never a verdict", asyn
     body: completion(good, { message: { role: "assistant", content: good, refusal: null } }),
   });
   expect(results[0]).toEqual({ kind: "correction", sender: "person", confidence: 0.8 });
+});
+
+test("base URL and model pairs that concatenate alike still get different ids", () => {
+  const one = OpenAIJudge.idFor({ baseUrl: "https://h/v1", model: "v1/m" });
+  const two = OpenAIJudge.idFor({ baseUrl: "https://h/v1/v1", model: "m" });
+  expect(one).not.toBe(two);
+});
+
+test("a redirect is a failure and is never followed, so the body never leaves the endpoint", async () => {
+  requests.length = 0;
+  reply = { body: completion(good) };
+  const judge = new OpenAIJudge({
+    baseUrl: `http://127.0.0.1:${server.port}/bounce/v1`,
+    model: "m",
+    apiKey: "sk-test",
+  });
+  const results = await judge.classify([
+    exchange,
+    exchange,
+    exchange,
+    exchange,
+    exchange,
+    exchange,
+  ]);
+  for (const result of results) {
+    expect(result).toBeInstanceOf(OpenAIFailed);
+    expect((result as Error).message).toContain("HTTP 307");
+  }
+  expect(requests.every((r) => r.path.startsWith("/bounce"))).toBe(true);
+  expect(requests.length).toBeLessThanOrEqual(4);
+});
+
+test("an oversized 401 still stops the batch", async () => {
+  reply = { status: 401, body: { error: "x".repeat(2_000_000) } };
+  requests.length = 0;
+  const judge = new OpenAIJudge({ baseUrl, model: "m", apiKey: "wrong" });
+  const results = await judge.classify(Array.from({ length: 12 }, () => exchange));
+  expect(results.every((r) => r instanceof Error && r.message.includes("HTTP 401"))).toBe(true);
+  expect(requests.length).toBeLessThanOrEqual(4);
+});
+
+test("a malformed Jev key is refused before use, and never printed", async () => {
+  const failure = await provider({ name: "jev", apiKey: `sk-${CANARY}\u0007` })
+    .create()
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(Error);
+  expect(`${(failure as Error).message}${(failure as Error).stack}`).not.toContain(CANARY);
+});
+
+test("one redaction covers messages, stacks and causes", () => {
+  const key = `sk-${CANARY}`;
+  expect(redact(`bad header ${key} and ${key}`, [key, undefined, ""])).toBe(
+    "bad header [key] and [key]",
+  );
+  const error = scrub(new Error(`outer ${key}`, { cause: new Error(`inner ${key}`) }), [key]);
+  expect(`${error.message}${error.stack}${(error.cause as Error).message}`).not.toContain(CANARY);
+});
+
+test("the factory scrubs keys from every provider's errors", async () => {
+  const apiKey = `sk-${CANARY}`;
+  reply = { body: completion(`{"echo":"${apiKey}"}`) };
+  const openai = await provider({ name: "openai", baseUrl, model: "m", apiKey }).create();
+  const [result] = (await openai?.classify([CANNED_EXCHANGE])) ?? [];
+  expect(result).toBeInstanceOf(Error);
+  expect(`${(result as Error).message}${(result as Error).stack}`).not.toContain(CANARY);
 });

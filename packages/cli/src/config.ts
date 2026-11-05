@@ -46,6 +46,8 @@ export function judgeChoice(config: Config, env: Env, flag?: string): JudgeChoic
   switch (name) {
     case "jev": {
       const apiKey = pick("TYPESAFE_API_KEY", stored?.apiKey);
+      const problem = apiKey ? keyProblem(apiKey) : null;
+      if (problem) return new Error(`--judge jev: ${problem}`);
       return apiKey ? { name, apiKey } : { name };
     }
     case "openai": {
@@ -67,10 +69,20 @@ export function judgeChoice(config: Config, env: Env, flag?: string): JudgeChoic
   }
 }
 
-export function typesafeKey(config: Config, env: Env): string | undefined {
-  return (
+export function typesafeKey(config: Config, env: Env): string | Error | undefined {
+  const key =
     env.TYPESAFE_API_KEY?.trim() ||
     (config.judge?.name === "jev" ? config.judge.apiKey : undefined) ||
-    undefined
-  );
+    undefined;
+  const problem = key ? keyProblem(key) : null;
+  return problem ? new Error(`TYPESAFE_API_KEY: ${problem}`) : key;
 }
+
+export const secretsIn = (config: Config, env: Env): string[] =>
+  [
+    env.TYPESAFE_API_KEY,
+    env.QUENCH_OPENAI_API_KEY,
+    env.TYPESAFE_API_KEY?.trim(),
+    env.QUENCH_OPENAI_API_KEY?.trim(),
+    config.judge?.apiKey,
+  ].filter((key): key is string => Boolean(key));

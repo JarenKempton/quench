@@ -4,11 +4,12 @@ import {
   endpointProblem,
   JudgeName,
   keyProblem,
+  redact,
   provider,
   type JudgeChoice,
   type Judgment,
 } from "@quench/judge";
-import { judgeChoice, readConfig, writeConfig, type Config } from "../config.ts";
+import { judgeChoice, readConfig, secretsIn, writeConfig, type Config } from "../config.ts";
 import { plural, shortPath } from "../format.ts";
 import { prompt } from "../prompt.ts";
 import { profile } from "./profile.ts";
@@ -33,6 +34,7 @@ type Context = {
   judge: string | undefined;
   ask: (question: string, hidden?: boolean) => Promise<string | null>;
   config: Config;
+  typed: string[];
 };
 
 const TITLES: Record<Step, string> = {
@@ -77,6 +79,7 @@ export async function setup(
     judge: options.judge,
     ask: reader.ask,
     config,
+    typed: [],
   };
   try {
     return await steps(context, start, done);
@@ -152,6 +155,8 @@ async function pickJudge(context: Context): Promise<Outcome> {
       "",
     ].join("\n"),
   );
+  const safe = (text: string) =>
+    redact(text, [...secretsIn(context.config, env), ...context.typed]);
   for (;;) {
     const answer = context.yes
       ? recommended
@@ -168,19 +173,19 @@ async function pickJudge(context: Context): Promise<Outcome> {
     const stored = await details(context, name as JudgeName);
     if (stored === null) return "stopped";
     if (stored instanceof Error) {
-      out(`  ${stored.message}\n`);
+      out(safe(`  ${stored.message}\n`));
       if (context.yes) return "stopped";
       continue;
     }
     const choice = judgeChoice({ judge: stored }, env, stored.name);
     if (choice instanceof Error) {
-      out(`  ${choice.message}\n`);
+      out(safe(`  ${choice.message}\n`));
       if (context.yes) return "stopped";
       continue;
     }
     const tested = await trial(choice, env, platform);
     if (tested instanceof Error) {
-      out(`  Test failed: ${tested.message}\n`);
+      out(safe(`  Test failed: ${tested.message}\n`));
       if (context.yes) return "stopped";
       continue;
     }
@@ -204,7 +209,9 @@ async function details(
     const known = env[variable]?.trim() || undefined;
     if (known || context.yes) return { value: known, typed: false };
     const value = await context.ask(`  ${label}${hint ? ` [${hint}]` : ""}: `, hidden);
-    return value === null ? null : { value: value.trim() || undefined, typed: true };
+    if (value === null) return null;
+    if (hidden && value.trim()) context.typed.push(value, value.trim());
+    return { value: value.trim() || undefined, typed: true };
   };
   if (name === "jev") {
     const hint = previous?.apiKey ? "keep saved key" : "";
@@ -214,7 +221,8 @@ async function details(
     const apiKey = key.typed || !fromEnv ? (key.value ?? previous?.apiKey) : undefined;
     if (!apiKey && !fromEnv)
       return new Error("Jev needs a TypeSafe API key: set TYPESAFE_API_KEY or type it.");
-    const problem = apiKey ? keyProblem(apiKey) : null;
+    const effective = apiKey ?? env.TYPESAFE_API_KEY?.trim();
+    const problem = effective ? keyProblem(effective) : null;
     if (problem) return new Error(`Jev: ${problem}.`);
     return { name, ...(apiKey ? { apiKey } : {}) };
   }
@@ -238,7 +246,8 @@ async function details(
       return new Error(
         "openai needs a base URL and model: type them, or set QUENCH_OPENAI_BASE_URL and QUENCH_OPENAI_MODEL.",
       );
-    const problem = endpointProblem(baseUrl) ?? (apiKey ? keyProblem(apiKey) : null);
+    const effective = apiKey ?? env.QUENCH_OPENAI_API_KEY?.trim();
+    const problem = endpointProblem(baseUrl) ?? (effective ? keyProblem(effective) : null);
     if (problem) return new Error(`openai: ${problem}.`);
     return {
       name,

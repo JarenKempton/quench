@@ -99,7 +99,7 @@ test("setup tests an OpenAI-compatible judge on a canned exchange and keeps its 
   const run = await quench(home, ["setup", "judge"], typed);
   expect(run.stderr).toBe("");
   expect(run.code).toBe(0);
-  const id = `openai/${baseUrl}/small-model/reply-v1`;
+  const id = `openai/reply-v1/${JSON.stringify({ baseUrl, model: "small-model" })}`;
   expect(run.stdout).toContain(`Test passed: ${id} answered "correction"`);
   expect(run.stdout).not.toContain("sk-local-test");
   expect(bodies).toHaveLength(1);
@@ -255,3 +255,26 @@ test.skipIf(!posix)(
   },
   20_000,
 );
+
+test("a malformed TYPESAFE_API_KEY is refused on every path without being printed", async () => {
+  const home = await freshHome();
+  const env = { TYPESAFE_API_KEY: `sk-${CANARY}\u0007` };
+  for (const args of [
+    ["setup", "judge", "--judge", "jev", "--yes"],
+    ["setup", "--yes"],
+    ["corrections", "--judge", "jev", "--json"],
+    ["corrections", "--judge", "jev", "--days", "36500", "--themes"],
+    ["corrections", "--judge", "jev", "--days", "36500", "--causes"],
+  ]) {
+    const run = await quench(home, args, "", env);
+    expect(run.code).toBe(1);
+    expect(run.stdout + run.stderr).not.toContain(CANARY);
+  }
+  await Bun.write(
+    join(home, ".quench/config.json"),
+    JSON.stringify({ judge: { name: "jev", apiKey: `sk-${CANARY}\u0007` } }),
+  );
+  const stored = await quench(home, ["corrections", "--json"]);
+  expect(stored.code).toBe(1);
+  expect(stored.stdout + stored.stderr).not.toContain(CANARY);
+});

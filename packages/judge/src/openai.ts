@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 import { Answer, answerSchema, json, replyPrompt, SYSTEM_PROMPT } from "./questions.ts";
+import { scrub } from "./redact.ts";
 import type { Exchange, Judge, Judgment } from "./verdict.ts";
 
 const WORKERS = 4;
@@ -73,7 +74,8 @@ export class OpenAIJudge implements Judge {
   }
 
   static idFor({ baseUrl, model }: { baseUrl: string; model: string }): string {
-    return `openai/${completionsUrl(baseUrl).replace(/\/chat\/completions$/, "")}/${model}/reply-v1`;
+    const base = completionsUrl(baseUrl).replace(/\/chat\/completions$/, "");
+    return `openai/reply-v1/${JSON.stringify({ baseUrl: base, model })}`;
   }
 
   async classify(exchanges: readonly Exchange[]): Promise<Judgment[]> {
@@ -94,12 +96,11 @@ export class OpenAIJudge implements Judge {
     const { apiKey, model, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS } = this.#options;
     const badKey = apiKey === undefined ? null : keyProblem(apiKey);
     if (badKey) return (this.#broken = new OpenAIFailed("request", badKey));
-    const redact = (text: string) => (apiKey ? text.split(apiKey).join("[key]") : text);
     let body: string;
-    let status: number;
     try {
       const response = await fetch(this.#url, {
         method: "POST",
+        redirect: "manual",
         headers: {
           "content-type": "application/json",
           ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
@@ -118,18 +119,25 @@ export class OpenAIJudge implements Judge {
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      status = response.status;
+      const { status } = response;
+      if (status < 200 || status > 299) {
+        await response.body?.cancel().catch(() => undefined);
+        const failure = new OpenAIFailed(
+          "status",
+          status >= 300 && status <= 399
+            ? `HTTP ${status} redirect, not followed`
+            : `HTTP ${status}`,
+        );
+        if ((status >= 300 && status <= 399) || [401, 403, 404].includes(status))
+          this.#broken = failure;
+        return failure;
+      }
       const read = await bounded(response);
       if (read === null) return new OpenAIFailed("unparseable", "the response was over 1 MiB");
       body = read;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return new OpenAIFailed("request", redact(message));
-    }
-    if (status < 200 || status > 299) {
-      const failure = new OpenAIFailed("status", `HTTP ${status}`);
-      if (status === 401 || status === 403 || status === 404) this.#broken = failure;
-      return failure;
+      return scrub(new OpenAIFailed("request", message), [apiKey]);
     }
     const completion = Completion.safeParse(json(body));
     if (!completion.success) return new OpenAIFailed("unparseable", "no single chat completion");

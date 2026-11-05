@@ -119,10 +119,12 @@ tools. `--themes` and `--causes` still use Jev.
 `--judge openai` classifies through any OpenAI-compatible endpoint: one `POST /v1/chat/completions`
 per reply with the same clipped prompt and a strict JSON schema. An answer that is not exactly a
 verdict, a refusal, a `finish_reason` other than `stop`, a response over 1 MiB, or any HTTP error
-counts as failed and is never guessed; after a 401, 403 or 404 the rest are not attempted. The base
+counts as failed and is never guessed. Redirects are never followed and count as failed; after a
+redirect, 401, 403 or 404 the rest are not attempted. The base
 URL must be `https`, or plain `http` to a loopback or private address for a local model. A key a
-header cannot carry is refused before any request, and keys are never printed. Its judge id names
-the full base URL and the model (`openai/<base-url>/<model>/reply-v1`), so verdicts from different
+header cannot carry is refused before any request, from the environment, the file or typed,
+and keys are redacted from every error any judge reports. Its judge id names
+the full base URL and the model as JSON (`openai/reply-v1/{"baseUrl":…,"model":…}`), so verdicts from different
 endpoints or models never mix. `--judge none` makes no model calls: `corrections` says so and exits
 2, and every other command works as before. An explicit `--judge` always wins over `QUENCH_JUDGE`.
 
