@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { lines, quench } from "./run.ts";
+import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const skill = (dir: string) =>
   Bun.write(join(dir, "SKILL.md"), `---\nname: ${basename(dir)}\ndescription: d\n---\n`);
@@ -120,14 +120,18 @@ test("the summary says so when nothing measured is worth doing", async () => {
   expect(JSON.parse((await quench(home, "--json")).stdout).nextSteps).toEqual([]);
 });
 
-test("an instruction file no longer on disk is not recommended", async () => {
-  const home = await fixture();
-  await rm(join(home, ".claude/CLAUDE.md"));
-  const { stdout } = await quench(home);
-  expect(stdout).not.toContain("Trim");
-  const json = JSON.parse((await quench(home, "--json")).stdout);
-  expect(json.nextSteps.map((s: { kind: string }) => s.kind)).toEqual(["skill-cut"]);
-});
+test(
+  "an instruction file no longer on disk is not recommended",
+  async () => {
+    const home = await fixture();
+    await rm(join(home, ".claude/CLAUDE.md"));
+    const { stdout } = await quench(home);
+    expect(stdout).not.toContain("Trim");
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(json.nextSteps.map((s: { kind: string }) => s.kind)).toEqual(["skill-cut"]);
+  },
+  cliRunsTimeout,
+);
 
 const up = (server: string, size: number) => ({
   type: "api-request-shape",

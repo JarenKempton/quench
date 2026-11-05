@@ -2,6 +2,8 @@ import { join } from "node:path";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
+export const cliRunsTimeout = 20_000;
+
 export async function quench(home: string, ...args: string[]) {
   const proc = Bun.spawn(["bun", main, ...args], {
     env: {
