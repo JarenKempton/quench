@@ -85,6 +85,34 @@ test("a rejected upstream fetch fails closed", async () => {
   await failed(await get("https://quench.sh/install.ps1"), psFailure);
 });
 
+test("an upstream body that errors mid-stream fails closed", async () => {
+  const broken = () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("#!/bin/sh\necho partial\n"));
+          controller.error(new Error("connection reset"));
+        },
+      }),
+    );
+  upstream({ [`${latest}/install.sh`]: broken, [`${latest}/install.ps1`]: broken });
+  await failed(await get("https://quench.sh/install.sh"), shFailure);
+  await failed(await get("https://quench.sh/install.ps1"), psFailure);
+});
+
+test("a rejected assets binding returns an uncached 500 with the security headers", async () => {
+  const response = await worker.fetch(new Request("https://quench.sh/"), {
+    ASSETS: {
+      fetch: async () => {
+        throw new Error("assets down");
+      },
+    },
+  });
+  expect(response.status).toBe(500);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  secure(response);
+});
+
 test("a redirect loop stops after five hops", async () => {
   upstream({ [`${latest}/install.sh`]: redirect(`${latest}/install.sh`) });
   await failed(await get("https://quench.sh/install.sh"), shFailure);
