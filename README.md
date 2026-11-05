@@ -59,14 +59,19 @@ Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh
 | stable  | Actions → Release → Run workflow (patch/minor/major) | `quench update --channel stable`  |
 | nightly | On every merge to `main`, replacing the last one     | `quench update --channel nightly` |
 
-Then run `quench` with no arguments for the profile of every agent and project in your
-history.
+Then run `quench setup`. It finds your agents' history (sessions and days per harness), prints the
+summary, lets you pick a judge (tested on one made-up exchange, so none of your history is sent),
+and would pair with a hub and open `quench ui` once those ship. Every step can be skipped; run it
+again to resume where it stopped, or `quench setup judge` to redo one step. `quench setup --judge
+none --yes` asks nothing and needs no key or hub. After that, `quench` with no arguments shows the
+profile of every agent and project in your history.
 
 ## Commands
 
 | Command                                        | What it shows                                                                         |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `quench`                                       | A short summary: what sessions start with, what is worth a look, busiest projects     |
+| `quench setup [step] [--judge <name>] [--yes]` | Find agents, show the summary, pick and test a judge; resumable, every step skippable |
 | `quench profile [section]`                     | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`          |
 | `quench worktrees [--days 30] [--json]`        | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only  |
 | `quench report [--days 30] [--json]`           | Per harness: starting load, peak context, compactions, tool errors, models and effort |
@@ -110,6 +115,20 @@ is killed), exits non-zero or answers with anything but
 the bare verdict counts as failed and is retried on the next run. After one non-zero exit, the
 remaining replies are not attempted. On Windows, `--judge claude` refuses to run for now; use Jev there. Codex is not offered: `codex exec` cannot be run without
 tools. `--themes` and `--causes` still use Jev.
+
+`--judge openai` classifies through any OpenAI-compatible endpoint: one `POST /v1/chat/completions`
+per reply with the same clipped prompt and a strict JSON schema. An answer that is not exactly a
+verdict, or any HTTP error, counts as failed and is never guessed; after a 401, 403 or 404 the rest
+are not attempted. Its judge id names the endpoint's host and the model
+(`openai/<host>/<model>/reply-v1`), so verdicts from different endpoints or models never mix.
+`--judge none` makes no model calls: `corrections` says so and exits 2, and every other command
+works as before.
+
+`quench setup` saves the judge you pick, its base URL, model and any key you type in
+`~/.quench/config.json`, created readable only by you (mode 0600). With no `--judge`, `corrections`
+uses that choice, else Jev. Environment variables win over the file: `QUENCH_JUDGE`,
+`TYPESAFE_API_KEY`, `QUENCH_OPENAI_BASE_URL`, `QUENCH_OPENAI_MODEL` and `QUENCH_OPENAI_API_KEY`.
+A key that came from the environment is not written to the file.
 
 Sender attribution uses harness metadata first, optional host evidence second, fixed message
 formats third, and Jev's guess otherwise. Messages T3 Code records as its own notifications or

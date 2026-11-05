@@ -7,6 +7,7 @@ import {
   type Usage,
 } from "@typesafe-ai/sdk";
 import type { CauseInput, CauseJudge } from "./causes.ts";
+import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
 import type { ThemeInput, ThemeDecision, ThemeJudge } from "./themes.ts";
 import {
   ReplyKind,
@@ -20,8 +21,6 @@ import {
 
 const MODEL = "jev-latest";
 const WORKERS = 12;
-const ASSISTANT_CHARS = 1500;
-const REPLY_CHARS = 2000;
 
 export class KeyRejected extends Error {
   constructor(
@@ -82,19 +81,19 @@ export class Jev implements Judge {
   }
 }
 
-export const requests = (exchange: Exchange) => ({
-  kind: {
-    state: {
-      assistant_said: tail(exchange.assistantSaid, ASSISTANT_CHARS),
-      user_reply: head(exchange.reply, REPLY_CHARS),
+export const requests = (exchange: Exchange) => {
+  const { assistantSaid, reply } = clipped(exchange);
+  return {
+    kind: {
+      state: { assistant_said: assistantSaid, user_reply: reply },
+      questions: { kind: choice(KIND_QUESTION, replyKindMeaning) },
     },
-    questions: { kind: choice("What is the user's reply mainly doing?", replyKindMeaning) },
-  },
-  sender: {
-    state: { message: head(exchange.reply, REPLY_CHARS) },
-    questions: { sender: choice("Who wrote this message?", senderMeaning) },
-  },
-});
+    sender: {
+      state: { message: reply },
+      questions: { sender: choice(SENDER_QUESTION, senderMeaning) },
+    },
+  };
+};
 
 export class JevThemes implements ThemeJudge {
   static readonly id = `jev/${MODEL}/themes-v1`;
@@ -178,9 +177,6 @@ const withStreamedBody =
     const response = await fetch(input, init);
     return new Response(response.body?.pipeThrough(new TransformStream()), response);
   };
-
-const head = (text: string, chars: number) => Array.from(text).slice(0, chars).join("");
-const tail = (text: string, chars: number) => Array.from(text).slice(-chars).join("");
 
 async function mapLimit<T, R>(
   items: readonly T[],

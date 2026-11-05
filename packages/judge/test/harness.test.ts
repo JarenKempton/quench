@@ -11,7 +11,8 @@ import {
   HarnessUnsupported,
   type Exchange,
 } from "../src/index.ts";
-import { ARGV, childEnv, verdictIn } from "../src/harness.ts";
+import { ARGV, childEnv } from "../src/harness.ts";
+import { verdictIn } from "../src/questions.ts";
 import { requests } from "../src/jev.ts";
 import { fakeCalls, fakeHarnessPath, type FakeConfig } from "./fake-path.ts";
 
