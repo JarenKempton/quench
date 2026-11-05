@@ -93,6 +93,7 @@ const treeLines = (stdout: Uint8Array): TreeLine[] =>
 
 export class Repo {
   readonly dir: string;
+  private children = new Set<Promise<number>>();
 
   constructor(readonly data: DataDir) {
     this.dir = data.path("skills.git");
@@ -103,12 +104,14 @@ export class Repo {
     options: { input?: string | Uint8Array; env?: Record<string, string>; ok?: number[] } = {},
   ) {
     const dir = await this.data.existing("skills.git");
-    const proc = Bun.spawn(["git", ...SETTINGS, ...args], {
-      env: { ...process.env, ...IDENTITY, GIT_DIR: dir, ...options.env },
-      stdin: options.input === undefined ? "ignore" : new Blob([options.input]),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const proc = this.track(
+      Bun.spawn(["git", ...SETTINGS, ...args], {
+        env: { ...process.env, ...IDENTITY, GIT_DIR: dir, ...options.env },
+        stdin: options.input === undefined ? "ignore" : new Blob([options.input]),
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
+    );
     const [stdout, stderr, code] = await Promise.all([
       new Response(proc.stdout).bytes(),
       new Response(proc.stderr).text(),
@@ -117,6 +120,17 @@ export class Repo {
     if (!(options.ok ?? [0]).includes(code))
       throw new GitError(`git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`);
     return { stdout, text: new TextDecoder().decode(stdout).trim(), code };
+  }
+
+  private track<T extends { exited: Promise<number> }>(proc: T) {
+    const exited = proc.exited;
+    this.children.add(exited);
+    void exited.finally(() => this.children.delete(exited));
+    return proc;
+  }
+
+  async settled() {
+    while (this.children.size) await Promise.allSettled(this.children);
   }
 
   scratch(prefix: string) {
@@ -192,9 +206,23 @@ export class Repo {
       await this.data.write([...scratch.parts, "b"], after);
       const { GIT_DIR: _, ...env } = process.env;
       await this.data.existing(...scratch.parts);
-      const proc = Bun.spawn(
-        ["git", ...SETTINGS, "diff", "--no-index", "--no-color", "--", "a", "b"],
-        { cwd: dir, env, stdout: "pipe", stderr: "pipe" },
+      const proc = this.track(
+        Bun.spawn(
+          [
+            "git",
+            ...SETTINGS,
+            "diff",
+            "--no-index",
+            "--no-color",
+            "--no-ext-diff",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+            "--",
+            "a",
+            "b",
+          ],
+          { cwd: dir, env, stdout: "pipe", stderr: "pipe" },
+        ),
       );
       const [text, stderr, code] = await Promise.all([
         new Response(proc.stdout).text(),
@@ -245,14 +273,63 @@ export class Repo {
     message: string,
     guard: Guard = () => {},
   ) {
+    return this.commitFiles(base, [{ path, content }], message, guard);
+  }
+
+  async commitFiles(
+    base: string | null,
+    files: { path: string; content: string }[],
+    message: string,
+    guard: Guard = () => {},
+  ) {
     if ((await this.head()) !== base) throw new StaleHead(base);
-    const blob = await this.blob(content);
+    const blobs = await Promise.all(
+      files.map(async (f) => ({ ...f, blob: await this.blob(f.content) })),
+    );
     return this.withIndex(async (env) => {
       await this.git(base ? ["read-tree", base] : ["read-tree", "--empty"], { env });
-      await this.git(["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], { env });
+      for (const f of blobs)
+        await this.git(["update-index", "--add", "--cacheinfo", `100644,${f.blob},${f.path}`], {
+          env,
+        });
       const { text: tree } = await this.git(["write-tree"], { env });
       return this.land(base, tree, message, guard);
     });
+  }
+
+  async threeWay(current: string, base: string, proposed: string) {
+    const scratch = await this.scratch("merge-");
+    try {
+      const names = ["current", "base", "proposed"];
+      await this.data.write([...scratch.parts, "current"], current);
+      await this.data.write([...scratch.parts, "base"], base);
+      await this.data.write([...scratch.parts, "proposed"], proposed);
+      const { GIT_DIR: _, ...env } = process.env;
+      await this.data.existing(...scratch.parts);
+      const proc = this.track(
+        Bun.spawn(
+          [
+            "git",
+            ...SETTINGS,
+            "merge-file",
+            "-p",
+            "--diff3",
+            ...names.flatMap((n) => ["-L", n]),
+            ...names,
+          ],
+          { cwd: scratch.path, env, stdout: "pipe", stderr: "pipe" },
+        ),
+      );
+      const [text, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (code < 0 || code > 127) throw new GitError(`git merge-file failed: ${stderr.trim()}`);
+      return text;
+    } finally {
+      await this.data.remove(...scratch.parts);
+    }
   }
 
   async revert(base: string, commit: string, guard: Guard = () => {}) {

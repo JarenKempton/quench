@@ -1,10 +1,12 @@
 import { Database } from "bun:sqlite";
-import { MachineState } from "@quench/fleet";
-import { sha256 } from "@quench/fleet";
+import { z } from "zod";
+import { Claims, EvidenceRef, MachineState, sha256 } from "@quench/fleet";
 
 export const PAIRING_TTL_MS = 10 * 60_000;
 export const ATTEMPT_WINDOW_MS = 10 * 60_000;
 export const MAX_FAILED_ATTEMPTS = 10;
+export const PROPOSAL_WINDOW_MS = 60 * 60_000;
+export const MAX_PROPOSALS_PER_WINDOW = 10;
 const SESSION_TTL_MS = 7 * 86_400_000;
 
 const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -38,6 +40,41 @@ CREATE TABLE IF NOT EXISTS machines (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_machine ON machines (name) WHERE revoked_at IS NULL;
 CREATE TABLE IF NOT EXISTS failed_attempts (kind TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS propose_codes (
+  code_hash TEXT PRIMARY KEY, machine_id INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS propose_tokens (
+  id INTEGER PRIMARY KEY,
+  machine_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  issued_at INTEGER NOT NULL,
+  revoked_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS proposal_submissions (machine_id INTEGER NOT NULL, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS proposals (
+  id INTEGER PRIMARY KEY,
+  revision TEXT NOT NULL,
+  skill TEXT NOT NULL,
+  machine_id INTEGER NOT NULL,
+  machine TEXT NOT NULL,
+  base_tree_hash TEXT NOT NULL,
+  base_commit TEXT NOT NULL,
+  base_content TEXT NOT NULL,
+  content TEXT NOT NULL,
+  claims TEXT NOT NULL,
+  evidence TEXT NOT NULL,
+  submitted_at INTEGER NOT NULL,
+  approved_at INTEGER,
+  approved_commit TEXT
+);
+CREATE TRIGGER IF NOT EXISTS proposals_immutable
+BEFORE UPDATE OF id, revision, skill, machine_id, machine, base_tree_hash, base_commit, base_content, content, claims, evidence, submitted_at ON proposals
+BEGIN SELECT RAISE(ABORT, 'proposals are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS proposals_decided_once
+BEFORE UPDATE OF approved_at, approved_commit ON proposals WHEN OLD.approved_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'proposal already approved'); END;
+CREATE TRIGGER IF NOT EXISTS proposals_kept BEFORE DELETE ON proposals
+BEGIN SELECT RAISE(ABORT, 'proposals are immutable'); END;
 `;
 
 export class SessionEnded extends Error {
@@ -48,6 +85,32 @@ export class SessionEnded extends Error {
 
 export type Identity = { id: number; name: string; tokenHash: string };
 
+export type Proposer = { id: number; machineId: number; name: string; tokenHash: string };
+
+export type Scope = "machine" | "propose";
+
+const ProposalRow = z.object({
+  id: z.number(),
+  revision: z.string(),
+  skill: z.string(),
+  machine: z.string(),
+  base_tree_hash: z.string(),
+  base_commit: z.string(),
+  base_content: z.string(),
+  content: z.string(),
+  claims: z.string().transform((c) => Claims.parse(JSON.parse(c))),
+  evidence: z.string().transform((e) => z.array(EvidenceRef).parse(JSON.parse(e))),
+  submitted_at: z.number(),
+  approved_at: z.number().nullable(),
+  approved_commit: z.string().nullable(),
+});
+export type StoredProposal = z.infer<typeof ProposalRow>;
+
+export type NewProposal = Pick<
+  StoredProposal,
+  "revision" | "skill" | "base_tree_hash" | "base_commit" | "base_content" | "content"
+> & { claims: z.infer<typeof Claims>; evidence: z.infer<typeof EvidenceRef>[] };
+
 export type MachineRow = {
   id: number;
   name: string;
@@ -55,6 +118,7 @@ export type MachineRow = {
   last_seen_at: number | null;
   state: string | null;
   reported_at: number | null;
+  proposals: number;
 };
 
 export class Store {
@@ -154,7 +218,7 @@ export class Store {
     return code;
   }
 
-  redeem(code: string): { machine: string; token: string } | null {
+  redeem(code: string): { machine: string; token: string; scope: Scope } | null {
     const hash = sha256(normaliseCode(code));
     return this.db.transaction(() => {
       const row = this.db
@@ -162,7 +226,8 @@ export class Store {
           "UPDATE pairing_codes SET used_at = ?1 WHERE code_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING machine, expires_at",
         )
         .get(this.now(), hash) as { machine: string; expires_at: number } | null;
-      if (!row || this.activeMachine(row.machine)) return null;
+      if (!row) return this.redeemPropose(hash);
+      if (this.activeMachine(row.machine)) return null;
       const revokedSince = this.db
         .query("SELECT 1 FROM machines WHERE name = ? AND revoked_at > ?")
         .get(row.machine, row.expires_at - PAIRING_TTL_MS);
@@ -171,8 +236,152 @@ export class Store {
       this.db
         .query("INSERT INTO machines (name, token_hash, paired_at) VALUES (?, ?, ?)")
         .run(row.machine, sha256(token), this.now());
-      return { machine: row.machine, token };
+      return { machine: row.machine, token, scope: "machine" as const };
     })();
+  }
+
+  private redeemPropose(hash: string) {
+    const row = this.db
+      .query(
+        "UPDATE propose_codes SET used_at = ?1 WHERE code_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING machine_id",
+      )
+      .get(this.now(), hash) as { machine_id: number } | null;
+    const machine =
+      row &&
+      (this.db
+        .query("SELECT id, name FROM machines WHERE id = ? AND revoked_at IS NULL")
+        .get(row.machine_id) as { id: number; name: string } | null);
+    if (!machine) return null;
+    this.db
+      .query("UPDATE propose_tokens SET revoked_at = ? WHERE machine_id = ? AND revoked_at IS NULL")
+      .run(this.now(), machine.id);
+    const token = randomToken("qp_");
+    this.db
+      .query("INSERT INTO propose_tokens (machine_id, token_hash, issued_at) VALUES (?, ?, ?)")
+      .run(machine.id, sha256(token), this.now());
+    return { machine: machine.name, token, scope: "propose" as const };
+  }
+
+  newProposeCode(name: string) {
+    const machine = this.db
+      .query("SELECT id FROM machines WHERE name = ? AND revoked_at IS NULL")
+      .get(name) as { id: number } | null;
+    if (!machine) return null;
+    const code = pairingCode();
+    this.db
+      .query("INSERT INTO propose_codes (code_hash, machine_id, expires_at) VALUES (?, ?, ?)")
+      .run(sha256(normaliseCode(code)), machine.id, this.now() + PAIRING_TTL_MS);
+    return code;
+  }
+
+  revokeProposals(name: string) {
+    return this.db.transaction(() => {
+      const ids = this.db.query("SELECT id FROM machines WHERE name = ?").all(name) as {
+        id: number;
+      }[];
+      let changes = 0;
+      for (const { id } of ids) {
+        changes += this.db
+          .query("UPDATE propose_codes SET used_at = ? WHERE machine_id = ? AND used_at IS NULL")
+          .run(this.now(), id).changes;
+        changes += this.db
+          .query(
+            "UPDATE propose_tokens SET revoked_at = ? WHERE machine_id = ? AND revoked_at IS NULL",
+          )
+          .run(this.now(), id).changes;
+      }
+      return changes > 0;
+    })();
+  }
+
+  proposerFor(token: string | null): Proposer | null {
+    if (!token?.startsWith("qp_")) return null;
+    const tokenHash = sha256(token);
+    const row = this.db
+      .query(
+        "SELECT p.id, p.machine_id, m.name FROM propose_tokens p JOIN machines m ON m.id = p.machine_id WHERE p.token_hash = ? AND p.revoked_at IS NULL AND m.revoked_at IS NULL",
+      )
+      .get(tokenHash) as { id: number; machine_id: number; name: string } | null;
+    return row && { id: row.id, machineId: row.machine_id, name: row.name, tokenHash };
+  }
+
+  proposerActive(proposer: Proposer) {
+    return !!this.db
+      .query(
+        "SELECT 1 FROM propose_tokens p JOIN machines m ON m.id = p.machine_id WHERE p.id = ? AND p.token_hash = ? AND p.revoked_at IS NULL AND m.id = ? AND m.revoked_at IS NULL",
+      )
+      .get(proposer.id, proposer.tokenHash, proposer.machineId);
+  }
+
+  submission(proposer: Proposer) {
+    return this.db
+      .transaction(() => {
+        this.db
+          .query("DELETE FROM proposal_submissions WHERE at <= ?")
+          .run(this.now() - PROPOSAL_WINDOW_MS);
+        const { n } = this.db
+          .query("SELECT COUNT(*) AS n FROM proposal_submissions WHERE machine_id = ?")
+          .get(proposer.machineId) as { n: number };
+        if (n >= MAX_PROPOSALS_PER_WINDOW) return false;
+        this.db
+          .query("INSERT INTO proposal_submissions (machine_id, at) VALUES (?, ?)")
+          .run(proposer.machineId, this.now());
+        return true;
+      })
+      .immediate();
+  }
+
+  addProposal(proposer: Proposer, p: NewProposal): number | null {
+    return this.db
+      .transaction(() => {
+        if (!this.proposerActive(proposer)) return null;
+        const same = this.db
+          .query(
+            "SELECT id FROM proposals WHERE machine_id = ? AND skill = ? AND revision = ? AND base_tree_hash = ? AND approved_at IS NULL",
+          )
+          .get(proposer.machineId, p.skill, p.revision, p.base_tree_hash) as { id: number } | null;
+        if (same) return same.id;
+        return Number(
+          this.db
+            .query(
+              "INSERT INTO proposals (revision, skill, machine_id, machine, base_tree_hash, base_commit, base_content, content, claims, evidence, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              p.revision,
+              p.skill,
+              proposer.machineId,
+              proposer.name,
+              p.base_tree_hash,
+              p.base_commit,
+              p.base_content,
+              p.content,
+              JSON.stringify(p.claims),
+              JSON.stringify(p.evidence),
+              this.now(),
+            ).lastInsertRowid,
+        );
+      })
+      .immediate();
+  }
+
+  proposal(id: number): StoredProposal | null {
+    const row = this.db.query("SELECT * FROM proposals WHERE id = ?").get(id);
+    return row ? ProposalRow.parse(row) : null;
+  }
+
+  proposals(limit = 50): StoredProposal[] {
+    return this.db
+      .query("SELECT * FROM proposals ORDER BY id DESC LIMIT ?")
+      .all(limit)
+      .map((row) => ProposalRow.parse(row));
+  }
+
+  approved(id: number, commit: string) {
+    this.db
+      .query(
+        "UPDATE proposals SET approved_at = ?, approved_commit = ? WHERE id = ? AND approved_at IS NULL",
+      )
+      .run(this.now(), commit, id);
   }
 
   machineFor(token: string | null): Identity | null {
@@ -197,17 +406,18 @@ export class Store {
       const codes = this.db
         .query("UPDATE pairing_codes SET used_at = ? WHERE machine = ? AND used_at IS NULL")
         .run(this.now(), name).changes;
+      const proposals = this.revokeProposals(name);
       const machines = this.db
         .query("UPDATE machines SET revoked_at = ? WHERE name = ? AND revoked_at IS NULL")
         .run(this.now(), name).changes;
-      return codes + machines > 0;
+      return codes + machines > 0 || proposals;
     })();
   }
 
   machines(): MachineRow[] {
     return this.db
       .query(
-        "SELECT id, name, paired_at, last_seen_at, state, reported_at FROM machines WHERE revoked_at IS NULL ORDER BY name",
+        "SELECT id, name, paired_at, last_seen_at, state, reported_at, (SELECT COUNT(*) FROM propose_tokens p WHERE p.machine_id = machines.id AND p.revoked_at IS NULL) AS proposals FROM machines WHERE revoked_at IS NULL ORDER BY name",
       )
       .all() as MachineRow[];
   }

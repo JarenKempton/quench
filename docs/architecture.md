@@ -279,6 +279,18 @@ session, pairing-code and machine-token hashes, and each machine's last merged s
   shows its SPKI SHA-256 as `--pin`. `quench connect` reads the certificate once, compares the
   pin before sending anything, then trusts only that certificate for every request with normal
   verification. Plain HTTP is accepted on loopback only, by both sides.
+- **Proposals** (#143). "Allow proposals" mints a single-use code for a paired machine; `quench
+connect` exchanges it for a `qp_` token kept in `propose-token` (0600), stored hashed and
+  revocable apart from the machine token. It reaches only `/api/v1/skills` (that machine's bundle
+  at HEAD) and `POST /api/v1/proposals`; machine tokens are refused there, and it is refused
+  everywhere else. A submission is rate-limited per machine before its body is read, capped,
+  refused if binary, secret-scanned with `@quench/secrets`, and accepted only on the current
+  tree hash. It is stored in SQLite, never in `main`, behind triggers that forbid rewriting or
+  deleting it. The review page renders the diff escaped, flags added URLs, shell commands,
+  scripts and credential mentions, and labels agent, harness and session as claims. Approval is
+  an owner form that re-checks the password and lands through `commitFile`'s compare-and-swap;
+  if the skill's tree hash no longer matches the base, approval is refused and `git merge-file
+--diff3` output is shown, never saved.
 - **Client.** `quench connect` keeps `~/.quench/fleet/connection.json`, `token` (0600),
   `bundle.json` and `blobs/<sha256>`, each checked against its hash. #138's agent reuses
   `@quench/hub/client` to poll and post snapshots.

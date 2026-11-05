@@ -14,7 +14,16 @@ import { dirname, join } from "node:path";
 import { connect as tlsConnect } from "node:tls";
 import { X509Certificate } from "node:crypto";
 import { z } from "zod";
-import { BundleManifest, MachineName, sha256, treeHash, type Snapshot } from "@quench/fleet";
+import {
+  BundleManifest,
+  MachineName,
+  sha256,
+  SkillName,
+  treeHash,
+  TreeHash,
+  type ProposalSubmission,
+  type Snapshot,
+} from "@quench/fleet";
 import { readTree } from "@quench/fleet/disk";
 import { spkiPin } from "./cert.ts";
 import { isLoopback } from "./loopback.ts";
@@ -39,6 +48,7 @@ export const clientDir = (homeDir: string) => join(homeDir, ".quench", "fleet");
 const paths = (dir: string) => ({
   connection: join(dir, "connection.json"),
   token: join(dir, "token"),
+  proposeToken: join(dir, "propose-token"),
   bundle: join(dir, "bundle.json"),
   blobs: join(dir, "blobs"),
   trees: join(dir, "trees"),
@@ -123,15 +133,107 @@ export async function pair(dir: string, input: { url: string; code: string; pin?
     body: JSON.stringify({ code: input.code }),
   });
   if (!response.ok) throw await failure(response, "pairing refused");
-  const { machine, token } = z
-    .object({ machine: MachineName, token: z.string().min(16) })
+  const { machine, token, scope } = z
+    .object({
+      machine: MachineName,
+      token: z.string().min(16),
+      scope: z.enum(["machine", "propose"]).default("machine"),
+    })
     .parse(await response.json());
   const p = paths(dir);
   await mkdir(dir, { recursive: true });
-  await atomicWrite(p.token, `${token}\n`, 0o600);
   const connection: Connection = { version: 1, url, machine, cert };
+  if (scope === "propose") {
+    const existing = await readFile(p.connection, "utf8").catch(() => null);
+    const known = existing === null ? null : Connection.parse(JSON.parse(existing));
+    if (known && (known.url !== url || known.machine !== machine))
+      throw new Error(
+        `this machine is connected to ${known.url} as ${known.machine}; proposal access is for ${url} as ${machine}`,
+      );
+    await atomicWrite(p.proposeToken, `${token}\n`, 0o600);
+    if (!known) await atomicWrite(p.connection, `${JSON.stringify(connection, null, 2)}\n`);
+    return { ...(known ?? connection), scope };
+  }
+  await atomicWrite(p.token, `${token}\n`, 0o600);
   await atomicWrite(p.connection, `${JSON.stringify(connection, null, 2)}\n`);
-  return connection;
+  return { ...connection, scope };
+}
+
+async function proposer(dir: string) {
+  const p = paths(dir);
+  const text = await readFile(p.connection, "utf8").catch(() => null);
+  const token = await readFile(p.proposeToken, "utf8").catch(() => null);
+  if (text === null || token === null)
+    throw new Error(
+      "this machine has no proposal access; ask the hub owner to choose Allow proposals for it, then run the quench connect command it shows",
+    );
+  return { connection: Connection.parse(JSON.parse(text)), token: token.trim() };
+}
+
+export const HubSkill = z
+  .object({ name: SkillName, path: z.string(), treeHash: TreeHash, content: z.string() })
+  .strict();
+export type HubSkill = z.infer<typeof HubSkill>;
+
+async function asProposer(dir: string, path: string, init: RequestInit = {}) {
+  const { connection, token } = await proposer(dir);
+  return call(connection, path, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${token}` },
+  });
+}
+
+export async function hubSkills(dir: string) {
+  const response = await asProposer(dir, "/api/v1/skills");
+  if (!response.ok) throw await failure(response, "skills refused");
+  return z
+    .object({
+      machine: MachineName,
+      skills: z.array(z.object({ name: SkillName, treeHash: TreeHash }).strict()),
+    })
+    .strict()
+    .parse(await response.json());
+}
+
+export async function hubSkill(dir: string, name: string) {
+  const response = await asProposer(dir, `/api/v1/skills/${encodeURIComponent(name)}`);
+  if (!response.ok) throw await failure(response, `${name} refused`);
+  return HubSkill.parse(await response.json());
+}
+
+export const ProposalReceipt = z
+  .object({
+    id: z.number().int().positive(),
+    revision: z.string(),
+    skill: SkillName,
+    machine: MachineName,
+    baseTreeHash: TreeHash,
+    status: z.literal("pending"),
+    flags: z.array(z.object({ kind: z.string(), line: z.number() }).strict()),
+  })
+  .strict();
+
+export async function submitProposal(dir: string, submission: ProposalSubmission) {
+  const response = await asProposer(dir, "/api/v1/proposals", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(submission),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+      findings?: string[];
+      current?: string;
+    } | null;
+    const detail = [
+      ...(body?.findings ?? []).map((f) => `found ${f}`),
+      ...(body?.current ? [`current tree hash ${body.current}`] : []),
+    ];
+    throw new Error(
+      `proposal refused: ${response.status} ${body?.error ?? response.statusText}${detail.length ? `\n${detail.join("\n")}` : ""}`,
+    );
+  }
+  return ProposalReceipt.parse(await response.json());
 }
 
 export async function storedBundle(dir: string): Promise<StoredBundle | null> {

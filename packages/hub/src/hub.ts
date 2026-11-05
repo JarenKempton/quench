@@ -7,18 +7,24 @@ import {
   own,
   resolve,
   sha256,
+  treeHash,
   type HarnessId,
   type MachineState,
   type Snapshot,
   type TreeHash,
 } from "@quench/fleet";
 import { importSkillsRepo } from "@quench/fleet";
-import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo } from "@quench/fleet/disk";
+import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo, readTree } from "@quench/fleet/disk";
+import shippedSkill from "../../../skills/quench/SKILL.md" with { type: "text" };
 import { versionCards, type Reporting } from "./cards.ts";
 import { DataDir } from "./data.ts";
 import { Repo, type Guard, type Version } from "./git.ts";
 import type { CardView, Desired } from "./skill-views.ts";
 import { Store, type Identity } from "./store.ts";
+
+export const SHIPPED_SKILL = { name: "quench", path: "skills/quench", content: shippedSkill };
+
+export type SkillAt = { name: string; path: string; treeHash: string; content: string };
 
 const MAX_DIFF = 40_000;
 
@@ -195,6 +201,52 @@ export class Hub {
 
   async revert(base: string, commit: string, guard: Guard = () => {}) {
     return this.committed(await this.repo.revert(base, commit, guard));
+  }
+
+  async skillAt(commit: string, name: string): Promise<SkillAt | null> {
+    const { fleet } = await this.fleetAt(commit);
+    const source = own(fleet.skills, name);
+    if (!source) return null;
+    const dir = await this.checkout(commit);
+    const tree = await readTree(join(dir, ...source.path.split("/"))).catch(() => null);
+    const content = await this.repo.show(commit, `${source.path}/SKILL.md`);
+    if (!tree || content === null) return null;
+    return { name, path: source.path, treeHash: treeHash(tree), content };
+  }
+
+  async assignedSkills(machine: string, commit: string) {
+    const { manifest } = await this.bundle(machine, commit);
+    return Object.entries(manifest.skills)
+      .map(([name, skill]) => ({ name, treeHash: skill.treeHash }))
+      .sort((a, b) => (a.name < b.name ? -1 : 1));
+  }
+
+  async assignedSkill(machine: string, commit: string, name: string): Promise<SkillAt | null> {
+    const { manifest } = await this.bundle(machine, commit);
+    const bundled = own(manifest.skills, name);
+    if (!bundled) return null;
+    const skill = await this.skillAt(commit, name);
+    return skill && skill.treeHash === bundled.treeHash ? skill : null;
+  }
+
+  async addShippedSkill(base: string, guard: Guard = () => {}) {
+    const { fleet } = await this.fleetAt(base);
+    const { name, path, content } = SHIPPED_SKILL;
+    if (own(fleet.skills, name)) throw new Error(`the fleet already has a skill named ${name}`);
+    if ((await this.repo.files(base)).some((f) => f.startsWith(`${path}/`)))
+      throw new Error(`${path} already exists in the skills repo`);
+    const next = FleetFile.parse({ ...fleet, skills: { ...fleet.skills, [name]: { path } } });
+    return this.committed(
+      await this.repo.commitFiles(
+        base,
+        [
+          { path: `${path}/SKILL.md`, content },
+          { path: FLEET_FILE, content: fleetYaml(next) },
+        ],
+        `Add the shipped ${name} skill`,
+        guard,
+      ),
+    );
   }
 
   async desired(machines: readonly string[], commit: string): Promise<Desired> {

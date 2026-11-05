@@ -1,19 +1,41 @@
 import { timingSafeEqual } from "node:crypto";
 import { hostname, networkInterfaces } from "node:os";
 import { z } from "zod";
-import { excluded, FleetFile, MachineName, RelativePath, sha256, Snapshot } from "@quench/fleet";
+import {
+  excluded,
+  FleetFile,
+  MachineName,
+  MAX_PROPOSAL_BYTES,
+  own,
+  ProposalSubmission,
+  RelativePath,
+  sha256,
+  SkillName,
+  Snapshot,
+} from "@quench/fleet";
+import { detect, detectInFile } from "@quench/secrets";
 import { FLEET_FILE } from "@quench/fleet/disk";
 import { selfSignedCertificate, spkiPin } from "./cert.ts";
 import { GitError, StaleHead } from "./git.ts";
 import type { DataDir } from "./data.ts";
-import { Hub } from "./hub.ts";
+import { Hub, SHIPPED_SKILL } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
-import { SessionEnded, type Identity } from "./store.ts";
-import { connectPage, dashboard, editPage, loginPage, messagePage } from "./ui.ts";
+import { binary, decodedViews, flagsFor, squeezedViews } from "./review.ts";
+import { SessionEnded, type Identity, type Proposer, type StoredProposal } from "./store.ts";
+import {
+  connectPage,
+  dashboard,
+  editPage,
+  loginPage,
+  messagePage,
+  proposalPage,
+  type ProposalSummary,
+} from "./ui.ts";
 
 export const MAX_SNAPSHOT_BYTES = 1024 * 1024;
 const MAX_FORM_BYTES = 1024 * 1024;
 const MAX_PAIR_BYTES = 4096;
+const MAX_PROPOSAL_BODY = MAX_PROPOSAL_BYTES * 6 + 16 * 1024;
 const COOKIE = "quench_hub";
 
 export type ServeOptions = {
@@ -105,6 +127,11 @@ const ROUTES: Record<string, string[]> = {
   "/toggle": ["POST"],
   "/revert": ["POST"],
   "/edit": ["GET", "POST"],
+  "/machines/propose": ["POST"],
+  "/machines/propose/revoke": ["POST"],
+  "/skills/shipped": ["POST"],
+  "/proposal": ["GET"],
+  "/proposal/approve": ["POST"],
 };
 
 const csrfToken = (session: string) => sha256(`csrf\0${session}`);
@@ -204,7 +231,17 @@ export async function serveHub(options: ServeOptions) {
       const paired = parsed.success ? hub.store.redeem(parsed.data.code) : null;
       if (!paired) return json({ error: "invalid, used or expired code" }, 401);
       hub.store.succeeded(attempt);
-      return json({ machine: paired.machine, token: paired.token });
+      return json({ machine: paired.machine, token: paired.token, scope: paired.scope });
+    }
+    if (
+      path === "/api/v1/skills" ||
+      path.startsWith("/api/v1/skills/") ||
+      path === "/api/v1/proposals"
+    ) {
+      const proposer = hub.store.proposerFor(bearer(req));
+      if (!proposer) return revoked();
+      const response = await proposeRoute(req, path, proposer);
+      return hub.store.proposerActive(proposer) ? response : revoked();
     }
     const identity = hub.store.machineFor(bearer(req));
     if (!identity) return revoked();
@@ -242,6 +279,187 @@ export async function serveHub(options: ServeOptions) {
       return json({ machine, state });
     }
     return json({ error: "not found" }, 404);
+  }
+
+  async function proposeRoute(req: Request, path: string, proposer: Proposer): Promise<Response> {
+    const machine = proposer.name;
+    if (path === "/api/v1/skills" && req.method === "GET")
+      return json({ machine, skills: await hub.assignedSkills(machine, await hub.head()) });
+    const one = /^\/api\/v1\/skills\/([^/]+)$/.exec(path);
+    if (one && req.method === "GET") {
+      const name = SkillName.safeParse(decodeURIComponent(one[1]!));
+      const skill = name.success && (await hub.assignedSkill(machine, await hub.head(), name.data));
+      if (!skill) return json({ error: "not a skill assigned to this machine" }, 404);
+      return json(skill);
+    }
+    if (path === "/api/v1/proposals" && req.method === "POST") return propose(req, proposer);
+    return json({ error: "not found" }, 404);
+  }
+
+  async function propose(req: Request, proposer: Proposer): Promise<Response> {
+    if (!hub.store.submission(proposer))
+      return json({ error: "too many proposals from this machine; wait an hour and retry" }, 429);
+    const body = await readCapped(req, MAX_PROPOSAL_BODY);
+    if (!body) return tooLarge();
+    const raw = parseJson(body) as { content?: unknown } | undefined;
+    if (typeof raw?.content === "string" && Buffer.byteLength(raw.content) > MAX_PROPOSAL_BYTES)
+      return json({ error: `proposal content is over ${MAX_PROPOSAL_BYTES} bytes` }, 413);
+    const parsed = ProposalSubmission.safeParse(raw);
+    if (!parsed.success)
+      return json({ error: "invalid proposal", issues: parsed.error.issues }, 400);
+    const submission = parsed.data;
+    if (binary(submission.content))
+      return json(
+        { error: "binary content is refused; a proposal is one plain-text SKILL.md" },
+        415,
+      );
+    const meta = JSON.stringify([submission.claims, submission.evidence]);
+    const decoded = [
+      ...[submission.content, meta].map(decodedViews),
+      squeezedViews([submission.content, meta]),
+    ];
+    if (decoded.some((d) => !d.complete))
+      return json(
+        {
+          error:
+            "too much encoded content to scan in full; nothing was stored. Keep encoded data out of SKILL.md",
+        },
+        422,
+      );
+    const findings = [
+      ...detectInFile(submission.content, "SKILL.md"),
+      ...detect(meta),
+      ...decoded.flatMap((d) => d.views).flatMap((view) => detectInFile(view)),
+    ];
+    if (findings.length)
+      return json(
+        {
+          error: "the secret scan flagged this proposal; nothing was stored",
+          findings: [...new Set(findings.map((f) => `${f.provider} (${f.rule})`))].sort(),
+        },
+        422,
+      );
+    const head = await hub.head();
+    const skill = await hub.assignedSkill(proposer.name, head, submission.skill);
+    if (!skill) return json({ error: "not a skill assigned to this machine" }, 404);
+    if (skill.treeHash !== submission.baseTreeHash)
+      return json(
+        {
+          error: "the base is out of date; run quench skill show again and redo the edit",
+          current: skill.treeHash,
+        },
+        409,
+      );
+    if (skill.content === submission.content)
+      return json({ error: "the proposal is the same as the current SKILL.md" }, 400);
+    const revision = sha256(submission.content);
+    const id = hub.store.addProposal(proposer, {
+      revision,
+      skill: skill.name,
+      base_tree_hash: skill.treeHash,
+      base_commit: head,
+      base_content: skill.content,
+      content: submission.content,
+      claims: submission.claims,
+      evidence: submission.evidence,
+    });
+    if (id === null) return revoked();
+    return json(
+      {
+        id,
+        revision,
+        skill: skill.name,
+        machine: proposer.name,
+        baseTreeHash: skill.treeHash,
+        status: "pending",
+        flags: flagsFor(skill.content, submission.content).map(({ kind, line }) => ({
+          kind,
+          line,
+        })),
+      },
+      201,
+    );
+  }
+
+  async function review(
+    p: StoredProposal,
+    head: string,
+    extra: { error?: string; status?: number } = {},
+  ) {
+    const current = await hub.skillAt(head, p.skill);
+    const stale = !current || current.treeHash !== p.base_tree_hash;
+    return proposalPage({
+      proposal: p,
+      head,
+      current,
+      diff: await hub.repo.diff(p.base_content, p.content, `${current?.path ?? p.skill}/SKILL.md`),
+      flags: flagsFor(p.base_content, p.content),
+      threeWay:
+        stale && current && !p.approved_at
+          ? await hub.repo.threeWay(current.content, p.base_content, p.content)
+          : null,
+      ...extra,
+    });
+  }
+
+  async function summaries(head: string): Promise<ProposalSummary[]> {
+    const hashes = new Map<string, Promise<string | null>>();
+    const hashOf = (skill: string) => {
+      if (!hashes.has(skill))
+        hashes.set(
+          skill,
+          hub.skillAt(head, skill).then((s) => s?.treeHash ?? null),
+        );
+      return hashes.get(skill)!;
+    };
+    return Promise.all(
+      hub.store.proposals().map(async (p) => ({
+        id: p.id,
+        skill: p.skill,
+        machine: p.machine,
+        submitted_at: p.submitted_at,
+        approved_at: p.approved_at,
+        approved_commit: p.approved_commit,
+        stale: !p.approved_at && (await hashOf(p.skill)) !== p.base_tree_hash,
+      })),
+    );
+  }
+
+  async function approve(f: URLSearchParams, as: Owned): Promise<Response> {
+    const id = Number(f.get("id"));
+    const base = commitField(f, "base");
+    if (!Number.isSafeInteger(id) || !base) return messagePage("Not approved", "bad proposal", 400);
+    const attempt = as.now(() => hub.store.attempt("approve"));
+    if (attempt === null)
+      return messagePage("Not approved", "too many attempts; wait and retry", 429);
+    if (!(await hub.store.checkOwner(f.get("password") ?? "")))
+      return messagePage("Not approved", "wrong password; nothing was committed", 401);
+    hub.store.succeeded(attempt);
+    const p = hub.store.proposal(id);
+    if (!p) return messagePage("Not found", "no such proposal", 404);
+    if (p.approved_at) return messagePage("Not approved", "this proposal is already approved", 409);
+    const current = await hub.skillAt(base, p.skill);
+    if (!current || current.treeHash !== p.base_tree_hash)
+      return review(p, await hub.head(), {
+        error: "this proposal is stale; nothing was committed",
+        status: 409,
+      });
+    try {
+      const commit = await hub.writeFile(
+        base,
+        `${current.path}/SKILL.md`,
+        p.content,
+        `Approve proposal ${id} to ${p.skill} from ${p.machine}`,
+        () => {
+          as.guard();
+          if (hub.store.proposal(id)?.approved_at) throw new Error("already approved");
+        },
+      );
+      hub.store.approved(id, commit);
+      return redirect(`/proposal?id=${id}`);
+    } catch (error) {
+      return conflict(error);
+    }
   }
 
   async function ui(req: Request, path: string): Promise<Response> {
@@ -314,9 +532,38 @@ export async function serveHub(options: ServeOptions) {
         machines,
         history: await hub.repo.log(20),
         files: await hub.repo.files(head),
+        proposals: await summaries(head),
+        shipped: own(fleet.skills, SHIPPED_SKILL.name) ? null : SHIPPED_SKILL.name,
         desired: await hub.desired(names, head),
         cards: await hub.cards(fleet, machines),
       });
+    }
+    if (path === "/proposal") {
+      const id = Number(f.get("id"));
+      const p = Number.isSafeInteger(id) ? hub.store.proposal(id) : null;
+      if (!p) return messagePage("Not found", "no such proposal", 404);
+      return review(p, await hub.head());
+    }
+    if (path === "/proposal/approve") return approve(f, as!);
+    if (path === "/machines/propose") {
+      const name = MachineName.safeParse(f.get("name"));
+      const code = name.success ? as!.now(() => hub.store.newProposeCode(name.data)) : null;
+      if (!name.success || !code)
+        return messagePage("Not allowed", "proposals need a paired machine", 409);
+      return connectPage(
+        name.data,
+        `quench connect ${publicUrl(req)} --code ${code}${pin ? ` --pin ${pin}` : ""}`,
+        true,
+      );
+    }
+    if (path === "/machines/propose/revoke") {
+      as!.now(() => hub.store.revokeProposals(f.get("name") ?? ""));
+      return redirect("/");
+    }
+    if (path === "/skills/shipped") {
+      const base = commitField(f, "base");
+      if (!base) return messagePage("Not added", "bad base commit", 400);
+      return hub.addShippedSkill(base, as!.guard).then(() => redirect("/"), conflict);
     }
     if (path === "/machines") {
       const name = MachineName.safeParse(f.get("name"));
@@ -410,6 +657,7 @@ export async function serveHub(options: ServeOptions) {
     async stop() {
       await server.stop(true);
       await hub.mirrored();
+      await hub.repo.settled();
       hub.close();
     },
   };

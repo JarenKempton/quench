@@ -95,6 +95,13 @@ export async function connect(
       code: options.code,
       ...(options.pin ? { pin: options.pin } : {}),
     });
+    if (connection.scope === "propose") {
+      process.stdout.write(
+        `Proposal access to ${connection.url} for ${connection.machine}: agents here can read and propose changes to its assigned skills
+`,
+      );
+      return 0;
+    }
     const { bundle, fetched } = await fetchBundle(dir);
     process.stdout.write(
       `Connected to ${connection.url} as ${connection.machine}\nBundle ${bundle.id}: ${Object.keys(bundle.manifest.skills).length} skills, ${bundle.manifest.placements.length} placements, ${fetched} files fetched\n`,
