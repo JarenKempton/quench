@@ -38,7 +38,7 @@ test("file scans also report secret-named plaintext values", () => {
   expect(detectInFile("token = ${GH_TOKEN}\n")).toEqual([]);
 });
 
-const mask = masker(randomBytes(32));
+const mask = masker(Buffer.alloc(32, 7));
 
 test("masks keep four characters and a keyed tag, never the value", () => {
   const shown = mask.masked(fakeGithub());
