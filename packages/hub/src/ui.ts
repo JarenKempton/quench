@@ -187,6 +187,7 @@ const FLAG_LABELS: Record<Flag["kind"], string> = {
   shell: "shell command",
   script: "script",
   credential: "credential mention",
+  encoded: "encoded content",
 };
 
 const claim = (value: string | undefined) =>
@@ -235,7 +236,7 @@ export function proposalPage(input: {
             `<tr><td class="flag">${FLAG_LABELS[f.kind]}</td><td>${f.line}</td><td><code>${escape(f.text)}</code></td></tr>`,
         )
         .join("")}</table>`
-    : `<p id="flags">No new URLs, shell commands, scripts or credential mentions.</p>`;
+    : `<p id="flags">No new URLs, shell commands, scripts, credential mentions or encoded content.</p>`;
   const decision = p.approved_at
     ? `<p>Approved and committed in <code>${escape(p.approved_commit ?? "")}</code>.</p>`
     : stale

@@ -20,7 +20,7 @@ import { GitError, StaleHead } from "./git.ts";
 import type { DataDir } from "./data.ts";
 import { Hub, SHIPPED_SKILL } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
-import { binary, flagsFor } from "./review.ts";
+import { binary, decodedViews, flagsFor } from "./review.ts";
 import { SessionEnded, type Identity, type Proposer, type StoredProposal } from "./store.ts";
 import {
   connectPage,
@@ -313,9 +313,11 @@ export async function serveHub(options: ServeOptions) {
         { error: "binary content is refused; a proposal is one plain-text SKILL.md" },
         415,
       );
+    const meta = JSON.stringify([submission.claims, submission.evidence]);
     const findings = [
       ...detectInFile(submission.content, "SKILL.md"),
-      ...detect(JSON.stringify([submission.claims, submission.evidence])),
+      ...detect(meta),
+      ...[submission.content, meta].flatMap(decodedViews).flatMap((view) => detectInFile(view)),
     ];
     if (findings.length)
       return json(

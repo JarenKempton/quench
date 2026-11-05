@@ -339,7 +339,9 @@ test(
     expect(plainPage).not.toContain("<b>bot</b>");
     expect(plainPage).toContain('laptop <span class="claim">(from its proposal token)</span>');
     expect(plainPage).toContain("No evidence attached.");
-    expect(plainPage).toContain("No new URLs, shell commands, scripts or credential mentions.");
+    expect(plainPage).toContain(
+      "No new URLs, shell commands, scripts, credential mentions or encoded content.",
+    );
 
     const riskyPage = await (await owner.fetch(`/proposal?id=${risky.id}`)).text();
     expect(riskyPage).not.toContain("<script>");
@@ -476,6 +478,80 @@ test(
       if (previous === undefined) delete process.env.GIT_CONFIG_PARAMETERS;
       else process.env.GIT_CONFIG_PARAMETERS = previous;
     }
+  },
+  HUB_TEST_MS,
+);
+
+const SECRET = ["gh", "p_", "Q7m4F9x2R8v6L3z5N0p1C4b7D9w2H6k8S3a5"].join("");
+const percent = (text: string) =>
+  [...Buffer.from(text)].map((b) => `%${b.toString(16).padStart(2, "0")}`).join("");
+
+test(
+  "credentials hidden in base64, base64url, percent or hex encoding are refused",
+  async () => {
+    const { hub, dir, proposeToken, api } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const post = (body: unknown) =>
+      api("/api/v1/proposals", proposeToken, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const encodings: Record<string, string> = {
+      base64: Buffer.from(SECRET).toString("base64"),
+      base64url: Buffer.from(`token: ${SECRET}?`).toString("base64url"),
+      percent: percent(SECRET),
+      hex: Buffer.from(SECRET).toString("hex"),
+      "base64 of percent": Buffer.from(percent(SECRET)).toString("base64"),
+    };
+    for (const [name, value] of Object.entries(encodings)) {
+      const response = await post(
+        submission(edited(current.content, `Decode this: \`${value}\``), current.treeHash),
+      );
+      const text = await response.text();
+      expect([name, response.status]).toEqual([name, 422]);
+      expect(text).not.toContain(SECRET);
+      expect(text).not.toContain(value);
+    }
+    const inClaims = await post(
+      submission(edited(current.content, "Plain."), current.treeHash, {
+        claims: { session: encodings.base64! },
+      }),
+    );
+    expect(inClaims.status).toBe(422);
+    expect(hub.hub.store.proposals()).toEqual([]);
+  },
+  HUB_TEST_MS,
+);
+
+test("long opaque runs left after decoding are flagged as encoded content", () => {
+  const opaque = Buffer.from(Array.from({ length: 30 }, (_, i) => (i * 73 + 11) % 256)).toString(
+    "base64",
+  );
+  const kinds = (line: string) => flagsFor("", `${line}\n`).map((f) => f.kind);
+  expect(kinds(`Paste \`${opaque}\` into the config.`)).toContain("encoded");
+  expect(kinds(`Hash ${"3f9a".repeat(10)}`)).toContain("encoded");
+  expect(kinds(`Send ${percent("hello there world")}`)).toContain("encoded");
+  expect(kinds("Keep commit subjects under seventy-two characters, imperative mood.")).toEqual([]);
+  expect(kinds("Use the review-checklist skill before merging.")).toEqual([]);
+  expect(flagsFor(`Hash ${"3f9a".repeat(10)}\n`, `Hash ${"3f9a".repeat(10)}\nMore.\n`)).toEqual([]);
+});
+
+test(
+  "the review page shows encoded content before the owner approves",
+  async () => {
+    const { owner, dir } = await setup();
+    const current = await hubSkill(dir, SKILL);
+    const opaque = Buffer.from(Array.from({ length: 30 }, (_, i) => (i * 73 + 11) % 256)).toString(
+      "base64",
+    );
+    const receipt = await submitProposal(
+      dir,
+      submission(edited(current.content, `Paste \`${opaque}\` into the config.`), current.treeHash),
+    );
+    expect(receipt.flags.map((f) => f.kind)).toContain("encoded");
+    const page = await (await owner.fetch(`/proposal?id=${receipt.id}`)).text();
+    expect(page).toContain('<td class="flag">encoded content</td>');
   },
   HUB_TEST_MS,
 );
