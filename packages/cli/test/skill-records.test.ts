@@ -17,6 +17,7 @@ type Case = {
   args?: string;
   reply: string | null;
   userRuns?: boolean;
+  listed?: string[];
 };
 
 const session = (c: Case) =>
@@ -27,8 +28,8 @@ const session = (c: Case) =>
       timestamp: at(0),
       attachment: {
         type: "skill_listing",
-        names: ["verify", "deploy"],
-        content: "- verify\n- deploy",
+        names: c.listed ?? ["verify", "deploy"],
+        content: (c.listed ?? ["verify", "deploy"]).map((n) => `- ${n}`).join("\n"),
       },
     },
     { type: "user", timestamp: at(1), message: { role: "user", content: "fix the build" } },
@@ -171,6 +172,12 @@ test("one record per skill, agent and location, with tree hash, use and co-occur
     harness: "codex",
     origin: "user",
     use: { sessionsListed: null, used: null, usedByUser: null, lowerBound: true },
+    coOccurrence: {
+      sessionsLoaded: null,
+      withHumanCorrection: null,
+      unjudgedSessions: null,
+      noFollowUp: null,
+    },
   });
   expect(text).toContain("co-occurrence, not cause");
   expect(text).toMatch(/verify {2}5 sessions loaded it · 2 had a human correction/);
@@ -226,6 +233,64 @@ test("no skill name, argument, description or reply text from history reaches th
   expect(text).not.toContain("Cookie");
 });
 
+test("a listed name with no skill on disk or in --source is hashed, never shown", async () => {
+  const leak = `Cookie: sid=${CANARY}g`;
+  const listed = ["verify", leak, "ghost", `x${CANARY}h`.repeat(20)];
+  const home = await fixture(
+    ordinary.map((c) => ({ ...c, listed, skill: c.id === "a" ? leak : c.skill })),
+    [],
+  );
+  const { json, text } = await report(home);
+  const hidden = json.skills.filter((r: Record) => r.location === "recorded-only");
+  expect(hidden).toHaveLength(3);
+  expect(hidden.every((r: Record) => /^sha256:[0-9a-f]{64}$/.test(r.skill))).toBe(true);
+  expect(hidden.every((r: Record) => r.origin === null && r.contentVersion === null)).toBe(true);
+  expect(json.skills.map((r: Record) => r.skill)).not.toContain("ghost");
+  expect(JSON.stringify(json)).not.toContain(CANARY);
+  expect(text).not.toContain(CANARY);
+  expect(text).not.toContain("Cookie");
+  const source = await mkdtemp(join(tmpdir(), "quench-cli-skills-source-"));
+  await Bun.write(join(source, "skills/ghost/SKILL.md"), skillFile("ghost"));
+  const named = (await report(home, "--source", source)).json.skills;
+  expect(named.find((r: Record) => r.skill === "ghost")).toMatchObject({
+    location: "recorded-only",
+  });
+});
+
+test("--source validation errors name a fixed kind, never the value", async () => {
+  const home = await fixture(ordinary, []);
+  const source = await mkdtemp(join(tmpdir(), "quench-cli-skills-source-"));
+  await Bun.write(
+    join(source, "registry.yaml"),
+    `skills:\n  "Cookie: sid=${CANARY}i": { path: "skills/${CANARY}j" }\n`,
+  );
+  const out = await quench(
+    home,
+    "skills",
+    "--days",
+    "36500",
+    "--no-host-history",
+    "--source",
+    source,
+  );
+  expect(out.code).toBe(1);
+  expect(out.stderr).toMatch(/^--source: invalid registry\.yaml/m);
+  expect(out.stderr + out.stdout).not.toContain(CANARY);
+  await Bun.write(join(source, "registry.yaml"), `skills: [${CANARY}k\n`);
+  const bad = await quench(
+    home,
+    "skills",
+    "--days",
+    "36500",
+    "--no-host-history",
+    "--source",
+    source,
+  );
+  expect(bad.code).toBe(1);
+  expect(bad.stderr).toMatch(/^--source: unparseable registry\.yaml/m);
+  expect(bad.stderr).not.toContain(CANARY);
+});
+
 async function codexSession(home: string, id: string, entries: string[]) {
   const codex = join(home, ".codex");
   const block = [
@@ -265,12 +330,14 @@ test("a recorded path that is not on disk now never becomes a location or id", a
   ]);
   const { json, text } = await report(home);
   const records: Record[] = json.skills;
-  expect(records.find((r) => r.skill === "leak")).toMatchObject({
+  const hashed = (name: string) =>
+    `sha256:${new Bun.CryptoHasher("sha256").update(name).digest("hex")}`;
+  expect(records.find((r) => r.skill === hashed("leak"))).toMatchObject({
     harness: "codex",
     location: "recorded-only",
     origin: null,
   });
-  expect(records.find((r) => r.skill === "sample:hello")).toMatchObject({
+  expect(records.find((r) => r.skill === hashed("sample:hello"))).toMatchObject({
     location: "plugin:sample@debug",
     contentVersion: null,
   });

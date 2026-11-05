@@ -18,7 +18,7 @@ import { reading } from "../progress.ts";
 import { skillUse } from "../profile/recorded-skills.ts";
 import { splitSkills } from "../profile/setup.ts";
 import { coOccurrence } from "../skills/co-occurrence.ts";
-import { drift } from "../skills/drift.ts";
+import { drift, readSource, SourceError, type Source } from "../skills/drift.ts";
 import { ORIGINS, SCHEMA_VERSION, skillRecords } from "../skills/records.ts";
 import { renderSkills } from "../skills/render.ts";
 import { sessionKey, type SessionContext } from "./context.ts";
@@ -111,6 +111,14 @@ async function skillsReport(home: Home, options: Options) {
     process.stderr.write("--machine is only available for skills plan\n");
     return 1;
   }
+  let source: Source | null = null;
+  try {
+    source = options.source ? await readSource(options.source) : null;
+  } catch (error) {
+    const kind = error instanceof SourceError ? error.message : "source could not be read";
+    process.stderr.write(`--source: ${kind}\n`);
+    return 1;
+  }
   const since = new Date(Date.now() - options.days * 86_400_000);
   const cache = options.cache ? await placeCache(home.dir) : undefined;
   const { places } = await sessionPlaces(home, since, reading(), cache);
@@ -136,15 +144,10 @@ async function skillsReport(home: Home, options: Options) {
     sessionKeys: places.map((p) => sessionKey({ harness: p.harness, sessionId: p.session })),
     recordedHarnesses: new Set(recorded.uses.map((u) => u.harness)),
     roots: await skillRoots(home, places),
+    sourceNames: new Set(source?.skills.keys()),
     coOccurrence: coOccurrence(replies, contexts, since),
   });
-  let compared = null;
-  try {
-    compared = options.source ? await drift(options.source, records) : null;
-  } catch (error) {
-    process.stderr.write(`${(error as Error).message}\n`);
-    return 1;
-  }
+  const compared = source && drift(source, records);
   process.stdout.write(
     options.json
       ? json({

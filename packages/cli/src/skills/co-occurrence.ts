@@ -6,10 +6,10 @@ export const BASIS = "co-occurrence, not cause";
 
 export type CoOccurrence = {
   basis: typeof BASIS;
-  sessionsLoaded: number;
+  sessionsLoaded: number | null;
   withHumanCorrection: number | null;
-  unjudgedSessions: number;
-  noFollowUp: number;
+  unjudgedSessions: number | null;
+  noFollowUp: number | null;
 };
 
 type Outcome = "human" | "unknown" | "judged" | "silent";
@@ -36,9 +36,16 @@ export function coOccurrence(
     if (RANK[outcome] > RANK[outcomes.get(key) ?? "silent"]) outcomes.set(key, outcome);
   }
   return (skill, sessions) => {
-    const loaded = [...new Set(sessions)].filter((key) =>
-      contexts.get(key)?.skills?.includes(skill),
-    );
+    const recorded = [...new Set(sessions)].filter((key) => contexts.get(key)?.skills);
+    if (!recorded.length)
+      return {
+        basis: BASIS,
+        sessionsLoaded: null,
+        withHumanCorrection: null,
+        unjudgedSessions: null,
+        noFollowUp: null,
+      };
+    const loaded = recorded.filter((key) => contexts.get(key)!.skills!.includes(skill));
     const of = (outcome: Outcome) =>
       loaded.filter((key) => (outcomes.get(key) ?? "silent") === outcome).length;
     const human = of("human");

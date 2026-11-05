@@ -1,6 +1,6 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { treeHash, type HarnessId, type TreeHash } from "@quench/fleet";
+import { SkillName, treeHash, type HarnessId, type TreeHash } from "@quench/fleet";
 import { FLEET_FILE, inside, loadFleet, readTree } from "@quench/fleet/disk";
 import type { SkillRecord } from "./records.ts";
 
@@ -33,9 +33,13 @@ function warningKinds(warnings: readonly string[]): Drift["warnings"] {
   return [...counts].map(([kind, count]) => ({ kind, count }));
 }
 
-export async function drift(dir: string, records: readonly SkillRecord[]): Promise<Drift> {
+export type Source = { skills: Map<string, TreeHash | null>; warnings: string[] };
+
+export async function readSource(dir: string): Promise<Source> {
   const { folders, warnings } = await sourceSkills(dir);
-  const root = await realpath(dir);
+  const root = await realpath(dir).catch((error) => {
+    throw sourceError(error, "folder");
+  });
   const source = new Map<string, TreeHash | null>();
   for (const [skill, path] of folders) {
     const real = await realpath(path).catch(() => null);
@@ -49,6 +53,13 @@ export async function drift(dir: string, records: readonly SkillRecord[]): Promi
         : null,
     );
   }
+  return { skills: source, warnings };
+}
+
+export function drift(
+  { skills: source, warnings }: Source,
+  records: readonly SkillRecord[],
+): Drift {
   const installed = records.filter((r) => r.origin === "user" && r.location !== "unknown");
   const result: Drift = {
     inSourceNotInstalled: [...source]
@@ -74,12 +85,54 @@ export async function drift(dir: string, records: readonly SkillRecord[]): Promi
   return result;
 }
 
+const REGISTRY = "registry.yaml";
+
+export class SourceError extends Error {}
+
+const DISK_ERRORS = [
+  [/is a symlink/, "input is a symlink"],
+  [/is not a regular file or folder/, "input is not a regular file or folder"],
+  [/is not a file$/, "input is not a file"],
+  [/is not a folder$/, "input is not a folder"],
+  [/has neither /, "not a skills repo"],
+] as const;
+
+function sourceError(error: unknown, file: string): SourceError {
+  const issues = (error as { name?: unknown; issues?: unknown })?.issues;
+  if (error instanceof Error && error.name === "ZodError" && Array.isArray(issues)) {
+    const codes = new Map<string, number>();
+    for (const { code } of issues as { code: unknown }[]) {
+      const kind = typeof code === "string" && /^[a-z_]+$/.test(code) ? code : "other";
+      codes.set(kind, (codes.get(kind) ?? 0) + 1);
+    }
+    const shown = [...codes].map(([code, n]) => `${code} ×${n}`).join(", ");
+    return new SourceError(`invalid ${file} (${shown})`);
+  }
+  if (error instanceof SyntaxError) return new SourceError(`unparseable ${file}`);
+  const code = (error as NodeJS.ErrnoException)?.code;
+  if (typeof code === "string" && /^E[A-Z]+$/.test(code))
+    return new SourceError(`unreadable input (${code})`);
+  const message = error instanceof Error ? error.message : "";
+  const read = /^cannot read .*: (E[A-Z]+)$/.exec(message)?.[1];
+  if (read) return new SourceError(`unreadable input (${read})`);
+  const known = DISK_ERRORS.find(([pattern]) => pattern.test(message))?.[1];
+  return new SourceError(known ?? "source could not be read");
+}
+
 async function sourceSkills(dir: string) {
-  const declared =
-    (await Bun.file(join(dir, FLEET_FILE)).exists()) ||
-    (await Bun.file(join(dir, "registry.yaml")).exists());
-  if (!declared) return { folders: await skillFolders(dir, 3), warnings: [] };
-  const { fleet, warnings } = await loadFleet(dir);
+  const fleetFile = await Bun.file(join(dir, FLEET_FILE)).exists();
+  const declared = fleetFile || (await Bun.file(join(dir, REGISTRY)).exists());
+  const file = fleetFile ? FLEET_FILE : REGISTRY;
+  if (!declared)
+    return {
+      folders: await skillFolders(dir, 3).catch((error) => {
+        throw sourceError(error, "folder");
+      }),
+      warnings: [],
+    };
+  const { fleet, warnings } = await loadFleet(dir).catch((error) => {
+    throw sourceError(error, file);
+  });
   return {
     folders: Object.entries(fleet.skills).map(
       ([skill, { path }]) => [skill, join(dir, ...path.split("/"))] as const,
@@ -95,9 +148,9 @@ async function skillFolders(dir: string, depth: number): Promise<(readonly [stri
     if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "node_modules")
       continue;
     const path = join(dir, entry.name);
-    if ((await stat(join(path, "SKILL.md")).catch(() => null))?.isFile())
-      found.push([entry.name, path]);
-    else if (depth > 0) found.push(...(await skillFolders(path, depth - 1)));
+    if ((await stat(join(path, "SKILL.md")).catch(() => null))?.isFile()) {
+      if (SkillName.safeParse(entry.name).success) found.push([entry.name, path]);
+    } else if (depth > 0) found.push(...(await skillFolders(path, depth - 1)));
   }
   return found;
 }

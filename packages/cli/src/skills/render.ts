@@ -61,7 +61,7 @@ export function renderSkills(
     );
   for (const r of shown)
     lines.push(
-      `  ${r.skill} · ${harnessById[r.harness].label} · ${r.location}  ${count(r.coOccurrence.sessionsLoaded)} sessions loaded it · ${count(r.coOccurrence.withHumanCorrection!)} had a human correction · ${count(r.coOccurrence.unjudgedSessions)} not judged yet · ${count(r.coOccurrence.noFollowUp)} with no human follow-up`,
+      `  ${r.skill} · ${harnessById[r.harness].label} · ${r.location}  ${count(r.coOccurrence.sessionsLoaded!)} sessions loaded it · ${count(r.coOccurrence.withHumanCorrection!)} had a human correction · ${count(r.coOccurrence.unjudgedSessions!)} not judged yet · ${count(r.coOccurrence.noFollowUp!)} with no human follow-up`,
     );
   lines.push(
     `  Shown at ${MIN_SESSIONS} or more sessions of the same skill, agent and location with a judged human follow-up. Verdicts from the ${judge} cache only; no model is called.`,
