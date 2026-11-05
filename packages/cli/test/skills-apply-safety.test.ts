@@ -390,3 +390,42 @@ test("re-pointing a symlinked ~/.claude mid-apply is a conflict and nothing is w
   expect(await readFile(join(second, "skills/alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
   expect(await readFile(join(first, "skills/alpha/SKILL.md"), "utf8")).toBe("# alpha v1\n");
 });
+
+for (const update of [false, true])
+  test(`recovery after "swapped" keeps edits made to the placed ${update ? "update" : "install"}`, async () => {
+    const { home, source, options } = await setup(V1, ALPHA);
+    if (update) {
+      await planAndApply(home, options);
+      await writeSource(source, V2, ALPHA);
+    }
+    await interrupted(home, options, "swapped", async () => {
+      throw new Error("crash");
+    }).catch(() => undefined);
+    await writeFile(claude(home, "alpha"), "edited after the crash\n");
+    await writeFile(claude(home, "alpha", "private.txt"), "private\n");
+    const plan = await skillsPlan(home, options);
+    const result = await skillsApply(home, { ...options, planHash: plan.hash! }).catch(
+      (e: Error) => e,
+    );
+    expect(result instanceof Error ? result.message : "").toContain("conflict");
+    expect(await readFile(claude(home, "alpha"), "utf8")).toBe("edited after the crash\n");
+    expect(await readFile(claude(home, "alpha", "private.txt"), "utf8")).toBe("private\n");
+    expect(await readJournal(stateDir(home))).not.toBeNull();
+  });
+
+test.skipIf(windows)(
+  'recovery after "swapped" keeps a placed folder whose only change is a file mode',
+  async () => {
+    const { home, options } = await setup(V1, ALPHA);
+    await interrupted(home, options, "swapped", async () => {
+      throw new Error("crash");
+    }).catch(() => undefined);
+    await chmod(claude(home, "alpha", "run.sh"), 0o644);
+    const plan = await skillsPlan(home, options);
+    const result = await skillsApply(home, { ...options, planHash: plan.hash! }).catch(
+      (e: Error) => e,
+    );
+    expect(result instanceof Error ? result.message : "").toContain("conflict");
+    expect(await readFile(claude(home, "alpha"), "utf8")).toBe("# alpha v1\n");
+  },
+);

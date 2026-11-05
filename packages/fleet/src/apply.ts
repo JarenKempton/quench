@@ -48,6 +48,7 @@ export const JournalOp = z
     backupId: z.string().nullable(),
     desired: TreeHash.nullable(),
     previous: TreeHash.nullable(),
+    previousExecutables: z.array(z.string()).nullable(),
     files: z.array(z.object({ path: z.string(), mode: FileMode, sha256: Sha256 }).strict()),
     exclude: Exclude.nullable(),
   })
@@ -298,6 +299,20 @@ async function stagedByUs(op: JournalOp) {
   });
 }
 
+const placedExecutables = (op: JournalOp) =>
+  op.files
+    .filter((f) => f.mode === "100755")
+    .map((f) => f.path)
+    .sort();
+
+async function backedUp(op: JournalOp, conflict: (why: string) => Conflict) {
+  await guard(op.base, op.backup, "dir", op.pin);
+  if (!op.backupId || (await identity(op.backup)) !== op.backupId)
+    throw conflict(`${op.backup} is not the folder Quench moved aside`);
+  if (!matches(await inspect(op.backup), op.previous, op.previousExecutables))
+    throw conflict(`${op.backup} changed after Quench moved it aside`);
+}
+
 async function tidy(op: JournalOp) {
   if (!(await probe(op.work))) return;
   const conflict = (why: string) =>
@@ -314,8 +329,7 @@ async function tidy(op: JournalOp) {
     await guard(op.base, path, "dir", op.pin);
     const id = await identity(path);
     if (path === op.backup) {
-      if (id !== op.backupId || (await inspect(path))?.treeHash !== op.previous)
-        throw conflict(`${path} changed`);
+      await backedUp(op, conflict);
     } else if (path === op.stage) {
       if (id !== op.stagedId || !(await stagedByUs(op))) throw conflict(`${path} changed`);
     } else throw conflict(`${path} was not created by Quench`);
@@ -343,23 +357,25 @@ export async function recover(state: string): Promise<string | null> {
     if (op.kind === "remove" && op.exclude) await wrap(() => dropExclude(op.exclude!, ledger));
   } else
     await wrap(async () => {
-      const ours = async (path: string) => !!op.stagedId && (await identity(path)) === op.stagedId;
+      const placed = async () => {
+        await guard(op.base, op.path, "dir", op.pin);
+        if (!op.stagedId || (await identity(op.path)) !== op.stagedId)
+          throw conflict(`${op.path} was created by someone else after the interrupted apply`);
+        if (!matches(await inspect(op.path), op.desired, placedExecutables(op)))
+          throw conflict(`${op.path} was edited after the interrupted apply`);
+      };
       if (await probe(op.backup)) {
-        await guard(op.base, op.backup, "dir", op.pin);
-        if ((await identity(op.backup)) !== op.backupId)
-          throw conflict(`${op.backup} is not the folder Quench moved aside`);
+        await backedUp(op, conflict);
         if (await probe(op.path)) {
-          await guard(op.base, op.path, "dir", op.pin);
-          if (!(await ours(op.path)))
-            throw conflict(`${op.path} was created by someone else after the interrupted apply`);
+          await placed();
           await removeTree(op.path);
         }
         await guard(op.base, op.path, "absent", op.pin);
         await rename(op.backup, op.path);
         await guard(op.base, op.path, "dir", op.pin);
       } else if (op.kind === "install" && (await probe(op.path))) {
-        await guard(op.base, op.path, "dir", op.pin);
-        if (await ours(op.path)) await removeTree(op.path);
+        await placed();
+        await removeTree(op.path);
       }
       if (op.kind === "install" && op.exclude) await dropExclude(op.exclude, ledger);
     });
@@ -454,6 +470,7 @@ async function applyItem(input: ApplyInput, item: PlanItem) {
     backupId: null,
     desired: kind === "remove" ? null : item.desired,
     previous: planned?.treeHash ?? null,
+    previousExecutables: planned?.executables ?? null,
     files:
       kind === "remove"
         ? []
