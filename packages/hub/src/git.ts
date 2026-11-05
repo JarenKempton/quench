@@ -1,18 +1,6 @@
-import { constants } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  mkdtemp,
-  open,
-  realpath,
-  rename,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, isAbsolute, join, posix, relative } from "node:path";
+import { join, posix } from "node:path";
 import { excluded, foldCollision, insideFolder } from "@quench/fleet";
+import type { DataDir } from "./data.ts";
 
 export const BRANCH = "refs/heads/main";
 
@@ -57,50 +45,6 @@ const escapes = (path: string, target: string) => {
   return resolved === ".." || resolved.startsWith("../");
 };
 
-async function privateFolder(path: string, home: string) {
-  const info = await lstat(path);
-  if (info.isSymbolicLink() || !info.isDirectory())
-    throw new GitError(`${path} is not a plain folder; remove it and retry`);
-  if (process.getuid && info.uid !== process.getuid())
-    throw new GitError(`${path} is not owned by the user running the hub`);
-  const [real, base] = await Promise.all([realpath(path), realpath(home)]);
-  if (relative(base, real).startsWith("..") || isAbsolute(relative(base, real)))
-    throw new GitError(`${path} resolves outside the hub's data folder`);
-  if (process.platform === "win32") return;
-  const handle = await open(
-    path,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-  );
-  try {
-    await handle.chmod(0o700);
-  } finally {
-    await handle.close();
-  }
-}
-
-async function freshPath(root: string, parts: string[]) {
-  let dir = root;
-  for (const part of parts.slice(0, -1)) {
-    dir = join(dir, part);
-    const info = await lstat(dir).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-    if (!info) await mkdir(dir);
-    else if (info.isSymbolicLink() || !info.isDirectory())
-      throw new GitError(`${dir} is not a plain folder`);
-  }
-  const file = join(dir, parts.at(-1)!);
-  if (
-    await lstat(file).then(
-      () => true,
-      () => false,
-    )
-  )
-    throw new GitError(`${file} already exists`);
-  return file;
-}
-
 const IDENTITY = {
   GIT_AUTHOR_NAME: "Quench hub",
   GIT_AUTHOR_EMAIL: "hub@quench.invalid",
@@ -123,7 +67,11 @@ export class StaleHead extends Error {
 export type Commit = { sha: string; subject: string; date: string };
 
 export class Repo {
-  constructor(readonly dir: string) {}
+  readonly dir: string;
+
+  constructor(readonly data: DataDir) {
+    this.dir = data.path("skills.git");
+  }
 
   async git(
     args: string[],
@@ -145,20 +93,8 @@ export class Repo {
     return { stdout, text: new TextDecoder().decode(stdout).trim(), code };
   }
 
-  async scratch(prefix: string) {
-    const home = dirname(this.dir);
-    const root = join(home, "tmp");
-    await mkdir(root, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
-    });
-    await privateFolder(root, home);
-    const dir = join(
-      root,
-      `${prefix}${Buffer.from(crypto.getRandomValues(new Uint8Array(12))).toString("hex")}`,
-    );
-    await mkdir(dir, { mode: 0o700 });
-    await privateFolder(dir, home);
-    return dir;
+  scratch(prefix: string) {
+    return this.data.fresh(["tmp"], prefix);
   }
 
   exists() {
@@ -166,7 +102,7 @@ export class Repo {
   }
 
   async init() {
-    await mkdir(this.dir, { recursive: true });
+    await this.data.dir("skills.git");
     await this.git(["init", "--quiet", "--bare", "--initial-branch=main", this.dir]);
   }
 
@@ -223,10 +159,11 @@ export class Repo {
   }
 
   async diff(before: string | null, after: string, path: string) {
-    const dir = await this.scratch("diff-");
+    const scratch = await this.scratch("diff-");
+    const dir = scratch.path;
     try {
-      await writeFile(join(dir, "a"), before ?? "");
-      await writeFile(join(dir, "b"), after);
+      await this.data.write([...scratch.parts, "a"], before ?? "");
+      await this.data.write([...scratch.parts, "b"], after);
       const { GIT_DIR: _, ...env } = process.env;
       const proc = Bun.spawn(
         ["git", ...SETTINGS, "diff", "--no-index", "--no-color", "--", "a", "b"],
@@ -244,16 +181,16 @@ export class Repo {
         .replace(/^--- a\/a$/m, `--- a/${path}`)
         .replace(/^\+\+\+ b\/b$/m, `+++ b/${path}`);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await this.data.remove(...scratch.parts);
     }
   }
 
   private async withIndex<T>(run: (env: Record<string, string>) => Promise<T>) {
-    const dir = await this.scratch("index-");
+    const scratch = await this.scratch("index-");
     try {
-      return await run({ GIT_INDEX_FILE: join(dir, "index") });
+      return await run({ GIT_INDEX_FILE: join(scratch.path, "index") });
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await this.data.remove(...scratch.parts);
     }
   }
 
@@ -310,7 +247,7 @@ export class Repo {
     });
   }
 
-  async materialize(commit: string, target: string) {
+  async materialize(commit: string, target: string[]) {
     const { stdout } = await this.git(["ls-tree", "-r", "-z", "--full-tree", commit]);
     const entries = new TextDecoder()
       .decode(stdout)
@@ -345,26 +282,22 @@ export class Repo {
     for (const f of files)
       if (f.mode === "120000" && escapes(f.path, new TextDecoder().decode(f.bytes)))
         throw new GitError(`${f.path} links outside the tree`);
-    await mkdir(dirname(target), { recursive: true });
-    const staging = await mkdtemp(`${target}.tmp-`);
+    const staging = await this.data.fresh(target.slice(0, -1), `${target.at(-1)}.tmp-`);
     try {
       const ordered = [
         ...files.filter((f) => f.mode !== "120000"),
         ...files.filter((f) => f.mode === "120000"),
       ];
       for (const f of ordered) {
-        const file = await freshPath(staging, f.path.split("/"));
-        if (f.mode === "120000") {
-          await symlink(new TextDecoder().decode(f.bytes), file).catch(() => undefined);
-          continue;
-        }
-        await writeFile(file, f.bytes, { flag: "wx" });
-        if (f.mode === "100755" && process.platform !== "win32") await chmod(file, 0o755);
+        const parts = [...staging.parts, ...f.path.split("/")];
+        if (f.mode === "120000")
+          await this.data.link(parts, new TextDecoder().decode(f.bytes)).catch(() => undefined);
+        else await this.data.write(parts, f.bytes, f.mode === "100755" ? 0o755 : 0o644);
       }
-      await rm(target, { recursive: true, force: true });
-      await rename(staging, target);
+      await this.data.remove(...target);
+      await this.data.move(staging.parts, target);
     } catch (error) {
-      await rm(staging, { recursive: true, force: true });
+      await this.data.remove(...staging.parts);
       throw error;
     }
   }

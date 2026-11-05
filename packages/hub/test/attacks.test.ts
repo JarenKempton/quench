@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { importInto, MAX_FAILED_ATTEMPTS } from "../src/index.ts";
+import { DataDir } from "../src/data.ts";
 import { Repo } from "../src/git.ts";
 import {
   failure,
@@ -69,11 +70,12 @@ async function pivotCommit(gitDir: string, outside: string) {
 
 test("a tree with a duplicate symlink/folder entry never writes outside the extraction folder", async () => {
   const outside = temp("outside");
-  const repo = new Repo(join(temp("bare"), "skills.git"));
+  const repo = new Repo(await DataDir.open(join(temp("bare"), "hub")));
   await repo.init();
   const commit = await pivotCommit(repo.dir, outside);
-  const target = join(temp("target"), "tree");
-  expect(await failure(repo.materialize(commit, target))).toContain("duplicate path");
+  expect(await failure(repo.materialize(commit, ["checkouts", "tree"]))).toContain(
+    "duplicate path",
+  );
   expect(existsSync(join(outside, "marker"))).toBe(false);
 });
 
@@ -91,7 +93,7 @@ test("importing a repo with that tree is refused and writes nothing outside", as
 });
 
 test("escaping symlinks, invalid names and .git entries are rejected before any write", async () => {
-  const repo = new Repo(join(temp("bare"), "skills.git"));
+  const repo = new Repo(await DataDir.open(join(temp("bare"), "hub")));
   await repo.init();
   const skill = await object(repo.dir, "blob", Buffer.from("# a\n"));
   const cases: [string, string, string][] = [
@@ -103,15 +105,14 @@ test("escaping symlinks, invalid names and .git entries are rejected before any 
   ];
   for (const entry of cases) {
     const commit = await commitTree(repo.dir, [["100644", "SKILL.md", skill], entry]);
-    const target = join(temp("target"), "tree");
-    expect(await failure(repo.materialize(commit, target))).not.toBe("");
-    expect(existsSync(target)).toBe(false);
+    expect(await failure(repo.materialize(commit, ["checkouts", "tree"]))).not.toBe("");
+    expect(existsSync(repo.data.path("checkouts", "tree"))).toBe(false);
   }
 });
 
 test("a symlink inside the tree still materializes", async () => {
   if (process.platform === "win32") return;
-  const repo = new Repo(join(temp("bare"), "skills.git"));
+  const repo = new Repo(await DataDir.open(join(temp("bare"), "hub")));
   await repo.init();
   const skill = await object(repo.dir, "blob", Buffer.from("# a\n"));
   const link = await object(repo.dir, "blob", Buffer.from("../SKILL.md"));
@@ -120,9 +121,8 @@ test("a symlink inside the tree still materializes", async () => {
     ["100644", "SKILL.md", skill],
     ["40000", "refs", sub],
   ]);
-  const target = join(temp("target"), "tree");
-  await repo.materialize(commit, target);
-  expect(await Bun.file(join(target, "refs", "alias")).text()).toBe("# a\n");
+  await repo.materialize(commit, ["checkouts", "tree"]);
+  expect(await Bun.file(repo.data.path("checkouts", "tree", "refs", "alias")).text()).toBe("# a\n");
 });
 
 test("import refuses option-like sources and non-allowlisted transports", async () => {
@@ -604,13 +604,13 @@ test("a pre-created <data>/tmp symlink or file is refused, never followed or chm
     await import("node:fs");
   for (const kind of ["symlink", "file"] as const) {
     const data = join(temp("data"), "hub");
-    mkdirSync(data, { recursive: true });
+    mkdirSync(data, { mode: 0o700 });
     const outside = temp("outside");
     chmodSync(outside, 0o755);
+    const repo = new Repo(await DataDir.open(data));
+    await repo.init();
     if (kind === "symlink") symlinkSync(outside, join(data, "tmp"));
     else writeFileSync(join(data, "tmp"), "");
-    const repo = new Repo(join(data, "skills.git"));
-    await repo.init();
     expect(await failure(repo.scratch("diff-"))).toContain("tmp is not a plain folder");
     expect(await failure(repo.diff(null, "x\n", "a.txt"))).toContain("not a plain folder");
     expect(await failure(repo.commitFile(null, "a.txt", "x\n", "m"))).toContain(
@@ -624,11 +624,11 @@ test("a pre-created <data>/tmp symlink or file is refused, never followed or chm
 
 test("scratch folders are fresh, private, and inside the data folder", async () => {
   const data = join(temp("data"), "hub");
-  const repo = new Repo(join(data, "skills.git"));
+  const repo = new Repo(await DataDir.open(data));
   await repo.init();
   const { lstatSync, realpathSync } = await import("node:fs");
-  const a = await repo.scratch("diff-");
-  const b = await repo.scratch("diff-");
+  const a = (await repo.scratch("diff-")).path;
+  const b = (await repo.scratch("diff-")).path;
   expect(a).not.toBe(b);
   for (const dir of [a, b]) {
     const info = lstatSync(dir);

@@ -89,6 +89,8 @@ profile of every agent and project in your history.
 | `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
 | `quench agent install\|uninstall\|run`          | A user service that keeps applying `--source` every `--interval`; never self-updates                   |
 
+The hub's data folder (`--data`, default `~/.quench/hub`) must be private to the user that runs it: the hub creates it 0700 and refuses to start if it is a link, owned by someone else, readable by group or others, or contains any symlink.
+
 The hub also ships as a Docker image built from this repo (`docker build -t quench-hub .`); it
 uses the image's system `git` for its internal skills repo and keeps everything under `/data`:
 

@@ -1,12 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { hostname, networkInterfaces } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
 import { excluded, FleetFile, MachineName, RelativePath, sha256, Snapshot } from "@quench/fleet";
 import { FLEET_FILE } from "@quench/fleet/disk";
 import { selfSignedCertificate, spkiPin } from "./cert.ts";
 import { GitError, StaleHead } from "./git.ts";
+import type { DataDir } from "./data.ts";
 import { Hub } from "./hub.ts";
 import { isLoopback } from "./loopback.ts";
 import { SessionEnded, type Identity } from "./store.ts";
@@ -70,17 +69,14 @@ const cookie = (req: Request) =>
 const redirect = (to: string, headers: Record<string, string> = {}) =>
   new Response(null, { status: 303, headers: { location: to, ...headers } });
 
-async function certificate(dataDir: string, names: string[]) {
-  const dir = join(dataDir, "tls");
-  const certPath = join(dir, "cert.pem");
-  const keyPath = join(dir, "key.pem");
-  const existing = await readFile(certPath, "utf8").catch(() => null);
-  if (existing) return { cert: existing, key: await readFile(keyPath, "utf8") };
-  await mkdir(dir, { recursive: true });
+async function certificate(data: DataDir, names: string[]) {
+  const existing = await data.read(["tls", "cert.pem"]);
+  const key = await data.read(["tls", "key.pem"]);
+  if (existing && key) return { cert: existing.toString("utf8"), key: key.toString("utf8") };
   const made = selfSignedCertificate(names);
-  await writeFile(keyPath, made.key, { mode: 0o600 });
-  await chmod(keyPath, 0o600);
-  await writeFile(certPath, made.cert);
+  await data.remove("tls");
+  await data.write(["tls", "key.pem"], made.key, 0o600);
+  await data.write(["tls", "cert.pem"], made.cert, 0o644);
   return made;
 }
 
@@ -158,7 +154,7 @@ export async function serveHub(options: ServeOptions) {
   const generated = !options.http && !options.tls;
   const tls = options.http
     ? undefined
-    : (options.tls ?? (await certificate(options.dataDir, certificateNames(options))));
+    : (options.tls ?? (await certificate(hub.data, certificateNames(options))));
   const pin = generated && tls ? spkiPin(tls.cert) : null;
   if (options.mirror) hub.mirror();
 

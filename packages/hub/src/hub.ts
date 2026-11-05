@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, readlink, rm } from "node:fs/promises";
+import { readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   BundleManifest,
@@ -12,6 +12,7 @@ import {
 } from "@quench/fleet";
 import { importSkillsRepo } from "@quench/fleet";
 import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo } from "@quench/fleet/disk";
+import { DataDir } from "./data.ts";
 import { Repo, type Guard } from "./git.ts";
 import { Store, type Identity } from "./store.ts";
 
@@ -54,17 +55,18 @@ export class Hub {
   private checkouts = new Map<string, Promise<string>>();
   private pushing: Promise<void> = Promise.resolve();
 
-  constructor(
-    readonly dataDir: string,
+  private constructor(
+    readonly data: DataDir,
+    database: string,
     readonly options: { mirror?: string; now?: () => number; log?: (line: string) => void } = {},
   ) {
-    this.repo = new Repo(join(dataDir, "skills.git"));
-    this.store = new Store(join(dataDir, "hub.sqlite"), options.now);
+    this.repo = new Repo(data);
+    this.store = new Store(database, options.now);
   }
 
   static async open(dataDir: string, options: Hub["options"] = {}) {
-    await mkdir(dataDir, { recursive: true });
-    const hub = new Hub(dataDir, options);
+    const data = await DataDir.open(dataDir);
+    const hub = new Hub(data, await data.ensureFile(["hub.sqlite"]), options);
     if (!(await hub.repo.exists())) await hub.repo.init();
     if (!(await hub.repo.head()))
       await hub.repo.commitFile(null, FLEET_FILE, EMPTY_FLEET, "Start an empty fleet");
@@ -84,11 +86,11 @@ export class Hub {
   async checkout(commit: string) {
     let ready = this.checkouts.get(commit);
     if (!ready) {
-      const dir = join(this.dataDir, "checkouts", commit);
-      ready = this.repo.materialize(commit, dir).then(async () => {
-        for (const name of await readdir(join(this.dataDir, "checkouts")))
+      const dir = this.data.path("checkouts", commit);
+      ready = this.repo.materialize(commit, ["checkouts", commit]).then(async () => {
+        for (const name of await this.data.list("checkouts"))
           if (name !== commit && !name.includes(".tmp") && !this.checkouts.has(name))
-            await rm(join(this.dataDir, "checkouts", name), { recursive: true, force: true });
+            await this.data.remove("checkouts", name);
         return dir;
       });
       ready.catch(() => this.checkouts.delete(commit));
@@ -195,16 +197,16 @@ export class Hub {
 }
 
 export async function importInto(dataDir: string, source: string) {
-  const repo = new Repo(join(dataDir, "skills.git"));
+  const data = await DataDir.open(dataDir);
+  const repo = new Repo(data);
   if (await repo.exists())
     throw new Error(`${dataDir} already has a skills repo; import into a new hub data folder`);
-  await mkdir(dataDir, { recursive: true });
   await repo.init();
   const scratch = await repo.scratch("import-");
   try {
     const head = await repo.fetchHead(source);
-    const tree = join(scratch, "tree");
-    await repo.materialize(head, tree);
+    await repo.materialize(head, [...scratch.parts, "tree"]);
+    const tree = data.path(...scratch.parts, "tree");
     if ((await repo.show(head, FLEET_FILE)) !== null)
       return { head, commit: head, warnings: [] as string[], skills: null };
     const found = await readSkillsRepo(tree);
@@ -218,9 +220,9 @@ export async function importInto(dataDir: string, source: string) {
     );
     return { head, commit, warnings, skills: Object.keys(fleet.skills).length };
   } catch (error) {
-    await rm(repo.dir, { recursive: true, force: true });
+    await data.remove("skills.git");
     throw error;
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await data.remove(...scratch.parts);
   }
 }
