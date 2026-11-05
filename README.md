@@ -89,6 +89,27 @@ profile of every agent and project in your history.
 | `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                      |
 | `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
 | `quench agent install\|uninstall\|run`          | A user service that keeps applying `--source` every `--interval`; never self-updates                   |
+| `quench skills eval <skill> --candidate <dir>`  | Replays first prompts on the installed and a candidate skill in scratch Claude Code homes; asks first  |
+
+`quench skills eval <skill> --candidate <dir>` tests a skill change against your own past prompts
+(Claude Code on Linux and macOS; other platforms get an "unsupported" result and nothing runs). It takes the
+first prompt of each Claude Code session that triggered the skill while the ledger says the installed
+version, by tree hash, was live. Sessions from before Quench installed that version are skipped.
+Each prompt runs twice through `claude -p`: once with the installed folder, once with the candidate.
+Every run gets a fresh scratch `HOME`, `CLAUDE_CONFIG_DIR` and working folder, which are deleted after
+the run. It passes `--setting-sources user` (only the scratch home, which holds just the skill),
+`--tools Skill`, `--strict-mcp-config`, hooks off, built-in plugins off and `--no-session-persistence`.
+A run whose start event shows any other tool, an MCP server or a plugin is stopped and counted as
+failed. The scratch home has no login, so set `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or
+`CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`). Before anything runs, it shows the prompts, a token
+and cost estimate at list prices, and a reminder that replays send prompts to the model provider,
+then asks for confirmation (`--yes` skips the question). It replays 5 prompts by default and at most
+20 (`--limit`). It refuses to start when the estimate is above `--max-cost` (default $1, at most $10),
+and it stops once the spend reported by `claude -p` reaches that cap. Results are deterministic: did
+the skill trigger, tokens and reported cost for the original, current and candidate runs, side by side,
+plus wins, losses and ties. A prompt whose current-version replay doesn't trigger the skill is excluded
+as replay noise, and the exclusion rate is shown. No judge reads the answers. Prompts and answers
+appear only in the text view; `--json` carries counts, hashes and session ids.
 
 The hub's data folder (`--data`, default `~/.quench/hub`) must be private to the user that runs it: the hub creates it 0700 and refuses to start if it is a link, owned by someone else, readable by group or others, or contains any symlink.
 

@@ -2,6 +2,7 @@ export { VerdictCache } from "./cache.ts";
 export * from "./causes.ts";
 export {
   CHILD_ENV,
+  childEnv,
   HarnessFailed,
   HarnessJudge,
   HarnessMissing,

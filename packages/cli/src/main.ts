@@ -61,6 +61,9 @@ Usage:
   quench skills status --source <dir> --machine <name> [--project <dir>] [--json]
                                        conflicts, drift and installation history; exits 1 on conflicts or drift
     --project <dir>                    also place project-scoped skills into this checkout (repeatable)
+  quench skills eval <skill> --candidate <dir> [--limit 5] [--max-cost 1] [--yes] [--json]
+                                       replay first prompts against the installed and a candidate skill in scratch
+                                       Claude Code homes (Linux, macOS); shows a cost estimate and asks first
   quench agent install|uninstall|run --source <dir> --machine <name> [--interval 300] [--once]
                                        a user service that keeps applying the source; never updates itself
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
@@ -130,6 +133,9 @@ const { positionals, values } = parseArgs({
     project: { type: "string", multiple: true, default: [] },
     interval: { type: "string", default: "300" },
     once: { type: "boolean", default: false },
+    candidate: { type: "string" },
+    limit: { type: "string" },
+    "max-cost": { type: "string" },
   },
 });
 
@@ -184,8 +190,9 @@ if (values.judge !== undefined && command !== "corrections" && command !== "setu
   process.stderr.write("--judge is only available for corrections and setup\n");
   process.exit(1);
 }
-if (values.yes && command !== "setup") {
-  process.stderr.write("--yes is only available for setup\n");
+const evaluating = command === "skills" && rest[0] === "eval";
+if (values.yes && command !== "setup" && !evaluating) {
+  process.stderr.write("--yes is only available for setup and skills eval\n");
   process.exit(1);
 }
 const config = await readConfig(home.dir);
@@ -244,6 +251,15 @@ if (
   process.stderr.write(
     "--source, --machine and --project are only available for skills and agent\n",
   );
+  process.exit(1);
+}
+if (
+  (values.candidate !== undefined ||
+    values.limit !== undefined ||
+    values["max-cost"] !== undefined) &&
+  !evaluating
+) {
+  process.stderr.write("--candidate, --limit and --max-cost are only available for skills eval\n");
   process.exit(1);
 }
 if (values.plan !== undefined && command !== "skills") {
@@ -383,6 +399,12 @@ switch (command) {
       ...(values.source ? { source: values.source } : {}),
       ...(values.machine ? { machine: values.machine } : {}),
       ...(values.plan ? { plan: values.plan } : {}),
+      eval: {
+        yes: values.yes,
+        ...(values.candidate ? { candidate: resolve(values.candidate) } : {}),
+        ...(values.limit !== undefined ? { limit: values.limit } : {}),
+        ...(values["max-cost"] !== undefined ? { maxCost: values["max-cost"] } : {}),
+      },
     });
     break;
   case "agent":
