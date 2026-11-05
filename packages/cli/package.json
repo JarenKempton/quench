@@ -9,6 +9,7 @@
   "dependencies": {
     "@quench/fleet": "workspace:*",
     "@quench/history": "workspace:*",
+    "@quench/hub": "workspace:*",
     "@quench/insights": "workspace:*",
     "@quench/judge": "workspace:*",
     "@quench/secrets": "workspace:*"
