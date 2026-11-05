@@ -14,7 +14,7 @@ import {
 import { importSkillsRepo } from "@quench/fleet";
 import { buildBundle, FLEET_FILE, loadFleet, readSkillsRepo } from "@quench/fleet/disk";
 import { Repo } from "./git.ts";
-import { Store } from "./store.ts";
+import { Store, type Identity } from "./store.ts";
 
 export const EMPTY_FLEET = "version: 1\nskills: {}\n";
 
@@ -183,13 +183,8 @@ export class Hub {
     return this.committed(await this.repo.revert(base, commit));
   }
 
-  report(machine: string, snapshot: Snapshot): MachineState | null {
-    return this.store.db.transaction(() => {
-      if (!this.store.activeMachine(machine)) return null;
-      const next = mergeSnapshot(this.store.machineState(machine), snapshot);
-      this.store.saveState(machine, next);
-      return next;
-    })();
+  report(identity: Identity, snapshot: Snapshot): MachineState | null {
+    return this.store.report(identity, (previous) => mergeSnapshot(previous, snapshot));
   }
 }
 

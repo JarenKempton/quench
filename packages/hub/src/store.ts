@@ -40,6 +40,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_active_machine ON machines (name) WHERE re
 CREATE TABLE IF NOT EXISTS failed_attempts (kind TEXT NOT NULL, at INTEGER NOT NULL);
 `;
 
+export type Identity = { id: number; name: string; tokenHash: string };
+
 export type MachineRow = {
   id: number;
   name: string;
@@ -158,14 +160,15 @@ export class Store {
     })();
   }
 
-  machineFor(token: string | null): string | null {
+  machineFor(token: string | null): Identity | null {
     if (!token) return null;
+    const tokenHash = sha256(token);
     const row = this.db
       .query("SELECT id, name FROM machines WHERE token_hash = ? AND revoked_at IS NULL")
-      .get(sha256(token)) as { id: number; name: string } | null;
+      .get(tokenHash) as { id: number; name: string } | null;
     if (!row) return null;
     this.db.query("UPDATE machines SET last_seen_at = ? WHERE id = ?").run(this.now(), row.id);
-    return row.name;
+    return { id: row.id, name: row.name, tokenHash };
   }
 
   revoke(name: string) {
@@ -195,9 +198,21 @@ export class Store {
     return row?.state ? MachineState.parse(JSON.parse(row.state)) : null;
   }
 
-  saveState(name: string, state: MachineState) {
-    this.db
-      .query("UPDATE machines SET state = ?, reported_at = ? WHERE name = ? AND revoked_at IS NULL")
-      .run(JSON.stringify(state), this.now(), name);
+  report(identity: Identity, apply: (previous: MachineState | null) => MachineState) {
+    return this.db
+      .transaction(() => {
+        const row = this.db
+          .query(
+            "SELECT state FROM machines WHERE id = ? AND token_hash = ? AND revoked_at IS NULL",
+          )
+          .get(identity.id, identity.tokenHash) as { state: string | null } | null;
+        if (!row) return null;
+        const next = apply(row.state ? MachineState.parse(JSON.parse(row.state)) : null);
+        this.db
+          .query("UPDATE machines SET state = ?, reported_at = ? WHERE id = ?")
+          .run(JSON.stringify(next), this.now(), identity.id);
+        return next;
+      })
+      .immediate();
   }
 }

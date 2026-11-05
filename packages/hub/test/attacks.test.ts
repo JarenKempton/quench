@@ -9,6 +9,7 @@ import {
   Owner,
   PASSWORD,
   skillsSource,
+  snapshot,
   startHub,
   temp,
   type Running,
@@ -287,4 +288,51 @@ test("revoking a machine invalidates its outstanding pairing codes", async () =>
 
   const fresh = await owner.addMachine("laptop");
   expect(await redeem(fresh.code)).toBe(200);
+});
+
+test("a snapshot held open across revoke and re-pair cannot overwrite the new machine's state", async () => {
+  const { hub, owner } = await hubWithSkills();
+  const pairWith = async (code: string) =>
+    (
+      (await (
+        await fetch(`${hub.url}/api/v1/pair`, {
+          method: "POST",
+          body: JSON.stringify({ code }),
+          ...tls(hub),
+        })
+      ).json()) as { token: string }
+    ).token;
+  const post = (token: string, body: string | ReadableStream<Uint8Array>) =>
+    fetch(`${hub.url}/api/v1/snapshot`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body,
+      duplex: "half",
+      ...tls(hub),
+    } as RequestInit);
+  const oldToken = await pairWith((await owner.addMachine("laptop")).code);
+
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  const stale = JSON.stringify(snapshot(999, {}));
+  const slow = post(
+    oldToken,
+    new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode(stale.slice(0, 10)));
+        await held;
+        controller.enqueue(new TextEncoder().encode(stale.slice(10)));
+        controller.close();
+      },
+    }),
+  );
+  await Bun.sleep(200);
+
+  expect((await owner.post("/machines/revoke", { name: "laptop" })).status).toBe(303);
+  const newToken = await pairWith((await owner.addMachine("laptop")).code);
+  expect((await post(newToken, JSON.stringify(snapshot(1, {})))).status).toBe(200);
+
+  release();
+  expect((await slow).status).toBe(401);
+  expect(hub.hub.store.machineState("laptop")!.generation).toBe(1);
 });

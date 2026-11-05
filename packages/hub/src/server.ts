@@ -192,8 +192,9 @@ export async function serveHub(options: ServeOptions) {
       hub.store.succeeded(attempt);
       return json({ machine: paired.machine, token: paired.token });
     }
-    const machine = hub.store.machineFor(bearer(req));
-    if (!machine) return json({ error: "unknown or revoked machine token" }, 401);
+    const identity = hub.store.machineFor(bearer(req));
+    if (!identity) return json({ error: "unknown or revoked machine token" }, 401);
+    const machine = identity.name;
     if (path === "/api/v1/bundle" && req.method === "GET") {
       const bundle = await hub.bundle(machine, await hub.head());
       const etag = `"${bundle.id}"`;
@@ -217,7 +218,7 @@ export async function serveHub(options: ServeOptions) {
       const parsed = Snapshot.safeParse(parseJson(body));
       if (!parsed.success)
         return json({ error: "invalid snapshot", issues: parsed.error.issues }, 400);
-      const state = hub.report(machine, parsed.data);
+      const state = hub.report(identity, parsed.data);
       if (!state) return json({ error: "unknown or revoked machine token" }, 401);
       return json({ machine, state });
     }
