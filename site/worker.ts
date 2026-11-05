@@ -12,14 +12,14 @@ const failures = new Map([
 
 type Env = { ASSETS: { fetch: (request: Request) => Promise<Response> } };
 
-async function download(path: string): Promise<string | undefined> {
+async function download(path: string): Promise<ArrayBuffer | undefined> {
   let url = new URL(stable + path);
   for (let hop = 0; hop <= maxHops; hop++) {
     if (url.protocol !== "https:" || !hosts.has(url.host)) return undefined;
     const response = await fetch(url, { redirect: "manual" });
     const location = response.headers.get("location");
     if (response.status < 300 || response.status > 399 || !location)
-      return response.status === 200 ? await response.text() : undefined;
+      return response.status === 200 ? await response.arrayBuffer() : undefined;
     url = new URL(location, url);
   }
   return undefined;

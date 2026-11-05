@@ -56,6 +56,24 @@ test("an allowlisted multi-hop redirect serves the script as text/plain", async 
   secure(response);
 });
 
+test("the installer bytes are served unchanged, including a BOM and invalid UTF-8", async () => {
+  const bytes = new Uint8Array([
+    0xef,
+    0xbb,
+    0xbf,
+    ...new TextEncoder().encode("#!/bin/sh\n# "),
+    0xff,
+    0xfe,
+    0xc3,
+    0x28,
+    0x0a,
+  ]);
+  upstream({ [`${latest}/install.ps1`]: () => new Response(bytes) });
+  const response = await get("https://quench.sh/install.ps1");
+  expect(response.status).toBe(200);
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+});
+
 test("a redirect off the allowlist fails closed without being fetched", async () => {
   upstream({
     [`${latest}/install.sh`]: redirect("https://evil.example/install.sh"),
