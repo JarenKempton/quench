@@ -26,7 +26,12 @@ const entry = (checkout: string | null, treeHash: string, at: number): LedgerEnt
   gitExclude: null,
 });
 
-type Session = { cwd: string | null; at: number; load: string | null };
+type Session = {
+  cwd: string | null;
+  at: number;
+  load: string | null;
+  loadedAt?: number | null;
+};
 
 function evidence(sessions: Session[]): SkillEvidence {
   const started = new Map<string, { harness: "claude-code"; at: number; cwd: string | null }>();
@@ -36,7 +41,16 @@ function evidence(sessions: Session[]): SkillEvidence {
     started.set(key, { harness: "claude-code", at: s.at, cwd: s.cwd });
     contexts.set(key, {
       skills: ["tidy"],
-      loads: s.load === null ? [] : [{ name: "tidy", path: s.load === "unnamed" ? null : s.load }],
+      loads:
+        s.load === null
+          ? []
+          : [
+              {
+                name: "tidy",
+                path: s.load === "unnamed" ? null : s.load,
+                at: s.loadedAt === undefined ? s.at : s.loadedAt,
+              },
+            ],
       files: [],
     });
   });
@@ -96,4 +110,25 @@ test("a global and a project installation that both cover a session leave an unn
   expect(project!.versions![0]!.loaded.sessions).toBe(0);
   expect(global!.versions![0]!.without.sessions).toBe(0);
   expect(project!.versions![0]!.without.sessions).toBe(0);
+});
+
+test("a load counts for the version installed when it happened, not when its session started", () => {
+  sequence = 0;
+  const ledger = [entry(null, hash("a"), T1), entry(null, hash("b"), T2)];
+  const day = 86_400_000;
+  const [global] = withVersions(
+    [record("~/.claude/skills/tidy")],
+    ledger,
+    evidence([
+      { cwd: null, at: T1 + day, load: "unnamed", loadedAt: T2 + day },
+      { cwd: null, at: T1 + day, load: `${HOME}/.claude/skills/tidy/SKILL.md`, loadedAt: T2 + 2 },
+      { cwd: null, at: T1 + day, load: "unnamed", loadedAt: T1 + 2 * day },
+      { cwd: null, at: T1 + day, load: "unnamed", loadedAt: null },
+      { cwd: null, at: T1 + day, load: "unnamed", loadedAt: T2 },
+    ]),
+    absolute,
+  );
+  const [v1, v2] = global!.versions!;
+  expect(v1!.loaded.sessions).toBe(1);
+  expect(v2!.loaded.sessions).toBe(2);
 });
