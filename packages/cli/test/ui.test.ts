@@ -402,7 +402,7 @@ test("a burst of reloads starts at most one scan; ?refresh=1 or an old result st
 });
 
 test(
-  "no secrets scan starts until /api/secrets is requested",
+  "no secrets scan starts until /api/secrets is requested, even after warming",
   async () => {
     const { dir } = await housekeepingHome();
     const key = join(dir, ".quench/local/secrets.key");
@@ -414,6 +414,7 @@ test(
     });
     if (running instanceof Error) throw running;
     try {
+      await running.warm();
       await get(running.port, "/");
       await Bun.sleep(200);
       expect(await Bun.file(key).exists()).toBe(false);

@@ -172,7 +172,7 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
   try {
     const server = serveUi({ port, api, assets: await uiAssets() });
     const warm = async () => {
-      for (const load of Object.values(api)) await load({ refresh: false }).catch(() => {});
+      for (const load of [api.report, api.skills]) await load({ refresh: false }).catch(() => {});
     };
     return { ...server, warm };
   } catch (error) {
