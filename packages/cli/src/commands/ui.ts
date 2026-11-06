@@ -44,6 +44,7 @@ export class Aged {
     readonly value: unknown,
     readonly computedAt: Date,
     readonly refreshing: boolean,
+    readonly refreshError: string | null,
   ) {}
 }
 
@@ -56,20 +57,29 @@ export function lastResult(
   refreshAfterMs = REFRESH_AFTER_MS,
 ): (asked: { refresh: boolean }) => Promise<Aged> {
   let last: { value: unknown; at: Date } | null = null;
+  let attemptedAt = 0;
+  let failure: string | null = null;
   let running: Promise<void> | null = null;
   const refresh = () =>
     (running ??= read()
-      .then((value) => {
-        last = { value, at: new Date() };
-      })
+      .then(
+        (value) => {
+          last = { value, at: new Date() };
+          failure = null;
+        },
+        (error: Error) => {
+          failure = error.message;
+          throw error;
+        },
+      )
       .finally(() => {
+        attemptedAt = Date.now();
         running = null;
       }));
   return async (asked) => {
     if (!last) await refresh();
-    else if (asked.refresh || Date.now() - last.at.getTime() >= refreshAfterMs)
-      refresh().catch(() => {});
-    return new Aged(last!.value, last!.at, running !== null);
+    else if (asked.refresh || Date.now() - attemptedAt >= refreshAfterMs) refresh().catch(() => {});
+    return new Aged(last!.value, last!.at, running !== null, failure);
   };
 }
 
@@ -101,6 +111,9 @@ export function serveUi(options: {
           return respond(JSON.stringify(result.value), 200, "application/json", {
             "x-quench-computed-at": result.computedAt.toISOString(),
             "x-quench-refreshing": String(result.refreshing),
+            ...(result.refreshError
+              ? { "x-quench-refresh-error": encodeURIComponent(result.refreshError) }
+              : {}),
           });
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);

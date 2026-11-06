@@ -346,3 +346,31 @@ test(
   },
   cliRunsTimeout,
 );
+
+test("a refresh that keeps failing is retried once per interval, not on every poll, and its error is served beside the old result", async () => {
+  let reads = 0;
+  const read = () =>
+    ++reads === 1 ? Promise.resolve("first") : Promise.reject(new Error("scan failed: disk gone"));
+  const flaky = serveUi({ port: 0, api: { report: lastResult(read, 50) }, assets });
+  try {
+    await get(flaky.port, "/api/report");
+    await Bun.sleep(60);
+    const polls = [];
+    for (let i = 0; i < 5; i++) {
+      polls.push(await get(flaky.port, "/api/report"));
+      await Bun.sleep(5);
+    }
+    expect(reads).toBe(2);
+    const last = polls.at(-1)!;
+    expect(JSON.parse(last.body)).toBe("first");
+    expect(last.headers["x-quench-refreshing"]).toBe("false");
+    expect(decodeURIComponent(last.headers["x-quench-refresh-error"] as string)).toBe(
+      "scan failed: disk gone",
+    );
+    await Bun.sleep(60);
+    await get(flaky.port, "/api/report");
+    expect(reads).toBe(3);
+  } finally {
+    await flaky.stop();
+  }
+});

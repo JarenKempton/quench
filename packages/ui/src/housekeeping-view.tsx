@@ -24,7 +24,13 @@ import { viewerShell } from "./skills.ts";
 type Load<T> =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; report: T; computedAt: string | null; refreshing: boolean };
+  | {
+      status: "ready";
+      report: T;
+      computedAt: string | null;
+      refreshing: boolean;
+      refreshError: string | null;
+    };
 
 function useReport<T>(path: string) {
   const [state, setState] = useState<Load<T>>({ status: "loading" });
@@ -39,6 +45,8 @@ function useReport<T>(path: string) {
           report: (await response.json()) as T,
           computedAt: response.headers.get("x-quench-computed-at"),
           refreshing: response.headers.get("x-quench-refreshing") === "true",
+          refreshError:
+            decodeURIComponent(response.headers.get("x-quench-refresh-error") ?? "") || null,
         });
       } catch (error) {
         setState({ status: "error", message: (error as Error).message });
@@ -102,6 +110,11 @@ function Section<T>({
           </span>
         )}
       </div>
+      {state.status === "ready" && state.refreshError && (
+        <p className="font-mono text-xs text-warn">
+          Last refresh failed, showing the earlier result: {state.refreshError}
+        </p>
+      )}
       {state.status === "loading" && (
         <Note>
           Reading your session history… The first scan can take minutes; later visits show the last
