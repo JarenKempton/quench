@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Home } from "@quench/history";
-import { CSP, serveUi, startUi } from "../src/commands/ui.ts";
+import { CSP, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
@@ -26,7 +26,11 @@ const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
 const assets = new Map<string, Blob>([
   ["index.html", new Blob(["<!doctype html><title>Quench</title>"])],
 ]);
-const server = serveUi({ port: 0, skills: async () => ({ skills: [] }), assets });
+const server = serveUi({
+  port: 0,
+  api: { skills: async () => ({ skills: [] }) },
+  assets,
+});
 afterAll(() => server.stop());
 
 test("binds 127.0.0.1 only", async () => {
@@ -132,6 +136,139 @@ test(
       );
       const again = JSON.parse((await get(running.port, "/api/skills")).body);
       expect(again.skills.map((r: { skill: string }) => r.skill)).toContain("tidy");
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+const CANARY = "ghp_" + "QuenchUiCanary0123456789abcdefghijkl";
+
+const git = (cwd: string, ...args: string[]) => {
+  const result = Bun.spawnSync(
+    ["git", "-c", "user.name=q", "-c", "user.email=q@q", "-c", "init.defaultBranch=main", ...args],
+    { cwd },
+  );
+  if (!result.success) throw new Error(result.stderr.toString());
+};
+
+async function housekeepingHome() {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "quench-cli-ui-housekeeping-")));
+  const repo = join(dir, "code/app");
+  const tree = (name: string) => join(dir, "wt", name);
+  await mkdir(repo, { recursive: true });
+  git(repo, "init");
+  git(repo, "commit", "--allow-empty", "-m", "init");
+  for (const name of ["merged", "dirty"]) git(repo, "worktree", "add", "-b", name, tree(name));
+  await Bun.write(join(tree("dirty"), "notes.txt"), "draft\n");
+  await Bun.write(join(repo, ".env"), `GITHUB_TOKEN=${CANARY}\n`);
+  await Bun.write(
+    join(repo, ".mcp.json"),
+    JSON.stringify({ mcpServers: { gh: { command: "gh-mcp", env: { GITHUB_TOKEN: CANARY } } } }),
+  );
+  await Bun.write(
+    join(dir, ".claude/projects/app/s1.jsonl"),
+    lines([
+      {
+        type: "user",
+        sessionId: "s1",
+        cwd: repo,
+        timestamp: at(9),
+        message: { role: "user", content: `use GITHUB_TOKEN=${CANARY} for the push` },
+      },
+      {
+        type: "assistant",
+        sessionId: "s1",
+        cwd: repo,
+        timestamp: at(8),
+        message: {
+          id: "m1",
+          model: "model-x",
+          content: [{ type: "text", text: `Exported ${CANARY}.` }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+    ]),
+  );
+  return { dir, repo, tree };
+}
+
+async function sameEnvQuench(home: string, ...args: string[]) {
+  const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/main.ts"), ...args], {
+    env: {
+      ...process.env,
+      HOME: home,
+      CLAUDE_CONFIG_DIR: "",
+      CODEX_HOME: "",
+      PI_CODING_AGENT_DIR: "",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  return { stdout, code };
+}
+
+const withoutClock = (report: { observedAt?: string }) => ({ ...report, observedAt: null });
+
+test(
+  "/api/worktrees and /api/secrets equal their CLI --json, and the canary value never reaches the page",
+  async () => {
+    const { dir, tree } = await housekeepingHome();
+    const cliWorktrees = await quench(dir, "worktrees", "--json");
+    const cliSecrets = await sameEnvQuench(dir, "secrets", "--json", "--no-host-history");
+    expect(cliWorktrees.code).toBe(0);
+    expect(cliSecrets.code).toBe(0);
+    const worktrees = JSON.parse(cliWorktrees.stdout);
+    expect(
+      worktrees.repositories[0].worktrees.map((w: { path: string; removable: boolean }) => [
+        w.path,
+        w.removable,
+      ]),
+    ).toEqual([
+      [tree("dirty"), false],
+      [tree("merged"), true],
+    ]);
+    const secrets = JSON.parse(cliSecrets.stdout);
+    expect(secrets.history.secrets.length).toBeGreaterThan(0);
+    expect(secrets.configs.length).toBeGreaterThan(0);
+    expect(cliSecrets.stdout).not.toContain(CANARY);
+
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const served = {
+        worktrees: await get(running.port, "/api/worktrees"),
+        secrets: await get(running.port, "/api/secrets"),
+      };
+      for (const response of Object.values(served)) {
+        expect(response.status).toBe(200);
+        expect(response.headers["content-security-policy"]).toBe(CSP);
+      }
+      expect(withoutClock(JSON.parse(served.worktrees.body))).toEqual(withoutClock(worktrees));
+      expect(withoutClock(JSON.parse(served.secrets.body))).toEqual(withoutClock(secrets));
+      expect(served.secrets.body).toContain(`${CANARY.slice(0, 4)}…`);
+
+      const assets = await uiAssets();
+      const everything = [
+        "/",
+        "/api/skills",
+        "/api/worktrees",
+        "/api/secrets",
+        ...[...assets.keys()].map((name) => `/${name}`),
+      ];
+      for (const path of everything) {
+        const { body } = await get(running.port, path);
+        expect(body).not.toContain(CANARY);
+        expect(body).not.toContain(CANARY.slice(4));
+      }
+      expect(await Bun.file(join(tree("merged"), ".git")).exists()).toBe(true);
     } finally {
       await running.stop();
     }
