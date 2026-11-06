@@ -11,6 +11,7 @@ import {
   type Provider,
   judgeCauses,
   type CauseInput,
+  type Causes,
   groupCorrections,
   ThemeCache,
   judgeReplies,
@@ -20,7 +21,7 @@ import {
   VerdictCache,
   type Judged,
   type Reply,
-  type SessionRuns,
+  type Sender,
   type Summary,
   type Tally,
   type Themes,
@@ -105,23 +106,18 @@ export async function corrections(home: Home, options: Options): Promise<number>
     chosen.id,
     replyJudge === null,
   );
-  const host =
-    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
-  let sessions: SessionRuns[];
-  const contexts = new Map<string, SessionContext>();
   const since = new Date(Date.now() - options.days * 86_400_000);
-  try {
-    const refs = scoped?.refs ?? (await discoverAll(home, since));
-    sessions = await sessionRuns(refs, home.dir, host?.enrich, contexts, scoped !== null);
-  } finally {
-    host?.close();
-  }
+  const { sessions, contexts, warnings } = await readSessions(
+    home,
+    since,
+    options.hostHistory,
+    scoped?.refs ?? null,
+  );
   const missing = scoped && unread(scoped, sessions);
   if (missing) {
     warn(`${missing.label} could not be read as a session\n`);
     return 1;
   }
-  const warnings = host?.warnings ?? [];
   for (const warning of warnings) warn(`${warning}\n`);
   let judged: Judged;
   try {
@@ -165,25 +161,8 @@ export async function corrections(home: Home, options: Options): Promise<number>
     warn(`${error.message}. Check TYPESAFE_API_KEY has no extra characters.\n`);
     return 1;
   }
-  const context = options.context
-    ? inContext(judged.replies, contexts, since, options.examples)
-    : null;
-  const inventory = options.context ? await skillsInContext(home, contexts) : null;
-  const histories = inventory
-    ? await fileHistories({
-        contexts,
-        replies: judged.replies,
-        since,
-        homeDir: home.dir,
-        skillPath: inventory.skillPath,
-        write: !options.dryRun,
-      })
-    : null;
-  const overlaps = inventory
-    ? await skillOverlaps(
-        [...new Set([...contexts.values()].flatMap((c) => c.paths ?? []))],
-        inventory.skills,
-      )
+  const found = options.context
+    ? await contextOf(home, judged.replies, contexts, since, options.examples, !options.dryRun)
     : null;
   const path = (file: string) => shortPath(file, home.dir);
   const tokens = replyJudge && "tokens" in replyJudge ? (replyJudge.tokens as Tokens) : null;
@@ -194,50 +173,21 @@ export async function corrections(home: Home, options: Options): Promise<number>
     scoped && options.json
       ? json(scopedReport(cache.judge, sessions, judged, causes))
       : options.json
-        ? json({
-            schemaVersion: SCHEMA_VERSION,
-            days: options.days,
-            judge: cache.judge,
-            newlyJudged: judged.newlyJudged,
-            pending: judged.pending,
-            calls: judged.pending * callsPerReply,
-            failed: judged.failures.length,
-            tokens,
-            warnings,
-            ...summary,
-            ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
-            ...(causes
-              ? {
-                  causes: {
-                    ...causes,
-                    tokens: causeJudge?.tokens ?? null,
-                    caused: causes.caused.map((c) => ({ ...example(c.reply), cause: c.cause })),
-                  },
-                }
-              : {}),
-            ...(context
-              ? {
-                  context: {
-                    ...context,
-                    recurring: context.recurring.map((r) => ({
-                      ...r,
-                      files: r.files.map((f) => ({ ...f, name: path(f.name) })),
-                    })),
-                    history: histories && {
-                      ...histories,
-                      files: histories.files.map((f) => ({ ...f, path: path(f.path) })),
-                    },
-                    overlaps: overlaps?.map((o) => ({
-                      ...o,
-                      entry: { ...o.entry, path: path(o.entry.path) },
-                      skill: { ...o.skill, path: path(o.skill.path) },
-                    })),
-                  },
-                }
-              : {}),
-            latest: summary.latest.map(example),
-            latestAutomation: summary.latestAutomation.map(example),
-          })
+        ? json(
+            reportJson({
+              days: options.days,
+              judge: cache.judge,
+              judged,
+              callsPerReply,
+              tokens,
+              warnings,
+              summary,
+              path,
+              ...(themes ? { themes: { ...themes, tokens: themeJudge?.tokens ?? null } } : {}),
+              ...(causes ? { causes: { ...causes, tokens: causeJudge?.tokens ?? null } } : {}),
+              ...(found ? { found } : {}),
+            }),
+          )
         : (themes
             ? renderThemes(themes, judged, options.days, calls)
             : render(
@@ -250,9 +200,11 @@ export async function corrections(home: Home, options: Options): Promise<number>
                 calls,
               )) +
           (causes ? renderCauses(causes, options.examples) : "") +
-          (context ? renderInContext(context, path) : "") +
-          (histories ? renderHistories(histories, path) : "") +
-          (overlaps ? renderOverlaps(overlaps, path) : ""),
+          (found
+            ? renderInContext(found.context, path) +
+              renderHistories(found.histories, path) +
+              renderOverlaps(found.overlaps, path)
+            : ""),
   );
   if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
   if (
@@ -269,6 +221,170 @@ export async function corrections(home: Home, options: Options): Promise<number>
     return 2;
   }
   return 0;
+}
+
+async function readSessions(
+  home: Home,
+  since: Date,
+  hostHistory: string | false | undefined,
+  refs: Awaited<ReturnType<typeof discoverAll>> | null,
+) {
+  const host = hostHistory === false ? null : openT3History(hostHistory ?? t3State(home));
+  const contexts = new Map<string, SessionContext>();
+  try {
+    const sessions = await sessionRuns(
+      refs ?? (await discoverAll(home, since)),
+      home.dir,
+      host?.enrich,
+      contexts,
+      refs !== null,
+    );
+    return { sessions, contexts, warnings: host?.warnings ?? [] };
+  } finally {
+    host?.close();
+  }
+}
+
+async function contextOf(
+  home: Home,
+  replies: readonly Reply[],
+  contexts: ReadonlyMap<string, SessionContext>,
+  since: Date,
+  examples: number,
+  write: boolean,
+) {
+  const inventory = await skillsInContext(home, contexts);
+  return {
+    context: inContext(replies, contexts, since, examples),
+    histories: await fileHistories({
+      contexts,
+      replies,
+      since,
+      homeDir: home.dir,
+      skillPath: inventory.skillPath,
+      write,
+    }),
+    overlaps: await skillOverlaps(
+      [...new Set([...contexts.values()].flatMap((c) => c.paths ?? []))],
+      inventory.skills,
+    ),
+  };
+}
+
+type Found = Awaited<ReturnType<typeof contextOf>>;
+
+function reportJson(input: {
+  days: number;
+  judge: string;
+  judged: Judged;
+  callsPerReply: number;
+  tokens: Tokens | null;
+  warnings: readonly string[];
+  summary: Summary;
+  path: (file: string) => string;
+  themes?: Themes & { tokens: unknown };
+  causes?: Causes & { tokens: unknown };
+  found?: Found;
+}) {
+  const { judged, summary, path, themes, causes, found } = input;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    days: input.days,
+    judge: input.judge,
+    newlyJudged: judged.newlyJudged,
+    pending: judged.pending,
+    calls: judged.pending * input.callsPerReply,
+    failed: judged.failures.length,
+    tokens: input.tokens,
+    warnings: input.warnings,
+    ...summary,
+    weekly: weekly(judged.replies),
+    ...(themes ? { themes } : {}),
+    ...(causes
+      ? {
+          causes: {
+            ...causes,
+            caused: causes.caused.map((c) => ({ ...example(c.reply), cause: c.cause })),
+          },
+        }
+      : {}),
+    ...(found
+      ? {
+          context: {
+            ...found.context,
+            recurring: found.context.recurring.map((r) => ({
+              ...r,
+              files: r.files.map((f) => ({ ...f, name: path(f.name) })),
+            })),
+            history: {
+              ...found.histories,
+              files: found.histories.files.map((f) => ({ ...f, path: path(f.path) })),
+            },
+            overlaps: found.overlaps.map((o) => ({
+              ...o,
+              entry: { ...o.entry, path: path(o.entry.path) },
+              skill: { ...o.skill, path: path(o.skill.path) },
+            })),
+          },
+        }
+      : {}),
+    latest: summary.latest.map(example),
+    latestAutomation: summary.latestAutomation.map(example),
+  };
+}
+
+const monday = (at: Date) => {
+  const day = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  return day.toISOString().slice(0, 10);
+};
+
+function weekly(replies: readonly Reply[]) {
+  const weeks = new Map<string, Record<Sender, { judged: number; corrections: number }>>();
+  for (const reply of replies) {
+    if (!reply.run.replyAt || !reply.sender || !reply.kind) continue;
+    const week = monday(reply.run.replyAt);
+    const entry = weeks.get(week) ?? {
+      person: { judged: 0, corrections: 0 },
+      automation: { judged: 0, corrections: 0 },
+    };
+    entry[reply.sender].judged++;
+    if (reply.kind === "correction") entry[reply.sender].corrections++;
+    weeks.set(week, entry);
+  }
+  return [...weeks]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([week, { person, automation }]) => ({
+      week,
+      fromPeople: person,
+      fromAutomation: automation,
+    }));
+}
+
+export async function correctionsJson(
+  home: Home,
+  options: { days: number; examples: number; judge: Provider; hostHistory?: string | false },
+) {
+  const cache = await VerdictCache.open(join(home.dir, ".quench/local"), options.judge.id!, true);
+  const since = new Date(Date.now() - options.days * 86_400_000);
+  const { sessions, contexts, warnings } = await readSessions(
+    home,
+    since,
+    options.hostHistory,
+    null,
+  );
+  const judged = await judgeReplies(sessions, cache, null);
+  return reportJson({
+    days: options.days,
+    judge: cache.judge,
+    judged,
+    callsPerReply: options.judge.callsPerReply,
+    tokens: null,
+    warnings,
+    summary: summarize(judged.replies, options.examples),
+    path: (file) => shortPath(file, home.dir),
+    found: await contextOf(home, judged.replies, contexts, since, options.examples, false),
+  });
 }
 
 type Calls = { label: string; perReply: number; judge: string };

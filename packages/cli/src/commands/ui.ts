@@ -1,5 +1,7 @@
 import { extname } from "node:path";
 import type { Home } from "@quench/history";
+import type { Provider } from "@quench/judge";
+import { correctionsJson } from "./corrections.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
 
 export const LOOPBACK = "127.0.0.1";
@@ -37,21 +39,23 @@ export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
 export function serveUi(options: {
   port: number;
-  skills: () => Promise<unknown>;
+  api: Readonly<Record<string, () => Promise<unknown>>>;
   assets: ReadonlyMap<string, Blob>;
 }): UiServer {
   const server = Bun.serve({
     hostname: LOOPBACK,
     port: options.port,
+    idleTimeout: 0,
     async fetch(request) {
       if (request.headers.get("host") !== `${LOOPBACK}:${server.port}`)
         return respond("Host not allowed\n", 421);
       if (request.method !== "GET" && request.method !== "HEAD")
         return respond("Method not allowed\n", 405);
       const path = new URL(request.url).pathname;
-      if (path === "/api/skills") {
+      const api = Object.hasOwn(options.api, path) ? options.api[path] : undefined;
+      if (api) {
         try {
-          return respond(JSON.stringify(await options.skills()), 200, "application/json");
+          return respond(JSON.stringify(await api()), 200, "application/json");
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);
         }
@@ -88,7 +92,18 @@ export type UiFlags = {
   open: boolean;
   source?: string;
   hostHistory?: string | false;
+  judge: Provider | null;
 };
+
+const NO_JUDGE = { judge: null };
+
+function latest<T>(run: () => Promise<T>) {
+  let running: Promise<T> | null = null;
+  return () =>
+    (running ??= run().finally(() => {
+      running = null;
+    }));
+}
 
 export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Error> {
   const port = Number(flags.port ?? "0");
@@ -96,21 +111,26 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
-  let running: Promise<unknown> | null = null;
-  const skills = () =>
-    (running ??= skillsJson(home, { ...flags, source })
-      .then(({ report }) => report)
-      .finally(() => {
-        running = null;
-      }));
+  const { judge } = flags;
+  const api = {
+    "/api/skills": latest(() => skillsJson(home, { ...flags, source }).then((r) => r.report)),
+    "/api/corrections": latest(async () =>
+      judge?.id
+        ? correctionsJson(home, { days: flags.days, examples: 10, judge, ...hostHistory(flags) })
+        : NO_JUDGE,
+    ),
+  };
   try {
-    return serveUi({ port, skills, assets: await uiAssets() });
+    return serveUi({ port, api, assets: await uiAssets() });
   } catch (error) {
     return new Error(
       `quench ui could not listen on ${LOOPBACK}:${port}: ${(error as Error).message}`,
     );
   }
 }
+
+const hostHistory = (flags: UiFlags) =>
+  flags.hostHistory === undefined ? {} : { hostHistory: flags.hostHistory };
 
 export async function ui(home: Home, flags: UiFlags): Promise<number> {
   const server = await startUi(home, flags);
