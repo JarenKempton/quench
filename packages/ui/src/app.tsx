@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./components/ui/button.tsx";
+import { HousekeepingView } from "./housekeeping-view.tsx";
+import { cn } from "./lib/utils.ts";
 import { SkillsView } from "./skills-view.tsx";
 import type { SkillsReport } from "./skills.ts";
 
@@ -8,7 +10,22 @@ type State =
   | { status: "error"; message: string }
   | { status: "ready"; report: SkillsReport };
 
+const TABS = [
+  ["skills", "Skills"],
+  ["housekeeping", "Housekeeping"],
+] as const;
+
+type Tab = (typeof TABS)[number][0];
+
+const tabOf = (hash: string): Tab => (hash === "#housekeeping" ? "housekeeping" : "skills");
+
 export function App() {
+  const [tab, setTab] = useState<Tab>(() => tabOf(location.hash));
+  useEffect(() => {
+    const follow = () => setTab(tabOf(location.hash));
+    addEventListener("hashchange", follow);
+    return () => removeEventListener("hashchange", follow);
+  }, []);
   const [state, setState] = useState<State>({ status: "loading" });
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -20,29 +37,47 @@ export function App() {
       setState({ status: "error", message: (error as Error).message });
     }
   }, []);
+  const skillsAsked = useRef(false);
   useEffect(() => {
+    if (tab !== "skills" || skillsAsked.current) return;
+    skillsAsked.current = true;
     void load();
-  }, [load]);
+  }, [tab, load]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <header className="mb-6 flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-3">
           <span className="text-base font-semibold tracking-tight">Quench</span>
-          <span className="text-sm text-muted-foreground">Skills</span>
+          <nav className="flex gap-3 text-sm">
+            {TABS.map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                aria-current={tab === id ? "page" : undefined}
+                className={cn(
+                  "text-muted-foreground hover:text-foreground",
+                  tab === id && "text-foreground",
+                )}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
         </div>
-        {state.status === "ready" && (
+        {tab === "skills" && state.status === "ready" && (
           <span className="font-mono text-xs text-muted-foreground">
             last {state.report.days} days · read-only
           </span>
         )}
       </header>
-      {state.status === "loading" && (
+      {tab === "housekeeping" && <HousekeepingView />}
+      {tab === "skills" && state.status === "loading" && (
         <Message title="Reading your session history…">
           The first run reads every session and can take a minute. Later runs use the cache.
         </Message>
       )}
-      {state.status === "error" && (
+      {tab === "skills" && state.status === "error" && (
         <Message title="Couldn't load your skills">
           <span className="font-mono text-xs">{state.message}</span>
           <div className="mt-4">
@@ -52,7 +87,8 @@ export function App() {
           </div>
         </Message>
       )}
-      {state.status === "ready" &&
+      {tab === "skills" &&
+        state.status === "ready" &&
         (state.report.skills.length ? (
           <SkillsView report={state.report} />
         ) : (

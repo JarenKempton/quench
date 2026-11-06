@@ -10,10 +10,7 @@ import { placeCache } from "../cache.ts";
 import { reading } from "../progress.ts";
 import { json, plural, shortPath } from "../format.ts";
 
-export async function worktrees(
-  home: Home,
-  options: { days: number; json: boolean; cache: boolean },
-): Promise<number> {
+export async function worktreesJson(home: Home, options: { days: number; cache: boolean }) {
   const since = new Date(Date.now() - options.days * 86_400_000);
   const cache = options.cache ? await placeCache(home.dir) : undefined;
   const { places } = await sessionPlaces(home, since, reading(), cache);
@@ -30,7 +27,7 @@ export async function worktrees(
     );
     repositories.push({ root: project.root, ...checked });
   }
-  const result = {
+  return {
     observedAt: new Date().toISOString(),
     days: options.days,
     repositories,
@@ -41,6 +38,14 @@ export async function worktrees(
       "Nothing is removed by Quench.",
     ],
   };
+}
+
+export async function worktrees(
+  home: Home,
+  options: { days: number; json: boolean; cache: boolean },
+): Promise<number> {
+  const result = await worktreesJson(home, options);
+  const { repositories } = result;
   if (options.json) {
     process.stdout.write(json(result));
     return 0;

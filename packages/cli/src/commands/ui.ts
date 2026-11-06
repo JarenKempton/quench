@@ -1,6 +1,8 @@
 import { extname } from "node:path";
 import type { Home } from "@quench/history";
+import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
+import { worktreesJson } from "./worktrees.ts";
 
 export const LOOPBACK = "127.0.0.1";
 
@@ -30,14 +32,62 @@ export async function uiAssets(): Promise<Map<string, Blob>> {
   return new Map(Object.entries(embedded).map(([name, path]) => [name, Bun.file(path)]));
 }
 
-const respond = (body: Blob | string, status: number, type = "text/plain; charset=utf-8") =>
-  new Response(body, { status, headers: { ...HEADERS, "content-type": type } });
+const respond = (
+  body: Blob | string,
+  status: number,
+  type = "text/plain; charset=utf-8",
+  extra: Record<string, string> = {},
+) => new Response(body, { status, headers: { ...HEADERS, ...extra, "content-type": type } });
+
+export class Aged {
+  constructor(
+    readonly value: unknown,
+    readonly computedAt: Date,
+    readonly refreshing: boolean,
+    readonly refreshError: string | null,
+  ) {}
+}
+
+export const REFRESH_AFTER_MS = 5 * 60_000;
+
+type Load = (asked: { refresh: boolean }) => Promise<unknown>;
+
+export function lastResult(
+  read: () => Promise<unknown>,
+  refreshAfterMs = REFRESH_AFTER_MS,
+): (asked: { refresh: boolean }) => Promise<Aged> {
+  let last: { value: unknown; at: Date } | null = null;
+  let attemptedAt = 0;
+  let failure: string | null = null;
+  let running: Promise<void> | null = null;
+  const refresh = () =>
+    (running ??= read()
+      .then(
+        (value) => {
+          last = { value, at: new Date() };
+          failure = null;
+        },
+        (error: Error) => {
+          failure = error.message;
+          throw error;
+        },
+      )
+      .finally(() => {
+        attemptedAt = Date.now();
+        running = null;
+      }));
+  return async (asked) => {
+    if (!last) await refresh();
+    else if (asked.refresh || Date.now() - attemptedAt >= refreshAfterMs) refresh().catch(() => {});
+    return new Aged(last!.value, last!.at, running !== null, failure);
+  };
+}
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
 export function serveUi(options: {
   port: number;
-  skills: () => Promise<unknown>;
+  api: Readonly<Record<string, Load>>;
   assets: ReadonlyMap<string, Blob>;
 }): UiServer {
   const server = Bun.serve({
@@ -48,17 +98,30 @@ export function serveUi(options: {
         return respond("Host not allowed\n", 421);
       if (request.method !== "GET" && request.method !== "HEAD")
         return respond("Method not allowed\n", 405);
-      const path = new URL(request.url).pathname;
-      if (path === "/api/skills") {
+      const url = new URL(request.url);
+      const path = url.pathname;
+      const name = path.slice("/api/".length);
+      if (path.startsWith("/api/") && Object.hasOwn(options.api, name)) {
         try {
-          return respond(JSON.stringify(await options.skills()), 200, "application/json");
+          const result = await options.api[name]!({
+            refresh: url.searchParams.get("refresh") === "1",
+          });
+          if (!(result instanceof Aged))
+            return respond(JSON.stringify(result), 200, "application/json");
+          return respond(JSON.stringify(result.value), 200, "application/json", {
+            "x-quench-computed-at": result.computedAt.toISOString(),
+            "x-quench-refreshing": String(result.refreshing),
+            ...(result.refreshError
+              ? { "x-quench-refresh-error": encodeURIComponent(result.refreshError) }
+              : {}),
+          });
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);
         }
       }
-      const name = path === "/" ? "index.html" : path.slice(1);
-      const asset = !name.includes("/") && options.assets.get(name);
-      if (asset) return respond(asset, 200, TYPES[extname(name)]);
+      const file = path === "/" ? "index.html" : path.slice(1);
+      const asset = !file.includes("/") && options.assets.get(file);
+      if (asset) return respond(asset, 200, TYPES[extname(file)]);
       if (path === "/")
         return respond(
           "This build of quench has no UI assets. Run bun run --cwd packages/ui build.\n",
@@ -96,20 +159,26 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
-  let running: Promise<unknown> | null = null;
-  const skills = () =>
-    (running ??= skillsJson(home, { ...flags, source })
-      .then(({ report }) => report)
-      .finally(() => {
-        running = null;
-      }));
+  const api = {
+    skills: oneAtATime(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
+    worktrees: lastResult(() => worktreesJson(home, flags)),
+    secrets: lastResult(() => secretsJson(home, flags)),
+  };
   try {
-    return serveUi({ port, skills, assets: await uiAssets() });
+    return serveUi({ port, api, assets: await uiAssets() });
   } catch (error) {
     return new Error(
       `quench ui could not listen on ${LOOPBACK}:${port}: ${(error as Error).message}`,
     );
   }
+}
+
+function oneAtATime<T>(read: () => Promise<T>): () => Promise<T> {
+  let running: Promise<T> | null = null;
+  return () =>
+    (running ??= read().finally(() => {
+      running = null;
+    }));
 }
 
 export async function ui(home: Home, flags: UiFlags): Promise<number> {

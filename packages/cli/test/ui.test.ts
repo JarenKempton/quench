@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Home } from "@quench/history";
-import { CSP, serveUi, startUi } from "../src/commands/ui.ts";
+import { CSP, lastResult, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
@@ -26,7 +26,11 @@ const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
 const assets = new Map<string, Blob>([
   ["index.html", new Blob(["<!doctype html><title>Quench</title>"])],
 ]);
-const server = serveUi({ port: 0, skills: async () => ({ skills: [] }), assets });
+const server = serveUi({
+  port: 0,
+  api: { skills: async () => ({ skills: [] }) },
+  assets,
+});
 afterAll(() => server.stop());
 
 test("binds 127.0.0.1 only", async () => {
@@ -138,3 +142,235 @@ test(
   },
   cliRunsTimeout,
 );
+
+const CANARY = "ghp_" + "QuenchUiCanary0123456789abcdefghijkl";
+
+const git = (cwd: string, ...args: string[]) => {
+  const result = Bun.spawnSync(
+    ["git", "-c", "user.name=q", "-c", "user.email=q@q", "-c", "init.defaultBranch=main", ...args],
+    { cwd },
+  );
+  if (!result.success) throw new Error(result.stderr.toString());
+};
+
+async function housekeepingHome() {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "quench-cli-ui-housekeeping-")));
+  const repo = join(dir, "code/app");
+  const tree = (name: string) => join(dir, "wt", name);
+  await mkdir(repo, { recursive: true });
+  git(repo, "init");
+  git(repo, "commit", "--allow-empty", "-m", "init");
+  for (const name of ["merged", "dirty"]) git(repo, "worktree", "add", "-b", name, tree(name));
+  await Bun.write(join(tree("dirty"), "notes.txt"), "draft\n");
+  await Bun.write(join(repo, ".env"), `GITHUB_TOKEN=${CANARY}\n`);
+  await Bun.write(
+    join(repo, ".mcp.json"),
+    JSON.stringify({ mcpServers: { gh: { command: "gh-mcp", env: { GITHUB_TOKEN: CANARY } } } }),
+  );
+  await Bun.write(
+    join(dir, ".claude/projects/app/s1.jsonl"),
+    lines([
+      {
+        type: "user",
+        sessionId: "s1",
+        cwd: repo,
+        timestamp: at(9),
+        message: { role: "user", content: `use GITHUB_TOKEN=${CANARY} for the push` },
+      },
+      {
+        type: "assistant",
+        sessionId: "s1",
+        cwd: repo,
+        timestamp: at(8),
+        message: {
+          id: "m1",
+          model: "model-x",
+          content: [{ type: "text", text: `Exported ${CANARY}.` }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+    ]),
+  );
+  return { dir, repo, tree };
+}
+
+async function sameEnvQuench(home: string, ...args: string[]) {
+  const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/main.ts"), ...args], {
+    env: {
+      ...process.env,
+      HOME: home,
+      CLAUDE_CONFIG_DIR: "",
+      CODEX_HOME: "",
+      PI_CODING_AGENT_DIR: "",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  return { stdout, code };
+}
+
+const withoutClock = (report: { observedAt?: string }) => ({ ...report, observedAt: null });
+
+test(
+  "/api/worktrees and /api/secrets equal their CLI --json, and the canary value never reaches the page",
+  async () => {
+    const { dir, tree } = await housekeepingHome();
+    const cliWorktrees = await quench(dir, "worktrees", "--json");
+    const cliSecrets = await sameEnvQuench(dir, "secrets", "--json", "--no-host-history");
+    expect(cliWorktrees.code).toBe(0);
+    expect(cliSecrets.code).toBe(0);
+    const worktrees = JSON.parse(cliWorktrees.stdout);
+    expect(
+      worktrees.repositories[0].worktrees.map((w: { path: string; removable: boolean }) => [
+        w.path,
+        w.removable,
+      ]),
+    ).toEqual([
+      [tree("dirty"), false],
+      [tree("merged"), true],
+    ]);
+    const secrets = JSON.parse(cliSecrets.stdout);
+    expect(secrets.history.secrets.length).toBeGreaterThan(0);
+    expect(secrets.configs.length).toBeGreaterThan(0);
+    expect(cliSecrets.stdout).not.toContain(CANARY);
+
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const served = {
+        worktrees: await get(running.port, "/api/worktrees"),
+        secrets: await get(running.port, "/api/secrets"),
+      };
+      for (const response of Object.values(served)) {
+        expect(response.status).toBe(200);
+        expect(response.headers["content-security-policy"]).toBe(CSP);
+      }
+      expect(withoutClock(JSON.parse(served.worktrees.body))).toEqual(withoutClock(worktrees));
+      expect(withoutClock(JSON.parse(served.secrets.body))).toEqual(withoutClock(secrets));
+      expect(served.secrets.body).toContain(`${CANARY.slice(0, 4)}…`);
+
+      const assets = await uiAssets();
+      const everything = [
+        "/",
+        "/api/skills",
+        "/api/worktrees",
+        "/api/secrets",
+        ...[...assets.keys()].map((name) => `/${name}`),
+      ];
+      for (const path of everything) {
+        const { body } = await get(running.port, path);
+        expect(body).not.toContain(CANARY);
+        expect(body).not.toContain(CANARY.slice(4));
+      }
+      expect(await Bun.file(join(tree("merged"), ".git")).exists()).toBe(true);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+test("a burst of reloads starts at most one scan; ?refresh=1 or an old result starts one more", async () => {
+  let reads = 0;
+  const pending: ((value: string) => void)[] = [];
+  const read = () => {
+    reads++;
+    return reads === 1
+      ? Promise.resolve("first")
+      : new Promise<string>((done) => {
+          pending.push(done);
+        });
+  };
+  const slow = serveUi({ port: 0, api: { report: lastResult(read, 300) }, assets });
+  const burst = (path: string) =>
+    Promise.all(Array.from({ length: 10 }, () => get(slow.port, path)));
+  try {
+    await Bun.sleep(50);
+    expect(reads).toBe(0);
+    const first = await get(slow.port, "/api/report");
+    expect(JSON.parse(first.body)).toBe("first");
+    expect(first.headers["x-quench-refreshing"]).toBe("false");
+    for (const response of await burst("/api/report")) {
+      expect(JSON.parse(response.body)).toBe("first");
+      expect(response.headers["x-quench-refreshing"]).toBe("false");
+      expect(response.headers["x-quench-computed-at"]).toBe(first.headers["x-quench-computed-at"]);
+    }
+    expect(reads).toBe(1);
+    const asked = await burst("/api/report?refresh=1");
+    expect(reads).toBe(2);
+    for (const response of asked) {
+      expect(JSON.parse(response.body)).toBe("first");
+      expect(response.headers["x-quench-refreshing"]).toBe("true");
+      expect(response.headers["content-security-policy"]).toBe(CSP);
+    }
+    pending.shift()!("second");
+    await Bun.sleep(10);
+    await burst("/api/report");
+    expect(reads).toBe(2);
+    expect(JSON.parse((await get(slow.port, "/api/report")).body)).toBe("second");
+    await Bun.sleep(350);
+    await burst("/api/report");
+    expect(reads).toBe(3);
+  } finally {
+    await slow.stop();
+  }
+});
+
+test(
+  "no secrets scan starts until /api/secrets is requested",
+  async () => {
+    const { dir } = await housekeepingHome();
+    const key = join(dir, ".quench/local/secrets.key");
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      await get(running.port, "/");
+      await Bun.sleep(200);
+      expect(await Bun.file(key).exists()).toBe(false);
+      expect((await get(running.port, "/api/secrets")).status).toBe(200);
+      expect(await Bun.file(key).exists()).toBe(true);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+test("a refresh that keeps failing is retried once per interval, not on every poll, and its error is served beside the old result", async () => {
+  let reads = 0;
+  const read = () =>
+    ++reads === 1 ? Promise.resolve("first") : Promise.reject(new Error("scan failed: disk gone"));
+  const flaky = serveUi({ port: 0, api: { report: lastResult(read, 50) }, assets });
+  try {
+    await get(flaky.port, "/api/report");
+    await Bun.sleep(60);
+    const polls = [];
+    for (let i = 0; i < 5; i++) {
+      polls.push(await get(flaky.port, "/api/report"));
+      await Bun.sleep(5);
+    }
+    expect(reads).toBe(2);
+    const last = polls.at(-1)!;
+    expect(JSON.parse(last.body)).toBe("first");
+    expect(last.headers["x-quench-refreshing"]).toBe("false");
+    expect(decodeURIComponent(last.headers["x-quench-refresh-error"] as string)).toBe(
+      "scan failed: disk gone",
+    );
+    await Bun.sleep(60);
+    await get(flaky.port, "/api/report");
+    expect(reads).toBe(3);
+  } finally {
+    await flaky.stop();
+  }
+});
