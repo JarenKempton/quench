@@ -40,6 +40,7 @@ export { skillFolder } from "./skill-origin.ts";
 export { quoteArg, shellFor, withEnv, type Shell } from "./removal.ts";
 export {
   matches,
+  namesSkill,
   prose,
   sessionAsks,
   skillAsks,

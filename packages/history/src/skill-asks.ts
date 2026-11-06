@@ -25,7 +25,10 @@ export function sessionAsks(session: Session, extraNames: readonly string[]): Se
   const byPath = new Map(listed.flatMap((s) => (s.path ? [[s.path, s.name] as const] : [])));
   const found = skillAsks(session, extraNames);
   const people = session.events.flatMap((e, i) =>
-    e.type === "message" && e.author === "user" && senderOf(e, session.parent !== null) === "person"
+    e.type === "message" &&
+    e.author === "user" &&
+    !e.queued &&
+    senderOf(e, session.parent !== null) === "person"
       ? [i]
       : [],
   );
@@ -57,9 +60,9 @@ export function skillAsks(session: Session, extraNames: readonly string[]): Skil
     if (event.type !== "message" || event.author !== "user") continue;
     const next = session.events[index + 1];
     const command = next?.type === "invocation" && next.by === "user";
-    const words = command ? [] : wordsOf(prose(event.text));
+    const text = command ? "" : prose(event.text);
     const found = phrases.flatMap(({ name, words: phrase }) =>
-      matches(words, phrase)
+      namesSkill(text, phrase)
         ? [
             {
               name: intern(name),
@@ -92,6 +95,17 @@ export const prose = (text: string) =>
     .split(/\s+/)
     .filter((token) => !/[/\\]|^~/.test(token))
     .join(" ");
+
+export const namesSkill = (text: string, phrase: readonly string[]) =>
+  matches(
+    wordsOf(
+      text
+        .split(/\s+/)
+        .filter((token) => !/[-_]/.test(token) || wordsOf(token).length <= phrase.length)
+        .join(" "),
+    ),
+    phrase,
+  );
 
 export const wordsOf = (text: string) =>
   text

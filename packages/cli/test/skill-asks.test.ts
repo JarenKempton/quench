@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { matches, prose, wordsOf } from "@quench/history";
+import { namesSkill, prose, wordsOf } from "@quench/history";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -45,6 +45,8 @@ const SAID = {
   delegatePrompt: "use the tide pool skill on the logs",
   deployGate: "deploy gate this",
   deepLane: "deep review the change in a lane",
+  queuedAsk: "tide pool the db",
+  queuedFollowUp: "also check the replica",
   reveiw: "deep reveiw the patch",
   relayCodex: "relay: deep review again",
   unknown: "deep review now",
@@ -148,6 +150,29 @@ async function fixture() {
       skillCall("tide-pool", 14),
       said(15),
     ]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/queued.jsonl"),
+    lines([
+      listing,
+      typed(SAID.queuedAsk, 40),
+      {
+        type: "attachment",
+        cwd: project,
+        timestamp: at(41),
+        attachment: {
+          type: "queued_command",
+          commandMode: "prompt",
+          prompt: SAID.queuedFollowUp,
+          origin: { kind: "human" },
+        },
+      },
+      said(42),
+    ]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/queued/subagents/agent-q.jsonl"),
+    lines([{ ...listing, timestamp: at(59) }, viaHost("go", 59), skillCall("tide-pool", 59)]),
   );
   await Bun.write(
     join(home, ".claude/projects/p/lane.jsonl"),
@@ -286,8 +311,8 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       "  Claude Code  deep-review     1             2                 1                  1  1 loaded by a delegate",
       "  Claude Code  ship-it         1             1                 0                  1  only loads from /ship-it (disable-model-invocation)",
       "  Claude Code  deploy-gate     0             1                 0                  1  only loads from /deploy-gate (disable-model-invocation)",
+      "  Claude Code  tide-pool       2             2                 2                  0  2 loaded by a delegate",
       "  Codex        deep-review     1             1                 1                  0",
-      "  Claude Code  tide-pool       1             1                 1                  0  1 loaded by a delegate",
       "  Claude Code  night-watch     1             1                 1                  0",
       "  Claude Code  weather         0  not measured      not measured       not measured  1 mention, one-word name",
       "  Relayed by agents or automation, not counted as asked: 3 messages naming 5 skills",
@@ -359,6 +384,19 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       fix: "only loads from /name",
     },
     {
+      harness: "claude-code",
+      name: "tide-pool",
+      used: 2,
+      measured: "matched",
+      asked: 2,
+      askedAndLoaded: 2,
+      askedNotLoaded: 0,
+      viaDelegate: 2,
+      relayed: 1,
+      unknownSender: 0,
+      fix: null,
+    },
+    {
       harness: "codex",
       name: "deep-review",
       used: 1,
@@ -369,19 +407,6 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       viaDelegate: 0,
       relayed: 1,
       unknownSender: 1,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "tide-pool",
-      used: 1,
-      measured: "matched",
-      asked: 1,
-      askedAndLoaded: 1,
-      askedNotLoaded: 0,
-      viaDelegate: 1,
-      relayed: 1,
-      unknownSender: 0,
       fix: null,
     },
     {
@@ -481,7 +506,7 @@ test("one-word names count as asked only through the opt-in Jev judgment, cached
 });
 
 test("names match as words outside code, paths and URLs, with typos and sound-alikes anchored by an exact word", () => {
-  const ask = (text: string, name: string) => matches(wordsOf(prose(text)), wordsOf(name));
+  const ask = (text: string, name: string) => namesSkill(prose(text), wordsOf(name));
   expect(ask("tide pool it", "tide-pool")).toBe(true);
   expect(ask("tidepool", "tide-pool")).toBe(true);
   expect(ask("Tide pole please", "tide-pool")).toBe(true);
@@ -497,5 +522,8 @@ test("names match as words outside code, paths and URLs, with typos and sound-al
   expect(ask("try this:\n```\nship_it()\n```", "ship-it")).toBe(false);
   expect(ask("run `ship-it` later", "ship-it")).toBe(false);
   expect(ask("ship it now", "ship-it")).toBe(true);
+  expect(ask("branch tide-pool-fix is stale", "tide-pool")).toBe(false);
+  expect(ask("git push origin fix-tide-pool", "tide-pool")).toBe(false);
+  expect(ask("Unknown skill: tide-pool", "tide-pool")).toBe(true);
   expect(ask("the weather", "weather")).toBe(true);
 });
