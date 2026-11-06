@@ -17,6 +17,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Temp folder in memory
+        if: runner.os == 'macOS'
+        run: |
+          diskutil erasevolume APFS quench-tmp "$(hdiutil attach -nomount ram://2097152 | awk '{print $1}')"
+          echo "TMPDIR=/Volumes/quench-tmp" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
