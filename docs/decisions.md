@@ -12,7 +12,8 @@ retired with it and live in git history.
   runs agents only for evals the owner starts, in scratch homes with tools, hooks, plugins and
   MCP off, so replays never reach real history ([#137](https://github.com/JarenKempton/quench/issues/137), amending the earlier "never runs agents").
 - **Local-first.** Everything works offline from files already on the machine. Anything
-  that sends data anywhere is opt-in and says what it sends.
+  that sends data anywhere is opt-in and says what it sends. Pairing with a hub is that opt-in
+  for the archive, and `quench agent otel` states what OTel sends.
 - **No fake numbers.** Every number traces to a file on disk, and estimates are labeled.
 - **Align, don't fork.** Quench writes harness-native settings and never invents a format.
 - **Zero-setup discovery.** Projects come from the working directories sessions recorded,
@@ -46,7 +47,8 @@ retired with it and live in git history.
   move to a native addon.
 - **Few dependencies.** `zod` for validating harness formats, plus Bun's built-ins.
   Vite+ for lint, format and type checks. Anything new needs a reason a built-in can't
-  cover.
+  cover. A runtime service (ClickHouse) is allowed when it ships in the hub image and is reached
+  over a plain protocol; it is not a library.
 - **`quench ui` is the one exception: React, Tailwind, Radix and shadcn/ui, build-only**
   ([#134](https://github.com/JarenKempton/quench/issues/134)). The data is live and local, so
   every view renders in the browser from `/api/report`, `/api/skills` and `/api/corrections` (cached verdicts only, so opening it never calls a judge), and shadcn is built for React and Vite.
@@ -65,6 +67,18 @@ retired with it and live in git history.
   never mix judges. Themes and causes stay Jev-only until another provider passes their fixtures.
   `none` turns off model calls only. The choice and any typed key live in a 0600 config file that
   environment variables override.
+- **Default judge and cost: Jev stays the default; Cloudflare Workers AI is not yet a substitute.**
+  Measured on the maintainer's history, 30 days to 2026-11-06: 12,010 replies needed a judgment
+  (≈400 a day, peak 1,126; 3,468 recorded as typed by a person, ≈116 a day), 4,251 already in
+  Jev's cache. Jev used 1,262 input tokens per judgment (two calls, SDK-reported) at the published
+  $0.042 per million input tokens, output free: $0.05 per 1,000 judgments, ≈$0.64 a month at that
+  volume. Through `--judge openai` on the same 200 uncached replies, Cloudflare's free models
+  agreed with Jev on kind 49% (`llama-3.1-8b-instruct-fp8-fast`, which called 79 corrections to
+  Jev's 19), 49% (`granite-4.0-h-micro`) and 66% (`qwen3-30b-a3b-fp8`, catching 9 of 19), and on
+  sender 78–85%. The 10,000 free neurons a day cover the volume (≈3 neurons a judgment for
+  llama, ≈17 for qwen3: every day, or 26 of 31), so volume is not the obstacle; agreement is.
+  No change is needed for these models; reasoning models such as `gpt-oss-20b` stop at
+  Cloudflare's default 256 output tokens unless the judge sends `max_tokens`.
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
 - **Hosts enrich history; they do not redefine harnesses.** Optional local host adapters add
@@ -171,6 +185,30 @@ retired with it and live in git history.
   becomes an empty bundle and never removes anything. The first snapshot after missed or failed polls
   carries `staleSince`; the hub shows that window until the next snapshot clears it. Before every git
   subprocess the hub re-checks that `GIT_DIR` is a plain folder inside its data folder.
+- **The hub's analytics archive is ClickHouse; hub state stays in SQLite and git** ([#176](https://github.com/JarenKempton/quench/issues/176)).
+  It is sized for years of six machines and is the only append-heavy store. Pairing, tokens,
+  machines, proposals and bundles stay where they were. The hub reaches ClickHouse over HTTP with
+  `fetch` and supervises it as a child process. Its data lives in its own folder, never inside the
+  hub's data folder, because its engine makes symlinks. It listens on loopback only, with a
+  generated password, and runs inside a 3 GiB budget: 2.5 GiB server cap, 1.5 GiB per query,
+  GROUP BY and sort spill to disk at 512 MiB, small caches, and no metric or trace log tables.
+- **Transcripts and per-session results are the core of the archive; OTel is an add-on** ([#176](https://github.com/JarenKempton/quench/issues/176)).
+  A paired agent ships each session file once it has been idle 30 minutes, as native bytes
+  compressed with zstd at its harness-relative path. It ships the same session's
+  `quench_sessions` row (fixed vocabulary, cached verdicts only, never a judge call) alongside.
+  A machine with no OTel and no CLIProxy gets full history. Replays run the existing adapters
+  over a scratch home, and improved analyses write rows with a newer `AnalysisVersion`.
+  Transcripts are the one hub path that keeps prompts and tool output. They are readable only by
+  the owner and secret-scanned on arrival.
+- **OTLP leaves a machine only through the quench agent, filtered first** ([#176](https://github.com/JarenKempton/quench/issues/176)).
+  `--otlp` listens on loopback for OTLP/HTTP JSON only. Before anything is spooled, it drops
+  `codex.sse_event`, prompts, tool arguments, parameters and output, `user.email`, account ids,
+  bytes, free-text bodies and nested values, and caps other strings at 256 characters. The hub
+  applies the same filter again and takes the machine from the token. With OTel off, the API
+  names each missing cost, latency and error field and why. Quench prints harness OTel settings
+  and never writes them.
+- **Retention is a setting, default five years** (`--retention`, applied as a ClickHouse TTL
+  that drops whole monthly parts, and a daily transcript sweep).
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

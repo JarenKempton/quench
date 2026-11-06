@@ -56,7 +56,11 @@ Usage:
                                        a local page of starting load and skills on 127.0.0.1 (random port by default); read-only
   quench hub serve [--data <dir>] [--listen <host:port>] [--url <public url>] [--mirror <git remote>]
                    [--tls-cert <pem> --tls-key <pem> | --http]
-                                       run the fleet hub; first run needs QUENCH_HUB_PASSWORD (--http: loopback only)
+                   [--clickhouse-bin <path> [--clickhouse-data <dir>] [--clickhouse-port 8123] | --clickhouse <url>]
+                   [--retention 5y]
+                                       run the fleet hub; first run needs QUENCH_HUB_PASSWORD (--http: loopback only).
+                                       With ClickHouse it also keeps the analytics archive: transcripts, per-session
+                                       results and stripped OTel, kept for --retention (90d, 18m, 5y or never)
   quench hub import <git-url|path> [--data <dir>]
                                        bring a skills repo into a new hub with its history, plus one fleet-file commit
   quench connect <https://hub> --code XXXX-XXXX [--pin sha256:…]
@@ -76,8 +80,12 @@ Usage:
                                        replay first prompts against the installed and a candidate skill in scratch
                                        Claude Code homes (Linux, macOS); shows a cost estimate and asks first
   quench agent install|uninstall|run [--source <dir> --machine <name>] [--interval 300] [--once]
+                                     [--otlp 127.0.0.1:4318]
                                        a user service that keeps applying the paired hub's bundle, or the
-                                       source, and reports to the hub; never updates itself
+                                       source, and reports to the hub; never updates itself. Paired, it also
+                                       ships session transcripts and per-session results to the hub's archive;
+                                       --otlp adds stripped OTel (cost, latency, errors)
+  quench agent otel                    the harness settings that send OTel through the agent
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
   quench corrections [session-file...] [--session <id>]... [--causes] [--json]
@@ -145,6 +153,12 @@ const { positionals, values } = parseArgs({
     plan: { type: "string" },
     project: { type: "string", multiple: true, default: [] },
     interval: { type: "string", default: "300" },
+    otlp: { type: "string" },
+    retention: { type: "string" },
+    clickhouse: { type: "string" },
+    "clickhouse-bin": { type: "string" },
+    "clickhouse-data": { type: "string" },
+    "clickhouse-port": { type: "string" },
     once: { type: "boolean", default: false },
     base: { type: "string" },
     agent: { type: "string" },
@@ -297,12 +311,28 @@ if (values.plan !== undefined && command !== "skills") {
   process.stderr.write("--plan is only available for skills apply\n");
   process.exit(1);
 }
-if ((values.once || values.interval !== "300") && command !== "agent") {
-  process.stderr.write("--interval and --once are only available for agent\n");
+if (
+  (values.once || values.interval !== "300" || values.otlp !== undefined) &&
+  command !== "agent"
+) {
+  process.stderr.write("--interval, --once and --otlp are only available for agent\n");
   process.exit(1);
 }
 
-const HUB_FLAGS = ["data", "listen", "http", "url", "mirror", "tls-cert", "tls-key"] as const;
+const HUB_FLAGS = [
+  "data",
+  "listen",
+  "http",
+  "url",
+  "mirror",
+  "tls-cert",
+  "tls-key",
+  "retention",
+  "clickhouse",
+  "clickhouse-bin",
+  "clickhouse-data",
+  "clickhouse-port",
+] as const;
 if (HUB_FLAGS.some((f) => values[f] !== undefined && values[f] !== false) && command !== "hub") {
   process.stderr.write(`--${HUB_FLAGS.join(", --")} are only available for hub\n`);
   process.exit(1);
@@ -466,6 +496,7 @@ switch (command) {
       projects: values.project,
       interval: Number(values.interval),
       once: values.once,
+      ...(values.otlp !== undefined ? { otlp: values.otlp } : {}),
       homeFlags: Object.keys(HOME_FLAGS).flatMap((flag) => {
         const dir = values[flag as keyof typeof HOME_FLAGS];
         return dir ? [`--${flag}`, resolve(dir)] : [];
@@ -500,6 +531,11 @@ switch (command) {
       ...(values.mirror ? { mirror: values.mirror } : {}),
       ...(values["tls-cert"] ? { tlsCert: values["tls-cert"] } : {}),
       ...(values["tls-key"] ? { tlsKey: values["tls-key"] } : {}),
+      ...(values.retention ? { retention: values.retention } : {}),
+      ...(values.clickhouse ? { clickhouse: values.clickhouse } : {}),
+      ...(values["clickhouse-bin"] ? { clickhouseBin: values["clickhouse-bin"] } : {}),
+      ...(values["clickhouse-data"] ? { clickhouseData: values["clickhouse-data"] } : {}),
+      ...(values["clickhouse-port"] ? { clickhousePort: values["clickhouse-port"] } : {}),
     });
     break;
   case "skill":

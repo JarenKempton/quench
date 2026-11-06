@@ -10,6 +10,7 @@ import {
   type Connection,
   type StoredBundle,
 } from "@quench/hub/client";
+import { archiveCycle, archiveLine, type ArchiveStatus } from "./agent-archive.ts";
 import { applyAndReport, readStatus, writeStatus } from "./agent-cycle.ts";
 import type { SkillsOptions } from "./skills.ts";
 
@@ -90,6 +91,7 @@ export async function hubCycle(
     await postSnapshot(dir, report.snapshot).catch((error) =>
       errors.push(`snapshot not delivered: ${message(error)}`),
     );
+  const archive: ArchiveStatus | null = connection ? await archiveCycle(home, dir) : null;
   const synced = errors.length === 0;
   const hub: HubLink = {
     url: connection?.url ?? null,
@@ -101,12 +103,13 @@ export async function hubCycle(
     staleSince,
     error: errors.join("; ") || null,
   };
-  return writeStatus(home, { version: 1, machine: hub.machine, ...report, kept, hub });
+  return writeStatus(home, { version: 1, machine: hub.machine, ...report, kept, hub, archive });
 }
 
-export const hubLine = (status: { hub: HubLink; kept: boolean }) =>
-  status.hub.error
+export const hubLine = (status: { hub: HubLink; kept: boolean; archive: ArchiveStatus | null }) =>
+  (status.archive ? archiveLine(status.archive) : "") +
+  (status.hub.error
     ? `; ${status.hub.error}${status.kept ? `; kept bundle ${status.hub.bundle} applied` : ""}`
     : status.hub.staleSince
       ? `; caught up, stale since ${status.hub.staleSince}`
-      : "";
+      : "");

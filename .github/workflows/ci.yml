@@ -26,6 +26,32 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: ClickHouse for the archive test (none is built for Windows)
+        if: runner.os != 'Windows'
+        id: clickhouse
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/clickhouse
+          key: clickhouse-26.8.34.13-${{ runner.os }}-${{ runner.arch }}
+      - name: Download ClickHouse 26.8.34.13 LTS
+        if: runner.os != 'Windows' && steps.clickhouse.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/clickhouse" && cd "$RUNNER_TEMP/clickhouse"
+          if [ "$RUNNER_OS" = macOS ]; then
+            gh release download -R ClickHouse/ClickHouse v26.8.34.13-lts -p clickhouse-macos-aarch64
+            echo "d1666bb409243aee970c6ea76d8b97e18cbcb6351d61d52dd3d88baab14d26db  clickhouse-macos-aarch64" | shasum -a 256 -c
+            mv clickhouse-macos-aarch64 clickhouse
+          else
+            gh release download -R ClickHouse/ClickHouse v26.8.34.13-lts -p clickhouse-common-static-26.8.34.13-amd64.tgz
+            echo "d64b69ce0a13a1e89960b5ffcc6f07ea471b314ae21348e457dd232c8fa5506e  clickhouse-common-static-26.8.34.13-amd64.tgz" | sha256sum -c
+            tar xzf clickhouse-common-static-26.8.34.13-amd64.tgz --strip-components=3 clickhouse-common-static-26.8.34.13/usr/bin/clickhouse
+            rm clickhouse-common-static-26.8.34.13-amd64.tgz
+          fi
+          chmod +x clickhouse
+      - if: runner.os != 'Windows'
+        run: echo "QUENCH_TEST_CLICKHOUSE=$RUNNER_TEMP/clickhouse/clickhouse" >> "$GITHUB_ENV"
       - run: bunx vp check
       - run: bunx vp run compile
       - run: ./dist/quench --help
@@ -56,3 +82,11 @@ jobs:
           test -f "$scratch/claude/skills/commit-style/SKILL.md"
           test -f "$scratch/pi/skills/commit-style/SKILL.md"
       - run: bun -e "const fs = require('node:fs'); const d = require('node:os').tmpdir(); const left = fs.readdirSync(d).filter((n) => n.startsWith('quench-')); console.log(d, left); if (left.length) process.exit(1)"
+
+  archive-container:
+    name: Archive container at scale (Docker, Linux only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: 100M synthetic OTel rows over a year, then year-long GROUP BYs, in a 3 GiB container
+        run: ROWS=100000000 CHUNK=50000000 packages/hub/test/scale.sh
