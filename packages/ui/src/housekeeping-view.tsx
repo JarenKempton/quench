@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
 import { CopyButton } from "./copy-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { Button } from "./components/ui/button.tsx";
+import { Fresh } from "./fresh.tsx";
 import {
   Table,
   TableBody,
@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "./components/ui/table.tsx";
 import {
-  freshness,
   plan,
   rotations,
   type FileSecrets,
@@ -20,61 +19,32 @@ import {
   type WorktreesReport,
 } from "./housekeeping.ts";
 import { viewerShell } from "./skills.ts";
+import type { Load, State } from "./use-api.ts";
 
-type Load<T> =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | {
-      status: "ready";
-      report: T;
-      computedAt: string | null;
-      refreshing: boolean;
-      refreshError: string | null;
-    };
+type Page = { states: Record<string, State<unknown>>; load: Load };
 
-function useReport<T>(path: string) {
-  const [state, setState] = useState<Load<T>>({ status: "loading" });
-  const load = useCallback(
-    async (refresh = false) => {
-      setState((last) => (last.status === "ready" ? last : { status: "loading" }));
-      try {
-        const response = await fetch(refresh ? `${path}?refresh=1` : path);
-        if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-        setState({
-          status: "ready",
-          report: (await response.json()) as T,
-          computedAt: response.headers.get("x-quench-computed-at"),
-          refreshing: response.headers.get("x-quench-refreshing") === "true",
-          refreshError:
-            decodeURIComponent(response.headers.get("x-quench-refresh-error") ?? "") || null,
-        });
-      } catch (error) {
-        setState({ status: "error", message: (error as Error).message });
-      }
-    },
-    [path],
-  );
-  useEffect(() => {
-    void load();
-  }, [load]);
-  const refreshing = state.status === "ready" && state.refreshing;
-  useEffect(() => {
-    if (!refreshing) return;
-    const timer = setInterval(() => void load(), 5000);
-    return () => clearInterval(timer);
-  }, [refreshing, load]);
-  return [state, load] as const;
-}
+const WORKTREES = "/api/worktrees";
+const SECRETS = "/api/secrets";
+export const HOUSEKEEPING = [WORKTREES, SECRETS];
 
-export function HousekeepingView() {
-  const [worktrees, reloadWorktrees] = useReport<WorktreesReport>("/api/worktrees");
-  const [secrets, reloadSecrets] = useReport<SecretsReport>("/api/secrets");
+const stateOf = <T,>(states: Page["states"], path: string) =>
+  (states[path] ?? { status: "loading" }) as State<T>;
+
+export function HousekeepingView({ states, load }: Page) {
   return (
     <div className="space-y-10">
-      <Section title="Idle worktrees" state={worktrees} retry={reloadWorktrees}>
+      <Section
+        title="Idle worktrees"
+        state={stateOf<WorktreesReport>(states, WORKTREES)}
+        retry={(refresh) => load(WORKTREES, refresh)}
+      >
         {(report) => <Worktrees report={report} />}
       </Section>
-      <Section title="Exposed secrets" state={secrets} retry={reloadSecrets}>
+      <Section
+        title="Exposed secrets"
+        state={stateOf<SecretsReport>(states, SECRETS)}
+        retry={(refresh) => load(SECRETS, refresh)}
+      >
         {(report) => <Secrets report={report} />}
       </Section>
     </div>
@@ -88,7 +58,7 @@ function Section<T>({
   children,
 }: {
   title: string;
-  state: Load<T>;
+  state: State<T>;
   retry: (refresh?: boolean) => void;
   children: (report: T) => React.ReactNode;
 }) {
@@ -96,25 +66,8 @@ function Section<T>({
     <section className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-        {state.status === "ready" && state.computedAt && (
-          <span className="flex items-baseline gap-2 font-mono text-xs text-muted-foreground">
-            {freshness(state.computedAt, state.refreshing, Date.now())}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={state.refreshing}
-              onClick={() => retry(true)}
-            >
-              Refresh
-            </Button>
-          </span>
-        )}
+        <Fresh state={state} refresh={() => retry(true)} />
       </div>
-      {state.status === "ready" && state.refreshError && (
-        <p className="font-mono text-xs text-warn">
-          Last refresh failed, showing the earlier result: {state.refreshError}
-        </p>
-      )}
       {state.status === "loading" && (
         <Note>
           Reading your session history… The first scan can take minutes; later visits show the last

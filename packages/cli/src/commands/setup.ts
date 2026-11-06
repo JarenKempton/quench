@@ -95,7 +95,14 @@ export async function setup(
   } finally {
     reader.close();
   }
-  return code === 0 && context.launch ? serveUi(home, { days: 30, cache: true, open: true }) : code;
+  if (code !== 0 || !context.launch) return code;
+  const choice = judgeChoice(await readConfig(home.dir), context.env);
+  return serveUi(home, {
+    days: 30,
+    cache: true,
+    open: true,
+    judge: choice instanceof Error ? null : provider(choice),
+  });
 }
 
 async function steps(context: Context, start: number, done: Set<string>): Promise<number> {

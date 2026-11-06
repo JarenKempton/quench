@@ -1,10 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, stat } from "node:fs/promises";
 import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Home } from "@quench/history";
+import { provider, type Provider } from "@quench/judge";
 import { CSP, lastResult, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
+import { day, fixture, session } from "./correction-home.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
@@ -28,7 +30,10 @@ const assets = new Map<string, Blob>([
 ]);
 const server = serveUi({
   port: 0,
-  api: { skills: async () => ({ skills: [] }) },
+  api: {
+    skills: async () => ({ skills: [] }),
+    corrections: async () => ({ judge: null }),
+  },
   assets,
 });
 afterAll(() => server.stop());
@@ -49,7 +54,7 @@ test("binds 127.0.0.1 only", async () => {
 });
 
 test("every response carries the strict CSP, DENY framing and no-store", async () => {
-  for (const path of ["/", "/api/skills", "/missing.js"]) {
+  for (const path of ["/", "/api/skills", "/api/corrections", "/missing.js"]) {
     const { headers } = await get(server.port, path);
     expect(headers["content-security-policy"]).toBe(CSP);
     expect(headers["x-frame-options"]).toBe("DENY");
@@ -66,11 +71,29 @@ test("a foreign Host header is rejected, so DNS rebinding can't read the API", a
     `localhost:${server.port}`,
     "127.0.0.1:1",
   ]) {
-    const response = await get(server.port, "/api/skills", host);
-    expect(response.status).toBe(421);
-    expect(response.body).not.toContain("skills");
+    for (const path of ["/api/skills", "/api/corrections"]) {
+      const response = await get(server.port, path, host);
+      expect(response.status).toBe(421);
+      expect(response.body).not.toContain("skills");
+      expect(response.body).not.toContain("judge");
+    }
   }
 });
+
+test("an API answer that takes longer than Bun's 10 s idle timeout still arrives", async () => {
+  const slow = serveUi({
+    port: 0,
+    api: { corrections: () => Bun.sleep(15_000).then(() => ({ judge: null })) },
+    assets,
+  });
+  try {
+    const answer = await fetch(`${slow.url}api/corrections`);
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ judge: null });
+  } finally {
+    await slow.stop();
+  }
+}, 25_000);
 
 const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 
@@ -111,7 +134,7 @@ async function home() {
 }
 
 test(
-  "/api/skills equals quench skills --json on the same home, and each request reads it again",
+  "/api/skills equals quench skills --json on the same home, kept until a refresh reads it again",
   async () => {
     const dir = await home();
     const expected = await quench(dir, "skills", "--json", "--no-host-history");
@@ -122,6 +145,7 @@ test(
       cache: true,
       open: false,
       hostHistory: false,
+      judge: null,
     });
     if (running instanceof Error) throw running;
     try {
@@ -129,13 +153,100 @@ test(
       const served = await get(running.port, "/api/skills");
       expect(served.status).toBe(200);
       expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
       expect(JSON.parse(served.body)).toEqual(JSON.parse(expected.stdout));
       await Bun.write(
         join(dir, ".claude/skills/tidy/SKILL.md"),
         "---\nname: tidy\ndescription: tidy\n---\n",
       );
-      const again = JSON.parse((await get(running.port, "/api/skills")).body);
-      expect(again.skills.map((r: { skill: string }) => r.skill)).toContain("tidy");
+      const names = async (path: string) => {
+        const response = await get(running.port, path);
+        return {
+          refreshing: response.headers["x-quench-refreshing"],
+          skills: JSON.parse(response.body).skills.map((r: { skill: string }) => r.skill),
+        };
+      };
+      expect((await names("/api/skills")).skills).not.toContain("tidy");
+      expect(await names("/api/skills?refresh=1")).toMatchObject({ refreshing: "true" });
+      let after = await names("/api/skills");
+      while (after.refreshing === "true") {
+        await Bun.sleep(50);
+        after = await names("/api/skills");
+      }
+      expect(after.skills).toContain("tidy");
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+async function tree(dir: string): Promise<string[]> {
+  const entries = (await readdir(dir, { recursive: true })).sort();
+  return Promise.all(entries.map(async (e) => `${e}:${(await stat(join(dir, e))).mtimeMs}`));
+}
+
+test(
+  "/api/corrections is quench corrections --json --context --cached-only with only the shown file histories, calls no judge and writes nothing",
+  async () => {
+    const dir = await fixture();
+    const work = JSON.stringify(join(dir, "work", "CLAUDE.md")).slice(1, -1);
+    const once = JSON.stringify(join(dir, "elsewhere", "AGENTS.md")).slice(1, -1);
+    await Bun.write(join(dir, "elsewhere", "AGENTS.md"), "Once.\n");
+    await Bun.write(
+      join(dir, ".claude/projects/-work/once.jsonl"),
+      session(dir, { id: "once", at: day(3, 1), corrected: false }).replaceAll(work, once),
+    );
+    const expected = await quench(
+      dir,
+      "corrections",
+      "--json",
+      "--context",
+      "--cached-only",
+      "--days",
+      "36500",
+      "--no-host-history",
+    );
+    expect(expected.stderr).toBe("");
+    const report = JSON.parse(expected.stdout);
+    const { floor, files } = report.context.history;
+    const shown = files.filter((f: { sessions: number }) => f.sessions >= floor);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(files.length);
+    expect(report.weekly.length).toBeGreaterThan(0);
+    let created = 0;
+    const judge: Provider = {
+      ...provider({ name: "jev", apiKey: "must-not-be-used" }),
+      create: async () => {
+        created++;
+        throw new Error("the UI must not create a judge");
+      },
+    };
+    const running = await startUi(new Home(dir), {
+      days: 36500,
+      cache: true,
+      open: false,
+      hostHistory: false,
+      judge,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const before = await tree(dir);
+      const served = await get(running.port, "/api/corrections");
+      expect(served.status).toBe(200);
+      expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
+      expect(JSON.parse(served.body)).toEqual({
+        ...report,
+        context: {
+          ...report.context,
+          history: { ...report.context.history, total: files.length, files: shown },
+        },
+      });
+      expect(created).toBe(0);
+      for (const text of ["no, wrong", "thanks", "fix it", "Use Bun", "test suite", "done"])
+        expect(served.body).not.toContain(text);
+      expect(await tree(dir)).toEqual(before);
     } finally {
       await running.stop();
     }
@@ -240,6 +351,7 @@ test(
       cache: true,
       open: false,
       hostHistory: false,
+      judge: null,
     });
     if (running instanceof Error) throw running;
     try {
@@ -275,6 +387,24 @@ test(
   },
   cliRunsTimeout,
 );
+
+test("with judging off, /api/corrections says so without reading history", async () => {
+  const running = await startUi(new Home(await mkdtemp(join(tmpdir(), "quench-cli-ui-"))), {
+    days: 30,
+    cache: true,
+    open: false,
+    hostHistory: false,
+    judge: provider({ name: "none" }),
+  });
+  if (running instanceof Error) throw running;
+  try {
+    expect(JSON.parse((await get(running.port, "/api/corrections")).body)).toEqual({
+      judge: null,
+    });
+  } finally {
+    await running.stop();
+  }
+});
 
 test("a burst of reloads starts at most one scan; ?refresh=1 or an old result starts one more", async () => {
   let reads = 0;
@@ -332,6 +462,7 @@ test(
       cache: true,
       open: false,
       hostHistory: false,
+      judge: null,
     });
     if (running instanceof Error) throw running;
     try {
