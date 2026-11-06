@@ -14,6 +14,12 @@ trap 'docker rm -f "$name" >/dev/null; docker volume prune -f >/dev/null' EXIT
 for _ in $(seq 120); do docker logs "$name" 2>&1 | grep -q "Archive in ClickHouse" && break; sleep 1; done
 docker logs "$name" 2>&1 | grep "Archive in ClickHouse"
 
+timed() {
+  local started=$(date +%s%N)
+  q "$@"
+  echo "took $(( ($(date +%s%N) - started) / 1000000 )) ms"
+}
+
 q() {
   docker exec "$name" sh -c 'wget -qO- --content-on-error --header "X-ClickHouse-User: quench" \
     --header "X-ClickHouse-Key: $(cat /data/clickhouse-password)" \
@@ -49,14 +55,14 @@ echo "--- size"
 q "SELECT sum(rows) AS rows, formatReadableSize(sum(data_compressed_bytes)) AS on_disk, formatReadableSize(sum(data_uncompressed_bytes)) AS raw, round(sum(data_uncompressed_bytes) / sum(data_compressed_bytes), 1) AS ratio, uniqExact(partition) AS partitions FROM system.parts WHERE active AND database = 'quench' AND table = 'otel_logs' FORMAT Vertical"
 
 echo "--- year-long GROUP BY machine, event, day"
-q "SELECT count() AS groups, sum(c) AS events FROM (SELECT Machine, EventName, toStartOfDay(TimestampTime) AS day, count() AS c FROM otel_logs WHERE TimestampTime >= '2025-11-06' AND TimestampTime < '2026-11-07' GROUP BY Machine, EventName, day) FORMAT Vertical" "log_comment=scale-day"
+timed "SELECT count() AS groups, sum(c) AS events FROM (SELECT Machine, EventName, toStartOfDay(TimestampTime) AS day, count() AS c FROM otel_logs WHERE TimestampTime >= '2025-11-06' AND TimestampTime < '2026-11-07' GROUP BY Machine, EventName, day) FORMAT Vertical" "log_comment=scale-day"
 
 echo "--- year-long GROUP BY session, cost and p95 latency"
-q "SELECT count() AS sessions, round(sum(cost), 2) AS cost, round(avg(p95)) AS avg_p95_ms FROM (SELECT SessionId, sum(toFloat64OrZero(LogAttributes['cost_usd'])) AS cost, quantile(0.95)(toFloat64OrZero(LogAttributes['duration_ms'])) AS p95 FROM otel_logs GROUP BY SessionId) FORMAT Vertical" "log_comment=scale-session"
+timed "SELECT count() AS sessions, round(sum(cost), 2) AS cost, round(avg(p95)) AS avg_p95_ms FROM (SELECT SessionId, sum(toFloat64OrZero(LogAttributes['cost_usd'])) AS cost, quantile(0.95)(toFloat64OrZero(LogAttributes['duration_ms'])) AS p95 FROM otel_logs GROUP BY SessionId) FORMAT Vertical" "log_comment=scale-session"
 
 q "SYSTEM FLUSH LOGS"
 echo "--- per-query peak memory"
-q "SELECT log_comment, query_duration_ms, formatReadableSize(memory_usage) AS peak, formatReadableQuantity(read_rows) AS read FROM system.query_log WHERE type = 'QueryFinish' AND log_comment LIKE 'scale-%' ORDER BY event_time FORMAT PrettyCompactMonoBlock"
+q "SELECT log_comment, type, query_duration_ms, formatReadableSize(memory_usage) AS peak, formatReadableQuantity(read_rows) AS read FROM system.query_log WHERE log_comment LIKE 'scale-%' AND type != 'QueryStart' ORDER BY event_time FORMAT PrettyCompactMonoBlock"
 echo "--- container"
 echo "limit $memory, peak $(docker exec "$name" cat /sys/fs/cgroup/memory.peak | numfmt --to=iec), OOM killed: $(docker inspect -f '{{.State.OOMKilled}}' "$name")"
 test "$(docker inspect -f '{{.State.Running}}' "$name")" = true

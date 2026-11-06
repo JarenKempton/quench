@@ -1,8 +1,5 @@
-import { zstdDecompressSync } from "node:zlib";
 import {
-  MAX_TRANSCRIPT_BYTES,
   retentionCutoff,
-  sha256,
   stripLogs,
   stripMetrics,
   valueText,
@@ -12,12 +9,14 @@ import {
   type SessionResult,
   type TranscriptUpload,
 } from "@quench/fleet";
-import { detect } from "@quench/secrets";
 import type { ClickHouse, Params } from "./clickhouse.ts";
 import type { DataDir } from "./data.ts";
+import { receiveTranscript, Rejected } from "./intake.ts";
 import { migrate } from "./schema.ts";
 
-export class Rejected extends Error {}
+export { Rejected };
+
+export class Busy extends Error {}
 
 const attrs = (list: KeyValue[] | undefined) =>
   Object.fromEntries((list ?? []).map((kv) => [kv.key, valueText(kv.value)]));
@@ -306,38 +305,37 @@ export class Archive {
     return ["archive", machine, harness, ...segments];
   }
 
-  async transcript(machine: string, upload: TranscriptUpload, compressed: Uint8Array) {
-    let raw: Buffer;
+  private receiving = false;
+
+  async transcript(machine: string, upload: TranscriptUpload, body: AsyncIterable<Uint8Array>) {
+    if (this.receiving) throw new Busy("the hub is receiving another transcript; retry shortly");
+    this.receiving = true;
     try {
-      raw = zstdDecompressSync(compressed, { maxOutputLength: MAX_TRANSCRIPT_BYTES });
-    } catch {
-      throw new Rejected(
-        `the transcript is not zstd, or is over ${MAX_TRANSCRIPT_BYTES} bytes once decompressed`,
-      );
+      const got = await receiveTranscript(this.data, body);
+      if (got.sha256 !== upload.sha256) {
+        await this.data.remove(...got.tmp);
+        throw new Rejected("the transcript does not match its sha256");
+      }
+      await this.data.move(got.tmp, this.parts(machine, upload.harness, upload.path));
+      await this.ch.insert("quench_transcripts", [
+        {
+          Machine: machine,
+          Harness: upload.harness,
+          SessionId: upload.sessionId,
+          Path: upload.path,
+          Sha256: upload.sha256,
+          Bytes: got.raw,
+          StoredBytes: got.stored,
+          SecretFindings: got.secrets.findings,
+          SecretRules: [...got.secrets.rules].sort(),
+          ModifiedAt: msTime(upload.modifiedAt),
+          ArchivedAt: msTime(new Date(this.now()).toISOString()),
+        },
+      ]);
+      return { bytes: got.raw, stored: got.stored, secretFindings: got.secrets.findings };
+    } finally {
+      this.receiving = false;
     }
-    if (sha256(raw) !== upload.sha256)
-      throw new Rejected("the transcript does not match its sha256");
-    const findings = detect(raw.toString("utf8"));
-    const parts = this.parts(machine, upload.harness, upload.path);
-    const tmp = ["tmp", `${crypto.randomUUID()}.zst`];
-    await this.data.write(tmp, compressed);
-    await this.data.move(tmp, parts);
-    await this.ch.insert("quench_transcripts", [
-      {
-        Machine: machine,
-        Harness: upload.harness,
-        SessionId: upload.sessionId,
-        Path: upload.path,
-        Sha256: upload.sha256,
-        Bytes: raw.length,
-        StoredBytes: compressed.length,
-        SecretFindings: findings.length,
-        SecretRules: [...new Set(findings.map((f) => f.rule))].sort(),
-        ModifiedAt: msTime(upload.modifiedAt),
-        ArchivedAt: msTime(new Date(this.now()).toISOString()),
-      },
-    ]);
-    return { bytes: raw.length, stored: compressed.length, secretFindings: findings.length };
   }
 
   async readTranscript(machine: string, harness: string, path: string) {

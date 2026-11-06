@@ -107,8 +107,9 @@ SETTINGS ttl_only_drop_parts = 1`,
   SkillsInvoked Array(LowCardinality(String)),
   JudgeId LowCardinality(String),
   AnalysisVersion UInt32,
-  ComputedAt DateTime64(3)
-) ENGINE = ReplacingMergeTree(ComputedAt)
+  ComputedAt DateTime64(3),
+  Version UInt64 MATERIALIZED toUInt64(AnalysisVersion) * 10000000000000 + toUInt64(toUnixTimestamp64Milli(ComputedAt))
+) ENGINE = ReplacingMergeTree(Version)
 PARTITION BY toYYYYMM(StartedAt)
 ORDER BY (Machine, Harness, SessionId, Path)
 SETTINGS ttl_only_drop_parts = 1`,

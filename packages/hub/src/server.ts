@@ -7,7 +7,7 @@ import {
   excluded,
   LogsRequest,
   MAX_OTLP_BYTES,
-  MAX_TRANSCRIPT_BYTES,
+  MAX_UPLOAD_BYTES,
   MetricsRequest,
   SessionResults,
   TranscriptUpload,
@@ -23,7 +23,7 @@ import {
 } from "@quench/fleet";
 import { detect, detectInFile } from "@quench/secrets";
 import { FLEET_FILE } from "@quench/fleet/disk";
-import { Archive, Rejected } from "./archive.ts";
+import { Archive, Busy, Rejected } from "./archive.ts";
 import { selfSignedCertificate, spkiPin } from "./cert.ts";
 import { ClickHouse, DEFAULT_MEMORY, superviseClickHouse, type Supervised } from "./clickhouse.ts";
 import { GitError, StaleHead } from "./git.ts";
@@ -166,6 +166,8 @@ async function withCsrf(response: Response, token: string) {
 }
 
 type Owned = { now: <T>(action: () => T) => T; guard: () => void };
+
+const ArchiveTime = z.union([z.iso.date(), z.iso.datetime({ offset: true })]);
 
 const PairRequest = z.object({ code: z.string().min(1).max(64) }).strict();
 
@@ -398,12 +400,21 @@ export async function serveHub(options: ServeOptions) {
           { error: "invalid x-quench-transcript header", issues: meta.error.issues },
           400,
         );
-      const body = await readCapped(req, MAX_TRANSCRIPT_BYTES);
-      if (!body) return tooLarge();
+      if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES) return tooLarge();
+      if (!req.body) return json({ error: "no transcript in the body" }, 400);
       try {
-        return json({ machine, ...(await archive.transcript(machine, meta.data, body)) });
+        return json({
+          machine,
+          ...(await archive.transcript(
+            machine,
+            meta.data,
+            req.body as unknown as AsyncIterable<Uint8Array>,
+          )),
+        });
       } catch (error) {
-        if (error instanceof Rejected) return json({ error: error.message }, 422);
+        if (error instanceof Busy)
+          return json({ error: error.message }, 429, { "retry-after": "5" });
+        if (error instanceof Rejected) return json({ error: error.message }, error.status);
         throw error;
       }
     }
@@ -422,6 +433,9 @@ export async function serveHub(options: ServeOptions) {
     const limit = Number(q.get("limit") ?? 500);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ARCHIVE_ROWS)
       return json({ error: `limit must be 1–${MAX_ARCHIVE_ROWS}` }, 400);
+    for (const key of ["from", "to"])
+      if (q.has(key) && !ArchiveTime.safeParse(q.get(key)).success)
+        return json({ error: `${key} must be an ISO date or date-time, such as 2026-11-01` }, 400);
     const filter = {
       limit,
       ...Object.fromEntries(
@@ -804,7 +818,7 @@ export async function serveHub(options: ServeOptions) {
   const server = Bun.serve({
     hostname: options.hostname,
     port: options.port,
-    maxRequestBodySize: MAX_TRANSCRIPT_BYTES + MAX_SNAPSHOT_BYTES,
+    maxRequestBodySize: MAX_UPLOAD_BYTES + MAX_SNAPSHOT_BYTES,
     ...(tls ? { tls } : {}),
     async fetch(req) {
       const path = new URL(req.url).pathname;

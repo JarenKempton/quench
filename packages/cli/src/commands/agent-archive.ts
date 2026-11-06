@@ -4,6 +4,7 @@ import {
   ANALYSIS_VERSION,
   MAX_SESSION_ROWS,
   MAX_TRANSCRIPT_BYTES,
+  MAX_UPLOAD_BYTES,
   sha256,
   TranscriptPath,
   type SessionResult,
@@ -195,6 +196,10 @@ export async function archiveCycle(
       const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
       if (!session) count(status.skipped, "unreadable");
       const compressed = await Bun.zstdCompress(bytes, { level: 10 });
+      if (compressed.length > MAX_UPLOAD_BYTES) {
+        count(status.skipped, "too-large");
+        continue;
+      }
       await putTranscript(
         dir,
         {

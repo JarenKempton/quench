@@ -319,10 +319,13 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   cookie.
 - **Core: transcripts and results.** `agent-archive.ts` keeps `archive.json` (path, size, mtime,
   SHA-256) so each file is shipped once per change, oldest first, at most 256 MiB raw per cycle.
-  The hub checks the SHA-256 after decompressing under a 512 MiB cap, secret-scans the text,
-  stores the compressed bytes through `DataDir`, and indexes them in `quench_transcripts`.
-  `quench_sessions` is a `ReplacingMergeTree(ComputedAt)`. Tokens Codex does not record stay
-  `NULL`, and corrections come from cached verdicts only.
+  The hub takes one transcript at a time and answers 429 while busy, so the agent retries next
+  cycle. `intake.ts` streams each upload to a temp file under the data folder, refusing more than
+  64 MiB compressed or 256 MiB decompressed as the bytes arrive, while it hashes and secret-scans
+  the decompressed stream line by line. Only a matching SHA-256 moves the file into place,
+  indexed in `quench_transcripts`. `quench_sessions` is a `ReplacingMergeTree` versioned on
+  `AnalysisVersion`, then `ComputedAt`, so an older analysis posted late never replaces a newer
+  one. Tokens Codex does not record stay `NULL`, and corrections come from cached verdicts only.
 - **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
   unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
   at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow
