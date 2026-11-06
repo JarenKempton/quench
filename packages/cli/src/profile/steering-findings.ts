@@ -22,7 +22,7 @@ const FILE_TYPES = new Set(
 );
 const RUNNERS = new Set(["bun", "npm", "pnpm", "yarn"]);
 
-const normal = (text: string) =>
+export const normal = (text: string) =>
   text
     .toLowerCase()
     .replace(/^\s*(?:[-+*]|\d+[.)])\s+/gm, "")

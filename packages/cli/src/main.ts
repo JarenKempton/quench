@@ -81,7 +81,7 @@ Usage:
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
     --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
-    --context                         recurring corrections with the skills and instruction files in context (read-only)
+    --context                         recurring corrections, the files in context, their history and skill overlaps (read-only)
     --cached-only                     use cached reply verdicts only; never classify new replies
     --judge jev|claude|openai|none     who classifies replies: the one quench setup picked, else Jev (TYPESAFE_API_KEY);
                                        claude -p on your own account; an OpenAI-compatible endpoint
