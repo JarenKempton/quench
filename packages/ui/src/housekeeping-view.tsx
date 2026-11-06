@@ -284,7 +284,7 @@ function Secrets({ report }: { report: SecretsReport }) {
                       {f.othersCanRead && <Badge variant="warn">others can read</Badge>}
                       {f.printedInSessions && <Badge variant="warn">printed by an agent</Badge>}
                       {f.readInSessions > 0 && (
-                        <Badge variant="outline">read in {count(f.readInSessions)} sessions</Badge>
+                        <Badge variant="outline">read in {sessions(f.readInSessions)}</Badge>
                       )}
                     </div>
                   </TableCell>
@@ -442,3 +442,5 @@ function Limitations({ items }: { items: string[] }) {
 }
 
 const count = (n: number) => n.toLocaleString("en-US");
+
+const sessions = (n: number) => `${count(n)} ${n === 1 ? "session" : "sessions"}`;
