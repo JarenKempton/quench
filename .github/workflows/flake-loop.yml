@@ -29,7 +29,7 @@ jobs:
       - run: ps -axo pid,etime,%cpu,rss,command | sort -k3 -nr | head -15
       - name: tests x4
         run: |
-          cp .github/flake/env.test.ts test/zz-env.test.ts
+          cp .github/flake/env.test.txt test/zz-env.test.ts
           fails=0
           for i in 1 2 3 4; do
             if [ "${{ matrix.runner }}" = vp ]; then cmd="bunx vp run test"; else cmd="bun test"; fi
