@@ -1,3 +1,5 @@
+import { quoteArg, type Shell } from "@quench/history/quote";
+
 export type Harness = "claude-code" | "codex" | "pi";
 
 export type SkillRecord = {
@@ -139,21 +141,45 @@ function readOnly(r: SkillRecord): string {
   return `Not found on disk: ${NOT_EDITABLE}.`;
 }
 
-function turnOff(r: SkillRecord, flags: readonly Flag[]): string | null {
-  const plugin = r.skill.includes(":") ? r.skill.slice(0, r.skill.indexOf(":")) : null;
-  if (r.harness !== "claude-code" || r.origin !== "plugin" || !plugin) return null;
+const codexPlugin = (r: SkillRecord) => {
+  const match = /\/plugins\/cache\/([^/]+)\/([^/]+)\//.exec(r.location.replaceAll("\\", "/"));
+  return match ? `${match[2]}@${match[1]}` : null;
+};
+
+export const viewerShell = (): Shell =>
+  globalThis.navigator?.userAgent.includes("Windows") ? "powershell" : "posix";
+
+function turnOff(r: SkillRecord, flags: readonly Flag[], shell: Shell): string | null {
+  if (r.origin !== "plugin") return null;
   const reasons = flags.filter((f) => f.kind === "unused" || f.kind === "large");
   if (!reasons.length) return null;
+  const plugin =
+    r.harness === "claude-code"
+      ? r.skill.includes(":")
+        ? r.skill.slice(0, r.skill.indexOf(":"))
+        : null
+      : r.harness === "codex"
+        ? codexPlugin(r)
+        : null;
+  if (!plugin) return null;
+  const how =
+    r.harness === "codex"
+      ? `remove it with \`codex plugin remove ${quoteArg(plugin, shell)}\` (if Codex refuses with 403 because it is installed by default, turn it off in codex → /plugins instead)`
+      : "disable the plugin (for example with /plugin, or enabledPlugins in ~/.claude/settings.json)";
   return [
-    `The "${r.skill}" skill comes from the "${plugin}" Claude Code plugin, which I can't edit.`,
+    `The "${r.skill}" skill comes from the "${plugin}" ${HARNESS_LABELS[r.harness]} plugin, which I can't edit.`,
     "",
     ...reasons.map((f) => `- ${f.fix.split(". ")[0]}.`),
     "",
-    `Check whether I use any other skill, command or agent from "${plugin}". If I don't, show me how to disable the plugin (for example with /plugin, or enabledPlugins in ~/.claude/settings.json), and change nothing until I agree.`,
+    `Check whether I use any other skill, command or agent from "${plugin}". If I don't, show me how to ${how}, and change nothing until I agree.`,
   ].join("\n");
 }
 
-export function suggestion(r: SkillRecord, flags: readonly Flag[]): Suggestion {
+export function suggestion(
+  r: SkillRecord,
+  flags: readonly Flag[],
+  shell: Shell = viewerShell(),
+): Suggestion {
   if (!flags.length) return { prompt: null, note: null };
   const file = skillFile(r);
   if ((r.origin === "user" || r.origin === "project") && file)
@@ -167,7 +193,7 @@ export function suggestion(r: SkillRecord, flags: readonly Flag[]): Suggestion {
       ].join("\n"),
       note: null,
     };
-  const prompt = turnOff(r, flags);
+  const prompt = turnOff(r, flags, shell);
   return {
     prompt,
     note: `${readOnly(r)}${prompt ? " The prompt below turns off the plugin instead." : ""}`,
