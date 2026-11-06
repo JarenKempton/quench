@@ -28,7 +28,7 @@ const assets = new Map<string, Blob>([
 ]);
 const server = serveUi({
   port: 0,
-  api: { skills: async () => ({ skills: [] }) },
+  api: { skills: async () => ({ skills: [] }), report: async () => ({ harnesses: [] }) },
   assets,
 });
 afterAll(() => server.stop());
@@ -49,7 +49,7 @@ test("binds 127.0.0.1 only", async () => {
 });
 
 test("every response carries the strict CSP, DENY framing and no-store", async () => {
-  for (const path of ["/", "/api/skills", "/missing.js"]) {
+  for (const path of ["/", "/api/skills", "/api/report", "/missing.js"]) {
     const { headers } = await get(server.port, path);
     expect(headers["content-security-policy"]).toBe(CSP);
     expect(headers["x-frame-options"]).toBe("DENY");
@@ -66,11 +66,33 @@ test("a foreign Host header is rejected, so DNS rebinding can't read the API", a
     `localhost:${server.port}`,
     "127.0.0.1:1",
   ]) {
-    const response = await get(server.port, "/api/skills", host);
-    expect(response.status).toBe(421);
-    expect(response.body).not.toContain("skills");
+    for (const path of ["/api/skills", "/api/report"]) {
+      const response = await get(server.port, path, host);
+      expect(response.status).toBe(421);
+      expect(response.body).not.toContain("skills");
+      expect(response.body).not.toContain("harnesses");
+    }
   }
 });
+
+test("only the named API endpoints answer", async () => {
+  for (const path of ["/api/", "/api/constructor", "/api/toString", "/api/report/x"])
+    expect((await get(server.port, path)).status).toBe(404);
+});
+
+async function refreshed(port: number, path: string) {
+  const before = (await get(port, path)).headers["x-quench-computed-at"];
+  await get(port, `${path}?refresh=1`);
+  for (;;) {
+    const now = await get(port, path);
+    if (
+      now.headers["x-quench-refreshing"] === "false" &&
+      now.headers["x-quench-computed-at"] !== before
+    )
+      return JSON.parse(now.body);
+    await Bun.sleep(20);
+  }
+}
 
 const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 
@@ -111,7 +133,7 @@ async function home() {
 }
 
 test(
-  "/api/skills equals quench skills --json on the same home, and each request reads it again",
+  "/api/skills equals quench skills --json on the same home, and serves the last result until a refresh lands",
   async () => {
     const dir = await home();
     const expected = await quench(dir, "skills", "--json", "--no-host-history");
@@ -134,7 +156,9 @@ test(
         join(dir, ".claude/skills/tidy/SKILL.md"),
         "---\nname: tidy\ndescription: tidy\n---\n",
       );
-      const again = JSON.parse((await get(running.port, "/api/skills")).body);
+      const stale = await get(running.port, "/api/skills");
+      expect(JSON.parse(stale.body)).toEqual(JSON.parse(expected.stdout));
+      const again = await refreshed(running.port, "/api/skills");
       expect(again.skills.map((r: { skill: string }) => r.skill)).toContain("tidy");
     } finally {
       await running.stop();
@@ -211,6 +235,61 @@ async function sameEnvQuench(home: string, ...args: string[]) {
 }
 
 const withoutClock = (report: { observedAt?: string }) => ({ ...report, observedAt: null });
+
+test(
+  "/api/report equals quench report --json on the same home, and serves the last result until a refresh lands",
+  async () => {
+    const dir = await home();
+    const expected = await quench(dir, "report", "--json");
+    expect(expected.code).toBe(0);
+    const want = JSON.parse(expected.stdout);
+    expect(want.harnesses[0].days).toHaveLength(1);
+    expect(want.harnesses[0].startParts.map((p: { kind: string }) => p.kind)).toContain("skills");
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const served = await get(running.port, "/api/report");
+      expect(served.status).toBe(200);
+      expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-refreshing"]).toBe("false");
+      expect(JSON.parse(served.body)).toEqual(want);
+      await Bun.write(
+        join(dir, ".claude/projects/demo/s2.jsonl"),
+        lines([
+          {
+            type: "user",
+            sessionId: "s2",
+            timestamp: at(5),
+            message: { role: "user", content: "hi" },
+          },
+          {
+            type: "assistant",
+            timestamp: at(4),
+            message: {
+              id: "m2",
+              model: "model-y",
+              content: [],
+              usage: { input_tokens: 7, output_tokens: 1 },
+            },
+          },
+        ]),
+      );
+      const stale = await get(running.port, "/api/report");
+      expect(stale.headers["x-quench-computed-at"]).toBe(served.headers["x-quench-computed-at"]);
+      expect(JSON.parse(stale.body)).toEqual(want);
+      const again = await refreshed(running.port, "/api/report");
+      expect(again.harnesses[0].sessions).toBe(want.harnesses[0].sessions + 1);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
 
 test(
   "/api/worktrees and /api/secrets equal their CLI --json, and the canary value never reaches the page",

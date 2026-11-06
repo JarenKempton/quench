@@ -1,8 +1,25 @@
-import { contextOf, unhandled, type HarnessId, type Session } from "@quench/history";
+import {
+  contextOf,
+  startedAt,
+  startingContext,
+  unhandled,
+  type HarnessId,
+  type Session,
+  type StartPart,
+} from "@quench/history";
 import { distribution, type Distribution } from "./distribution.ts";
 import { runs } from "./run.ts";
 
 export type Count = { name: string; count: number };
+
+export type Day = { day: string; sessions: number; startingLoad: number | null };
+
+export type StartShare = {
+  kind: StartPart["kind"];
+  server: string | null;
+  chars: number;
+  sessions: number;
+};
 
 export type HarnessReport = {
   harness: HarnessId;
@@ -23,6 +40,8 @@ export type HarnessReport = {
   models: Count[];
   efforts: Count[];
   unparsedLines: number;
+  days: Day[];
+  startParts: StartShare[];
 };
 
 export const startingShare = (r: HarnessReport) =>
@@ -69,6 +88,8 @@ class Tally {
   private readonly peaks: number[] = [];
   private readonly models = new Map<string, number>();
   private readonly efforts = new Map<string, number>();
+  private readonly days = new Map<string, { sessions: number; starts: number[] }>();
+  private readonly parts = new Map<string, StartShare>();
 
   constructor(readonly harness: HarnessId) {}
 
@@ -130,6 +151,25 @@ class Tally {
     this.compactedSessions += compacted ? 1 : 0;
     if (!s.parent && first !== null) this.starts.push(first);
     if (!s.parent && started && peakKnown) this.peaks.push(peak);
+    if (!s.parent) this.addStart(s, first);
+  }
+
+  private addStart(s: Session, first: number | null): void {
+    const day = startedAt(s)?.toISOString().slice(0, 10);
+    if (day) {
+      const entry = this.days.get(day) ?? { sessions: 0, starts: [] };
+      entry.sessions += 1;
+      if (first !== null) entry.starts.push(first);
+      this.days.set(day, entry);
+    }
+    for (const part of startingContext(s).parts) {
+      const server = part.kind === "mcp_tools" ? part.server : null;
+      const key = `${part.kind}:${server ?? ""}`;
+      const entry = this.parts.get(key) ?? { kind: part.kind, server, chars: 0, sessions: 0 };
+      entry.chars += part.chars;
+      entry.sessions += 1;
+      this.parts.set(key, entry);
+    }
   }
 
   finish(): HarnessReport {
@@ -152,6 +192,16 @@ class Tally {
       models: ranked(this.models),
       efforts: ranked(this.efforts),
       unparsedLines: this.unparsedLines,
+      days: [...this.days]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([day, d]) => ({
+          day,
+          sessions: d.sessions,
+          startingLoad: distribution(d.starts).p50,
+        })),
+      startParts: [...this.parts.values()]
+        .filter((p) => p.chars)
+        .sort((a, b) => b.chars - a.chars || a.kind.localeCompare(b.kind)),
     };
   }
 }

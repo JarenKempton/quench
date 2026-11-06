@@ -9,22 +9,24 @@ import {
 import { reading } from "../progress.ts";
 import { json, knownTokens } from "../format.ts";
 
-export async function report(
-  home: Home,
-  options: { days: number; json: boolean },
-): Promise<number> {
-  const since = new Date(Date.now() - options.days * 86_400_000);
+export async function reportJson(home: Home, days: number) {
+  const since = new Date(Date.now() - days * 86_400_000);
   const builder = new ReportBuilder();
   let unreadable = 0;
   for await (const outcome of readSessions(await discoverAll(home, since), 4, reading())) {
     if (outcome.ok) builder.add(outcome.session);
     else unreadable += 1;
   }
-  const harnesses = builder.finish();
+  return { days, unreadable, harnesses: builder.finish() };
+}
+
+export async function report(
+  home: Home,
+  options: { days: number; json: boolean },
+): Promise<number> {
+  const out = await reportJson(home, options.days);
   process.stdout.write(
-    options.json
-      ? json({ days: options.days, unreadable, harnesses })
-      : render(harnesses, options.days, unreadable),
+    options.json ? json(out) : render(out.harnesses, options.days, out.unreadable),
   );
   return 0;
 }

@@ -6,7 +6,14 @@ export {
   type BehaviourKind,
 } from "./behaviour.ts";
 export { distribution, type Distribution } from "./distribution.ts";
-export { ReportBuilder, startingShare, type Count, type HarnessReport } from "./report.ts";
+export {
+  ReportBuilder,
+  startingShare,
+  type Count,
+  type Day,
+  type HarnessReport,
+  type StartShare,
+} from "./report.ts";
 export {
   commandRecords,
   durationSeconds,

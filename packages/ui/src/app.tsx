@@ -1,111 +1,54 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "./components/ui/button.tsx";
-import { HousekeepingView } from "./housekeeping-view.tsx";
+import { useEffect, useState } from "react";
 import { cn } from "./lib/utils.ts";
-import { SkillsView } from "./skills-view.tsx";
-import type { SkillsReport } from "./skills.ts";
+import { href, parseRoute, type Route } from "./route.ts";
+import { TABS } from "./tabs.ts";
 
-type State =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; report: SkillsReport };
+const IDS = TABS.map((t) => t.id);
 
-const TABS = [
-  ["skills", "Skills"],
-  ["housekeeping", "Housekeeping"],
-] as const;
-
-type Tab = (typeof TABS)[number][0];
-
-const tabOf = (hash: string): Tab => (hash === "#housekeeping" ? "housekeeping" : "skills");
+function useRoute(tabs: readonly string[]): Route {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const changed = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
+  return parseRoute(hash, tabs);
+}
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(() => tabOf(location.hash));
-  useEffect(() => {
-    const follow = () => setTab(tabOf(location.hash));
-    addEventListener("hashchange", follow);
-    return () => removeEventListener("hashchange", follow);
-  }, []);
-  const [state, setState] = useState<State>({ status: "loading" });
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const response = await fetch("/api/skills");
-      if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-      setState({ status: "ready", report: (await response.json()) as SkillsReport });
-    } catch (error) {
-      setState({ status: "error", message: (error as Error).message });
-    }
-  }, []);
-  const skillsAsked = useRef(false);
-  useEffect(() => {
-    if (tab !== "skills" || skillsAsked.current) return;
-    skillsAsked.current = true;
-    void load();
-  }, [tab, load]);
+  const route = useRoute(IDS);
+  const query = route.params.toString();
+  const [opened, setOpened] = useState<Record<string, string>>({});
+  if (opened[route.tab] !== query) setOpened({ ...opened, [route.tab]: query });
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex items-baseline justify-between gap-4">
-        <div className="flex items-baseline gap-3">
-          <span className="text-base font-semibold tracking-tight">Quench</span>
-          <nav className="flex gap-3 text-sm">
-            {TABS.map(([id, label]) => (
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-border">
+        <div className="flex items-center gap-6">
+          <span className="pb-3 text-base font-semibold tracking-tight">Quench</span>
+          <nav aria-label="Views" className="flex gap-4">
+            {TABS.map((t) => (
               <a
-                key={id}
-                href={`#${id}`}
-                aria-current={tab === id ? "page" : undefined}
+                key={t.id}
+                href={href(t.id)}
+                aria-current={t.id === route.tab ? "page" : undefined}
                 className={cn(
-                  "text-muted-foreground hover:text-foreground",
-                  tab === id && "text-foreground",
+                  "-mb-px border-b-2 border-transparent pb-3 text-sm text-muted-foreground hover:text-foreground",
+                  t.id === route.tab && "border-foreground font-medium text-foreground",
                 )}
               >
-                {label}
+                {t.label}
               </a>
             ))}
           </nav>
         </div>
-        {tab === "skills" && state.status === "ready" && (
-          <span className="font-mono text-xs text-muted-foreground">
-            last {state.report.days} days · read-only
-          </span>
-        )}
+        <span className="pb-3 font-mono text-xs text-muted-foreground">read-only</span>
       </header>
-      {tab === "housekeeping" && <HousekeepingView />}
-      {tab === "skills" && state.status === "loading" && (
-        <Message title="Reading your session history…">
-          The first run reads every session and can take a minute. Later runs use the cache.
-        </Message>
-      )}
-      {tab === "skills" && state.status === "error" && (
-        <Message title="Couldn't load your skills">
-          <span className="font-mono text-xs">{state.message}</span>
-          <div className="mt-4">
-            <Button variant="outline" size="sm" onClick={load}>
-              Try again
-            </Button>
-          </div>
-        </Message>
-      )}
-      {tab === "skills" &&
-        state.status === "ready" &&
-        (state.report.skills.length ? (
-          <SkillsView report={state.report} />
-        ) : (
-          <Message title="No skills found">
-            None of your agents have skills on disk, and no session in the last {state.report.days}{" "}
-            days listed one. Add a skill, or run quench ui --days 90.
-          </Message>
-        ))}
-    </div>
-  );
-}
-
-function Message({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border px-6 py-12 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      <div className="mt-1 text-sm text-muted-foreground">{children}</div>
+      {TABS.filter((t) => t.id in opened).map(({ id, label, Page }) => (
+        <section key={id} hidden={id !== route.tab} aria-label={label}>
+          <Page params={new URLSearchParams(opened[id])} />
+        </section>
+      ))}
     </div>
   );
 }

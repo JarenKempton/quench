@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from "react";
 import { CopyButton } from "./copy-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { Button } from "./components/ui/button.tsx";
@@ -20,51 +19,7 @@ import {
   type WorktreesReport,
 } from "./housekeeping.ts";
 import { viewerShell } from "./skills.ts";
-
-type Load<T> =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | {
-      status: "ready";
-      report: T;
-      computedAt: string | null;
-      refreshing: boolean;
-      refreshError: string | null;
-    };
-
-function useReport<T>(path: string) {
-  const [state, setState] = useState<Load<T>>({ status: "loading" });
-  const load = useCallback(
-    async (refresh = false) => {
-      setState((last) => (last.status === "ready" ? last : { status: "loading" }));
-      try {
-        const response = await fetch(refresh ? `${path}?refresh=1` : path);
-        if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-        setState({
-          status: "ready",
-          report: (await response.json()) as T,
-          computedAt: response.headers.get("x-quench-computed-at"),
-          refreshing: response.headers.get("x-quench-refreshing") === "true",
-          refreshError:
-            decodeURIComponent(response.headers.get("x-quench-refresh-error") ?? "") || null,
-        });
-      } catch (error) {
-        setState({ status: "error", message: (error as Error).message });
-      }
-    },
-    [path],
-  );
-  useEffect(() => {
-    void load();
-  }, [load]);
-  const refreshing = state.status === "ready" && state.refreshing;
-  useEffect(() => {
-    if (!refreshing) return;
-    const timer = setInterval(() => void load(), 5000);
-    return () => clearInterval(timer);
-  }, [refreshing, load]);
-  return [state, load] as const;
-}
+import { useReport, type Load } from "./use-api.tsx";
 
 export function HousekeepingView() {
   const [worktrees, reloadWorktrees] = useReport<WorktreesReport>("/api/worktrees");
