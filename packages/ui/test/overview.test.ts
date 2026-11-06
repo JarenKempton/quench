@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { contributors, percent, windowDays, type HarnessReport } from "../src/report.ts";
+import {
+  chartDays,
+  chars,
+  contributors,
+  percent,
+  windowDays,
+  type HarnessReport,
+} from "../src/report.ts";
 
 const agent = (parts: HarnessReport["startParts"]): HarnessReport => ({
   harness: "claude-code",
@@ -45,4 +52,30 @@ test("percent never rounds a real share to zero", () => {
 test("the window ends today and spans the chosen days", () => {
   const days = windowDays(3, new Date("2026-03-01T15:00:00Z"));
   expect(days).toEqual(["2026-02-27", "2026-02-28", "2026-03-01"]);
+});
+
+const today = new Date("2026-03-01T15:00:00Z");
+const reportWith = (days: string[]) => ({
+  days: 3,
+  unreadable: 0,
+  harnesses: [{ ...agent([]), days: days.map((day) => ({ day, sessions: 1, startingLoad: 100 })) }],
+});
+
+test("the chart spans every day the table lists, including a session that started before the window", () => {
+  const report = reportWith(["2026-02-20", "2026-03-01"]);
+  const shown = chartDays(report, today);
+  expect(shown[0]).toBe("2026-02-20");
+  expect(shown.at(-1)).toBe("2026-03-01");
+  expect(shown).toHaveLength(10);
+  for (const d of report.harnesses[0]!.days) expect(shown).toContain(d.day);
+});
+
+test("the chart keeps the chosen window when every session started inside it", () => {
+  expect(chartDays(reportWith(["2026-02-28"]), today)).toEqual(windowDays(3, today));
+  expect(chartDays(reportWith([]), today)).toEqual(windowDays(3, today));
+});
+
+test("contributor sizes read in characters", () => {
+  expect(chars(950)).toBe("950 chars");
+  expect(chars(19_250)).toBe("19.3k chars");
 });

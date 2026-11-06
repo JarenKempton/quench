@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import {
   agentLabel,
+  chartDays,
+  chars,
   contributors,
   percent,
   shareOf,
   startingShare,
   tokens,
-  windowDays,
   type Count,
   type HarnessReport,
   type Report,
@@ -16,7 +17,7 @@ import { TrendChart } from "./trend-chart.tsx";
 export const skillsOf = (agent: string) => `#skills?agent=${encodeURIComponent(agent)}`;
 
 export function OverviewView({ report }: { report: Report }) {
-  const window = windowDays(report.days);
+  const window = chartDays(report);
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
@@ -149,7 +150,7 @@ function Contributors({ h }: { h: HarnessReport }) {
                 <span>{r.label}</span>
               )}
               <span className="font-mono text-xs text-muted-foreground">
-                {tokens(Math.round(r.perSession))} chars · {percent(r.chars, total)}
+                {chars(Math.round(r.perSession))} · {percent(r.chars, total)}
               </span>
             </div>
             <div className="mt-1 h-1.5 rounded-full bg-muted">

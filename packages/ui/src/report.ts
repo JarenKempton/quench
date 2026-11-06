@@ -45,6 +45,8 @@ export type Report = { days: number; unreadable: number; harnesses: HarnessRepor
 
 export const agentLabel = (h: Harness) => HARNESS_LABELS[h] ?? h;
 
+export const chars = (n: number) => `${tokens(n)} chars`;
+
 export function tokens(n: number | null): string {
   if (n === null) return "–";
   if (n < 1_000) return String(n);
@@ -108,6 +110,14 @@ export function windowDays(days: number, today = new Date()): string[] {
   return Array.from({ length: days }, (_, i) =>
     new Date(end - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10),
   );
+}
+
+export function chartDays(report: Report, today = new Date()): string[] {
+  const window = windowDays(report.days, today);
+  const first = report.harnesses.flatMap((h) => (h.days[0] ? [h.days[0].day] : [])).sort()[0];
+  if (!first || first >= window[0]!) return window;
+  const span = Math.round((Date.parse(window.at(-1)!) - Date.parse(first)) / 86_400_000) + 1;
+  return windowDays(span, today);
 }
 
 export const shareOf = (counts: Count[]) => {
