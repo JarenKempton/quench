@@ -47,6 +47,8 @@ const SAID = {
   deepLane: "deep review the change in a lane",
   queuedAsk: "tide pool the db",
   queuedFollowUp: "also check the replica",
+  scheduledAsk: "tide pool the cache",
+  scheduled: "scheduled check-in",
   reveiw: "deep reveiw the patch",
   relayCodex: "relay: deep review again",
   unknown: "deep review now",
@@ -173,6 +175,20 @@ async function fixture() {
   await Bun.write(
     join(home, ".claude/projects/p/queued/subagents/agent-q.jsonl"),
     lines([{ ...listing, timestamp: at(59) }, viaHost("go", 59), skillCall("tide-pool", 59)]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/scheduled.jsonl"),
+    lines([
+      listing,
+      typed(SAID.scheduledAsk, 10),
+      said(11),
+      { ...viaHost(SAID.scheduled, 30), promptSource: undefined, turnOrigin: "scheduled" },
+      said(31),
+    ]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/scheduled/subagents/agent-s.jsonl"),
+    lines([{ ...listing, timestamp: at(40) }, viaHost("go", 40), skillCall("tide-pool", 40)]),
   );
   await Bun.write(
     join(home, ".claude/projects/p/lane.jsonl"),
@@ -307,11 +323,11 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
     [
       "Asked in plain words · messages people typed that named a skill · last 30 days",
       "  Agent        Skill        Used         Asked  Asked and loaded  Asked, not loaded  Note",
+      "  Claude Code  tide-pool       3             3                 2                  1  2 loaded by a delegate",
       "  Claude Code  code-check      1             2                 1                  1",
       "  Claude Code  deep-review     1             2                 1                  1  1 loaded by a delegate",
       "  Claude Code  ship-it         1             1                 0                  1  only loads from /ship-it (disable-model-invocation)",
       "  Claude Code  deploy-gate     0             1                 0                  1  only loads from /deploy-gate (disable-model-invocation)",
-      "  Claude Code  tide-pool       2             2                 2                  0  2 loaded by a delegate",
       "  Codex        deep-review     1             1                 1                  0",
       "  Claude Code  night-watch     1             1                 1                  0",
       "  Claude Code  weather         0  not measured      not measured       not measured  1 mention, one-word name",
@@ -331,6 +347,19 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
   const out = await quench(home, ["profile", "skills", "--json"]);
   const parsed = JSON.parse(out.stdout);
   expect(parsed.recordedSkillAsks.rows.map(row)).toEqual([
+    {
+      harness: "claude-code",
+      name: "tide-pool",
+      used: 3,
+      measured: "matched",
+      asked: 3,
+      askedAndLoaded: 2,
+      askedNotLoaded: 1,
+      viaDelegate: 2,
+      relayed: 1,
+      unknownSender: 0,
+      fix: null,
+    },
     {
       harness: "claude-code",
       name: "code-check",
@@ -382,19 +411,6 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       relayed: 0,
       unknownSender: 0,
       fix: "only loads from /name",
-    },
-    {
-      harness: "claude-code",
-      name: "tide-pool",
-      used: 2,
-      measured: "matched",
-      asked: 2,
-      askedAndLoaded: 2,
-      askedNotLoaded: 0,
-      viaDelegate: 2,
-      relayed: 1,
-      unknownSender: 0,
-      fix: null,
     },
     {
       harness: "codex",
@@ -525,5 +541,9 @@ test("names match as words outside code, paths and URLs, with typos and sound-al
   expect(ask("branch tide-pool-fix is stale", "tide-pool")).toBe(false);
   expect(ask("git push origin fix-tide-pool", "tide-pool")).toBe(false);
   expect(ask("Unknown skill: tide-pool", "tide-pool")).toBe(true);
+  expect(ask("tide-pool's output", "tide-pool")).toBe(true);
+  expect(ask("tide-pool—thanks", "tide-pool")).toBe(true);
+  expect(ask("tide-pool,ship-it", "tide-pool")).toBe(true);
+  expect(ask("tide-pool,ship-it", "ship-it")).toBe(true);
   expect(ask("the weather", "weather")).toBe(true);
 });

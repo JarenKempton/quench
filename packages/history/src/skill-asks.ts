@@ -24,18 +24,6 @@ export function sessionAsks(session: Session, extraNames: readonly string[]): Se
   const listed = session.events.flatMap((e) => (e.type === "skills" ? e.listed : []));
   const byPath = new Map(listed.flatMap((s) => (s.path ? [[s.path, s.name] as const] : [])));
   const found = skillAsks(session, extraNames);
-  const people = session.events.flatMap((e, i) =>
-    e.type === "message" &&
-    e.author === "user" &&
-    !e.queued &&
-    senderOf(e, session.parent !== null) === "person"
-      ? [i]
-      : [],
-  );
-  for (const ask of found) {
-    const next = people.find((i) => i > ask.event);
-    ask.until = next === undefined ? null : (session.events[next]!.at?.getTime() ?? null);
-  }
   return {
     found,
     loads: [...new Set(session.events.flatMap((e) => skillUsesOf(e, byPath)))].map(intern),
@@ -58,6 +46,7 @@ export function skillAsks(session: Session, extraNames: readonly string[]): Skil
     for (const name of skillUsesOf(event, byPath))
       for (const ask of open) if (ask.name === name) ask.loaded = true;
     if (event.type !== "message" || event.author !== "user") continue;
+    if (closesRun(event)) for (const ask of open) ask.until = event.at?.getTime() ?? null;
     const next = session.events[index + 1];
     const command = next?.type === "invocation" && next.by === "user";
     const text = command ? "" : prose(event.text);
@@ -77,10 +66,13 @@ export function skillAsks(session: Session, extraNames: readonly string[]): Skil
         : [],
     );
     asks.push(...found);
-    open = event.queued ? [...open, ...found] : found;
+    open = closesRun(event) ? found : [...open, ...found];
   }
   return asks;
 }
+
+const closesRun = (message: Extract<Event, { type: "message" }>) =>
+  message.author === "user" && !message.queued;
 
 function senderOf(message: Extract<Event, { type: "message" }>, subagent: boolean): AskSender {
   if (message.origin === "typed") return "person";
@@ -100,8 +92,8 @@ export const namesSkill = (text: string, phrase: readonly string[]) =>
   matches(
     wordsOf(
       text
-        .split(/\s+/)
-        .filter((token) => !/[-_]/.test(token) || wordsOf(token).length <= phrase.length)
+        .split(/[^\p{L}\p{N}_-]+/u)
+        .filter((token) => token.split(/[-_]+/).filter(Boolean).length <= phrase.length)
         .join(" "),
     ),
     phrase,
