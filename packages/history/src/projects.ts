@@ -5,7 +5,7 @@ import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction, SessionEnricher } from "./model.ts";
 import { recordedFailures, type SessionFailure } from "./failures.ts";
 import { discoverAll, readSessions, type Progress } from "./read.ts";
-import { skillAsks, type SkillAsk } from "./skill-asks.ts";
+import { sessionAsks, type SessionAsks } from "./skill-asks.ts";
 import { startingContext, type StartingContext } from "./start.ts";
 import {
   recordedInstructions,
@@ -25,12 +25,13 @@ export type SessionPlace = {
   mcp: { server: string; calls: number }[];
   failures: SessionFailure[];
   start: StartingContext;
-  asks: { key: string; found: SkillAsk[] } | null;
+  asks: (SessionAsks & { key: string }) | null;
 };
 
+export type Vocabulary = { key: string; names: readonly string[] };
+
 export type Asking = {
-  key: string;
-  names: (harness: HarnessId) => readonly string[];
+  vocabulary: (harness: HarnessId, cwd: string | null) => Promise<Vocabulary>;
   enrich?: SessionEnricher;
 };
 
@@ -72,7 +73,9 @@ export async function sessionPlaces(
     const info = cache && (await stat(ref.path).catch(() => null));
     const stamp = info ? `${info.size}:${info.mtimeMs}` : null;
     const hit = stamp ? cache?.get(ref.path, stamp) : undefined;
-    if (hit && (!asking || hit.asks?.key === asking.key)) found.set(ref.path, hit);
+    const fresh =
+      hit && (!asking || hit.asks?.key === (await asking.vocabulary(hit.harness, hit.cwd)).key);
+    if (hit && fresh) found.set(ref.path, hit);
     else uncached.push(ref);
     if (stamp) stamps.set(ref.path, stamp);
   }
@@ -93,15 +96,7 @@ export async function sessionPlaces(
       mcp: recordedMcp(outcome.session),
       failures: recordedFailures(outcome.session),
       start: startingContext(outcome.session),
-      asks: asking
-        ? {
-            key: asking.key,
-            found: skillAsks(
-              asking.enrich?.(outcome.session) ?? outcome.session,
-              asking.names(outcome.session.harness),
-            ),
-          }
-        : null,
+      asks: asking ? await asksOf(asking, outcome.session) : null,
     };
     found.set(outcome.session.path, place);
     const stamp = stamps.get(outcome.session.path);
@@ -109,6 +104,17 @@ export async function sessionPlaces(
   }
   const places = refs.flatMap((ref) => found.get(ref.path) ?? []);
   return { places, unreadable };
+}
+
+async function asksOf(
+  asking: Asking,
+  session: Parameters<typeof sessionAsks>[0],
+): Promise<SessionAsks & { key: string }> {
+  const vocabulary = await asking.vocabulary(session.harness, session.cwd);
+  return {
+    key: vocabulary.key,
+    ...sessionAsks(asking.enrich?.(session) ?? session, vocabulary.names),
+  };
 }
 
 export async function projects(places: readonly SessionPlace[], scan: readonly string[] = []) {

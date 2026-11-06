@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { matches, wordsOf } from "@quench/history";
+import { matches, prose, wordsOf } from "@quench/history";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -40,7 +40,11 @@ const SAID = {
   revue: "Deep revue of the diff",
   weather: "is the weather skill any good",
   wach: "night wach on the deploy",
-  relayClaude: "relay from the lane: code check passed, ship it",
+  relayClaude: "relay from the lane: code check passed, ship it, tidy notes later",
+  tidePole: "tide pole the logs",
+  delegatePrompt: "use the tide pool skill on the logs",
+  deployGate: "deploy gate this",
+  deepLane: "deep review the change in a lane",
   reveiw: "deep reveiw the patch",
   relayCodex: "relay: deep review again",
   unknown: "deep review now",
@@ -58,8 +62,16 @@ async function fixture() {
   const project = join(home, "work");
   await mkdir(project, { recursive: true });
   const claudeSkills = join(home, ".claude/skills");
-  for (const name of ["code-check", "deep-review", "night-watch", "weather", "tidy-notes"])
+  for (const name of [
+    "code-check",
+    "deep-review",
+    "night-watch",
+    "weather",
+    "tidy-notes",
+    "tide-pool",
+  ])
     await skill(claudeSkills, name);
+  await skill(join(project, ".claude/skills"), "deploy-gate", "disable-model-invocation: true\n");
   await skill(claudeSkills, "ship-it", "disable-model-invocation: true\n");
   const codexSkills = join(home, ".codex/skills");
   for (const name of ["deep-review", "tidy-notes"]) await skill(codexSkills, name);
@@ -70,8 +82,9 @@ async function fixture() {
     timestamp: at(0),
     attachment: {
       type: "skill_listing",
-      names: ["code-check", "deep-review", "night-watch", "weather", "tidy-notes"],
-      content: "- code-check: x\n- deep-review: x\n- night-watch: x\n- weather: x\n- tidy-notes: x",
+      names: ["code-check", "deep-review", "night-watch", "weather", "tidy-notes", "tide-pool"],
+      content:
+        "- code-check: x\n- deep-review: x\n- night-watch: x\n- weather: x\n- tidy-notes: x\n- tide-pool: x",
     },
   };
   const typed = (text: string, second: number) => ({
@@ -121,6 +134,28 @@ async function fixture() {
       {
         ...typed("<command-name>/ship-it</command-name>\n<command-args></command-args>", 11),
       },
+      typed(SAID.tidePole, 12),
+      said(16),
+      typed(SAID.deployGate, 20),
+      said(21),
+    ]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/terminal/subagents/agent-a.jsonl"),
+    lines([
+      { ...listing, timestamp: at(13) },
+      viaHost(SAID.delegatePrompt, 13),
+      skillCall("tide-pool", 14),
+      said(15),
+    ]),
+  );
+  await Bun.write(
+    join(home, ".claude/projects/p/lane.jsonl"),
+    lines([
+      { ...listing, timestamp: at(31) },
+      viaHost("go", 31),
+      skillCall("deep-review", 32),
+      said(33),
     ]),
   );
   await Bun.write(
@@ -131,6 +166,8 @@ async function fixture() {
       skillCall("night-watch", 2),
       viaHost(SAID.relayClaude, 3),
       said(4),
+      viaHost(SAID.deepLane, 30),
+      said(34),
     ]),
   );
 
@@ -187,6 +224,7 @@ async function fixture() {
   db.exec(`
     CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
     CREATE TABLE orchestration_v2_projection_messages (thread_id TEXT, role TEXT, payload_json TEXT);
+    CREATE TABLE orchestration_v2_projection_subagents (thread_id TEXT, child_thread_id TEXT);
   `);
   const link = (thread: string, driver: string, nativeId: string) =>
     db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
@@ -210,6 +248,10 @@ async function fixture() {
     );
   link("t-claude", "claudeAgent", "hosted");
   link("t-codex", "codex", "hosted-codex");
+  link("t-lane", "claudeAgent", "lane");
+  db.query("INSERT INTO orchestration_v2_projection_subagents VALUES ('t-claude', 't-lane')").run();
+  message("t-claude", SAID.deepLane, 30, true);
+  message("t-lane", "go", 31, false);
   message("t-claude", SAID.wach, 1, true);
   message("t-claude", SAID.relayClaude, 3, false);
   message("t-codex", SAID.reveiw, 1, true);
@@ -226,6 +268,7 @@ const row = (r: Record<string, unknown>) => ({
   asked: r.asked,
   askedAndLoaded: r.askedAndLoaded,
   askedNotLoaded: r.askedNotLoaded,
+  viaDelegate: r.viaDelegate,
   relayed: r.relayed,
   unknownSender: r.unknownSender,
   fix: r.fix,
@@ -240,12 +283,14 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       "Asked in plain words · messages people typed that named a skill · last 30 days",
       "  Agent        Skill        Used         Asked  Asked and loaded  Asked, not loaded  Note",
       "  Claude Code  code-check      1             2                 1                  1",
+      "  Claude Code  deep-review     1             2                 1                  1  1 loaded by a delegate",
       "  Claude Code  ship-it         1             1                 0                  1  only loads from /ship-it (disable-model-invocation)",
-      "  Claude Code  deep-review     0             1                 0                  1",
+      "  Claude Code  deploy-gate     0             1                 0                  1  only loads from /deploy-gate (disable-model-invocation)",
       "  Codex        deep-review     1             1                 1                  0",
+      "  Claude Code  tide-pool       1             1                 1                  0  1 loaded by a delegate",
       "  Claude Code  night-watch     1             1                 1                  0",
       "  Claude Code  weather         0  not measured      not measured       not measured  1 mention, one-word name",
-      "  Relayed by agents or automation, not counted as asked: 2 messages naming 3 skills",
+      "  Relayed by agents or automation, not counted as asked: 3 messages naming 5 skills",
       "  Sender not recorded, not counted as asked: 1 message naming 1 skill",
     ].join("\n"),
   );
@@ -269,7 +314,21 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       asked: 2,
       askedAndLoaded: 1,
       askedNotLoaded: 1,
+      viaDelegate: 0,
       relayed: 1,
+      unknownSender: 0,
+      fix: null,
+    },
+    {
+      harness: "claude-code",
+      name: "deep-review",
+      used: 1,
+      measured: "matched",
+      asked: 2,
+      askedAndLoaded: 1,
+      askedNotLoaded: 1,
+      viaDelegate: 1,
+      relayed: 0,
       unknownSender: 0,
       fix: null,
     },
@@ -281,21 +340,23 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       asked: 1,
       askedAndLoaded: 0,
       askedNotLoaded: 1,
+      viaDelegate: 0,
       relayed: 1,
       unknownSender: 0,
       fix: "only loads from /name",
     },
     {
       harness: "claude-code",
-      name: "deep-review",
+      name: "deploy-gate",
       used: 0,
       measured: "matched",
       asked: 1,
       askedAndLoaded: 0,
       askedNotLoaded: 1,
+      viaDelegate: 0,
       relayed: 0,
       unknownSender: 0,
-      fix: null,
+      fix: "only loads from /name",
     },
     {
       harness: "codex",
@@ -305,8 +366,22 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       asked: 1,
       askedAndLoaded: 1,
       askedNotLoaded: 0,
+      viaDelegate: 0,
       relayed: 1,
       unknownSender: 1,
+      fix: null,
+    },
+    {
+      harness: "claude-code",
+      name: "tide-pool",
+      used: 1,
+      measured: "matched",
+      asked: 1,
+      askedAndLoaded: 1,
+      askedNotLoaded: 0,
+      viaDelegate: 1,
+      relayed: 1,
+      unknownSender: 0,
       fix: null,
     },
     {
@@ -317,7 +392,21 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       asked: 1,
       askedAndLoaded: 1,
       askedNotLoaded: 0,
+      viaDelegate: 0,
       relayed: 0,
+      unknownSender: 0,
+      fix: null,
+    },
+    {
+      harness: "claude-code",
+      name: "tidy-notes",
+      used: 0,
+      measured: "matched",
+      asked: 0,
+      askedAndLoaded: 0,
+      askedNotLoaded: 0,
+      viaDelegate: 0,
+      relayed: 1,
       unknownSender: 0,
       fix: null,
     },
@@ -329,16 +418,22 @@ test("profile skills counts plain-word asks per skill, relays apart, and keeps a
       asked: null,
       askedAndLoaded: null,
       askedNotLoaded: null,
+      viaDelegate: 0,
       relayed: 0,
       unknownSender: 0,
       fix: null,
     },
   ]);
-  expect(parsed.recordedSkillAsks.relayed).toEqual({ messages: 2, skills: 3 });
+  expect(parsed.recordedSkillAsks.relayed).toEqual({ messages: 3, skills: 5 });
   for (const said of Object.values(SAID)) expect(out.stdout).not.toContain(said);
   expect(parsed.limitations.some((l: string) => l.includes("Codex and Pi record no sender"))).toBe(
     true,
   );
+  const tidy = parsed.recordedSkillCuts.cuts.find(
+    (c: { agents: string[]; skills: string[] }) =>
+      c.agents.includes("claude-code") && c.skills.includes("tidy-notes"),
+  );
+  expect(tidy.relayed).toBe(1);
   const cuts = parsed.recordedSkillCuts.cuts.flatMap((c: { skills: string[] }) => c.skills);
   expect(cuts).toContain("tidy-notes");
   expect(cuts).not.toContain("deep-review");
@@ -385,8 +480,8 @@ test("one-word names count as asked only through the opt-in Jev judgment, cached
   }
 });
 
-test("names match as words, hyphens as spaces, with typos and sound-alikes in all but one word", () => {
-  const ask = (text: string, name: string) => matches(wordsOf(text), wordsOf(name));
+test("names match as words outside code, paths and URLs, with typos and sound-alikes anchored by an exact word", () => {
+  const ask = (text: string, name: string) => matches(wordsOf(prose(text)), wordsOf(name));
   expect(ask("tide pool it", "tide-pool")).toBe(true);
   expect(ask("tidepool", "tide-pool")).toBe(true);
   expect(ask("Tide pole please", "tide-pool")).toBe(true);
@@ -394,5 +489,13 @@ test("names match as words, hyphens as spaces, with typos and sound-alikes in al
   expect(ask("deep revue", "deep-review")).toBe(true);
   expect(ask("tied pole", "tide-pool")).toBe(false);
   expect(ask("or check", "qa-check")).toBe(false);
+  expect(ask("night wach", "night-watch")).toBe(true);
+  expect(ask("let's go stag tonight", "go-stg")).toBe(false);
+  expect(ask("unit reviews are slow", "unit-review")).toBe(false);
+  expect(ask("see ~/.claude/skills/ship-it/SKILL.md", "ship-it")).toBe(false);
+  expect(ask("see https://github.com/x/ship-it/pull/3", "ship-it")).toBe(false);
+  expect(ask("try this:\n```\nship_it()\n```", "ship-it")).toBe(false);
+  expect(ask("run `ship-it` later", "ship-it")).toBe(false);
+  expect(ask("ship it now", "ship-it")).toBe(true);
   expect(ask("the weather", "weather")).toBe(true);
 });

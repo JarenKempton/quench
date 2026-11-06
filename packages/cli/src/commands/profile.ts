@@ -45,10 +45,13 @@ import { trackedInRepo } from "../profile/skill-repos.ts";
 import { skillCuts } from "../profile/skill-cuts.ts";
 import {
   askedFor,
+  relayedFor,
   personOneWord,
   skillAsks,
-  vocabulary,
+  askVocabulary,
+  inventories,
   type AskVerdicts,
+  type Inventory,
 } from "../profile/skill-asks.ts";
 import { startSplit } from "../profile/recorded-start.ts";
 import { render, type Profile, type ProfiledProject, type View } from "../profile/render.ts";
@@ -65,7 +68,7 @@ const LIMITATIONS = [
   "Recorded skills are the skill lists session histories logged: Claude Code's listing, Codex's skills block and Pi's skills section. Listing size is the first listing in each session. Use counts sessions where the model invoked a listed skill (Claude Code's Skill tool), read its SKILL.md, or ran a shell command or code naming that exact listed path, or the user ran it as a command. Relative paths are not resolved, so shell-based use (how Codex loads skills) is a lower bound, and a command editing the file counts too.",
   "Skill sources: Claude Code records skill names only, so a name is matched to its user or project folder on disk now, then to Claude Code's own skills, then to an installed plugin by its prefix. Codex and Pi record each skill's file, so its path decides the source. Codex plugins installed by default come from the remote plugin catalog Codex caches locally. A skill found nowhere on disk now is not on disk now: removed since, or loaded from a place Quench does not read. Built-in skills are left out of never used and the cut list.",
   "The cut list groups never-used skills by what removes them: a plugin or a skill folder. Listed is the characters of each skill's own entry in the recorded listings, summed over every session that listed the target; sessions whose listing has no per-skill text make the size a lower bound, or unknown when none has it, and rank after known sizes. A target any agent still uses, or one whose use an agent does not record, gets no command. The Codex command is written for this machine's shell, carries an overridden CODEX_HOME, and is shown, never run. A project skill whose SKILL.md, or folder link, git tracks is one target per repository and path inside it, counted across every worktree; it gets no command, since removing it is a change to the repository. Any other folder is its own target. Folders and symlinks never get a command, only the path to remove; the only command is Codex plugin removal. Claude Code names are matched to a user folder first, then the project folder nearest the session's directory.",
-  "Asked in plain words counts messages a person typed that name a skill: Claude Code prompts it recorded as typed, and on any agent messages T3 Code recorded as typed by you in its app. Messages an agent, automation or T3 itself sent are relayed and counted apart; Codex and Pi record no sender, so without T3 Code history their messages are sender unknown and never counted as asked. A name matches as words, hyphens read as spaces, a plugin prefix dropped, with one-letter typos or the same sound allowed in all but one of its words. A one-word name is not measured unless --asks has Jev judge each message that names it. Loaded means the skill loaded in the run that message started. Names come from the session's own listing and skill folders on disk now outside projects, so a project skill hidden from the model (disable-model-invocation) is not matched. Skills asked for, or not measured, are left out of the cut list. disable-model-invocation is read from SKILL.md and flagged for Claude Code only.",
+  "Asked in plain words counts messages a person typed that name a skill: Claude Code prompts it recorded as typed, and on any agent messages T3 Code recorded as typed by you in its app. Messages an agent, automation or T3 itself sent are relayed and counted apart; Codex and Pi record no sender, so without T3 Code history their messages are sender unknown and never counted as asked. A name matches as words, hyphens read as spaces, a plugin prefix dropped, with one-letter typos or the same sound allowed in all but one of its words. A one-word name is not measured unless --asks has Jev judge each message that names it. Loaded means the skill loaded in the run that message started. Loaded also counts a Claude Code subagent or a T3 Code delegated thread that started during that run and loaded the skill; a subagent's own prompts count as relayed. Names come from the session's own listing and the skill folders on disk now for the session's folder. Skills asked for, not measured, or named by a sender Quench cannot identify are left out of the cut list; mentions only relayed by agents are not, and are shown beside the cut. Code, paths and URLs in a message are not matched. disable-model-invocation is read from SKILL.md and flagged for Claude Code only.",
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
   "Blocked calls are tool results Claude Code recorded as refused by a hook or a permission rule (its permissionDecision, or toolDenialKind in older versions), grouped by the guard, taken only from recorded fields (a documented hook event when Claude Code records one, otherwise hook, permission rule or auto mode), and the command key. The refusal text and the hook's own command are never read for it. Claude Code versions that wrote neither field, Codex and Pi record no such marker, so their refusals are not counted as blocks.",
   'Repeated failures are tool results a session recorded as errors, grouped per project by kind, command key and error class. A command key is the program\'s file name when it is on a fixed list of common tools (any other program is "other command") and, for git, gh, bun, npm, pnpm, yarn, docker, kubectl, cargo, go, uv and pip, a subcommand from a fixed list; never flags, arguments or values. A command whose raw text contains &&, ;, | or a newline anywhere, quoted or not, is "several commands". Calls that ran no shell command are keyed by tool name. The error class comes from a fixed list (auth failed, permission denied, timeout, network, not found, conflict, exit code N, other) matched on the raw result; no error or command text is stored, cached or shown. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results\' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.',
@@ -91,16 +94,12 @@ export async function profile(
   const cache = options.cache ? await placeCache(home.dir) : undefined;
   const host =
     options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
-  const outside = await skillInventory(home, home.dir);
+  const inventory = inventories(home);
+  const asking = askVocabulary(inventory, host !== null);
   let read: Awaited<ReturnType<typeof sessionPlaces>>;
   try {
     read = await sessionPlaces(home, since, reading(), cache, {
-      ...vocabulary(
-        outside.skills.filter((s) =>
-          s.sources.some((source) => source.scope === "user" || source.scope === "system"),
-        ),
-        host !== null,
-      ),
+      vocabulary: asking.vocabulary,
       ...(host ? { enrich: host.enrich } : {}),
     });
   } finally {
@@ -128,7 +127,7 @@ export async function profile(
       globalMcp.set(`${server.harness}\0${server.name}`, server);
     profiled.push(shared.project);
   }
-  const skills = skillUse(places, await placeOrigins(home, places, globalSkills));
+  const skills = skillUse(places, await placeOrigins(home, places, globalSkills, inventory));
   let judged: Awaited<ReturnType<typeof askVerdicts>>;
   try {
     judged = await askVerdicts(home, places, since, options);
@@ -139,7 +138,8 @@ export async function profile(
   }
   const asks = skillAsks(
     places,
-    [...globalSkills.values(), ...profiled.flatMap((p) => p.skills)],
+    [...globalSkills.values(), ...profiled.flatMap((p) => p.skills), ...asking.skills()],
+    host?.delegates ?? new Map(),
     judged.verdict,
     judged.judge,
     judged.newlyJudged,
@@ -167,6 +167,7 @@ export async function profile(
       (id) => harnessById[id].skillUse,
       (id, origin) => harnessById[id].skillCut(origin, { home, shell: shellFor() }),
       askedFor(asks),
+      relayedFor(asks),
     ),
     recordedSkillAsks: asks,
     recordedMcp: mcpUse(places, configuredMcp),
@@ -251,6 +252,7 @@ export async function placeOrigins(
   home: Home,
   places: readonly SessionPlace[],
   globalSkills: Map<string, Skill>,
+  shared?: Inventory,
 ): Promise<PlaceOrigin> {
   const origins = new Map(
     await Promise.all(harnesses.map(async (h) => [h.id, await h.skillOrigins(home)] as const)),
@@ -258,6 +260,7 @@ export async function placeOrigins(
   const global = [...globalSkills.values()];
   const byDirectory = new Map<string, Promise<Skill[]>>();
   const inventory = (cwd: string) =>
+    shared?.(cwd) ??
     byDirectory.get(cwd) ??
     byDirectory
       .set(

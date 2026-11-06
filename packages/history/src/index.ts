@@ -38,11 +38,21 @@ export { skillInventory, type Skill, type SkillRoot } from "./skills.ts";
 export type { CutContext, OriginOf, SkillCut, SkillOrigin } from "./skill-origin.ts";
 export { skillFolder } from "./skill-origin.ts";
 export { quoteArg, shellFor, withEnv, type Shell } from "./removal.ts";
-export { matches, skillAsks, wordsOf, type AskSender, type SkillAsk } from "./skill-asks.ts";
+export {
+  matches,
+  prose,
+  sessionAsks,
+  skillAsks,
+  wordsOf,
+  type AskSender,
+  type SessionAsks,
+  type SkillAsk,
+} from "./skill-asks.ts";
 export {
   projects,
   sessionPlaces,
   type Asking,
+  type Vocabulary,
   type PlaceCache,
   type Project,
   type ProjectDirectory,

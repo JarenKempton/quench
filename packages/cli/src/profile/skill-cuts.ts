@@ -10,6 +10,7 @@ export type Cut = {
   skills: string[];
   usedBy: string[];
   sessions: number;
+  relayed: number;
   listedChars: number;
   unsizedSessions: number;
   size: "exact" | "lower bound" | "unknown";
@@ -62,6 +63,7 @@ export function skillCuts(
   useRecorded: (harness: HarnessId) => boolean,
   cutOf: CutOf,
   asked: (harness: HarnessId, name: string) => boolean = () => false,
+  relayed: (harness: HarnessId, name: string) => number = () => 0,
 ): SkillCuts {
   const targets = new Map<string, Target>();
   const realUses = new Map<string, Map<string, number>>();
@@ -125,7 +127,13 @@ export function skillCuts(
     const unknown = [...t.harnesses].filter((h) => !useRecorded(h));
     const guarded =
       t.origin.kind === "folder" && !t.origin.link ? { ...t, uses: usesOf(t.realPaths) } : t;
-    cuts.push(cutFrom(guarded, unused, cutOf(recorded[0]!, t.origin), unknown));
+    const mentions = [...t.listings]
+      .filter(([l]) => !t.usedListings.has(l))
+      .reduce((n, [l, name]) => n + relayed(l.split("\0")[0] as HarnessId, name), 0);
+    cuts.push({
+      ...cutFrom(guarded, unused, cutOf(recorded[0]!, t.origin), unknown),
+      relayed: mentions,
+    });
   }
   return {
     cuts: cuts.sort(
@@ -155,6 +163,7 @@ function cutFrom(t: Target, unused: string[], cut: SkillCut, unknown: HarnessId[
     skills: unused,
     usedBy,
     sessions: t.sessions.size,
+    relayed: 0,
     listedChars: t.chars,
     unsizedSessions: t.unsized.size,
     size: !t.sized ? "unknown" : t.unsized.size ? "lower bound" : "exact",
@@ -201,7 +210,9 @@ function row(cut: Cut): string[] {
     cut.agents.map((h) => harnessById[h].label).join(", "),
     what,
     cut.source,
-    [cut.command, cut.note].filter(Boolean).join(" · "),
+    [cut.command, cut.note, cut.relayed > 0 && `relayed by agents ${count(cut.relayed)}`]
+      .filter(Boolean)
+      .join(" · "),
   ];
 }
 

@@ -55,12 +55,21 @@ const MAX_DELIVERY_MS = 60 * 60_000;
 
 export const t3State = (home: Home) => join(home.dir, ".t3", "userdata", "statev2.sqlite");
 
+const Subagent = z.object({
+  /** T3 conversation that delegated the work. */
+  thread_id: z.string(),
+  /** T3 conversation the delegate ran in; absent for work that stayed inside the parent. */
+  child_thread_id: z.string().nullable(),
+});
+
 export function openT3History(path: string): {
   enrich: SessionEnricher;
+  delegates: Map<string, string[]>;
   warnings: string[];
   close(): void;
 } {
   const warnings: string[] = [];
+  const delegates = new Map<string, string[]>();
   let db: Database | undefined;
   let enrich: SessionEnricher = (session) => session;
   const warn = (message: string) => {
@@ -88,6 +97,28 @@ export function openT3History(path: string): {
       owners.add(thread.appThreadId);
       links.set(key, owners);
     }
+    const native = new Map<string, string[]>();
+    for (const [key, owners] of links)
+      if (owners.size === 1) {
+        const owner = [...owners][0]!;
+        native.set(owner, [...(native.get(owner) ?? []), key]);
+      }
+    if (
+      db
+        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get("orchestration_v2_projection_subagents")
+    )
+      for (const row of db
+        .query("SELECT thread_id, child_thread_id FROM orchestration_v2_projection_subagents")
+        .all()) {
+        const link = Subagent.safeParse(row);
+        if (!link.success || !link.data.child_thread_id) continue;
+        const parents = native.get(link.data.thread_id) ?? [];
+        for (const child of native.get(link.data.child_thread_id) ?? [])
+          delegates.set(child, [
+            ...new Set([...(delegates.get(child) ?? []), ...parents.filter((p) => p !== child)]),
+          ]);
+      }
     let available = true;
     enrich = (session) => {
       if (!available) return session;
@@ -118,7 +149,7 @@ export function openT3History(path: string): {
       warn("T3 history is unreadable or incompatible; using harness/model sender attribution.");
     }
   }
-  return { enrich, warnings, close: () => db?.close() };
+  return { enrich, delegates, warnings, close: () => db?.close() };
 }
 
 function enrichSession(

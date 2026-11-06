@@ -9,7 +9,37 @@ export type SkillAsk = {
   loaded: boolean;
   oneWord: boolean;
   event: number;
+  at: number | null;
+  until: number | null;
 };
+
+export type SessionAsks = {
+  found: SkillAsk[];
+  loads: string[];
+  parent: string | null;
+  startedAt: number | null;
+};
+
+export function sessionAsks(session: Session, extraNames: readonly string[]): SessionAsks {
+  const listed = session.events.flatMap((e) => (e.type === "skills" ? e.listed : []));
+  const byPath = new Map(listed.flatMap((s) => (s.path ? [[s.path, s.name] as const] : [])));
+  const found = skillAsks(session, extraNames);
+  const people = session.events.flatMap((e, i) =>
+    e.type === "message" && e.author === "user" && senderOf(e, session.parent !== null) === "person"
+      ? [i]
+      : [],
+  );
+  for (const ask of found) {
+    const next = people.find((i) => i > ask.event);
+    ask.until = next === undefined ? null : (session.events[next]!.at?.getTime() ?? null);
+  }
+  return {
+    found,
+    loads: [...new Set(session.events.flatMap((e) => skillUsesOf(e, byPath)))].map(intern),
+    parent: session.parent,
+    startedAt: session.events.find((e) => e.at)?.at?.getTime() ?? null,
+  };
+}
 
 export function skillAsks(session: Session, extraNames: readonly string[]): SkillAsk[] {
   const listed = session.events.flatMap((e) => (e.type === "skills" ? e.listed : []));
@@ -27,16 +57,18 @@ export function skillAsks(session: Session, extraNames: readonly string[]): Skil
     if (event.type !== "message" || event.author !== "user") continue;
     const next = session.events[index + 1];
     const command = next?.type === "invocation" && next.by === "user";
-    const words = command ? [] : wordsOf(event.text);
+    const words = command ? [] : wordsOf(prose(event.text));
     const found = phrases.flatMap(({ name, words: phrase }) =>
       matches(words, phrase)
         ? [
             {
               name: intern(name),
-              sender: senderOf(event),
+              sender: senderOf(event, session.parent !== null),
               loaded: false,
               oneWord: phrase.length === 1,
               event: index,
+              at: event.at?.getTime() ?? null,
+              until: null,
             },
           ]
         : [],
@@ -47,11 +79,19 @@ export function skillAsks(session: Session, extraNames: readonly string[]): Skil
   return asks;
 }
 
-function senderOf(message: Extract<Event, { type: "message" }>): AskSender {
+function senderOf(message: Extract<Event, { type: "message" }>, subagent: boolean): AskSender {
   if (message.origin === "typed") return "person";
   if (message.origin === "scheduled") return "automation";
-  return message.sender?.sender ?? "unknown";
+  return message.sender?.sender ?? (subagent ? "automation" : "unknown");
 }
+
+export const prose = (text: string) =>
+  text
+    .replace(/```[\s\S]*?(```|$)/g, " ")
+    .replace(/`[^`\n]*`/g, " ")
+    .split(/\s+/)
+    .filter((token) => !/[/\\]|^~/.test(token))
+    .join(" ");
 
 export const wordsOf = (text: string) =>
   text
@@ -68,9 +108,13 @@ export function matches(words: readonly string[], phrase: readonly string[]): bo
     if (words[i] === joined) return true;
     if (i + phrase.length > words.length) continue;
     const window = words.slice(i, i + phrase.length);
+    const exact = window.map((word, j) => word === phrase[j]);
+    const anchored = exact.some((same, j) => same && phrase[j]!.length >= 3);
     if (
-      window.every((word, j) => close(word, phrase[j]!)) &&
-      window.some((word, j) => word === phrase[j])
+      exact.some(Boolean) &&
+      window.every(
+        (word, j) => exact[j] || ((anchored || phrase[j]!.length >= 5) && close(word, phrase[j]!)),
+      )
     )
       return true;
   }
@@ -78,8 +122,8 @@ export function matches(words: readonly string[], phrase: readonly string[]): bo
 }
 
 function close(word: string, target: string): boolean {
-  if (word === target) return true;
   if (word.length < 3 || target.length < 3) return false;
+  if (word.startsWith(target) || target.startsWith(word)) return false;
   return (
     distance(word, target) <= 1 ||
     (Math.abs(word.length - target.length) <= 2 && soundex(word) === soundex(target))
