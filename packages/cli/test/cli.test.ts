@@ -381,6 +381,21 @@ test.skipIf(process.platform !== "win32")(
   },
 );
 
+test("--help prints the full usage and an unknown command prints it after the error", async () => {
+  const help = await quench("--help");
+  expect(help.code).toBe(0);
+  expect(help.stderr).toBe("");
+  expect(help.stdout).toStartWith("quench — see what your coding agents load");
+  expect(help.stdout).toContain("steps: agents, summary, judge, hub, ui;");
+  expect(help.stdout).toContain("one section: projects, mcp, instructions, skills, failures");
+  expect(help.stdout).toContain("--theme-limit <1–50>");
+  expect(help.stdout).toContain("(default: 20)");
+  const unknown = await quench("frobnicate");
+  expect(unknown.code).toBe(1);
+  expect(unknown.stdout).toBe("");
+  expect(unknown.stderr).toBe(`unknown command "frobnicate"\n\n${help.stdout}`);
+});
+
 test("unknown commands and bad input fail with a message", async () => {
   expect((await quench("frobnicate")).code).toBe(1);
   expect((await quench("report", "--days", "zero")).stderr).toContain(
