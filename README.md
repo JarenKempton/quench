@@ -61,8 +61,8 @@ Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh
 
 Then run `quench setup`. It finds your agents' history (sessions and days per harness), prints the
 summary, lets you pick a judge (tested on one made-up exchange, so none of your history is sent),
-and pairs with a hub when you paste the `quench connect` line its Add machine button shows. `quench ui`
-is not shipped yet. Every step can be skipped; run it
+and pairs with a hub when you paste the `quench connect` line its Add machine button shows, then
+offers to open `quench ui`. Every step can be skipped; run it
 again to resume where it stopped, or `quench setup judge` to redo one step. `quench setup --judge
 none --yes` asks nothing and needs no key or hub. After that, `quench` with no arguments shows the
 profile of every agent and project in your history.
@@ -75,6 +75,7 @@ profile of every agent and project in your history.
 | `quench setup [step] [--judge <name>] [--yes]`  | Find agents, show the summary, pick and test a judge; resumable, every step skippable                  |
 | `quench profile [section]`                      | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`                           |
 | `quench worktrees [--days 30] [--json]`         | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only                   |
+| `quench ui [--port <n>] [--open]`               | Your skills in the browser: sortable, filterable, flagged, with a fix prompt to copy; 127.0.0.1 only   |
 | `quench report [--days 30] [--json]`            | Per harness: starting load, peak context, compactions, tool errors, models and effort                  |
 | `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                      |
 | `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                          |

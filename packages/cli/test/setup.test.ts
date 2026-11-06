@@ -248,6 +248,7 @@ test.skipIf(!posix)(
     await type("API key", `sk-${CANARY}\r`);
     await type("Paste the quench connect line", `--code ${CANARY}\r`);
     await type("paste the whole line", "\r");
+    await type("Open quench ui now?", "n\r");
     const exited = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "hung")]);
     if (exited === "hung") proc.kill();
     expect(exited).toBe(0);
@@ -280,3 +281,52 @@ test("a malformed TYPESAFE_API_KEY is refused on every path without being printe
   expect(stored.code).toBe(1);
   expect(stored.stdout + stored.stderr).not.toContain(CANARY);
 });
+
+test("without a terminal, setup's ui step prints how to open it and exits", async () => {
+  const home = await freshHome();
+  for (const stdin of ["\n", "y\n", ""]) {
+    const run = await quench(home, ["setup", "ui"], stdin);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("Skipped. Run quench ui --open any time");
+    expect(run.stdout).not.toContain("quench ui at http");
+  }
+});
+
+test.skipIf(!posix)(
+  "in a terminal, Enter at setup's ui step serves quench ui on 127.0.0.1",
+  async () => {
+    const home = await freshHome();
+    let screen = "";
+    const proc = Bun.spawn(
+      [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "ui"],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: "",
+          CLAUDE_CONFIG_DIR: "",
+          CODEX_HOME: "",
+          PI_CODING_AGENT_DIR: "",
+        },
+        terminal: {
+          cols: 200,
+          rows: 50,
+          data(_terminal, bytes) {
+            screen += new TextDecoder().decode(bytes);
+          },
+        },
+      },
+    );
+    try {
+      for (let i = 0; i < 200 && !screen.includes("Open quench ui now?"); i++) await Bun.sleep(25);
+      proc.terminal?.write("\r");
+      for (let i = 0; i < 200 && !screen.includes("Ctrl-C"); i++) await Bun.sleep(25);
+      const url = /quench ui at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(screen)?.[1];
+      expect(url).toBeDefined();
+      expect((await fetch(url!)).headers.get("x-frame-options")).toBe("DENY");
+    } finally {
+      proc.kill();
+      await proc.exited;
+    }
+  },
+);

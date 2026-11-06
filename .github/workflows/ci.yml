@@ -25,6 +25,16 @@ jobs:
       - run: bunx vp run compile
       - run: ./dist/quench --help
       - run: ./dist/quench --version
+      - name: UI smoke, outside the checkout
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/dist/quench" ui --port 47999 --days 1 > ui.log 2>&1 &
+          for _ in $(seq 30); do curl -sf http://127.0.0.1:47999/ -o page.html && break; sleep 1; done
+          grep -q '<div id="root">' page.html
+          curl -sf http://127.0.0.1:47999/app.js -o /dev/null
+          curl -sf http://127.0.0.1:47999/geist-latin-wght-normal.woff2 -o /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' http://127.0.0.1:47999/)" = 421
+          kill %1
       - run: bunx vp run test && bunx vp run test
       - name: Agent service smoke
         run: |

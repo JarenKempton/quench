@@ -31,4 +31,4 @@ const inherit = <Run extends typeof spawn | typeof spawnSync>(run: Run) =>
 Bun.spawn = inherit(spawn);
 Bun.spawnSync = inherit(spawnSync);
 
-afterAll(() => remove(root));
+afterAll(() => remove(root), 60_000);
