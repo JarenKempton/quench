@@ -65,6 +65,18 @@ retired with it and live in git history.
   never mix judges. Themes and causes stay Jev-only until another provider passes their fixtures.
   `none` turns off model calls only. The choice and any typed key live in a 0600 config file that
   environment variables override.
+- **Default judge and cost: Jev stays the default; Cloudflare Workers AI is not yet a substitute.**
+  Measured on the maintainer's history, 30 days to 2026-11-06: 12,010 replies needed a judgment
+  (≈400 a day, peak 1,126; 3,468 recorded as typed by a person, ≈116 a day), 4,251 already in
+  Jev's cache. Jev used 1,262 input tokens per judgment (two calls, SDK-reported) at the published
+  $0.042 per million input tokens, output free: $0.05 per 1,000 judgments, ≈$0.64 a month at that
+  volume. Through `--judge openai` on the same 200 uncached replies, Cloudflare's free models
+  agreed with Jev on kind 49% (`llama-3.1-8b-instruct-fp8-fast`, which called 79 corrections to
+  Jev's 19), 49% (`granite-4.0-h-micro`) and 66% (`qwen3-30b-a3b-fp8`, catching 9 of 19), and on
+  sender 78–85%. The 10,000 free neurons a day cover the volume (≈3 neurons a judgment for
+  llama, ≈17 for qwen3: every day, or 26 of 31), so volume is not the obstacle; agreement is.
+  No change is needed for these models; reasoning models such as `gpt-oss-20b` stop at
+  Cloudflare's default 256 output tokens unless the judge sends `max_tokens`.
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
 - **Hosts enrich history; they do not redefine harnesses.** Optional local host adapters add
