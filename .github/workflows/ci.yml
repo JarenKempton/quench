@@ -30,6 +30,10 @@ jobs:
       - run: bunx vp run compile
       - run: ./dist/quench --help
       - run: ./dist/quench --version
+      - name: Timing
+        run: |
+          bun packages/cli/test/timing.ts "$(ls dist/quench*)"
+          bun packages/cli/test/timing.ts bun packages/cli/src/main.ts
       - name: UI smoke, outside the checkout
         run: |
           cd "$RUNNER_TEMP"
