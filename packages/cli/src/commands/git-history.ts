@@ -3,6 +3,7 @@ import { dirname, join, relative, sep } from "node:path";
 
 const GIT_TIMEOUT_MS = 10_000;
 const NONE = "0".repeat(40);
+const CHUNK = 200;
 
 const OFF = [
   "log.showSignature=false",
@@ -173,55 +174,63 @@ function walk(
   return shown;
 }
 
+function chunkChanges(repo: string, tracked: readonly string[]): [string, Change[]][] {
+  const paths = tracked.map((file) => relative(repo, file).split(sep).join("/"));
+  const listed = paths.filter((p) => !/[\n\r]/.test(p));
+  if (!listed.length) return [];
+  const out = git(
+    repo,
+    [
+      "log",
+      "--stdin",
+      "--full-history",
+      "--sparse",
+      "--no-renames",
+      "--diff-merges=first-parent",
+      "--no-show-signature",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--format=%H %ct %P",
+      "--raw",
+      "--no-abbrev",
+      "-z",
+    ],
+    `--\n${listed.join("\n")}\n`,
+  );
+  if (!out) return [];
+  const { head, commits } = readLog(out, paths);
+  if (!head) return [];
+  const trees = treesOf(commits);
+  const walked = tracked.map((_, i) => walk(i, head, commits, trees));
+  const wanted = new Set(walked.flat().map((c) => c.blob));
+  wanted.delete(NONE);
+  const sizes = new Map<string, number>();
+  for (const line of (
+    git(repo, ["cat-file", "--batch-check"], `${[...wanted].join("\n")}\n`) ?? ""
+  ).split("\n")) {
+    const [id, type, size] = line.split(" ");
+    if (id && type === "blob") sizes.set(id, Number(size));
+  }
+  return tracked.map((file, i) => [
+    file,
+    walked[i]!.map((c) => ({ ...c, bytes: sizes.get(c.blob) ?? null })),
+  ]);
+}
+
 export async function gitChanges(files: readonly string[]): Promise<Map<string, Change[]>> {
   const repos = new Map<string, string[]>();
   for (const file of new Set(files)) {
     const repo = await repositoryOf(dirname(file));
-    if (repo) repos.set(repo, [...(repos.get(repo) ?? []), file]);
+    if (repo)
+      repos
+        .set(repo, repos.get(repo) ?? [])
+        .get(repo)!
+        .push(file);
   }
   const found = new Map<string, Change[]>();
-  for (const [repo, tracked] of repos) {
-    const paths = tracked.map((file) => relative(repo, file).split(sep).join("/"));
-    const listed = paths.filter((p) => !/[\n\r]/.test(p));
-    const out = git(
-      repo,
-      [
-        "log",
-        "--stdin",
-        "--full-history",
-        "--sparse",
-        "--no-renames",
-        "--diff-merges=first-parent",
-        "--no-show-signature",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--format=%H %ct %P",
-        "--raw",
-        "--no-abbrev",
-        "-z",
-      ],
-      `--\n${listed.join("\n")}\n`,
-    );
-    if (!out) continue;
-    const { head, commits } = readLog(out, paths);
-    if (!head) continue;
-    const trees = treesOf(commits);
-    const walked = tracked.map((_, i) => walk(i, head, commits, trees));
-    const wanted = new Set(walked.flat().map((c) => c.blob));
-    wanted.delete(NONE);
-    const sizes = new Map<string, number>();
-    for (const line of (
-      git(repo, ["cat-file", "--batch-check"], `${[...wanted].join("\n")}\n`) ?? ""
-    ).split("\n")) {
-      const [id, type, size] = line.split(" ");
-      if (id && type === "blob") sizes.set(id, Number(size));
-    }
-    tracked.forEach((file, i) =>
-      found.set(
-        file,
-        walked[i]!.map((c) => ({ ...c, bytes: sizes.get(c.blob) ?? null })),
-      ),
-    );
-  }
+  for (const [repo, tracked] of repos)
+    for (let at = 0; at < tracked.length; at += CHUNK)
+      for (const [file, changes] of chunkChanges(repo, tracked.slice(at, at + CHUNK)))
+        found.set(file, changes);
   return found;
 }
