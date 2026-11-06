@@ -90,8 +90,12 @@ export async function receiveTranscript(data: DataDir, body: AsyncIterable<Uint8
       if (failure) throw failure;
       await file.write(chunk);
       await new Promise<void>((done) => {
-        if (!inflate.write(chunk, () => done())) inflate.once("drain", done);
-        inflate.once("close", done);
+        const settled = () => {
+          inflate.off("close", settled);
+          done();
+        };
+        inflate.once("close", settled);
+        inflate.write(chunk, settled);
       });
       if (failure) throw failure;
     }
