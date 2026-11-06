@@ -22,7 +22,9 @@ import {
   treeHash,
   TreeHash,
   type ProposalSubmission,
+  type SessionResult,
   type Snapshot,
+  type TranscriptUpload,
 } from "@quench/fleet";
 import { readTree } from "@quench/fleet/disk";
 import { spkiPin } from "./cert.ts";
@@ -289,6 +291,55 @@ export async function postSnapshot(dir: string, snapshot: Snapshot) {
   if (!response.ok) throw await failure(response, "snapshot refused");
   return (await response.json()) as { machine: string; state: unknown };
 }
+
+async function asMachine(dir: string, path: string, init: RequestInit, what: string) {
+  const { connection, token } = await loadConnection(dir);
+  const response = await call(connection, path, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw await failure(response, what);
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+export const postOtlp = (dir: string, kind: "logs" | "metrics", zstdJson: Uint8Array) =>
+  asMachine(
+    dir,
+    `/api/v1/otlp/${kind}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-encoding": "zstd" },
+      body: zstdJson,
+    },
+    `OTLP ${kind} refused`,
+  );
+
+export const postSessions = (dir: string, sessions: SessionResult[]) =>
+  asMachine(
+    dir,
+    "/api/v1/sessions",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessions }),
+    },
+    "session results refused",
+  );
+
+export const putTranscript = (dir: string, upload: TranscriptUpload, compressed: Uint8Array) =>
+  asMachine(
+    dir,
+    "/api/v1/transcripts",
+    {
+      method: "PUT",
+      headers: {
+        "content-type": "application/zstd",
+        "x-quench-transcript": encodeURIComponent(JSON.stringify(upload)),
+      },
+      body: compressed,
+    },
+    `transcript ${upload.path} refused`,
+  );
 
 export const blobPath = (dir: string, digest: string) => join(paths(dir).blobs, digest);
 

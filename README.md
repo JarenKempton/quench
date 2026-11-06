@@ -93,6 +93,7 @@ profile of every agent and project in your history.
 | `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                         |
 | `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                       |
 | `quench agent install\|uninstall\|run`          | A user service that keeps applying the paired hub's bundle, or `--source`; never self-updates             |
+| `quench agent otel`                             | Harness settings that send stripped OTel through `agent run --otlp 127.0.0.1:4318`                        |
 | `quench skills eval <skill> --candidate <dir>`  | Replays first prompts on the installed and a candidate skill in scratch Claude Code homes; asks first     |
 
 `quench skills eval <skill> --candidate <dir>` tests a skill change against your own past prompts
@@ -119,13 +120,20 @@ Agents find this through the shipped `quench` skill (the hub's "Add the shipped 
 
 The hub's data folder (`--data`, default `~/.quench/hub`) must be private to the user that runs it: the hub creates it 0700 and refuses to start if it is a link, owned by someone else, readable by group or others, or contains any symlink.
 
-The hub also ships as a Docker image built from this repo (`docker build -t quench-hub .`); it
-uses the image's system `git` for its internal skills repo and keeps everything under `/data`:
+The hub also ships as a Docker image built from this repo (`docker build -t quench-hub .`), on the
+ClickHouse server image. It uses the image's system `git` for its internal skills repo, keeps hub
+state under `/data`, and runs ClickHouse for the analytics archive with its data under `/clickhouse`:
 
 ```sh
 docker run --rm -v quench-hub:/data quench-hub import https://github.com/you/skills.git
-docker run -d -p 8443:8443 -v quench-hub:/data -e QUENCH_HUB_PASSWORD=… quench-hub serve --url https://hub.lan:8443
+docker run -d --memory 3g -p 8443:8443 -v quench-hub:/data -v quench-archive:/clickhouse \
+  -e QUENCH_HUB_PASSWORD=… quench-hub serve --url https://hub.lan:8443 \
+  --clickhouse-bin /usr/bin/clickhouse --clickhouse-data /clickhouse
 ```
+
+Paired agents ship each session transcript (zstd, unstripped, owner-only, secret-scanned on arrival)
+and its per-session results once the session has been idle 30 minutes. OTel is optional
+(`quench agent otel`). History is kept for `--retention` (default `5y`).
 
 `quench corrections` asks [Jev](https://typesafe.ai) what each reply to an agent run was doing, using
 your own `TYPESAFE_API_KEY`. It sends the reply and the last 1,500 characters of the agent message
