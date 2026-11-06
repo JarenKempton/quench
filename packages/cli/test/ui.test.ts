@@ -186,7 +186,7 @@ async function home() {
 }
 
 test(
-  "/api/skills equals quench skills --json on the same home, and each request reads it again",
+  "/api/skills equals quench skills --json on the same home, kept until a refresh reads it again",
   async () => {
     const dir = await home();
     const expected = await quench(dir, "skills", "--json", "--no-host-history");
@@ -205,13 +205,18 @@ test(
       const served = await get(running.port, "/api/skills");
       expect(served.status).toBe(200);
       expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
       expect(JSON.parse(served.body)).toEqual(JSON.parse(expected.stdout));
       await Bun.write(
         join(dir, ".claude/skills/tidy/SKILL.md"),
         "---\nname: tidy\ndescription: tidy\n---\n",
       );
-      const again = JSON.parse((await get(running.port, "/api/skills")).body);
-      expect(again.skills.map((r: { skill: string }) => r.skill)).toContain("tidy");
+      const names = async (path: string) =>
+        JSON.parse((await get(running.port, path)).body).skills.map(
+          (r: { skill: string }) => r.skill,
+        );
+      expect(await names("/api/skills")).not.toContain("tidy");
+      expect(await names("/api/skills?refresh=1")).toContain("tidy");
     } finally {
       await running.stop();
     }

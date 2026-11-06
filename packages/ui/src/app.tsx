@@ -68,14 +68,21 @@ function SkillsPage({ state, load }: Page<SkillsReport>) {
       {(report) =>
         report.skills.length ? (
           <>
-            <Days days={report.days} />
+            <Days days={report.days}>
+              <Fresh state={state} refresh={() => load("/api/skills", true)} />
+            </Days>
             <SkillsView report={report} />
           </>
         ) : (
-          <Message title="No skills found">
-            None of your agents have skills on disk, and no session in the last {report.days} days
-            listed one. Add a skill, or run quench ui --days 90.
-          </Message>
+          <>
+            <Days days={report.days}>
+              <Fresh state={state} refresh={() => load("/api/skills", true)} />
+            </Days>
+            <Message title="No skills found">
+              None of your agents have skills on disk, and no session in the last {report.days} days
+              listed one. Add a skill, or run quench ui --days 90.
+            </Message>
+          </>
         )
       }
     </Loading>
@@ -94,13 +101,7 @@ function CorrectionsPage({ state, load }: Page<CorrectionsResponse>) {
         ) : (
           <>
             <Days days={report.days}>
-              {state.status === "ready" && state.computedAt && (
-                <Age
-                  at={state.computedAt}
-                  refreshing={state.refreshing}
-                  refresh={() => load("/api/corrections", true)}
-                />
-              )}
+              <Fresh state={state} refresh={() => load("/api/corrections", true)} />
             </Days>
             <CorrectionsView report={report} />
           </>
@@ -153,6 +154,20 @@ const ago = (at: Date, now: number) => {
   const minutes = Math.floor((now - at.getTime()) / 60_000);
   return minutes < 1 ? "just now" : minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
 };
+
+function Fresh<T>({ state, refresh }: { state: State<T>; refresh: () => void }) {
+  if (state.status !== "ready" || !state.computedAt) return null;
+  return (
+    <>
+      <Age at={state.computedAt} refreshing={state.refreshing} refresh={refresh} />
+      {state.error && (
+        <span role="alert" className="text-warn">
+          Refresh failed: {state.error}
+        </span>
+      )}
+    </>
+  );
+}
 
 function Age({ at, refreshing, refresh }: { at: Date; refreshing: boolean; refresh: () => void }) {
   const [now, setNow] = useState(() => Date.now());

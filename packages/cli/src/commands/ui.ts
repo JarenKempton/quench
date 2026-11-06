@@ -135,14 +135,6 @@ export type UiFlags = {
 
 const NO_JUDGE = { judge: null };
 
-function latest<T>(run: () => Promise<T>) {
-  let running: Promise<T> | null = null;
-  return () =>
-    (running ??= run().finally(() => {
-      running = null;
-    }));
-}
-
 export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Error> {
   const port = Number(flags.port ?? "0");
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
@@ -151,7 +143,7 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
   if (source instanceof Error) return source;
   const { judge } = flags;
   const api = {
-    "/api/skills": latest(() => skillsJson(home, { ...flags, source }).then((r) => r.report)),
+    "/api/skills": lastResult(() => skillsJson(home, { ...flags, source }).then((r) => r.report)),
     "/api/corrections": lastResult(async () =>
       judge?.id
         ? shownHistory(
