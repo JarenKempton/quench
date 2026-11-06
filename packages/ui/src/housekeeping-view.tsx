@@ -141,9 +141,9 @@ function Worktrees({ report }: { report: WorktreesReport }) {
       </p>
       {!plans.length && <Note>No linked worktrees in the repositories your sessions used.</Note>}
       {removable.length > 1 && (
-        <Command
+        <CopyButton
           text={removable.map((r) => r.command).join("\n")}
-          label={`Copy all ${count(removable.length)}`}
+          label={`Copy all ${count(removable.length)} commands`}
         />
       )}
       {plans.map((p) => (
