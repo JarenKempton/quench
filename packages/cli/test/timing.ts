@@ -12,8 +12,8 @@ for (const [n, at] of [day(1, 2), day(1, 20), day(2, 5)].entries()) {
     await mkdir(join(file, ".."), { recursive: true });
     await Bun.write(file, `rule ${n}\n`.repeat(n + 1));
   }
-  git(work, at, "add", ".");
-  git(work, at, "commit", "-q", "-m", `extra ${n}`);
+  await git(work, at, "add", ".");
+  await git(work, at, "commit", "-q", "-m", `extra ${n}`);
 }
 const dir = join(home, ".claude/projects/-work");
 for (const name of await readdir(dir)) {
