@@ -139,7 +139,7 @@ export async function snapshots(homeDir: string, write: boolean) {
     async save() {
       if (!changed) return;
       await mkdir(dirname(file), { recursive: true });
-      const temporary = `${file}.${process.pid}`;
+      const temporary = `${file}.${process.pid}.${crypto.randomUUID()}`;
       await Bun.write(temporary, JSON.stringify({ v: 1, files } satisfies Stored));
       await chmod(temporary, 0o600);
       await rename(temporary, file);

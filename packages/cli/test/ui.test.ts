@@ -276,41 +276,47 @@ test(
   cliRunsTimeout,
 );
 
-test("a slow report is computed on first request only, then served at once with its age while one refresh runs", async () => {
+test("a burst of reloads starts at most one scan; ?refresh=1 or an old result starts one more", async () => {
   let reads = 0;
-  let finish = (_: string) => {};
+  const pending: ((value: string) => void)[] = [];
   const read = () => {
     reads++;
     return reads === 1
       ? Promise.resolve("first")
       : new Promise<string>((done) => {
-          finish = done;
+          pending.push(done);
         });
   };
-  const slow = serveUi({ port: 0, api: { report: lastResult(read) }, assets });
+  const slow = serveUi({ port: 0, api: { report: lastResult(read, 300) }, assets });
+  const burst = (path: string) =>
+    Promise.all(Array.from({ length: 10 }, () => get(slow.port, path)));
   try {
     await Bun.sleep(50);
     expect(reads).toBe(0);
     const first = await get(slow.port, "/api/report");
     expect(JSON.parse(first.body)).toBe("first");
     expect(first.headers["x-quench-refreshing"]).toBe("false");
-    expect(Date.parse(first.headers["x-quench-computed-at"] as string)).toBeLessThanOrEqual(
-      Date.now(),
-    );
-    const [again, alongside] = await Promise.all([
-      get(slow.port, "/api/report"),
-      get(slow.port, "/api/report"),
-    ]);
-    for (const response of [again, alongside]) {
+    for (const response of await burst("/api/report")) {
+      expect(JSON.parse(response.body)).toBe("first");
+      expect(response.headers["x-quench-refreshing"]).toBe("false");
+      expect(response.headers["x-quench-computed-at"]).toBe(first.headers["x-quench-computed-at"]);
+    }
+    expect(reads).toBe(1);
+    const asked = await burst("/api/report?refresh=1");
+    expect(reads).toBe(2);
+    for (const response of asked) {
       expect(JSON.parse(response.body)).toBe("first");
       expect(response.headers["x-quench-refreshing"]).toBe("true");
       expect(response.headers["content-security-policy"]).toBe(CSP);
     }
-    expect(reads).toBe(2);
-    finish("second");
+    pending.shift()!("second");
     await Bun.sleep(10);
-    const fresh = await get(slow.port, "/api/report");
-    expect(JSON.parse(fresh.body)).toBe("second");
+    await burst("/api/report");
+    expect(reads).toBe(2);
+    expect(JSON.parse((await get(slow.port, "/api/report")).body)).toBe("second");
+    await Bun.sleep(350);
+    await burst("/api/report");
+    expect(reads).toBe(3);
   } finally {
     await slow.stop();
   }

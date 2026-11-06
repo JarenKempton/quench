@@ -28,24 +28,33 @@ type Load<T> =
 
 function useReport<T>(path: string) {
   const [state, setState] = useState<Load<T>>({ status: "loading" });
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const response = await fetch(path);
-      if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-      setState({
-        status: "ready",
-        report: (await response.json()) as T,
-        computedAt: response.headers.get("x-quench-computed-at"),
-        refreshing: response.headers.get("x-quench-refreshing") === "true",
-      });
-    } catch (error) {
-      setState({ status: "error", message: (error as Error).message });
-    }
-  }, [path]);
+  const load = useCallback(
+    async (refresh = false) => {
+      setState((last) => (last.status === "ready" ? last : { status: "loading" }));
+      try {
+        const response = await fetch(refresh ? `${path}?refresh=1` : path);
+        if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
+        setState({
+          status: "ready",
+          report: (await response.json()) as T,
+          computedAt: response.headers.get("x-quench-computed-at"),
+          refreshing: response.headers.get("x-quench-refreshing") === "true",
+        });
+      } catch (error) {
+        setState({ status: "error", message: (error as Error).message });
+      }
+    },
+    [path],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+  const refreshing = state.status === "ready" && state.refreshing;
+  useEffect(() => {
+    if (!refreshing) return;
+    const timer = setInterval(() => void load(), 5000);
+    return () => clearInterval(timer);
+  }, [refreshing, load]);
   return [state, load] as const;
 }
 
@@ -72,7 +81,7 @@ function Section<T>({
 }: {
   title: string;
   state: Load<T>;
-  retry: () => void;
+  retry: (refresh?: boolean) => void;
   children: (report: T) => React.ReactNode;
 }) {
   return (
@@ -82,8 +91,13 @@ function Section<T>({
         {state.status === "ready" && state.computedAt && (
           <span className="flex items-baseline gap-2 font-mono text-xs text-muted-foreground">
             {freshness(state.computedAt, state.refreshing, Date.now())}
-            <Button variant="outline" size="sm" onClick={retry}>
-              Reload
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={state.refreshing}
+              onClick={() => retry(true)}
+            >
+              Refresh
             </Button>
           </span>
         )}
@@ -98,7 +112,7 @@ function Section<T>({
         <Note>
           <span className="font-mono text-xs">{state.message}</span>
           <div className="mt-3">
-            <Button variant="outline" size="sm" onClick={retry}>
+            <Button variant="outline" size="sm" onClick={() => retry()}>
               Try again
             </Button>
           </div>

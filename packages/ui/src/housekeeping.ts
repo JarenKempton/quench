@@ -137,5 +137,5 @@ export function freshness(computedAt: string, refreshing: boolean, now: number):
       : minutes < 60
         ? `${minutes} min ago`
         : `${Math.floor(minutes / 60)} h ago`;
-  return refreshing ? `as of ${age} · refreshing, reload for the newer result` : `as of ${age}`;
+  return refreshing ? `as of ${age} · refreshing…` : `as of ${age}`;
 }

@@ -47,7 +47,14 @@ export class Aged {
   ) {}
 }
 
-export function lastResult(read: () => Promise<unknown>): () => Promise<Aged> {
+export const REFRESH_AFTER_MS = 5 * 60_000;
+
+type Load = (asked: { refresh: boolean }) => Promise<unknown>;
+
+export function lastResult(
+  read: () => Promise<unknown>,
+  refreshAfterMs = REFRESH_AFTER_MS,
+): (asked: { refresh: boolean }) => Promise<Aged> {
   let last: { value: unknown; at: Date } | null = null;
   let running: Promise<void> | null = null;
   const refresh = () =>
@@ -58,9 +65,10 @@ export function lastResult(read: () => Promise<unknown>): () => Promise<Aged> {
       .finally(() => {
         running = null;
       }));
-  return async () => {
+  return async (asked) => {
     if (!last) await refresh();
-    else refresh().catch(() => {});
+    else if (asked.refresh || Date.now() - last.at.getTime() >= refreshAfterMs)
+      refresh().catch(() => {});
     return new Aged(last!.value, last!.at, running !== null);
   };
 }
@@ -69,7 +77,7 @@ export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
 export function serveUi(options: {
   port: number;
-  api: Readonly<Record<string, () => Promise<unknown>>>;
+  api: Readonly<Record<string, Load>>;
   assets: ReadonlyMap<string, Blob>;
 }): UiServer {
   const server = Bun.serve({
@@ -80,11 +88,14 @@ export function serveUi(options: {
         return respond("Host not allowed\n", 421);
       if (request.method !== "GET" && request.method !== "HEAD")
         return respond("Method not allowed\n", 405);
-      const path = new URL(request.url).pathname;
+      const url = new URL(request.url);
+      const path = url.pathname;
       const name = path.slice("/api/".length);
       if (path.startsWith("/api/") && Object.hasOwn(options.api, name)) {
         try {
-          const result = await options.api[name]!();
+          const result = await options.api[name]!({
+            refresh: url.searchParams.get("refresh") === "1",
+          });
           if (!(result instanceof Aged))
             return respond(JSON.stringify(result), 200, "application/json");
           return respond(JSON.stringify(result.value), 200, "application/json", {
