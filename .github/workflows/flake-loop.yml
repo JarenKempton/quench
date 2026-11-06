@@ -26,7 +26,7 @@ jobs:
           fails=0
           for i in $(seq 8); do
             echo "=== iteration $i $(date -u +%FT%T)"
-            if bun test > "$RUNNER_TEMP/run.txt" 2>&1; then :; else fails=$((fails+1)); fi
+            if (set -o pipefail; bun test 2>&1 | perl -MPOSIX=strftime -MTime::HiRes=time -pe '$t=time; printf "%s.%03d ", strftime("%H:%M:%S", gmtime($t)), ($t*1000)%1000' > "$RUNNER_TEMP/run.txt"); then :; else fails=$((fails+1)); fi
             grep -E '\(fail\)|timed out|dangling|Expected|Received|^ *[0-9]+ (pass|fail)$' "$RUNNER_TEMP/run.txt" || true
           done
           kill $probe

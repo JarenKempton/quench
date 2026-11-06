@@ -13,7 +13,7 @@ setInterval(() => {
   lastIo = performance.now() - t0;
   const gap = now - last;
   if (gap > 250 || lastIo > 250)
-    console.log(`${new Date().toISOString()} PROBE gap=${gap.toFixed(0)}ms io=${lastIo.toFixed(0)}ms`);
+    console.log(`${new Date().toISOString().slice(11, 23)} PROBE gap=${gap.toFixed(0)}ms io=${lastIo.toFixed(0)}ms`);
   last = now;
 }, 50);
 process.on("SIGTERM", () => { closeSync(fd); process.exit(0); });
