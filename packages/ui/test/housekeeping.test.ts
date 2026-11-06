@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { plan, type Repository, type Worktree } from "../src/housekeeping.ts";
+import { freshness, plan, type Repository, type Worktree } from "../src/housekeeping.ts";
 
 const worktree = (over: Partial<Worktree> & { path: string }): Worktree => ({
   branch: "feature",
@@ -44,4 +44,13 @@ test("only worktrees the CLI marks removable get a command, quoted for the viewe
   expect(plan(repo, "powershell").removable[0]!.command).toBe(
     `git -C '/work/it''s repo' worktree remove '/work/trees/done one'`,
   );
+});
+
+test("a served result says how old it is and whether a newer one is on the way", () => {
+  const now = Date.parse("2026-11-06T12:00:00Z");
+  expect(freshness("2026-11-06T11:59:40Z", false, now)).toBe("as of just now");
+  expect(freshness("2026-11-06T11:48:00Z", true, now)).toBe(
+    "as of 12 min ago · refreshing, reload for the newer result",
+  );
+  expect(freshness("2026-11-06T09:00:00Z", false, now)).toBe("as of 3 h ago");
 });

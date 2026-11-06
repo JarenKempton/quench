@@ -128,3 +128,14 @@ export function rotations(report: SecretsReport) {
     `${a.provider}${a.issuer}`.localeCompare(`${b.provider}${b.issuer}`),
   );
 }
+
+export function freshness(computedAt: string, refreshing: boolean, now: number): string {
+  const minutes = Math.floor((now - Date.parse(computedAt)) / 60_000);
+  const age =
+    minutes < 1
+      ? "just now"
+      : minutes < 60
+        ? `${minutes} min ago`
+        : `${Math.floor(minutes / 60)} h ago`;
+  return refreshing ? `as of ${age} · refreshing, reload for the newer result` : `as of ${age}`;
+}

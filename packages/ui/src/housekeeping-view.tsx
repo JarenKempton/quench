@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "./components/ui/table.tsx";
 import {
+  freshness,
   plan,
   rotations,
   type FileSecrets,
@@ -23,7 +24,7 @@ import { viewerShell } from "./skills.ts";
 type Load<T> =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; report: T };
+  | { status: "ready"; report: T; computedAt: string | null; refreshing: boolean };
 
 function useReport<T>(path: string) {
   const [state, setState] = useState<Load<T>>({ status: "loading" });
@@ -32,7 +33,12 @@ function useReport<T>(path: string) {
     try {
       const response = await fetch(path);
       if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-      setState({ status: "ready", report: (await response.json()) as T });
+      setState({
+        status: "ready",
+        report: (await response.json()) as T,
+        computedAt: response.headers.get("x-quench-computed-at"),
+        refreshing: response.headers.get("x-quench-refreshing") === "true",
+      });
     } catch (error) {
       setState({ status: "error", message: (error as Error).message });
     }
@@ -71,8 +77,23 @@ function Section<T>({
 }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-      {state.status === "loading" && <Note>Reading your session history…</Note>}
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        {state.status === "ready" && state.computedAt && (
+          <span className="flex items-baseline gap-2 font-mono text-xs text-muted-foreground">
+            {freshness(state.computedAt, state.refreshing, Date.now())}
+            <Button variant="outline" size="sm" onClick={retry}>
+              Reload
+            </Button>
+          </span>
+        )}
+      </div>
+      {state.status === "loading" && (
+        <Note>
+          Reading your session history… The first scan can take minutes; later visits show the last
+          result at once.
+        </Note>
+      )}
       {state.status === "error" && (
         <Note>
           <span className="font-mono text-xs">{state.message}</span>

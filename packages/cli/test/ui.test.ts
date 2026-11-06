@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Home } from "@quench/history";
-import { CSP, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
+import { CSP, lastResult, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
@@ -269,6 +269,71 @@ test(
         expect(body).not.toContain(CANARY.slice(4));
       }
       expect(await Bun.file(join(tree("merged"), ".git")).exists()).toBe(true);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+test("a slow report is computed on first request only, then served at once with its age while one refresh runs", async () => {
+  let reads = 0;
+  let finish = (_: string) => {};
+  const read = () => {
+    reads++;
+    return reads === 1
+      ? Promise.resolve("first")
+      : new Promise<string>((done) => {
+          finish = done;
+        });
+  };
+  const slow = serveUi({ port: 0, api: { report: lastResult(read) }, assets });
+  try {
+    await Bun.sleep(50);
+    expect(reads).toBe(0);
+    const first = await get(slow.port, "/api/report");
+    expect(JSON.parse(first.body)).toBe("first");
+    expect(first.headers["x-quench-refreshing"]).toBe("false");
+    expect(Date.parse(first.headers["x-quench-computed-at"] as string)).toBeLessThanOrEqual(
+      Date.now(),
+    );
+    const [again, alongside] = await Promise.all([
+      get(slow.port, "/api/report"),
+      get(slow.port, "/api/report"),
+    ]);
+    for (const response of [again, alongside]) {
+      expect(JSON.parse(response.body)).toBe("first");
+      expect(response.headers["x-quench-refreshing"]).toBe("true");
+      expect(response.headers["content-security-policy"]).toBe(CSP);
+    }
+    expect(reads).toBe(2);
+    finish("second");
+    await Bun.sleep(10);
+    const fresh = await get(slow.port, "/api/report");
+    expect(JSON.parse(fresh.body)).toBe("second");
+  } finally {
+    await slow.stop();
+  }
+});
+
+test(
+  "no secrets scan starts until /api/secrets is requested",
+  async () => {
+    const { dir } = await housekeepingHome();
+    const key = join(dir, ".quench/local/secrets.key");
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      await get(running.port, "/");
+      await Bun.sleep(200);
+      expect(await Bun.file(key).exists()).toBe(false);
+      expect((await get(running.port, "/api/secrets")).status).toBe(200);
+      expect(await Bun.file(key).exists()).toBe(true);
     } finally {
       await running.stop();
     }

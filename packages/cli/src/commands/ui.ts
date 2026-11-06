@@ -32,8 +32,38 @@ export async function uiAssets(): Promise<Map<string, Blob>> {
   return new Map(Object.entries(embedded).map(([name, path]) => [name, Bun.file(path)]));
 }
 
-const respond = (body: Blob | string, status: number, type = "text/plain; charset=utf-8") =>
-  new Response(body, { status, headers: { ...HEADERS, "content-type": type } });
+const respond = (
+  body: Blob | string,
+  status: number,
+  type = "text/plain; charset=utf-8",
+  extra: Record<string, string> = {},
+) => new Response(body, { status, headers: { ...HEADERS, ...extra, "content-type": type } });
+
+export class Aged {
+  constructor(
+    readonly value: unknown,
+    readonly computedAt: Date,
+    readonly refreshing: boolean,
+  ) {}
+}
+
+export function lastResult(read: () => Promise<unknown>): () => Promise<Aged> {
+  let last: { value: unknown; at: Date } | null = null;
+  let running: Promise<void> | null = null;
+  const refresh = () =>
+    (running ??= read()
+      .then((value) => {
+        last = { value, at: new Date() };
+      })
+      .finally(() => {
+        running = null;
+      }));
+  return async () => {
+    if (!last) await refresh();
+    else refresh().catch(() => {});
+    return new Aged(last!.value, last!.at, running !== null);
+  };
+}
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
@@ -54,7 +84,13 @@ export function serveUi(options: {
       const name = path.slice("/api/".length);
       if (path.startsWith("/api/") && Object.hasOwn(options.api, name)) {
         try {
-          return respond(JSON.stringify(await options.api[name]!()), 200, "application/json");
+          const result = await options.api[name]!();
+          if (!(result instanceof Aged))
+            return respond(JSON.stringify(result), 200, "application/json");
+          return respond(JSON.stringify(result.value), 200, "application/json", {
+            "x-quench-computed-at": result.computedAt.toISOString(),
+            "x-quench-refreshing": String(result.refreshing),
+          });
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);
         }
@@ -101,8 +137,8 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
   if (source instanceof Error) return source;
   const api = {
     skills: oneAtATime(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
-    worktrees: oneAtATime(() => worktreesJson(home, flags)),
-    secrets: oneAtATime(() => secretsJson(home, flags)),
+    worktrees: lastResult(() => worktreesJson(home, flags)),
+    secrets: lastResult(() => secretsJson(home, flags)),
   };
   try {
     return serveUi({ port, api, assets: await uiAssets() });
