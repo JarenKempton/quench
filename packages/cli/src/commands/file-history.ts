@@ -7,6 +7,7 @@ import type { Reply } from "@quench/judge";
 import { plural } from "../format.ts";
 import { sessionOutcomes, tally } from "../skills/co-occurrence.ts";
 import type { SessionContext } from "./context.ts";
+import { gitChanges } from "./git-history.ts";
 import { DELETED, snapshots, versionsOf, type Span, type Versions } from "./file-versions.ts";
 
 export const BASIS = "correlation, not cause";
@@ -99,9 +100,10 @@ export async function fileHistories(input: {
     }
   }
   const recorded = await snapshots(input.homeDir, input.write);
+  const histories = await gitChanges([...tracked.keys()]);
   const files: FileHistory[] = [];
   for (const [real, entry] of tracked) {
-    const { source, spans } = await versionsOf(real, recorded);
+    const { source, spans } = await versionsOf(real, histories.get(real), recorded);
     const users = new Set(entry.uses.map((u) => u.key));
     const others = baselines[entry.kind].filter((u) => !users.has(u.key));
     const keysIn = (uses: Use[], span: Span) =>

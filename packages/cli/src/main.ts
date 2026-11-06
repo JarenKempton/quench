@@ -1,24 +1,8 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
-import { Home, harnessById } from "@quench/history";
-import { provider, THEME_LIMIT, MAX_THEME_LIMIT } from "@quench/judge";
-import { corrections } from "./commands/corrections.ts";
-import { setup, STEPS } from "./commands/setup.ts";
-import { judgeChoice, readConfig, secretsIn, typesafeKey } from "./config.ts";
-import { HOME_FLAGS, SECTIONS, profile } from "./commands/profile.ts";
-import { report } from "./commands/report.ts";
-import { allRuns, runs } from "./commands/runs.ts";
-import { steering } from "./commands/steering.ts";
-import { worktrees } from "./commands/worktrees.ts";
-import { sources } from "./commands/sources.ts";
-import { secrets } from "./commands/secrets.ts";
-import { update } from "./commands/update.ts";
-import { skills } from "./commands/skills.ts";
-import { connect, hub } from "./commands/hub.ts";
-import { skill } from "./commands/skill.ts";
-import { agent } from "./commands/agent.ts";
-import { ui } from "./commands/ui.ts";
 import { resolve } from "node:path";
+import { MAX_THEME_LIMIT, THEME_LIMIT } from "@quench/judge/limits";
+import { HOME_FLAGS, SECTIONS, STEPS } from "./names.ts";
 import { version } from "./version.ts";
 
 const USAGE = `quench — see what your coding agents load, what it costs, and how sessions go
@@ -172,11 +156,6 @@ const { positionals, values } = parseArgs({
   },
 });
 
-let home = Home.fromEnv();
-for (const [flag, harness] of Object.entries(HOME_FLAGS)) {
-  const dir = values[flag as keyof typeof HOME_FLAGS];
-  if (home && dir) home = home.withVar(harnessById[harness].home.variable, dir);
-}
 const [command = "summary", ...rest] = positionals;
 const days = Number(values.days ?? "30");
 const examples = Number(values.examples);
@@ -189,6 +168,12 @@ if (values.version) {
 if (values.help) {
   process.stdout.write(USAGE);
   process.exit(0);
+}
+const { Home, harnessById } = await import("@quench/history");
+let home = Home.fromEnv();
+for (const [flag, harness] of Object.entries(HOME_FLAGS)) {
+  const dir = values[flag as keyof typeof HOME_FLAGS];
+  if (home && dir) home = home.withVar(harnessById[harness].home.variable, dir);
 }
 if (!home) {
   process.stderr.write("HOME is not set\n");
@@ -232,7 +217,6 @@ if (values.yes && command !== "setup" && !evaluating) {
   process.stderr.write("--yes is only available for setup and skills eval\n");
   process.exit(1);
 }
-const config = await readConfig(home.dir);
 if (values["theme-limit"] !== undefined && !values.themes) {
   process.stderr.write("--theme-limit requires --themes\n");
   process.exit(1);
@@ -358,7 +342,8 @@ if (values.scan.length && command !== "profile" && command !== "summary") {
 }
 
 switch (command) {
-  case "summary":
+  case "summary": {
+    const { profile } = await import("./commands/profile.ts");
     process.exitCode = await profile(home, {
       days,
       scan: values.scan,
@@ -367,6 +352,7 @@ switch (command) {
       cache: !values["no-cache"],
     });
     break;
+  }
   case "profile": {
     const view = rest[0] ?? "full";
     if (view !== "full" && !SECTIONS.includes(view as (typeof SECTIONS)[number])) {
@@ -374,12 +360,15 @@ switch (command) {
       process.exitCode = 1;
       break;
     }
+    const { readConfig, typesafeKey } = await import("./config.ts");
+    const config = await readConfig(home.dir);
     const jevKey = values.asks ? typesafeKey(config, process.env) : undefined;
     if (jevKey instanceof Error) {
       process.stderr.write(`${jevKey.message}\n`);
       process.exitCode = 1;
       break;
     }
+    const { profile } = await import("./commands/profile.ts");
     process.exitCode = await profile(home, {
       days,
       scan: values.scan,
@@ -396,10 +385,13 @@ switch (command) {
     });
     break;
   }
-  case "sources":
+  case "sources": {
+    const { sources } = await import("./commands/sources.ts");
     process.exitCode = await sources(home, rest, { json: values.json });
     break;
-  case "steering":
+  }
+  case "steering": {
+    const { steering } = await import("./commands/steering.ts");
     process.exitCode = await steering(home, rest, {
       json: values.json,
       days,
@@ -407,23 +399,35 @@ switch (command) {
       cache: !values["no-cache"],
     });
     break;
-  case "worktrees":
+  }
+  case "worktrees": {
+    const { worktrees } = await import("./commands/worktrees.ts");
     process.exitCode = await worktrees(home, {
       days,
       json: values.json,
       cache: !values["no-cache"],
     });
     break;
-  case "report":
+  }
+  case "report": {
+    const { report } = await import("./commands/report.ts");
     process.exitCode = await report(home, { days, json: values.json });
     break;
-  case "setup":
+  }
+  case "setup": {
+    const { setup } = await import("./commands/setup.ts");
     process.exitCode = await setup(home, rest[0], {
       ...(values.judge === undefined ? {} : { judge: values.judge }),
       yes: values.yes,
     });
     break;
+  }
   case "corrections": {
+    const [{ judgeChoice, readConfig, secretsIn, typesafeKey }, { provider }] = await Promise.all([
+      import("./config.ts"),
+      import("@quench/judge"),
+    ]);
+    const config = await readConfig(home.dir);
     const choice = judgeChoice(config, process.env, values.judge);
     const jevKey = typesafeKey(config, process.env);
     const invalid = [choice, ...(values.themes || values.causes ? [jevKey] : [])].find(
@@ -435,6 +439,7 @@ switch (command) {
       break;
     }
     if (choice instanceof Error) break;
+    const { corrections } = await import("./commands/corrections.ts");
     process.exitCode = await corrections(home, {
       days,
       examples,
@@ -457,7 +462,8 @@ switch (command) {
     });
     break;
   }
-  case "secrets":
+  case "secrets": {
+    const { secrets } = await import("./commands/secrets.ts");
     process.exitCode = await secrets(home, {
       json: values.json,
       days,
@@ -469,7 +475,9 @@ switch (command) {
           : {}),
     });
     break;
-  case "skills":
+  }
+  case "skills": {
+    const { skills } = await import("./commands/skills.ts");
     process.exitCode = await skills(home, rest, {
       json: values.json,
       days,
@@ -491,7 +499,9 @@ switch (command) {
       },
     });
     break;
-  case "agent":
+  }
+  case "agent": {
+    const { agent } = await import("./commands/agent.ts");
     process.exitCode = await agent(home, rest, {
       projects: values.project,
       interval: Number(values.interval),
@@ -505,7 +515,14 @@ switch (command) {
       ...(values.machine ? { machine: values.machine } : {}),
     });
     break;
+  }
   case "ui": {
+    const [{ judgeChoice, readConfig }, { provider }, { ui }] = await Promise.all([
+      import("./config.ts"),
+      import("@quench/judge"),
+      import("./commands/ui.ts"),
+    ]);
+    const config = await readConfig(home.dir);
     const choice = judgeChoice(config, process.env);
     process.exitCode = await ui(home, {
       days,
@@ -522,7 +539,8 @@ switch (command) {
     });
     break;
   }
-  case "hub":
+  case "hub": {
+    const { hub } = await import("./commands/hub.ts");
     process.exitCode = await hub(home, rest, {
       http: values.http,
       ...(values.data ? { data: values.data } : {}),
@@ -538,7 +556,9 @@ switch (command) {
       ...(values["clickhouse-port"] ? { clickhousePort: values["clickhouse-port"] } : {}),
     });
     break;
-  case "skill":
+  }
+  case "skill": {
+    const { skill } = await import("./commands/skill.ts");
     process.exitCode = await skill(home, rest, {
       json: values.json,
       session: values.session,
@@ -548,16 +568,22 @@ switch (command) {
       ...(values.harness ? { harness: values.harness } : {}),
     });
     break;
-  case "connect":
+  }
+  case "connect": {
+    const { connect } = await import("./commands/hub.ts");
     process.exitCode = await connect(home, rest, {
       ...(values.code ? { code: values.code } : {}),
       ...(values.pin ? { pin: values.pin } : {}),
     });
     break;
-  case "update":
+  }
+  case "update": {
+    const { update } = await import("./commands/update.ts");
     process.exitCode = await update(version, values.channel);
     break;
-  case "runs":
+  }
+  case "runs": {
+    const { allRuns, runs } = await import("./commands/runs.ts");
     if (values.all) {
       process.exitCode = await allRuns(home, values.history);
       break;
@@ -572,6 +598,7 @@ switch (command) {
           : {}),
     });
     break;
+  }
   default:
     process.stderr.write(`unknown command "${command}"\n\n${USAGE}`);
     process.exitCode = 1;
