@@ -18,7 +18,7 @@ for i in $(seq "$runs"); do
   wait $pid; code=$?
   dur=$((SECONDS - start))
   [ $code = 0 ] || { fails=$((fails+1)); echo "=== iteration $i FAILED ($code)"; grep -E "\(fail\)|timed out|dangling|Expected|Received|error:" "$RUNNER_TEMP/it.txt" | head -20; }
-  grep -E "\(pass\).*\[[0-9]{4,}\.[0-9]+ms\]" "$RUNNER_TEMP/it.txt" | sed "s/^/  it$i slow: /" | head -5
+  grep -E "\(pass\).*\[([5-9][0-9]{2}|[0-9]{4,})\.[0-9]+ms\]" "$RUNNER_TEMP/it.txt" | grep -v "descendant holding" | sed "s/^/  it$i slow: /" | head -5
   [ $dur -ge 8 ] && slow=$((slow+1))
 done
 echo "RESULT runs=$runs fails=$fails stalled=$slow"
