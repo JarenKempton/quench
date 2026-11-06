@@ -17,6 +17,7 @@ import { skills } from "./commands/skills.ts";
 import { connect, hub } from "./commands/hub.ts";
 import { skill } from "./commands/skill.ts";
 import { agent } from "./commands/agent.ts";
+import { ui } from "./commands/ui.ts";
 import { resolve } from "node:path";
 import { version } from "./version.ts";
 
@@ -50,6 +51,8 @@ Usage:
     --source <dir>                     compare installed skills with a skills checkout by tree hash (read-only)
   quench skills plan --source <dir> --machine <name> [--project <dir>] --json
                                        what installing a skills checkout would change on this machine (read-only)
+  quench ui [--port <n>] [--open] [--days 30] [--source <dir>]
+                                       a local page of your skills on 127.0.0.1 (random port by default); read-only
   quench hub serve [--data <dir>] [--listen <host:port>] [--url <public url>] [--mirror <git remote>]
                    [--tls-cert <pem> --tls-key <pem> | --http]
                                        run the fleet hub; first run needs QUENCH_HUB_PASSWORD (--http: loopback only)
@@ -148,6 +151,8 @@ const { positionals, values } = parseArgs({
     candidate: { type: "string" },
     limit: { type: "string" },
     "max-cost": { type: "string" },
+    port: { type: "string" },
+    open: { type: "boolean", default: false },
   },
 });
 
@@ -260,14 +265,17 @@ if (values.channel !== undefined && values.channel !== "stable" && values.channe
   process.exit(1);
 }
 
-if (
-  (values.source !== undefined || values.machine !== undefined || values.project.length) &&
-  command !== "skills" &&
-  command !== "agent"
-) {
-  process.stderr.write(
-    "--source, --machine and --project are only available for skills and agent\n",
-  );
+const fleetCommand = command === "skills" || command === "agent";
+if ((values.machine !== undefined || values.project.length) && !fleetCommand) {
+  process.stderr.write("--machine and --project are only available for skills and agent\n");
+  process.exit(1);
+}
+if (values.source !== undefined && !fleetCommand && command !== "ui") {
+  process.stderr.write("--source is only available for skills, agent and ui\n");
+  process.exit(1);
+}
+if ((values.port !== undefined || values.open) && command !== "ui") {
+  process.stderr.write("--port and --open are only available for ui\n");
   process.exit(1);
 }
 if (
@@ -445,6 +453,20 @@ switch (command) {
       }),
       ...(values.source ? { source: values.source } : {}),
       ...(values.machine ? { machine: values.machine } : {}),
+    });
+    break;
+  case "ui":
+    process.exitCode = await ui(home, {
+      days,
+      cache: !values["no-cache"],
+      open: values.open,
+      ...(values.port !== undefined ? { port: values.port } : {}),
+      ...(values.source ? { source: values.source } : {}),
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
     });
     break;
   case "hub":

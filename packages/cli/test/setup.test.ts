@@ -248,6 +248,7 @@ test.skipIf(!posix)(
     await type("API key", `sk-${CANARY}\r`);
     await type("Paste the quench connect line", `--code ${CANARY}\r`);
     await type("paste the whole line", "\r");
+    await type("Open quench ui now?", "n\r");
     const exited = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "hung")]);
     if (exited === "hung") proc.kill();
     expect(exited).toBe(0);
@@ -279,4 +280,43 @@ test("a malformed TYPESAFE_API_KEY is refused on every path without being printe
   const stored = await quench(home, ["corrections", "--json"]);
   expect(stored.code).toBe(1);
   expect(stored.stdout + stored.stderr).not.toContain(CANARY);
+});
+
+test.skipIf(!posix)("setup's last step opens quench ui on 127.0.0.1", async () => {
+  const home = await freshHome();
+  const skipped = await quench(home, ["setup", "ui"], "n\n");
+  expect(skipped.code).toBe(0);
+  expect(skipped.stdout).toContain("Run quench ui --open any time");
+  const proc = Bun.spawn(
+    [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "ui"],
+    {
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: "",
+        CLAUDE_CONFIG_DIR: "",
+        CODEX_HOME: "",
+        PI_CODING_AGENT_DIR: "",
+      },
+      stdin: new TextEncoder().encode("\n"),
+      stdout: "pipe",
+      stderr: "ignore",
+    },
+  );
+  try {
+    const reader = proc.stdout.getReader();
+    let printed = "";
+    while (!printed.includes("Ctrl-C")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      printed += new TextDecoder().decode(value);
+    }
+    const url = /quench ui at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(printed)?.[1];
+    expect(url).toBeDefined();
+    expect((await fetch(url!)).headers.get("x-frame-options")).toBe("DENY");
+    expect((await config(home)).setup.done).toContain("ui");
+  } finally {
+    proc.kill();
+    await proc.exited;
+  }
 });

@@ -391,34 +391,57 @@ export async function skills(home: Home, rest: string[], flags: SkillsFlags) {
   }
 }
 
+export async function skillsJson(
+  home: Home,
+  options: { days: number; cache: boolean; hostHistory?: string | false; source: Source | null },
+) {
+  const { judge, records, unrecognised } = await collectSkills(home, options);
+  const compared = options.source && drift(options.source, records);
+  return {
+    report: {
+      schemaVersion: SCHEMA_VERSION,
+      days: options.days,
+      judge,
+      origins: ORIGINS,
+      skills: records,
+      unrecognised,
+      ...(compared ? { source: compared } : {}),
+      limitations: LIMITATIONS,
+    },
+    judge,
+    records,
+    unrecognised,
+    compared,
+  };
+}
+
+export async function readSkillsSource(dir: string | undefined): Promise<Source | null | Error> {
+  try {
+    return dir ? await readSource(dir) : null;
+  } catch (error) {
+    const kind = error instanceof SourceError ? error.message : "source could not be read";
+    return new Error(`--source: ${kind}`);
+  }
+}
+
 async function skillsReport(home: Home, options: Options) {
   if (options.machine) {
     process.stderr.write("--machine is only available for skills plan\n");
     return 1;
   }
-  let source: Source | null = null;
-  try {
-    source = options.source ? await readSource(options.source) : null;
-  } catch (error) {
-    const kind = error instanceof SourceError ? error.message : "source could not be read";
-    process.stderr.write(`--source: ${kind}\n`);
+  const source = await readSkillsSource(options.source);
+  if (source instanceof Error) {
+    process.stderr.write(`${source.message}\n`);
     return 1;
   }
-  const { judge, records, unrecognised } = await collectSkills(home, { ...options, source });
-  const compared = source && drift(source, records);
+  const { report, judge, records, unrecognised, compared } = await skillsJson(home, {
+    ...options,
+    source,
+  });
   process.stdout.write(
     options.json
-      ? json({
-          schemaVersion: SCHEMA_VERSION,
-          days: options.days,
-          judge,
-          origins: ORIGINS,
-          skills: records,
-          unrecognised,
-          ...(compared ? { source: compared } : {}),
-          limitations: LIMITATIONS,
-        })
-      : renderSkills(records, unrecognised, options.days, judge, compared),
+      ? json(report)
+      : renderSkills(records, unrecognised, options.days, judge, compared ?? null),
   );
   return 0;
 }

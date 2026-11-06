@@ -15,6 +15,7 @@ import { prompt } from "../prompt.ts";
 import { clientDir, loadConnection } from "@quench/hub/client";
 import { connect } from "./hub.ts";
 import { profile } from "./profile.ts";
+import { ui as serveUi } from "./ui.ts";
 
 export const STEPS = ["agents", "summary", "judge", "hub", "ui"] as const;
 type Step = (typeof STEPS)[number];
@@ -37,6 +38,7 @@ type Context = {
   ask: (question: string, hidden?: boolean) => Promise<string | null>;
   config: Config;
   typed: string[];
+  launch: boolean;
 };
 
 const TITLES: Record<Step, string> = {
@@ -82,12 +84,15 @@ export async function setup(
     ask: reader.ask,
     config,
     typed: [],
+    launch: false,
   };
+  let code: number;
   try {
-    return await steps(context, start, done);
+    code = await steps(context, start, done);
   } finally {
     reader.close();
   }
+  return code === 0 && context.launch ? serveUi(home, { days: 30, cache: true, open: true }) : code;
 }
 
 async function steps(context: Context, start: number, done: Set<string>): Promise<number> {
@@ -332,17 +337,20 @@ async function hub(context: Context): Promise<Outcome> {
   }
 }
 
-async function ui(): Promise<Outcome> {
-  out(
-    [
-      "  Not available yet: quench ui is still being built. Your first screen is the summary above:",
-      "  quench                any time, for that summary",
-      "  quench profile        every table",
-      "  quench corrections    correction rates, with the judge you picked",
-      "",
-    ].join("\n"),
-  );
-  return "skipped";
+async function ui(context: Context): Promise<Outcome> {
+  out("  quench ui shows your skills in the browser: use, corrections, drift, listing size.\n");
+  const later = "Run quench ui --open any time; it serves on 127.0.0.1 only and writes nothing.\n";
+  if (context.yes) {
+    out(`  Skipped. ${later}`);
+    return "skipped";
+  }
+  const answer = await context.ask("  Open quench ui now? [Y/n] ");
+  if (answer === null || /^\s*(n|no|skip)\s*$/i.test(answer)) {
+    out(`  ${later}`);
+    return "skipped";
+  }
+  context.launch = true;
+  return "done";
 }
 
 function recommend(env: Env, platform: NodeJS.Platform): JudgeName {

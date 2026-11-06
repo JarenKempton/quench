@@ -13,6 +13,7 @@
     "@quench/insights": "workspace:*",
     "@quench/judge": "workspace:*",
     "@quench/secrets": "workspace:*",
+    "@quench/ui": "workspace:*",
     "zod": "^4.1.0"
   }
 }
