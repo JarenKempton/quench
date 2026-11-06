@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir, rename, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { replacePrivateFile } from "../private-file.ts";
 
 export type Span = { treeHash: string; from: number; until: number | null; bytes: number | null };
 
@@ -138,11 +139,7 @@ export async function snapshots(homeDir: string, write: boolean) {
     },
     async save() {
       if (!changed) return;
-      await mkdir(dirname(file), { recursive: true });
-      const temporary = `${file}.${process.pid}.${crypto.randomUUID()}`;
-      await Bun.write(temporary, JSON.stringify({ v: 1, files } satisfies Stored));
-      await chmod(temporary, 0o600);
-      await rename(temporary, file);
+      await replacePrivateFile(file, JSON.stringify({ v: 1, files } satisfies Stored));
     },
   };
 }

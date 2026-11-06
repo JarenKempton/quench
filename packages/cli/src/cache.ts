@@ -1,6 +1,7 @@
-import { chmod, mkdir, rename, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { PlaceCache, SessionPlace } from "@quench/history";
+import { replacePrivateFile } from "./private-file.ts";
 import { compiled } from "./version.ts";
 
 const FILE = ".quench/local/session-places.json";
@@ -28,11 +29,7 @@ export async function placeCache(homeDir: string): Promise<PlaceCache & { save()
     },
     async save() {
       if (!changed) return;
-      await mkdir(dirname(path), { recursive: true });
-      const temporary = `${path}.${process.pid}.${crypto.randomUUID()}`;
-      await Bun.write(temporary, JSON.stringify({ v: 1, build, entries } satisfies Stored));
-      await chmod(temporary, 0o600);
-      await rename(temporary, path);
+      await replacePrivateFile(path, JSON.stringify({ v: 1, build, entries } satisfies Stored));
     },
   };
 }
