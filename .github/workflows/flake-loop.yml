@@ -1,0 +1,35 @@
+name: flake-loop
+on:
+  push:
+    branches: [t3/6c59f4f7]
+jobs:
+  suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: sysctl -n hw.ncpu machdep.cpu.brand_string; sw_vers; df -h /
+      - name: full suite x8 with stall probe
+        run: |
+          bun .github/flake/probe.ts "$RUNNER_TEMP/probe" > "$RUNNER_TEMP/probe.out" &
+          probe=$!
+          fails=0
+          for i in $(seq 8); do
+            echo "=== iteration $i $(date -u +%FT%T)"
+            bun test 2>&1 | grep -E '\(fail\)|timed out|dangling|Expected|Received|^ *[0-9]+ (pass|fail)' || true
+            test "${PIPESTATUS[0]}" = 0 || fails=$((fails+1))
+          done
+          kill $probe
+          echo "=== probe"
+          cat "$RUNNER_TEMP/probe.out"
+          echo "suite failures: $fails/8"
