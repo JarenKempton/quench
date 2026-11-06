@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        load: [none, disk]
+        load: [none, disk, suite]
     runs-on: macos-latest
     defaults:
       run:
@@ -24,4 +24,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - if: matrix.load == 'disk'
         run: nohup sh -c 'while :; do dd if=/dev/zero of="$RUNNER_TEMP/dd.bin" bs=1m count=512 2>/dev/null; sync; done' >/dev/null 2>&1 &
-      - run: .github/flake/loop.sh 40 packages/judge/test/harness.test.ts packages/judge/test/themes.test.ts
+      - if: matrix.load != 'suite'
+        run: .github/flake/loop.sh 40 packages/judge/test/harness.test.ts packages/judge/test/themes.test.ts
+      - if: matrix.load == 'suite'
+        run: .github/flake/loop.sh 8
