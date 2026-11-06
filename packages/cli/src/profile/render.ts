@@ -16,6 +16,7 @@ import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
 import { renderMcpTools, type McpToolRecord } from "./recorded-mcp-tools.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import type { SkillCuts } from "./skill-cuts.ts";
+import { renderAsks, type SkillAsks } from "./skill-asks.ts";
 import type { StartSplit } from "./recorded-start.ts";
 import { renderMcpServers, skillsCell, type InstructionFile } from "./setup.ts";
 import { summary } from "./summary.ts";
@@ -39,6 +40,7 @@ export type Profile = {
   recordedInstructions: RecordedFile[];
   recordedSkills: SkillUse[];
   recordedSkillCuts: SkillCuts;
+  recordedSkillAsks: SkillAsks;
   recordedMcp: McpUse[];
   recordedMcpTools: McpToolRecord[];
   duplicateMcpServers: McpDuplicate[];
@@ -82,7 +84,10 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
         roots: result.projects.map((p) => p.root),
       }),
     ],
-    skills: () => renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days),
+    skills: () => [
+      ...renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days),
+      ...renderAsks(result.recordedSkillAsks, result.days),
+    ],
     failures: () => renderFailures(result.recordedFailures, result.days, homeDir),
   };
   if (view === "summary") return summary(result, homeDir);

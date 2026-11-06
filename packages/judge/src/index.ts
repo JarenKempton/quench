@@ -1,4 +1,5 @@
 export { VerdictCache } from "./cache.ts";
+export * from "./asks.ts";
 export * from "./causes.ts";
 export {
   CHILD_ENV,
@@ -9,7 +10,7 @@ export {
   HarnessName,
   HarnessUnsupported,
 } from "./harness.ts";
-export { Jev, JevCauses, JevThemes, KeyRejected } from "./jev.ts";
+export { Jev, JevAsks, JevCauses, JevThemes, KeyRejected } from "./jev.ts";
 export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {

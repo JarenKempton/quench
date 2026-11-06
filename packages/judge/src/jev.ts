@@ -8,6 +8,7 @@ import {
   TypeSafeClient,
   type Fetch,
 } from "@typesafe-ai/sdk";
+import type { AskInput, AskJudge } from "./asks.ts";
 import type { CauseInput, CauseJudge } from "./causes.ts";
 import { JudgeFailed, reasonForStatus } from "./failure.ts";
 import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
@@ -184,6 +185,39 @@ export class JevCauses implements CauseJudge {
         questions: { cause: choice(input.question, input.choices) },
       });
       const answer = jevAnswer(result, "cause", Object.keys(input.choices), MODEL);
+      this.tokens.input += answer.input;
+      this.tokens.output += answer.output;
+      return { choice: answer.choice, model: answer.model };
+    } catch (error) {
+      throw jevFailure(error);
+    }
+  }
+}
+
+export class JevAsks implements AskJudge {
+  static readonly id = `jev/${MODEL}/asks-v1`;
+  readonly id = JevAsks.id;
+  readonly tokens = { input: 0, output: 0 };
+  readonly #client: TypeSafeClient;
+
+  constructor(apiKey: string, fetch: Fetch = globalThis.fetch) {
+    this.#client = new TypeSafeClient({
+      apiKey,
+      fetch: withStreamedBody(fetch),
+      defaultModel: MODEL,
+      logLevel: "off",
+      retry: { maxRetries: 0 },
+      timeout: 10_000,
+    });
+  }
+
+  async ask(input: AskInput): Promise<ThemeDecision> {
+    try {
+      const result = await this.#client.systemOne({
+        state: input.state,
+        questions: { ask: choice(input.question, input.choices) },
+      });
+      const answer = jevAnswer(result, "ask", Object.keys(input.choices), MODEL);
       this.tokens.input += answer.input;
       this.tokens.output += answer.output;
       return { choice: answer.choice, model: answer.model };

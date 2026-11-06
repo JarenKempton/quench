@@ -61,6 +61,7 @@ export function skillCuts(
   occurrences: readonly Occurrence[],
   useRecorded: (harness: HarnessId) => boolean,
   cutOf: CutOf,
+  asked: (harness: HarnessId, name: string) => boolean = () => false,
 ): SkillCuts {
   const targets = new Map<string, Target>();
   const realUses = new Map<string, Map<string, number>>();
@@ -88,6 +89,7 @@ export function skillCuts(
     if (o.origin.kind === "folder") t.realPaths.add(o.origin.realPath);
     const listing = `${o.harness}\0${o.name}`;
     t.listings.set(listing, o.name);
+    if (asked(o.harness, o.name)) t.usedListings.add(listing);
     if (o.chars === null) t.unsized.add(o.session);
     else {
       t.sized++;
