@@ -128,14 +128,48 @@ export function flagsOf(r: SkillRecord, report: SkillsReport): Flag[] {
   return flags;
 }
 
-export function fixPrompt(r: SkillRecord, flags: readonly Flag[]) {
-  if (!flags.length) return null;
-  const file = skillFile(r);
+export type Suggestion = { prompt: string | null; note: string | null };
+
+const NOT_EDITABLE = "Quench can't suggest an edit";
+
+function readOnly(r: SkillRecord): string {
+  if (r.location === "built-in") return `Built-in: ${NOT_EDITABLE}.`;
+  if (r.origin === "plugin") return `From a plugin: ${NOT_EDITABLE}.`;
+  if (r.origin === "vendored") return `Vendored with the agent or another tool: ${NOT_EDITABLE}.`;
+  return `Not found on disk: ${NOT_EDITABLE}.`;
+}
+
+function turnOff(r: SkillRecord, flags: readonly Flag[]): string | null {
+  const plugin = r.skill.includes(":") ? r.skill.slice(0, r.skill.indexOf(":")) : null;
+  if (r.harness !== "claude-code" || r.origin !== "plugin" || !plugin) return null;
+  const reasons = flags.filter((f) => f.kind === "unused" || f.kind === "large");
+  if (!reasons.length) return null;
   return [
-    `Review the "${r.skill}" skill for ${HARNESS_LABELS[r.harness]}${file ? `, at ${file}` : ` (${r.location})`}.`,
+    `The "${r.skill}" skill comes from the "${plugin}" Claude Code plugin, which I can't edit.`,
     "",
-    ...flags.map((f) => `- ${f.fix}`),
+    ...reasons.map((f) => `- ${f.fix.split(". ")[0]}.`),
     "",
-    "Show me the change as a diff before you write anything.",
+    `Check whether I use any other skill, command or agent from "${plugin}". If I don't, show me how to disable the plugin (for example with /plugin, or enabledPlugins in ~/.claude/settings.json), and change nothing until I agree.`,
   ].join("\n");
+}
+
+export function suggestion(r: SkillRecord, flags: readonly Flag[]): Suggestion {
+  if (!flags.length) return { prompt: null, note: null };
+  const file = skillFile(r);
+  if ((r.origin === "user" || r.origin === "project") && file)
+    return {
+      prompt: [
+        `Review the "${r.skill}" skill for ${HARNESS_LABELS[r.harness]}, at ${file}.`,
+        "",
+        ...flags.map((f) => `- ${f.fix}`),
+        "",
+        "Show me the change as a diff before you write anything.",
+      ].join("\n"),
+      note: null,
+    };
+  const prompt = turnOff(r, flags);
+  return {
+    prompt,
+    note: `${readOnly(r)}${prompt ? " The prompt below turns off the plugin instead." : ""}`,
+  };
 }

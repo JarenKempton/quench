@@ -27,6 +27,7 @@ export type SetupOptions = {
   yes: boolean;
   env?: Env;
   platform?: NodeJS.Platform;
+  tty?: boolean;
 };
 
 type Context = {
@@ -38,6 +39,7 @@ type Context = {
   ask: (question: string, hidden?: boolean) => Promise<string | null>;
   config: Config;
   typed: string[];
+  tty: boolean;
   launch: boolean;
 };
 
@@ -84,6 +86,7 @@ export async function setup(
     ask: reader.ask,
     config,
     typed: [],
+    tty: options.tty ?? process.stdin.isTTY === true,
     launch: false,
   };
   let code: number;
@@ -340,7 +343,7 @@ async function hub(context: Context): Promise<Outcome> {
 async function ui(context: Context): Promise<Outcome> {
   out("  quench ui shows your skills in the browser: use, corrections, drift, listing size.\n");
   const later = "Run quench ui --open any time; it serves on 127.0.0.1 only and writes nothing.\n";
-  if (context.yes) {
+  if (context.yes || !context.tty) {
     out(`  Skipped. ${later}`);
     return "skipped";
   }

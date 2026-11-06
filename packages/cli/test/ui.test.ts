@@ -3,10 +3,9 @@ import { mkdtemp } from "node:fs/promises";
 import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
-import { CSP, serveUi } from "../src/commands/ui.ts";
+import { Home } from "@quench/history";
+import { CSP, serveUi, startUi } from "../src/commands/ui.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
-
-const main = join(import.meta.dir, "../src/main.ts");
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
   new Promise<{
@@ -108,40 +107,33 @@ async function home() {
 }
 
 test(
-  "quench ui serves /api/skills equal to quench skills --json on the same home",
+  "/api/skills equals quench skills --json on the same home, and each request reads it again",
   async () => {
     const dir = await home();
     const expected = await quench(dir, "skills", "--json", "--no-host-history");
     expect(expected.code).toBe(0);
     expect(JSON.parse(expected.stdout).skills.length).toBe(2);
-    const proc = Bun.spawn(["bun", main, "ui", "--no-host-history"], {
-      env: {
-        ...process.env,
-        HOME: dir,
-        CLAUDE_CONFIG_DIR: "",
-        CODEX_HOME: "",
-        PI_CODING_AGENT_DIR: "",
-      },
-      stdout: "pipe",
-      stderr: "ignore",
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
     });
+    if (running instanceof Error) throw running;
     try {
-      const reader = proc.stdout.getReader();
-      let printed = "";
-      while (!/http:\/\/\S+\//.test(printed)) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        printed += new TextDecoder().decode(value);
-      }
-      const url = new URL(/http:\/\/\S+\//.exec(printed)![0]);
-      expect(url.hostname).toBe("127.0.0.1");
-      const served = await get(Number(url.port), "/api/skills");
+      expect(running.url).toStartWith("http://127.0.0.1:");
+      const served = await get(running.port, "/api/skills");
       expect(served.status).toBe(200);
       expect(served.headers["content-security-policy"]).toBe(CSP);
       expect(JSON.parse(served.body)).toEqual(JSON.parse(expected.stdout));
+      await Bun.write(
+        join(dir, ".claude/skills/tidy/SKILL.md"),
+        "---\nname: tidy\ndescription: tidy\n---\n",
+      );
+      const again = JSON.parse((await get(running.port, "/api/skills")).body);
+      expect(again.skills.map((r: { skill: string }) => r.skill)).toContain("tidy");
     } finally {
-      proc.kill();
-      await proc.exited;
+      await running.stop();
     }
   },
   cliRunsTimeout,

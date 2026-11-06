@@ -282,41 +282,51 @@ test("a malformed TYPESAFE_API_KEY is refused on every path without being printe
   expect(stored.stdout + stored.stderr).not.toContain(CANARY);
 });
 
-test.skipIf(!posix)("setup's last step opens quench ui on 127.0.0.1", async () => {
+test("without a terminal, setup's ui step prints how to open it and exits", async () => {
   const home = await freshHome();
-  const skipped = await quench(home, ["setup", "ui"], "n\n");
-  expect(skipped.code).toBe(0);
-  expect(skipped.stdout).toContain("Run quench ui --open any time");
-  const proc = Bun.spawn(
-    [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "ui"],
-    {
-      env: {
-        ...process.env,
-        HOME: home,
-        PATH: "",
-        CLAUDE_CONFIG_DIR: "",
-        CODEX_HOME: "",
-        PI_CODING_AGENT_DIR: "",
-      },
-      stdin: new TextEncoder().encode("\n"),
-      stdout: "pipe",
-      stderr: "ignore",
-    },
-  );
-  try {
-    const reader = proc.stdout.getReader();
-    let printed = "";
-    while (!printed.includes("Ctrl-C")) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      printed += new TextDecoder().decode(value);
-    }
-    const url = /quench ui at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(printed)?.[1];
-    expect(url).toBeDefined();
-    expect((await fetch(url!)).headers.get("x-frame-options")).toBe("DENY");
-    expect((await config(home)).setup.done).toContain("ui");
-  } finally {
-    proc.kill();
-    await proc.exited;
+  for (const stdin of ["\n", "y\n", ""]) {
+    const run = await quench(home, ["setup", "ui"], stdin);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("Skipped. Run quench ui --open any time");
+    expect(run.stdout).not.toContain("quench ui at http");
   }
 });
+
+test.skipIf(!posix)(
+  "in a terminal, Enter at setup's ui step serves quench ui on 127.0.0.1",
+  async () => {
+    const home = await freshHome();
+    let screen = "";
+    const proc = Bun.spawn(
+      [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "ui"],
+      {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: "",
+          CLAUDE_CONFIG_DIR: "",
+          CODEX_HOME: "",
+          PI_CODING_AGENT_DIR: "",
+        },
+        terminal: {
+          cols: 200,
+          rows: 50,
+          data(_terminal, bytes) {
+            screen += new TextDecoder().decode(bytes);
+          },
+        },
+      },
+    );
+    try {
+      for (let i = 0; i < 200 && !screen.includes("Open quench ui now?"); i++) await Bun.sleep(25);
+      proc.terminal?.write("\r");
+      for (let i = 0; i < 200 && !screen.includes("Ctrl-C"); i++) await Bun.sleep(25);
+      const url = /quench ui at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(screen)?.[1];
+      expect(url).toBeDefined();
+      expect((await fetch(url!)).headers.get("x-frame-options")).toBe("DENY");
+    } finally {
+      proc.kill();
+      await proc.exited;
+    }
+  },
+);

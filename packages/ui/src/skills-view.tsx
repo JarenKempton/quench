@@ -14,11 +14,11 @@ import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group.tsx";
 import { cn } from "./lib/utils.ts";
 import {
   correctionRate,
-  fixPrompt,
   flagsOf,
   HARNESS_LABELS,
   listing,
   skillFile,
+  suggestion,
   type Flag,
   type SkillRecord,
   type SkillsReport,
@@ -298,7 +298,7 @@ function Filter({
 function Detail({ row }: { row: Row }) {
   const r = row.record;
   const file = skillFile(r);
-  const prompt = fixPrompt(r, row.flags);
+  const { prompt, note } = suggestion(r, row.flags);
   return (
     <div className="space-y-4 py-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -319,6 +319,7 @@ function Detail({ row }: { row: Row }) {
       ) : (
         <p className="text-sm text-muted-foreground">Nothing flagged for this skill.</p>
       )}
+      {note && <p className="text-sm text-muted-foreground">{note}</p>}
       {prompt && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">

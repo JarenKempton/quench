@@ -31,17 +31,4 @@ const inherit = <Run extends typeof spawn | typeof spawnSync>(run: Run) =>
 Bun.spawn = inherit(spawn);
 Bun.spawnSync = inherit(spawnSync);
 
-afterAll(() => {
-  const started = Date.now();
-  const names = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-      e.isDirectory() ? [join(dir, e.name), ...names(join(dir, e.name))] : [join(dir, e.name)],
-    );
-  console.log(`DIAG temp root entries: ${names(root).length}`);
-  try {
-    remove(root);
-  } catch (error) {
-    console.log(`DIAG remove failed: ${(error as Error).message}`);
-  }
-  console.log(`DIAG remove took ${Date.now() - started}ms`);
-}, 60_000);
+afterAll(() => remove(root), 60_000);

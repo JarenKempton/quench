@@ -90,38 +90,34 @@ export type UiFlags = {
   hostHistory?: string | false;
 };
 
-export async function ui(home: Home, flags: UiFlags): Promise<number> {
+export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Error> {
   const port = Number(flags.port ?? "0");
-  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
-    process.stderr.write("--port must be a whole number from 0 to 65535\n");
-    return 1;
-  }
+  if (!Number.isInteger(port) || port < 0 || port > 65_535)
+    return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
-  if (source instanceof Error) {
-    process.stderr.write(`${source.message}\n`);
-    return 1;
-  }
-  let pending: Promise<unknown> | null = null;
-  const skills = () => {
-    pending ??= skillsJson(home, { ...flags, source }).then(
-      ({ report }) => report,
-      (error: unknown) => {
-        pending = null;
-        throw error;
-      },
-    );
-    return pending;
-  };
-  let server: UiServer;
+  if (source instanceof Error) return source;
+  let running: Promise<unknown> | null = null;
+  const skills = () =>
+    (running ??= skillsJson(home, { ...flags, source })
+      .then(({ report }) => report)
+      .finally(() => {
+        running = null;
+      }));
   try {
-    server = serveUi({ port, skills, assets: await uiAssets() });
+    return serveUi({ port, skills, assets: await uiAssets() });
   } catch (error) {
-    process.stderr.write(
-      `quench ui could not listen on ${LOOPBACK}:${port}: ${(error as Error).message}\n`,
+    return new Error(
+      `quench ui could not listen on ${LOOPBACK}:${port}: ${(error as Error).message}`,
     );
+  }
+}
+
+export async function ui(home: Home, flags: UiFlags): Promise<number> {
+  const server = await startUi(home, flags);
+  if (server instanceof Error) {
+    process.stderr.write(`${server.message}\n`);
     return 1;
   }
-  skills().catch(() => {});
   process.stdout.write(`quench ui at ${server.url}\nRead-only; Ctrl-C stops it.\n`);
   if (flags.open)
     try {

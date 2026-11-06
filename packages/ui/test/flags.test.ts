@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fixPrompt, flagsOf, type SkillRecord, type SkillsReport } from "../src/skills.ts";
+import { flagsOf, suggestion, type SkillRecord, type SkillsReport } from "../src/skills.ts";
 
 const record = (over: Partial<SkillRecord> & { id: string }): SkillRecord => ({
   skill: "deploy",
@@ -49,7 +49,7 @@ test("each flag fires on its evidence and gives a one-line reason", () => {
     "Its folder differs from the copy for Codex at ~/.codex/skills/deploy.",
     "Its listing is 1,500 characters, sent in every session that lists it.",
   ]);
-  expect(fixPrompt(flagged, flags)).toStartWith(
+  expect(suggestion(flagged, flags).prompt).toStartWith(
     'Review the "deploy" skill for Claude Code, at ~/.claude/skills/deploy/SKILL.md.',
   );
 });
@@ -63,5 +63,45 @@ test("unknown evidence never flags", () => {
   });
   const flags = flagsOf(quiet, report([quiet, record({ id: "b", contentVersion: "sha256:b" })]));
   expect(flags).toEqual([]);
-  expect(fixPrompt(quiet, flags)).toBeNull();
+  expect(suggestion(quiet, flags)).toEqual({ prompt: null, note: null });
+});
+
+test("a skill the user can't edit keeps its flags but gets no edit prompt", () => {
+  const builtIn = record({
+    id: "a",
+    skill: "claude-api",
+    location: "built-in",
+    origin: "vendored",
+    contentVersion: null,
+    recordedListingChars: 1400,
+  });
+  const flags = flagsOf(builtIn, report([builtIn]));
+  expect(flags.map((f) => f.kind)).toEqual(["large"]);
+  expect(suggestion(builtIn, flags)).toEqual({
+    prompt: null,
+    note: "Built-in: Quench can't suggest an edit.",
+  });
+
+  const codexPlugin = record({
+    id: "b",
+    skill: "vercel:ai-sdk",
+    harness: "codex",
+    origin: "plugin",
+    location: "~/.codex/plugins/cache/x/vercel/1/skills/ai-sdk",
+    use: { sessionsListed: 9, used: 0, usedByUser: 0, lowerBound: true },
+  });
+  const codexFlags = flagsOf(codexPlugin, report([codexPlugin]));
+  expect(codexFlags.map((f) => f.kind)).toEqual(["unused"]);
+  expect(suggestion(codexPlugin, codexFlags)).toEqual({
+    prompt: null,
+    note: "From a plugin: Quench can't suggest an edit.",
+  });
+
+  const claudePlugin = { ...codexPlugin, id: "c", harness: "claude-code" as const };
+  const offered = suggestion(claudePlugin, flagsOf(claudePlugin, report([claudePlugin])));
+  expect(offered.note).toBe(
+    "From a plugin: Quench can't suggest an edit. The prompt below turns off the plugin instead.",
+  );
+  expect(offered.prompt).toContain("disable the plugin");
+  expect(offered.prompt).not.toContain("description");
 });

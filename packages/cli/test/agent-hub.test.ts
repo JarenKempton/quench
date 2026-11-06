@@ -73,7 +73,7 @@ test("a skill toggled in the hub lands on only that machine, survives the hub go
 
   const line = (await owner.addMachine("laptop")).command;
   expect(line).toContain("--pin sha256:");
-  const paired = await quench(laptop, ["setup", "hub"], `${line}\nn\n`);
+  const paired = await quench(laptop, ["setup", "hub"], `${line}\n\n`);
   expect(paired.stderr).toBe("");
   expect(paired.stdout).toContain(`Connected to ${running.url} as laptop`);
   expect(paired.stdout).toContain("Next: quench agent install");
