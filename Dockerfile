@@ -1,7 +1,10 @@
 FROM oven/bun:1.4.2 AS build
 WORKDIR /src
+ARG VERSION=0.0.0-dev
 COPY . .
-RUN bun install --frozen-lockfile && bun build --compile packages/cli/src/main.ts --outfile /quench
+RUN bun install --frozen-lockfile \
+ && bun run --cwd packages/ui build \
+ && bun build --compile --define "process.env.QUENCH_VERSION=\"$VERSION\"" packages/cli/src/main.ts --outfile /quench
 
 FROM clickhouse/clickhouse-server:26.8.34.13@sha256:8b28eb09479c36c4533eec7a6268917d04ba3a6fd90e3f4205f70e761b6d7779
 LABEL org.opencontainers.image.title="Quench hub" \
