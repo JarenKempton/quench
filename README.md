@@ -74,6 +74,7 @@ profile of every agent and project in your history.
 | `quench`                                        | A short summary: what sessions start with, what is worth a look, busiest projects                      |
 | `quench setup [step] [--judge <name>] [--yes]`  | Find agents, show the summary, pick and test a judge; resumable, every step skippable                  |
 | `quench profile [section]`                      | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`                           |
+| `quench profile skills [--asks]`                | Per skill: used, asked in plain words, asked and loaded, asked but not loaded; `--asks` opts into Jev  |
 | `quench worktrees [--days 30] [--json]`         | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only                   |
 | `quench ui [--port <n>] [--open]`               | Your skills in the browser: sortable, filterable, flagged, with a fix prompt to copy; 127.0.0.1 only   |
 | `quench report [--days 30] [--json]`            | Per harness: starting load, peak context, compactions, tool errors, models and effort                  |

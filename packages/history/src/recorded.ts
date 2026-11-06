@@ -1,5 +1,5 @@
 import { sha256 } from "./jsonl.ts";
-import type { InjectedInstruction, ListedSkill, Session } from "./model.ts";
+import type { Event, InjectedInstruction, ListedSkill, Session } from "./model.ts";
 
 export type SessionSkills = {
   listed: ListedSkill[];
@@ -14,14 +14,9 @@ export function recordedSkills(session: Session): SessionSkills | null {
   const byPath = new Map([...listed.values()].flatMap((s) => (s.path ? [[s.path, s.name]] : [])));
   const used = new Map<string, "model" | "user">();
   for (const event of session.events) {
-    const uses =
-      event.type === "invocation"
-        ? [{ name: event.name, by: event.by }]
-        : event.type === "tool_call"
-          ? namedSkills(event, byPath)
-          : [];
-    for (const use of uses)
-      if (listed.has(use.name) && used.get(use.name) !== "user") used.set(use.name, use.by);
+    const by = event.type === "invocation" ? event.by : "model";
+    for (const name of skillUsesOf(event, byPath))
+      if (used.get(name) !== "user") used.set(name, by);
   }
   return {
     listed: [...listed.values()].map((skill) => ({
@@ -59,19 +54,18 @@ export async function compareWithDisk(record: InjectedInstruction): Promise<Disk
     : "differs";
 }
 
-function namedSkills(
-  call: Extract<Session["events"][number], { type: "tool_call" }>,
-  byPath: Map<string, string>,
-): { name: string; by: "model" }[] {
+export function skillUsesOf(event: Event, byPath: ReadonlyMap<string, string>): string[] {
+  if (event.type === "invocation") return [event.name];
+  if (event.type !== "tool_call") return [];
   return [...byPath]
     .filter(
       ([path]) =>
-        call.fileRead?.path === path ||
-        call.shell?.some((s) =>
+        event.fileRead?.path === path ||
+        event.shell?.some((s) =>
           [path, path.replaceAll("\\", "/")].some((form) => s.command?.includes(form)),
         ),
     )
-    .map(([, name]) => ({ name, by: "model" }));
+    .map(([, name]) => name);
 }
 
 export function recordedMcp(session: Session): { server: string; calls: number }[] {

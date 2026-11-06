@@ -30,8 +30,9 @@ Usage:
                                        find your agents, show the summary, pick a judge; resumes where it stopped
                                        steps: ${STEPS.join(", ")}; --yes takes each recommended answer
   quench [--days 30] [--scan <dir>]   a short summary: what sessions start with and what is worth a look
-  quench profile [section] [--days 30] [--scan <dir>] [--json]
+  quench profile [section] [--days 30] [--scan <dir>] [--json] [--asks]
                                        every table, or one section: ${SECTIONS.join(", ")}
+    --asks                             judge messages naming a one-word skill as asked or mentioned (opt-in Jev calls)
     --scan <dir>                       also profile <dir>, or the git repositories directly inside it (repeatable)
   quench worktrees [--days 30] [--json]  idle linked worktrees and which are safe to remove (read-only)
   quench report [--days 30] [--json]   totals per harness: starting load, context, models, effort
@@ -108,6 +109,7 @@ const { positionals, values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     themes: { type: "boolean", default: false },
     causes: { type: "boolean", default: false },
+    asks: { type: "boolean", default: false },
     context: { type: "boolean", default: false },
     "cached-only": { type: "boolean", default: false },
     "theme-limit": { type: "string" },
@@ -193,6 +195,10 @@ if (values.themes && command !== "corrections") {
 }
 if (values.causes && command !== "corrections") {
   process.stderr.write("--causes is only available for corrections\n");
+  process.exit(1);
+}
+if (values.asks && command !== "profile") {
+  process.stderr.write("--asks is only available for profile\n");
   process.exit(1);
 }
 if (values.context && command !== "corrections") {
@@ -338,12 +344,25 @@ switch (command) {
       process.exitCode = 1;
       break;
     }
+    const jevKey = values.asks ? typesafeKey(config, process.env) : undefined;
+    if (jevKey instanceof Error) {
+      process.stderr.write(`${jevKey.message}\n`);
+      process.exitCode = 1;
+      break;
+    }
     process.exitCode = await profile(home, {
       days,
       scan: values.scan,
       json: values.json,
       view: view as (typeof SECTIONS)[number] | "full",
       cache: !values["no-cache"],
+      asks: values.asks,
+      typesafeKey: jevKey,
+      ...(values["no-host-history"]
+        ? { hostHistory: false as const }
+        : values["host-history"]
+          ? { hostHistory: values["host-history"] }
+          : {}),
     });
     break;
   }

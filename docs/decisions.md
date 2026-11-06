@@ -88,6 +88,14 @@ retired with it and live in git history.
   `corrections --causes` adds the one cause question as an opt-in section beside `--themes`, with
   its own judge id and cache. It is not a new command, because it reads the same classified
   replies and sender split.
+- **A skill asked for in plain words counts apart from its loads** ([#132](https://github.com/JarenKempton/quench/issues/132)).
+  Only messages a person typed count as asked: harness-recorded typed prompts, else T3 Code host
+  evidence; relays and unknown senders are counted apart. Names match as words outside code, paths
+  and URLs, with typos and sound-alikes anchored by an exact word, and no message text is kept or
+  shown. A load counts in the asking run or in a subagent or T3 Code delegate started before the
+  next typed message. A one-word name is not measured unless the opt-in `profile skills --asks`
+  has Jev judge each message, with its own judge id and `asks.jsonl` cache. Asked, unmeasured and
+  unknown-sender skills never reach the cut list; relayed-only mentions do, with their count.
 - **Human correction and agent supervision are separate outcome signals.** Both can contribute
   to a corrective theme, with their own counts, sessions, recurrence and attributed examples.
   Unknown senders remain separate. Coordination is not automatically correction; agent-only
