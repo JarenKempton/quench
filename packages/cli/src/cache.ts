@@ -29,7 +29,7 @@ export async function placeCache(homeDir: string): Promise<PlaceCache & { save()
     async save() {
       if (!changed) return;
       await mkdir(dirname(path), { recursive: true });
-      const temporary = `${path}.${process.pid}`;
+      const temporary = `${path}.${process.pid}.${crypto.randomUUID()}`;
       await Bun.write(temporary, JSON.stringify({ v: 1, build, entries } satisfies Stored));
       await chmod(temporary, 0o600);
       await rename(temporary, path);

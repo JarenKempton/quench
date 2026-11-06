@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./components/ui/button.tsx";
 import { HousekeepingView } from "./housekeeping-view.tsx";
 import { cn } from "./lib/utils.ts";
@@ -37,9 +37,12 @@ export function App() {
       setState({ status: "error", message: (error as Error).message });
     }
   }, []);
+  const skillsAsked = useRef(false);
   useEffect(() => {
+    if (tab !== "skills" || skillsAsked.current) return;
+    skillsAsked.current = true;
     void load();
-  }, [load]);
+  }, [tab, load]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
