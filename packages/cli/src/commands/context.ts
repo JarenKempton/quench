@@ -5,6 +5,7 @@ import {
   knownTool,
   recordedInstructions,
   sourceTrace,
+  startedAt,
   type HarnessId,
   type Session,
 } from "@quench/history";
@@ -18,6 +19,9 @@ export type SessionContext = {
   skills: string[] | null;
   loads?: SkillLoaded[] | null;
   files: string[] | null;
+  paths?: string[] | null;
+  at?: number | null;
+  cwd?: string | null;
 };
 
 export type Loaded = {
@@ -180,6 +184,9 @@ export function contextOf(session: Session, home: string): SessionContext {
     skills: loads && [...new Set(loads.map((l) => l.name))],
     loads,
     files: files && [...new Set(files.map(fileName))],
+    paths: files && [...new Set(files.flatMap((f) => (f.path ? [f.path] : [])))],
+    at: startedAt(session)?.getTime() ?? null,
+    cwd: session.cwd,
   };
 }
 

@@ -330,6 +330,21 @@ corrections; no reply text is shown. It reads the verdict cache of the judge you
 or `--judge claude`'s, and with `--cached-only` asks neither. Being in context is a
 correlation, not a cause. Nothing is edited.
 
+`--context` also gives every skill and instruction or memory file loaded in the period a
+history, split at each content change: its size, the sessions that loaded it and how many of
+their judged replies were corrections, beside the other recorded sessions of the same span as a
+baseline. Changes come from `git log` where the file is tracked (an uncommitted edit starts a
+new span at the file's modified time). Other files get snapshots Quench records in
+`~/.quench/local/snapshots.json` on each run, so their history starts with the first run, and a
+session between two different snapshots is counted in neither. A skill counts by its `SKILL.md`,
+found from the recorded path or, when the harness recorded only the name, the one skill of that
+name the session's folder can see. A change is compared, using the hub's per-version card rule,
+once both sides have 10 sessions that loaded the file; a file that grew with no drop in
+correction rate is flagged as a correlation, not a cause. Instruction and memory entries
+(Claude Code's `MEMORY.md` and the entry files beside it) that share most of their words with a
+skill's description or a paragraph of its `SKILL.md` are listed with both locations, never their
+text; identical copies across worktrees are folded. `--dry-run` records no snapshot.
+
 ## Profile
 
 ```sh

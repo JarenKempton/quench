@@ -103,6 +103,10 @@ retired with it and live in git history.
   Unsupported adapters and missing/ambiguous results remain explicit. Source filenames do not
   determine relevance, and current files never fill historical gaps. Returned tool text is
   fingerprinted without claiming complete delivery, continued retention or causal influence.
+- **A file's history splits at content changes from git, else from Quench's own snapshots** ([#108](https://github.com/JarenKempton/quench/issues/108)).
+  Per-version correction rates reuse the hub card's comparison and sample floor. Snapshots are
+  only Quench's record of what it saw; sessions between two different snapshots are left out
+  rather than guessed. Growth flags are correlations; nothing is edited.
 - **Run records may list tool names; analysis may not depend on them.** `runs --json` lists
   each call's recorded name, MCP server, outcome and result size as raw data. Patterns and
   rankings still use structural fields only, because hosts rename tools.

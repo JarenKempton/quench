@@ -6,7 +6,12 @@ export { Home } from "./home.ts";
 export * from "./model.ts";
 export { discoverAll, readSessions, type Progress, type ReadOutcome } from "./read.ts";
 export { jsonlLines } from "./jsonl.ts";
-export { steeringInventory, type SteeringFile, type RuleCandidate } from "./steering.ts";
+export {
+  ruleCandidates,
+  steeringInventory,
+  type SteeringFile,
+  type RuleCandidate,
+} from "./steering.ts";
 export { sourceTrace } from "./sources.ts";
 export { commandShape, shellReads, type CommandShape } from "./shell.ts";
 export type { SkillListing, SkillLoad } from "./skill-loads.ts";

@@ -27,6 +27,8 @@ import {
 } from "@quench/judge";
 import { dateOf, latestLine, renderCauses } from "./causes.ts";
 import { inContext, renderInContext, type SessionContext } from "./context.ts";
+import { fileHistories, renderHistories } from "./file-history.ts";
+import { renderOverlaps, skillOverlaps, skillsInContext } from "./skill-overlap.ts";
 import { SCHEMA_VERSION, scopedReport, scopeRefs, unread, type Scope } from "./scope.ts";
 import { sessionRuns } from "./session-runs.ts";
 import { json, quote, shortPath } from "../format.ts";
@@ -166,6 +168,23 @@ export async function corrections(home: Home, options: Options): Promise<number>
   const context = options.context
     ? inContext(judged.replies, contexts, since, options.examples)
     : null;
+  const inventory = options.context ? await skillsInContext(home, contexts) : null;
+  const histories = inventory
+    ? await fileHistories({
+        contexts,
+        replies: judged.replies,
+        since,
+        homeDir: home.dir,
+        skillPath: inventory.skillPath,
+        write: !options.dryRun,
+      })
+    : null;
+  const overlaps = inventory
+    ? await skillOverlaps(
+        [...new Set([...contexts.values()].flatMap((c) => c.paths ?? []))],
+        inventory.skills,
+      )
+    : null;
   const path = (file: string) => shortPath(file, home.dir);
   const tokens = replyJudge && "tokens" in replyJudge ? (replyJudge.tokens as Tokens) : null;
   const calls = { label, perReply: callsPerReply, judge: cache.judge };
@@ -204,6 +223,15 @@ export async function corrections(home: Home, options: Options): Promise<number>
                       ...r,
                       files: r.files.map((f) => ({ ...f, name: path(f.name) })),
                     })),
+                    history: histories && {
+                      ...histories,
+                      files: histories.files.map((f) => ({ ...f, path: path(f.path) })),
+                    },
+                    overlaps: overlaps?.map((o) => ({
+                      ...o,
+                      entry: { ...o.entry, path: path(o.entry.path) },
+                      skill: { ...o.skill, path: path(o.skill.path) },
+                    })),
                   },
                 }
               : {}),
@@ -222,7 +250,9 @@ export async function corrections(home: Home, options: Options): Promise<number>
                 calls,
               )) +
           (causes ? renderCauses(causes, options.examples) : "") +
-          (context ? renderInContext(context, path) : ""),
+          (context ? renderInContext(context, path) : "") +
+          (histories ? renderHistories(histories, path) : "") +
+          (overlaps ? renderOverlaps(overlaps, path) : ""),
   );
   if (optIn && (themes?.failed || causes?.failed || judged.failures.length)) return 1;
   if (

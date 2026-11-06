@@ -28,18 +28,33 @@ const add = (into: VersionCounts, more: VersionCounts) => {
   for (const key of Object.keys(into) as (keyof VersionCounts)[]) into[key] += more[key];
 };
 
+type Versioned = { treeHash: string; from: string; loaded: VersionCounts };
+
+export function changes<V extends Versioned>(versions: readonly V[]): [V, V][] {
+  const sorted = [...versions].sort((a, b) => a.from.localeCompare(b.from));
+  const compared = new Set<string>();
+  const pairs: [V, V][] = [];
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const [was, now] = [sorted[i - 1]!, sorted[i]!];
+    const key = `${was.treeHash}\0${now.treeHash}`;
+    if (was.treeHash === now.treeHash || compared.has(key)) continue;
+    compared.add(key);
+    if (was.loaded.sessions + now.loaded.sessions === 0) continue;
+    pairs.push([was, now]);
+  }
+  return pairs;
+}
+
+export function sampled(before: VersionCounts, after: VersionCounts) {
+  const sessions = Math.min(before.sessions, after.sessions);
+  return { sessions, shown: sessions >= SAMPLE_FLOOR };
+}
+
 export function versionCards(machines: readonly Reporting[]): Card[] {
   const cards = new Map<string, Card>();
   for (const { name, state } of machines)
-    for (const record of state?.skills?.records ?? []) {
-      const versions = [...(record.versions ?? [])].sort((a, b) => a.from.localeCompare(b.from));
-      const compared = new Set<string>();
-      for (let i = versions.length - 1; i > 0; i--) {
-        const [was, now] = [versions[i - 1]!, versions[i]!];
-        if (was.treeHash === now.treeHash) continue;
-        if (compared.has(`${was.treeHash}\0${now.treeHash}`)) continue;
-        compared.add(`${was.treeHash}\0${now.treeHash}`);
-        if (was.loaded.sessions + now.loaded.sessions === 0) continue;
+    for (const record of state?.skills?.records ?? [])
+      for (const [was, now] of changes(record.versions ?? [])) {
         const key = `${record.skill}\0${was.treeHash}\0${now.treeHash}`;
         const card = cards.get(key) ?? {
           skill: record.skill,
@@ -61,15 +76,8 @@ export function versionCards(machines: readonly Reporting[]): Card[] {
         if (!card.places.some((p) => p.machine === name && p.harness === record.harness))
           card.places.push({ machine: name, harness: record.harness });
       }
-    }
   return [...cards.values()]
-    .map((card) => {
-      const sessions = Math.min(
-        card.sides.before.loaded.sessions,
-        card.sides.after.loaded.sessions,
-      );
-      return { ...card, sessions, shown: sessions >= SAMPLE_FLOOR };
-    })
+    .map((card) => ({ ...card, ...sampled(card.sides.before.loaded, card.sides.after.loaded) }))
     .sort((a, b) => a.skill.localeCompare(b.skill) || a.after.localeCompare(b.after));
 }
 
