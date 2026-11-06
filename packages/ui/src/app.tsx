@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "./components/ui/button.tsx";
 import { CorrectionsView } from "./corrections-view.tsx";
 import type { CorrectionsResponse } from "./corrections.ts";
 import { cn } from "./lib/utils.ts";
 import { SkillsView } from "./skills-view.tsx";
 import type { SkillsReport } from "./skills.ts";
-
-type State<T> =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; report: T };
+import { useApis, type Load, type State } from "./use-api.ts";
 
 const TABS = [
   { route: "#/", label: "Skills" },
@@ -20,23 +17,7 @@ type Route = (typeof TABS)[number]["route"];
 
 const routeOf = (hash: string): Route => TABS.find((t) => t.route === hash)?.route ?? "#/";
 
-function useApi<T>(path: string) {
-  const [state, setState] = useState<State<T>>({ status: "loading" });
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const response = await fetch(path);
-      if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-      setState({ status: "ready", report: (await response.json()) as T });
-    } catch (error) {
-      setState({ status: "error", message: (error as Error).message });
-    }
-  }, [path]);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  return [state, load] as const;
-}
+const PATHS: Record<Route, string> = { "#/": "/api/skills", "#/corrections": "/api/corrections" };
 
 export function App() {
   const [route, setRoute] = useState(() => routeOf(location.hash));
@@ -45,6 +26,10 @@ export function App() {
     addEventListener("hashchange", changed);
     return () => removeEventListener("hashchange", changed);
   }, []);
+  const { states, load, ensure } = useApis();
+  const path = PATHS[route];
+  useEffect(() => ensure(path), [ensure, path]);
+  const state = states[path] ?? { status: "loading" };
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <header className="mb-6 flex items-baseline gap-5">
@@ -66,15 +51,20 @@ export function App() {
         </nav>
         <span className="ml-auto font-mono text-xs text-muted-foreground">read-only</span>
       </header>
-      {route === "#/corrections" ? <CorrectionsPage /> : <SkillsPage />}
+      {route === "#/corrections" ? (
+        <CorrectionsPage state={state as State<CorrectionsResponse>} load={load} />
+      ) : (
+        <SkillsPage state={state as State<SkillsReport>} load={load} />
+      )}
     </div>
   );
 }
 
-function SkillsPage() {
-  const [state, load] = useApi<SkillsReport>("/api/skills");
+type Page<T> = { state: State<T>; load: Load };
+
+function SkillsPage({ state, load }: Page<SkillsReport>) {
   return (
-    <Loading state={state} load={load} what="your skills">
+    <Loading state={state} load={() => load("/api/skills")} what="your skills">
       {(report) =>
         report.skills.length ? (
           <>
@@ -92,10 +82,9 @@ function SkillsPage() {
   );
 }
 
-function CorrectionsPage() {
-  const [state, load] = useApi<CorrectionsResponse>("/api/corrections");
+function CorrectionsPage({ state, load }: Page<CorrectionsResponse>) {
   return (
-    <Loading state={state} load={load} what="your corrections">
+    <Loading state={state} load={() => load("/api/corrections")} what="your corrections">
       {(report) =>
         report.judge === null ? (
           <Message title="Reply classification is off">
@@ -104,7 +93,15 @@ function CorrectionsPage() {
           </Message>
         ) : (
           <>
-            <Days days={report.days} />
+            <Days days={report.days}>
+              {state.status === "ready" && state.computedAt && (
+                <Age
+                  at={state.computedAt}
+                  refreshing={state.refreshing}
+                  refresh={() => load("/api/corrections", true)}
+                />
+              )}
+            </Days>
             <CorrectionsView report={report} />
           </>
         )
@@ -143,8 +140,35 @@ function Loading<T>({
   );
 }
 
-function Days({ days }: { days: number }) {
-  return <p className="-mt-3 mb-5 font-mono text-xs text-muted-foreground">last {days} days</p>;
+function Days({ days, children }: { days: number; children?: React.ReactNode }) {
+  return (
+    <div className="-mt-3 mb-5 flex items-center gap-3 font-mono text-xs text-muted-foreground">
+      <span>last {days} days</span>
+      {children}
+    </div>
+  );
+}
+
+const ago = (at: Date, now: number) => {
+  const minutes = Math.floor((now - at.getTime()) / 60_000);
+  return minutes < 1 ? "just now" : minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+};
+
+function Age({ at, refreshing, refresh }: { at: Date; refreshing: boolean; refresh: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
+  return (
+    <>
+      <span>· computed {ago(at, now)}</span>
+      <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
+        <RefreshCw className={cn(refreshing && "animate-spin")} />
+        {refreshing ? "Refreshing…" : "Refresh"}
+      </Button>
+    </>
+  );
 }
 
 function Message({ title, children }: { title: string; children: React.ReactNode }) {

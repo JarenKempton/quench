@@ -66,7 +66,7 @@ export type CorrectionsReport = {
     withoutBehaviour: number;
     singleSession: number;
     recurring: Recurring[];
-    history: { basis: string; floor: number; files: FileHistory[] };
+    history: { basis: string; floor: number; total: number; files: FileHistory[] };
   };
 };
 
@@ -81,10 +81,8 @@ export const judgeCommand = (days: number) =>
   `quench corrections${days === 30 ? "" : ` --days ${days}`}`;
 
 export const shownFiles = (history: CorrectionsReport["context"]["history"]) =>
-  history.files
-    .filter((f) => f.sessions >= history.floor)
-    .sort(
-      (a, b) =>
-        Number(b.changes.some((c) => c.grewWithoutDrop)) -
-          Number(a.changes.some((c) => c.grewWithoutDrop)) || b.sessions - a.sessions,
-    );
+  [...history.files].sort(
+    (a, b) =>
+      Number(b.changes.some((c) => c.grewWithoutDrop)) -
+        Number(a.changes.some((c) => c.grewWithoutDrop)) || b.sessions - a.sessions,
+  );

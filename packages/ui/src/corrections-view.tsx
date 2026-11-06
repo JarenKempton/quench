@@ -82,7 +82,7 @@ export function CorrectionsView({ report }: { report: CorrectionsReport }) {
       <section className="space-y-3">
         <Heading
           title="Skill and instruction files in context"
-          note={`${shownFiles(context.history).length} of ${context.history.files.length} files with ${context.history.floor}+ sessions · split at each content change`}
+          note={`${shownFiles(context.history).length} of ${context.history.total} files with ${context.history.floor}+ sessions · split at each content change`}
         />
         <FilesTable report={report} />
       </section>

@@ -1,7 +1,7 @@
 import { extname } from "node:path";
 import type { Home } from "@quench/history";
 import type { Provider } from "@quench/judge";
-import { correctionsJson } from "./corrections.ts";
+import { correctionsJson, shownHistory } from "./corrections.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
 
 export const LOOPBACK = "127.0.0.1";
@@ -32,30 +32,68 @@ export async function uiAssets(): Promise<Map<string, Blob>> {
   return new Map(Object.entries(embedded).map(([name, path]) => [name, Bun.file(path)]));
 }
 
-const respond = (body: Blob | string, status: number, type = "text/plain; charset=utf-8") =>
-  new Response(body, { status, headers: { ...HEADERS, "content-type": type } });
+const respond = (
+  body: Blob | string,
+  status: number,
+  type = "text/plain; charset=utf-8",
+  extra: Record<string, string> = {},
+) => new Response(body, { status, headers: { ...HEADERS, ...extra, "content-type": type } });
+
+export class Aged {
+  constructor(
+    readonly value: unknown,
+    readonly computedAt: Date,
+  ) {}
+}
+
+export const MAX_AGE_MS = 5 * 60_000;
+
+export function lastResult(
+  read: () => Promise<unknown>,
+  maxAgeMs = MAX_AGE_MS,
+  now = () => Date.now(),
+): (refresh: boolean) => Promise<Aged> {
+  let last: Aged | null = null;
+  let running: Promise<Aged> | null = null;
+  const run = () =>
+    (running ??= read()
+      .then((value) => (last = new Aged(value, new Date(now()))))
+      .finally(() => {
+        running = null;
+      }));
+  return async (refresh) =>
+    running ?? (!last || refresh || now() - last.computedAt.getTime() > maxAgeMs ? run() : last);
+}
+
+export type Api = (refresh: boolean) => Promise<unknown>;
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
 export function serveUi(options: {
   port: number;
-  api: Readonly<Record<string, () => Promise<unknown>>>;
+  api: Readonly<Record<string, Api>>;
   assets: ReadonlyMap<string, Blob>;
 }): UiServer {
   const server = Bun.serve({
     hostname: LOOPBACK,
     port: options.port,
-    idleTimeout: 0,
     async fetch(request) {
       if (request.headers.get("host") !== `${LOOPBACK}:${server.port}`)
         return respond("Host not allowed\n", 421);
       if (request.method !== "GET" && request.method !== "HEAD")
         return respond("Method not allowed\n", 405);
-      const path = new URL(request.url).pathname;
+      const url = new URL(request.url);
+      const path = url.pathname;
       const api = Object.hasOwn(options.api, path) ? options.api[path] : undefined;
       if (api) {
+        server.timeout(request, 0);
         try {
-          return respond(JSON.stringify(await api()), 200, "application/json");
+          const result = await api(url.searchParams.get("refresh") === "1");
+          if (!(result instanceof Aged))
+            return respond(JSON.stringify(result), 200, "application/json");
+          return respond(JSON.stringify(result.value), 200, "application/json", {
+            "x-quench-computed-at": result.computedAt.toISOString(),
+          });
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);
         }
@@ -114,9 +152,16 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
   const { judge } = flags;
   const api = {
     "/api/skills": latest(() => skillsJson(home, { ...flags, source }).then((r) => r.report)),
-    "/api/corrections": latest(async () =>
+    "/api/corrections": lastResult(async () =>
       judge?.id
-        ? correctionsJson(home, { days: flags.days, examples: 10, judge, ...hostHistory(flags) })
+        ? shownHistory(
+            await correctionsJson(home, {
+              days: flags.days,
+              examples: 10,
+              judge,
+              ...hostHistory(flags),
+            }),
+          )
         : NO_JUDGE,
     ),
   };

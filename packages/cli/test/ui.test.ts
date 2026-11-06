@@ -5,8 +5,8 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Home } from "@quench/history";
 import { provider, type Provider } from "@quench/judge";
-import { CSP, serveUi, startUi } from "../src/commands/ui.ts";
-import { fixture } from "./correction-home.ts";
+import { Aged, CSP, lastResult, serveUi, startUi } from "../src/commands/ui.ts";
+import { day, fixture, session } from "./correction-home.ts";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const get = (port: number, path: string, host = `127.0.0.1:${port}`) =>
@@ -95,6 +95,58 @@ test("an API answer that takes longer than Bun's 10 s idle timeout still arrives
   }
 }, 25_000);
 
+test("lastResult keeps the last answer until it is too old or a refresh is asked, sharing one run", async () => {
+  let clock = 0;
+  let reads = 0;
+  let release = () => {};
+  const read = lastResult(
+    () => {
+      reads++;
+      return new Promise((done) => (release = () => done(reads)));
+    },
+    1000,
+    () => clock,
+  );
+  const first = [read(false), read(false), read(true)];
+  release();
+  const answers = await Promise.all(first);
+  expect(reads).toBe(1);
+  expect(answers.map((a) => a.value)).toEqual([1, 1, 1]);
+  expect(answers[0]).toBeInstanceOf(Aged);
+  clock = 1000;
+  expect((await read(false)).value).toBe(1);
+  const refreshed = read(true);
+  release();
+  expect((await refreshed).value).toBe(2);
+  clock = 2001;
+  const stale = read(false);
+  release();
+  expect(await stale).toMatchObject({ value: 3, computedAt: new Date(2001) });
+});
+
+test("?refresh=1 reaches the API, and its computed time is sent", async () => {
+  const asked: boolean[] = [];
+  const served = serveUi({
+    port: 0,
+    api: {
+      "/api/corrections": async (refresh) => {
+        asked.push(refresh);
+        return new Aged({ ok: true }, new Date(5));
+      },
+    },
+    assets,
+  });
+  try {
+    await get(served.port, "/api/corrections");
+    const again = await get(served.port, "/api/corrections?refresh=1");
+    expect(asked).toEqual([false, true]);
+    expect(again.headers["x-quench-computed-at"]).toBe(new Date(5).toISOString());
+    expect(JSON.parse(again.body)).toEqual({ ok: true });
+  } finally {
+    await served.stop();
+  }
+});
+
 const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 
 async function home() {
@@ -173,9 +225,16 @@ async function tree(dir: string): Promise<string[]> {
 }
 
 test(
-  "/api/corrections equals quench corrections --json --context --cached-only, calls no judge and writes nothing",
+  "/api/corrections is quench corrections --json --context --cached-only with only the shown file histories, calls no judge and writes nothing",
   async () => {
     const dir = await fixture();
+    const work = JSON.stringify(join(dir, "work", "CLAUDE.md")).slice(1, -1);
+    const once = JSON.stringify(join(dir, "elsewhere", "AGENTS.md")).slice(1, -1);
+    await Bun.write(join(dir, "elsewhere", "AGENTS.md"), "Once.\n");
+    await Bun.write(
+      join(dir, ".claude/projects/-work/once.jsonl"),
+      session(dir, { id: "once", at: day(3, 1), corrected: false }).replaceAll(work, once),
+    );
     const expected = await quench(
       dir,
       "corrections",
@@ -188,7 +247,10 @@ test(
     );
     expect(expected.stderr).toBe("");
     const report = JSON.parse(expected.stdout);
-    expect(report.context.history.files.length).toBeGreaterThan(0);
+    const { floor, files } = report.context.history;
+    const shown = files.filter((f: { sessions: number }) => f.sessions >= floor);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(files.length);
     expect(report.weekly.length).toBeGreaterThan(0);
     let created = 0;
     const judge: Provider = {
@@ -211,7 +273,14 @@ test(
       const served = await get(running.port, "/api/corrections");
       expect(served.status).toBe(200);
       expect(served.headers["content-security-policy"]).toBe(CSP);
-      expect(JSON.parse(served.body)).toEqual(report);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
+      expect(JSON.parse(served.body)).toEqual({
+        ...report,
+        context: {
+          ...report.context,
+          history: { ...report.context.history, total: files.length, files: shown },
+        },
+      });
       expect(created).toBe(0);
       for (const text of ["no, wrong", "thanks", "fix it", "Use Bun", "test suite", "done"])
         expect(served.body).not.toContain(text);

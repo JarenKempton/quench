@@ -387,6 +387,24 @@ export async function correctionsJson(
   });
 }
 
+export function shownHistory<
+  T extends { context?: { history: { floor: number; files: { sessions: number }[] } } },
+>(report: T) {
+  if (!report.context) return report;
+  const { history } = report.context;
+  return {
+    ...report,
+    context: {
+      ...report.context,
+      history: {
+        ...history,
+        total: history.files.length,
+        files: history.files.filter((f) => f.sessions >= history.floor),
+      },
+    },
+  };
+}
+
 type Calls = { label: string; perReply: number; judge: string };
 type Tokens = Jev["tokens"];
 
