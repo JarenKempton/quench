@@ -1,61 +1,72 @@
-import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "./components/ui/button.tsx";
 import { CorrectionsView } from "./corrections-view.tsx";
 import type { CorrectionsResponse } from "./corrections.ts";
+import { Fresh } from "./fresh.tsx";
+import { HOUSEKEEPING, HousekeepingView } from "./housekeeping-view.tsx";
 import { cn } from "./lib/utils.ts";
 import { SkillsView } from "./skills-view.tsx";
 import type { SkillsReport } from "./skills.ts";
 import { useApis, type Load, type State } from "./use-api.ts";
 
 const TABS = [
-  { route: "#/", label: "Skills" },
-  { route: "#/corrections", label: "Corrections" },
+  ["skills", "Skills"],
+  ["corrections", "Corrections"],
+  ["housekeeping", "Housekeeping"],
 ] as const;
 
-type Route = (typeof TABS)[number]["route"];
+type Tab = (typeof TABS)[number][0];
 
-const routeOf = (hash: string): Route => TABS.find((t) => t.route === hash)?.route ?? "#/";
+const tabOf = (hash: string): Tab => TABS.find(([id]) => `#${id}` === hash)?.[0] ?? "skills";
 
-const PATHS: Record<Route, string> = { "#/": "/api/skills", "#/corrections": "/api/corrections" };
+const SKILLS = "/api/skills";
+const CORRECTIONS = "/api/corrections";
+
+const PATHS: Record<Tab, readonly string[]> = {
+  skills: [SKILLS],
+  corrections: [CORRECTIONS],
+  housekeeping: HOUSEKEEPING,
+};
 
 export function App() {
-  const [route, setRoute] = useState(() => routeOf(location.hash));
+  const [tab, setTab] = useState<Tab>(() => tabOf(location.hash));
   useEffect(() => {
-    const changed = () => setRoute(routeOf(location.hash));
-    addEventListener("hashchange", changed);
-    return () => removeEventListener("hashchange", changed);
+    const follow = () => setTab(tabOf(location.hash));
+    addEventListener("hashchange", follow);
+    return () => removeEventListener("hashchange", follow);
   }, []);
   const { states, load, ensure } = useApis();
-  const path = PATHS[route];
-  useEffect(() => ensure(path), [ensure, path]);
-  const state = states[path] ?? { status: "loading" };
+  useEffect(() => PATHS[tab].forEach(ensure), [ensure, tab]);
+  const stateOf = <T,>(path: string) => (states[path] ?? { status: "loading" }) as State<T>;
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex items-baseline gap-5">
-        <span className="text-base font-semibold tracking-tight">Quench</span>
-        <nav className="flex items-baseline gap-4 text-sm">
-          {TABS.map((t) => (
-            <a
-              key={t.route}
-              href={t.route}
-              aria-current={route === t.route ? "page" : undefined}
-              className={cn(
-                "text-muted-foreground hover:text-foreground",
-                route === t.route && "font-medium text-foreground",
-              )}
-            >
-              {t.label}
-            </a>
-          ))}
-        </nav>
-        <span className="ml-auto font-mono text-xs text-muted-foreground">read-only</span>
+      <header className="mb-6 flex items-baseline justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <span className="text-base font-semibold tracking-tight">Quench</span>
+          <nav className="flex gap-3 text-sm">
+            {TABS.map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                aria-current={tab === id ? "page" : undefined}
+                className={cn(
+                  "text-muted-foreground hover:text-foreground",
+                  tab === id && "text-foreground",
+                )}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+        </div>
+        <span className="font-mono text-xs text-muted-foreground">read-only</span>
       </header>
-      {route === "#/corrections" ? (
-        <CorrectionsPage state={state as State<CorrectionsResponse>} load={load} />
-      ) : (
-        <SkillsPage state={state as State<SkillsReport>} load={load} />
+      {tab === "skills" && <SkillsPage state={stateOf<SkillsReport>(SKILLS)} load={load} />}
+      {tab === "corrections" && (
+        <CorrectionsPage state={stateOf<CorrectionsResponse>(CORRECTIONS)} load={load} />
       )}
+      {tab === "housekeeping" && <HousekeepingView states={states} load={load} />}
     </div>
   );
 }
@@ -64,34 +75,29 @@ type Page<T> = { state: State<T>; load: Load };
 
 function SkillsPage({ state, load }: Page<SkillsReport>) {
   return (
-    <Loading state={state} load={() => load("/api/skills")} what="your skills">
-      {(report) =>
-        report.skills.length ? (
-          <>
-            <Days days={report.days}>
-              <Fresh state={state} refresh={() => load("/api/skills", true)} />
-            </Days>
+    <Loading state={state} load={() => load(SKILLS)} what="your skills">
+      {(report) => (
+        <>
+          <Days days={report.days}>
+            <Fresh state={state} refresh={() => load(SKILLS, true)} />
+          </Days>
+          {report.skills.length ? (
             <SkillsView report={report} />
-          </>
-        ) : (
-          <>
-            <Days days={report.days}>
-              <Fresh state={state} refresh={() => load("/api/skills", true)} />
-            </Days>
+          ) : (
             <Message title="No skills found">
               None of your agents have skills on disk, and no session in the last {report.days} days
               listed one. Add a skill, or run quench ui --days 90.
             </Message>
-          </>
-        )
-      }
+          )}
+        </>
+      )}
     </Loading>
   );
 }
 
 function CorrectionsPage({ state, load }: Page<CorrectionsResponse>) {
   return (
-    <Loading state={state} load={() => load("/api/corrections")} what="your corrections">
+    <Loading state={state} load={() => load(CORRECTIONS)} what="your corrections">
       {(report) =>
         report.judge === null ? (
           <Message title="Reply classification is off">
@@ -101,7 +107,7 @@ function CorrectionsPage({ state, load }: Page<CorrectionsResponse>) {
         ) : (
           <>
             <Days days={report.days}>
-              <Fresh state={state} refresh={() => load("/api/corrections", true)} />
+              <Fresh state={state} refresh={() => load(CORRECTIONS, true)} />
             </Days>
             <CorrectionsView report={report} />
           </>
@@ -126,7 +132,8 @@ function Loading<T>({
   if (state.status === "loading")
     return (
       <Message title="Reading your session history…">
-        The first run reads every session and can take a minute. Later runs use the cache.
+        The first run reads every session and can take a minute. Later visits show the last result
+        at once.
       </Message>
     );
   return (
@@ -143,46 +150,10 @@ function Loading<T>({
 
 function Days({ days, children }: { days: number; children?: React.ReactNode }) {
   return (
-    <div className="-mt-3 mb-5 flex items-center gap-3 font-mono text-xs text-muted-foreground">
-      <span>last {days} days</span>
+    <div className="-mt-3 mb-5 flex flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
+      <span>last {days} days ·</span>
       {children}
     </div>
-  );
-}
-
-const ago = (at: Date, now: number) => {
-  const minutes = Math.floor((now - at.getTime()) / 60_000);
-  return minutes < 1 ? "just now" : minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
-};
-
-function Fresh<T>({ state, refresh }: { state: State<T>; refresh: () => void }) {
-  if (state.status !== "ready" || !state.computedAt) return null;
-  return (
-    <>
-      <Age at={state.computedAt} refreshing={state.refreshing} refresh={refresh} />
-      {state.error && (
-        <span role="alert" className="text-warn">
-          Refresh failed: {state.error}
-        </span>
-      )}
-    </>
-  );
-}
-
-function Age({ at, refreshing, refresh }: { at: Date; refreshing: boolean; refresh: () => void }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(tick);
-  }, []);
-  return (
-    <>
-      <span>· computed {ago(at, now)}</span>
-      <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
-        <RefreshCw className={cn(refreshing && "animate-spin")} />
-        {refreshing ? "Refreshing…" : "Refresh"}
-      </Button>
-    </>
   );
 }
 

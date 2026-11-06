@@ -16,17 +16,26 @@ import {
 import { count, json, plural, shortPath, table } from "../format.ts";
 import { reading } from "../progress.ts";
 
-export async function secrets(
-  home: Home,
-  options: { json: boolean; days: number; repoHistory?: boolean; hostHistory?: string | false },
-): Promise<number> {
-  const report = await secretsReport(home, {
+export type SecretsFlags = {
+  days: number;
+  repoHistory?: boolean;
+  hostHistory?: string | false;
+};
+
+export const secretsJson = (home: Home, options: SecretsFlags) =>
+  secretsReport(home, {
     days: options.days,
     hostHistory: options.hostHistory ?? t3State(home),
     repoHistory: options.repoHistory ?? false,
     onRead: reading(),
     onRepo: reading("repositories"),
   });
+
+export async function secrets(
+  home: Home,
+  options: SecretsFlags & { json: boolean },
+): Promise<number> {
+  const report = await secretsJson(home, options);
   process.stdout.write(options.json ? json(report) : render(report, home.dir).join("\n") + "\n");
   return 0;
 }

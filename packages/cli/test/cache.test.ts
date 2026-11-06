@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { SessionPlace } from "@quench/history";
 import { cliRunsTimeout } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
@@ -63,3 +64,14 @@ test(
   },
   cliRunsTimeout,
 );
+
+test("two place caches in one process save at the same time without colliding", async () => {
+  const { placeCache } = await import("../src/cache.ts");
+  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-cache-race-")));
+  const caches = await Promise.all([placeCache(home), placeCache(home)]);
+  caches.forEach((cache, i) =>
+    cache.set(`/s${i}.jsonl`, "1", { cwd: `/p${i}`, at: null } as SessionPlace),
+  );
+  await Promise.all(caches.map((cache) => cache.save()));
+  expect(await Bun.file(join(home, ".quench/local/session-places.json")).exists()).toBe(true);
+});

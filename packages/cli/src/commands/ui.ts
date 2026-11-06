@@ -2,7 +2,9 @@ import { extname } from "node:path";
 import type { Home } from "@quench/history";
 import type { Provider } from "@quench/judge";
 import { correctionsJson, shownHistory } from "./corrections.ts";
+import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
+import { worktreesJson } from "./worktrees.ts";
 
 export const LOOPBACK = "127.0.0.1";
 
@@ -43,35 +45,51 @@ export class Aged {
   constructor(
     readonly value: unknown,
     readonly computedAt: Date,
+    readonly refreshing: boolean,
+    readonly refreshError: string | null,
   ) {}
 }
 
-export const MAX_AGE_MS = 5 * 60_000;
+export const REFRESH_AFTER_MS = 5 * 60_000;
+
+type Load = (asked: { refresh: boolean }) => Promise<unknown>;
 
 export function lastResult(
   read: () => Promise<unknown>,
-  maxAgeMs = MAX_AGE_MS,
-  now = () => Date.now(),
-): (refresh: boolean) => Promise<Aged> {
-  let last: Aged | null = null;
-  let running: Promise<Aged> | null = null;
-  const run = () =>
+  refreshAfterMs = REFRESH_AFTER_MS,
+): (asked: { refresh: boolean }) => Promise<Aged> {
+  let last: { value: unknown; at: Date } | null = null;
+  let attemptedAt = 0;
+  let failure: string | null = null;
+  let running: Promise<void> | null = null;
+  const refresh = () =>
     (running ??= read()
-      .then((value) => (last = new Aged(value, new Date(now()))))
+      .then(
+        (value) => {
+          last = { value, at: new Date() };
+          failure = null;
+        },
+        (error: Error) => {
+          failure = error.message;
+          throw error;
+        },
+      )
       .finally(() => {
+        attemptedAt = Date.now();
         running = null;
       }));
-  return async (refresh) =>
-    running ?? (!last || refresh || now() - last.computedAt.getTime() > maxAgeMs ? run() : last);
+  return async (asked) => {
+    if (!last) await refresh();
+    else if (asked.refresh || Date.now() - attemptedAt >= refreshAfterMs) refresh().catch(() => {});
+    return new Aged(last!.value, last!.at, running !== null, failure);
+  };
 }
-
-export type Api = (refresh: boolean) => Promise<unknown>;
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
 export function serveUi(options: {
   port: number;
-  api: Readonly<Record<string, Api>>;
+  api: Readonly<Record<string, Load>>;
   assets: ReadonlyMap<string, Blob>;
 }): UiServer {
   const server = Bun.serve({
@@ -84,23 +102,29 @@ export function serveUi(options: {
         return respond("Method not allowed\n", 405);
       const url = new URL(request.url);
       const path = url.pathname;
-      const api = Object.hasOwn(options.api, path) ? options.api[path] : undefined;
-      if (api) {
+      const name = path.slice("/api/".length);
+      if (path.startsWith("/api/") && Object.hasOwn(options.api, name)) {
         server.timeout(request, 0);
         try {
-          const result = await api(url.searchParams.get("refresh") === "1");
+          const result = await options.api[name]!({
+            refresh: url.searchParams.get("refresh") === "1",
+          });
           if (!(result instanceof Aged))
             return respond(JSON.stringify(result), 200, "application/json");
           return respond(JSON.stringify(result.value), 200, "application/json", {
             "x-quench-computed-at": result.computedAt.toISOString(),
+            "x-quench-refreshing": String(result.refreshing),
+            ...(result.refreshError
+              ? { "x-quench-refresh-error": encodeURIComponent(result.refreshError) }
+              : {}),
           });
         } catch (error) {
           return respond(`${(error as Error).message}\n`, 500);
         }
       }
-      const name = path === "/" ? "index.html" : path.slice(1);
-      const asset = !name.includes("/") && options.assets.get(name);
-      if (asset) return respond(asset, 200, TYPES[extname(name)]);
+      const file = path === "/" ? "index.html" : path.slice(1);
+      const asset = !file.includes("/") && options.assets.get(file);
+      if (asset) return respond(asset, 200, TYPES[extname(file)]);
       if (path === "/")
         return respond(
           "This build of quench has no UI assets. Run bun run --cwd packages/ui build.\n",
@@ -141,21 +165,22 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
-  const { judge } = flags;
   const api = {
-    "/api/skills": lastResult(() => skillsJson(home, { ...flags, source }).then((r) => r.report)),
-    "/api/corrections": lastResult(async () =>
-      judge?.id
+    skills: lastResult(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
+    corrections: lastResult(async () =>
+      flags.judge?.id
         ? shownHistory(
             await correctionsJson(home, {
               days: flags.days,
               examples: 10,
-              judge,
-              ...hostHistory(flags),
+              judge: flags.judge,
+              ...(flags.hostHistory === undefined ? {} : { hostHistory: flags.hostHistory }),
             }),
           )
         : NO_JUDGE,
     ),
+    worktrees: lastResult(() => worktreesJson(home, flags)),
+    secrets: lastResult(() => secretsJson(home, flags)),
   };
   try {
     return serveUi({ port, api, assets: await uiAssets() });
@@ -165,9 +190,6 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
     );
   }
 }
-
-const hostHistory = (flags: UiFlags) =>
-  flags.hostHistory === undefined ? {} : { hostHistory: flags.hostHistory };
 
 export async function ui(home: Home, flags: UiFlags): Promise<number> {
   const server = await startUi(home, flags);
