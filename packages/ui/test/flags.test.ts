@@ -87,12 +87,23 @@ test("a skill the user can't edit keeps its flags but gets no edit prompt", () =
     skill: "vercel:ai-sdk",
     harness: "codex",
     origin: "plugin",
-    location: "~/.codex/plugins/cache/x/vercel/1/skills/ai-sdk",
+    location: "~/.codex/plugins/cache/openai-curated/vercel/0.54.1/skills/ai-sdk",
     use: { sessionsListed: 9, used: 0, usedByUser: 0, lowerBound: true },
   });
   const codexFlags = flagsOf(codexPlugin, report([codexPlugin]));
   expect(codexFlags.map((f) => f.kind)).toEqual(["unused"]);
-  expect(suggestion(codexPlugin, codexFlags)).toEqual({
+  const removal = suggestion(codexPlugin, codexFlags);
+  expect(removal.note).toBe(
+    "From a plugin: Quench can't suggest an edit. The prompt below turns off the plugin instead.",
+  );
+  expect(removal.prompt).toStartWith(
+    'The "vercel:ai-sdk" skill comes from the "vercel@openai-curated" Codex plugin',
+  );
+  expect(removal.prompt).toContain("`codex plugin remove vercel@openai-curated`");
+  expect(removal.prompt).toContain("turn it off in codex → /plugins");
+
+  const unplaced = { ...codexPlugin, id: "d", location: "plugin:vercel" };
+  expect(suggestion(unplaced, flagsOf(unplaced, report([unplaced])))).toEqual({
     prompt: null,
     note: "From a plugin: Quench can't suggest an edit.",
   });
@@ -103,5 +114,6 @@ test("a skill the user can't edit keeps its flags but gets no edit prompt", () =
     "From a plugin: Quench can't suggest an edit. The prompt below turns off the plugin instead.",
   );
   expect(offered.prompt).toContain("disable the plugin");
+  expect(offered.prompt).not.toContain("codex plugin remove");
   expect(offered.prompt).not.toContain("description");
 });

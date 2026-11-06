@@ -139,17 +139,34 @@ function readOnly(r: SkillRecord): string {
   return `Not found on disk: ${NOT_EDITABLE}.`;
 }
 
+const codexPlugin = (r: SkillRecord) => {
+  const match = /\/plugins\/cache\/([^/]+)\/([^/]+)\//.exec(r.location.replaceAll("\\", "/"));
+  return match ? `${match[2]}@${match[1]}` : null;
+};
+
 function turnOff(r: SkillRecord, flags: readonly Flag[]): string | null {
-  const plugin = r.skill.includes(":") ? r.skill.slice(0, r.skill.indexOf(":")) : null;
-  if (r.harness !== "claude-code" || r.origin !== "plugin" || !plugin) return null;
+  if (r.origin !== "plugin") return null;
   const reasons = flags.filter((f) => f.kind === "unused" || f.kind === "large");
   if (!reasons.length) return null;
+  const plugin =
+    r.harness === "claude-code"
+      ? r.skill.includes(":")
+        ? r.skill.slice(0, r.skill.indexOf(":"))
+        : null
+      : r.harness === "codex"
+        ? codexPlugin(r)
+        : null;
+  if (!plugin) return null;
+  const how =
+    r.harness === "codex"
+      ? `remove it with \`codex plugin remove ${plugin}\` (if Codex refuses with 403 because it is installed by default, turn it off in codex → /plugins instead)`
+      : "disable the plugin (for example with /plugin, or enabledPlugins in ~/.claude/settings.json)";
   return [
-    `The "${r.skill}" skill comes from the "${plugin}" Claude Code plugin, which I can't edit.`,
+    `The "${r.skill}" skill comes from the "${plugin}" ${HARNESS_LABELS[r.harness]} plugin, which I can't edit.`,
     "",
     ...reasons.map((f) => `- ${f.fix.split(". ")[0]}.`),
     "",
-    `Check whether I use any other skill, command or agent from "${plugin}". If I don't, show me how to disable the plugin (for example with /plugin, or enabledPlugins in ~/.claude/settings.json), and change nothing until I agree.`,
+    `Check whether I use any other skill, command or agent from "${plugin}". If I don't, show me how to ${how}, and change nothing until I agree.`,
   ].join("\n");
 }
 
