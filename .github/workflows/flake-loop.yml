@@ -1,7 +1,7 @@
 name: flake-loop
 on:
   push:
-    branches: [t3/6c59f4f7]
+    branches: [fix/judge-macos-flakes]
 jobs:
   suite:
     strategy:
@@ -26,8 +26,8 @@ jobs:
           fails=0
           for i in $(seq 8); do
             echo "=== iteration $i $(date -u +%FT%T)"
-            bun test 2>&1 | grep -E '\(fail\)|timed out|dangling|Expected|Received|^ *[0-9]+ (pass|fail)' || true
-            test "${PIPESTATUS[0]}" = 0 || fails=$((fails+1))
+            if bun test > "$RUNNER_TEMP/run.txt" 2>&1; then :; else fails=$((fails+1)); fi
+            grep -E '\(fail\)|timed out|dangling|Expected|Received|^ *[0-9]+ (pass|fail)$' "$RUNNER_TEMP/run.txt" || true
           done
           kill $probe
           echo "=== probe"
