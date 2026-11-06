@@ -7,25 +7,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        load: [cpu, disk, disk-ramtmp]
-        shard: [1, 2]
+        load: [none, disk]
     runs-on: macos-latest
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Temp folder in memory
+        run: |
+          diskutil erasevolume APFS quench-tmp "$(hdiutil attach -nomount ram://2097152 | awk '{print $1}')"
+          echo "TMPDIR=/Volumes/quench-tmp" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - if: matrix.load == 'cpu'
-        run: for _ in 1 2 3 4; do nohup sh -c 'while :; do :; done' >/dev/null 2>&1 & done
-      - if: startsWith(matrix.load, 'disk')
+      - if: matrix.load == 'disk'
         run: nohup sh -c 'while :; do dd if=/dev/zero of="$RUNNER_TEMP/dd.bin" bs=1m count=512 2>/dev/null; sync; done' >/dev/null 2>&1 &
-      - if: matrix.load == 'disk-ramtmp'
-        run: |
-          dev=$(hdiutil attach -nomount ram://2097152 | awk '{print $1}')
-          diskutil erasevolume APFS quenchtmp "$dev"
-          echo "TMPDIR=/Volumes/quenchtmp" >> "$GITHUB_ENV"
-      - run: .github/flake/loop.sh 50 packages/judge/test/harness.test.ts packages/judge/test/themes.test.ts
+      - run: .github/flake/loop.sh 40 packages/judge/test/harness.test.ts packages/judge/test/themes.test.ts

@@ -3,7 +3,7 @@ set -u
 runs=$1; files=("${@:2}")
 fails=0; slow=0
 for i in $(seq "$runs"); do
-  bun test --timeout 60000 "${files[@]}" > "$RUNNER_TEMP/it.txt" 2>&1 &
+  bun test "${files[@]}" > "$RUNNER_TEMP/it.txt" 2>&1 &
   pid=$!
   start=$SECONDS; sampled=0
   while kill -0 $pid 2>/dev/null; do

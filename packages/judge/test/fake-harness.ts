@@ -20,7 +20,7 @@ if (mode === "exit") {
   process.stderr.write(config.stderr ?? "not logged in\n");
   process.exit(3);
 }
-if (mode === "slow") await Bun.sleep(2_000);
+if (mode === "slow") await new Promise(() => setInterval(() => undefined, 60_000));
 if (mode === "linger")
   Bun.spawn(
     [
