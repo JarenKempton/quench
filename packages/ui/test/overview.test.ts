@@ -1,16 +1,5 @@
 import { expect, test } from "bun:test";
 import { contributors, percent, windowDays, type HarnessReport } from "../src/report.ts";
-import { href, parseRoute } from "../src/route.ts";
-
-const TABS = ["overview", "skills"];
-
-test("an empty or unknown hash opens the first tab; params ride along", () => {
-  expect(parseRoute("", TABS).tab).toBe("overview");
-  expect(parseRoute("#/nope", TABS).tab).toBe("overview");
-  const route = parseRoute(href("skills", { agent: "codex" }), TABS);
-  expect(route.tab).toBe("skills");
-  expect(route.params.get("agent")).toBe("codex");
-});
 
 const agent = (parts: HarnessReport["startParts"]): HarnessReport => ({
   harness: "claude-code",

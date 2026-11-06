@@ -49,11 +49,8 @@ retired with it and live in git history.
   cover.
 - **`quench ui` is the one exception: React, Tailwind, Radix and shadcn/ui, build-only**
   ([#134](https://github.com/JarenKempton/quench/issues/134)). The data is live and local, so
-  every view renders in the browser from `/api/*` (one per tab, such as `/api/report` and
-  `/api/skills`, each the same JSON as its command), and shadcn is built for React and Vite.
-  Tabs are hash routes, so there is no router. Each endpoint keeps its last result in memory,
-  serves it at once with its age and refreshes it in the background ([#169](https://github.com/JarenKempton/quench/issues/169)):
-  a full read takes minutes on a large home, and nothing is written to disk.
+  every view renders in the browser from `/api/report`, `/api/skills` and `/api/corrections` (cached verdicts only, so opening it never calls a judge), and shadcn is built for React and Vite.
+  `quench ui` reads the report and skills when it starts, so its first page waits on one scan, not two ([#169](https://github.com/JarenKempton/quench/issues/169)).
   Vite (already in the toolchain through Vite+) builds `packages/ui` to fixed-name static files
   that `bun build --compile` embeds; none of these packages ships as runtime code outside that
   page. The server binds 127.0.0.1, checks the Host header, and sends a strict CSP.

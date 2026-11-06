@@ -474,9 +474,11 @@ switch (command) {
       ...(values.machine ? { machine: values.machine } : {}),
     });
     break;
-  case "ui":
+  case "ui": {
+    const choice = judgeChoice(config, process.env);
     process.exitCode = await ui(home, {
       days,
+      judge: choice instanceof Error ? null : provider(choice),
       cache: !values["no-cache"],
       open: values.open,
       ...(values.port !== undefined ? { port: values.port } : {}),
@@ -488,6 +490,7 @@ switch (command) {
           : {}),
     });
     break;
+  }
   case "hub":
     process.exitCode = await hub(home, rest, {
       http: values.http,

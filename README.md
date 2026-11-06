@@ -69,31 +69,31 @@ profile of every agent and project in your history.
 
 ## Commands
 
-| Command                                         | What it shows                                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `quench`                                        | A short summary: what sessions start with, what is worth a look, busiest projects                      |
-| `quench setup [step] [--judge <name>] [--yes]`  | Find agents, show the summary, pick and test a judge; resumable, every step skippable                  |
-| `quench profile [section]`                      | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`                           |
-| `quench profile skills [--asks]`                | Per skill: used, asked in plain words, asked and loaded, asked but not loaded; `--asks` opts into Jev  |
-| `quench worktrees [--days 30] [--json]`         | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only                   |
-| `quench ui [--port <n>] [--open]`               | Overview of starting load per agent, and your skills with fix prompts, in the browser; 127.0.0.1 only  |
-| `quench report [--days 30] [--json]`            | Per harness: starting load, peak context, compactions, tool errors, models and effort                  |
-| `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                      |
-| `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                          |
-| `quench corrections [--dry-run]`                | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`                    |
-| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 2                |
-| `quench steering <project-dir> [--json]`        | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline                       |
-| `quench sources [session-file] [--json]`        | What one session read and loaded; default: the latest session in this folder; offline                  |
-| `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                           |
-| `quench hub serve` / `quench hub import <repo>` | The fleet hub: skills in git, toggles, editor, pairing, bundles; first run needs `QUENCH_HUB_PASSWORD` |
-| `quench connect <https://hub> --code … --pin …` | Pair this machine with a hub and fetch the bundle of skills assigned to it                             |
-| `quench skill list\|show\|diff\|propose`        | Read this machine's assigned skills from the hub and propose a new `SKILL.md` for the owner to approve |
-| `quench skills [--source <dir>] [--json]`       | One record per skill, agent and location: origin, use, tree hash, drift; read-only                     |
-| `quench skills plan --source <dir>`             | What a skills checkout would change here, with `--machine <name> --json`; read-only                    |
-| `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                      |
-| `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
-| `quench agent install\|uninstall\|run`          | A user service that keeps applying the paired hub's bundle, or `--source`; never self-updates          |
-| `quench skills eval <skill> --candidate <dir>`  | Replays first prompts on the installed and a candidate skill in scratch Claude Code homes; asks first  |
+| Command                                         | What it shows                                                                                             |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `quench`                                        | A short summary: what sessions start with, what is worth a look, busiest projects                         |
+| `quench setup [step] [--judge <name>] [--yes]`  | Find agents, show the summary, pick and test a judge; resumable, every step skippable                     |
+| `quench profile [section]`                      | Every table, or one: `projects`, `mcp`, `instructions`, `skills`, `failures`                              |
+| `quench profile skills [--asks]`                | Per skill: used, asked in plain words, asked and loaded, asked but not loaded; `--asks` opts into Jev     |
+| `quench worktrees [--days 30] [--json]`         | Idle linked worktrees, which are safe to remove and why the rest are kept; read-only                      |
+| `quench ui [--port <n>] [--open]`               | Starting load per agent, your skills and corrections in the browser, with prompts to copy; 127.0.0.1 only |
+| `quench report [--days 30] [--json]`            | Per harness: starting load, peak context, compactions, tool errors, models and effort                     |
+| `quench runs [session-file \| --session <id>]`  | One session as prompt → what the agent did → your reply; default: latest one here                         |
+| `quench runs --all --json [--history <dir>]`    | Every run of every session as JSON lines, per machine folder with `--history`                             |
+| `quench corrections [--dry-run]`                | Human correction and agent supervision rates, counted separately. Opt-in, `--judge`                       |
+| `quench corrections <file>... --session <id>`   | Corrections in those sessions only, with transcript line locators; `--json` is schema 2                   |
+| `quench steering <project-dir> [--json]`        | Instruction items ranked by recorded load, duplicates, conflicts, stale; offline                          |
+| `quench sources [session-file] [--json]`        | What one session read and loaded; default: the latest session in this folder; offline                     |
+| `quench secrets [--repo-history] [--json]`      | Exposed credentials, risky permissions, unpinned sources, git hooks; offline                              |
+| `quench hub serve` / `quench hub import <repo>` | The fleet hub: skills in git, toggles, editor, pairing, bundles; first run needs `QUENCH_HUB_PASSWORD`    |
+| `quench connect <https://hub> --code … --pin …` | Pair this machine with a hub and fetch the bundle of skills assigned to it                                |
+| `quench skill list\|show\|diff\|propose`        | Read this machine's assigned skills from the hub and propose a new `SKILL.md` for the owner to approve    |
+| `quench skills [--source <dir>] [--json]`       | One record per skill, agent and location: origin, use, tree hash, drift; read-only                        |
+| `quench skills plan --source <dir>`             | What a skills checkout would change here, with `--machine <name> --json`; read-only                       |
+| `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                         |
+| `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                       |
+| `quench agent install\|uninstall\|run`          | A user service that keeps applying the paired hub's bundle, or `--source`; never self-updates             |
+| `quench skills eval <skill> --candidate <dir>`  | Replays first prompts on the installed and a candidate skill in scratch Claude Code homes; asks first     |
 
 `quench skills eval <skill> --candidate <dir>` tests a skill change against your own past prompts
 (Claude Code on Linux and macOS; other platforms get an "unsupported" result and nothing runs). It takes the

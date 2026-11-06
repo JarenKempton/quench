@@ -1,5 +1,7 @@
 import { extname } from "node:path";
 import type { Home } from "@quench/history";
+import type { Provider } from "@quench/judge";
+import { correctionsJson, shownHistory } from "./corrections.ts";
 import { reportJson } from "./report.ts";
 import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
@@ -96,7 +98,6 @@ export function serveUi(options: {
   const server = Bun.serve({
     hostname: LOOPBACK,
     port: options.port,
-    idleTimeout: 0,
     async fetch(request) {
       if (request.headers.get("host") !== `${LOOPBACK}:${server.port}`)
         return respond("Host not allowed\n", 421);
@@ -106,6 +107,7 @@ export function serveUi(options: {
       const path = url.pathname;
       const name = path.slice("/api/".length);
       if (path.startsWith("/api/") && Object.hasOwn(options.api, name)) {
+        server.timeout(request, 0);
         try {
           const result = await options.api[name]!({
             refresh: url.searchParams.get("refresh") === "1",
@@ -155,7 +157,10 @@ export type UiFlags = {
   open: boolean;
   source?: string;
   hostHistory?: string | false;
+  judge: Provider | null;
 };
+
+const NO_JUDGE = { judge: null };
 
 export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | Error> {
   const port = Number(flags.port ?? "0");
@@ -166,6 +171,18 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
   const api = {
     report: lastResult(() => reportJson(home, flags.days)),
     skills: lastResult(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
+    corrections: lastResult(async () =>
+      flags.judge?.id
+        ? shownHistory(
+            await correctionsJson(home, {
+              days: flags.days,
+              examples: 10,
+              judge: flags.judge,
+              ...(flags.hostHistory === undefined ? {} : { hostHistory: flags.hostHistory }),
+            }),
+          )
+        : NO_JUDGE,
+    ),
     worktrees: lastResult(() => worktreesJson(home, flags)),
     secrets: lastResult(() => secretsJson(home, flags)),
   };

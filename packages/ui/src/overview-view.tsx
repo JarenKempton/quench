@@ -11,38 +11,18 @@ import {
   type HarnessReport,
   type Report,
 } from "./report.ts";
-import { href } from "./route.ts";
 import { TrendChart } from "./trend-chart.tsx";
-import { Loaded, Message } from "./use-api.tsx";
 
-export function OverviewPage() {
-  return (
-    <Loaded<Report> path="/api/report" what="your sessions">
-      {(report) => <Overview report={report} />}
-    </Loaded>
-  );
-}
+export const skillsOf = (agent: string) => `#skills?agent=${encodeURIComponent(agent)}`;
 
-function Overview({ report }: { report: Report }) {
-  if (!report.harnesses.length)
-    return (
-      <Message title="No sessions found">
-        No agent session started in the last {report.days} days. Run quench ui --days 90 to look
-        further back.
-      </Message>
-    );
+export function OverviewView({ report }: { report: Report }) {
   const window = windowDays(report.days);
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          What every session pays before any work starts, per agent.
-        </p>
-        <span className="font-mono text-xs text-muted-foreground">
-          last {report.days} days
-          {report.unreadable ? ` · ${report.unreadable} session files unreadable` : ""}
-        </span>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        What every session pays before any work starts, per agent.
+        {report.unreadable ? ` ${report.unreadable} session files could not be read.` : ""}
+      </p>
       {report.harnesses.map((h) => (
         <Agent key={h.harness} h={h} window={window} />
       ))}
@@ -160,7 +140,7 @@ function Contributors({ h }: { h: HarnessReport }) {
             <div className="flex items-baseline justify-between gap-3">
               {r.skills ? (
                 <a
-                  href={href("skills", { agent: h.harness })}
+                  href={skillsOf(h.harness)}
                   className="underline decoration-border underline-offset-4 hover:decoration-foreground"
                 >
                   {r.label} →
