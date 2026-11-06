@@ -304,6 +304,40 @@ connect` exchanges it for a `qp_` token kept in `propose-token` (0600), stored h
   both sides have 10 sessions that loaded the skill. Its diff comes from the hub repo (commits
   whose folder tree hash matches each side); revert offers that commit through `/revert`.
 
+## Analytics archive
+
+With `--clickhouse-bin` (or `--clickhouse <url>`) the hub also keeps a long-term archive (#176).
+
+```
+harness session files ──▶ quench agent ──zstd──▶ PUT /api/v1/transcripts ──▶ <data>/archive/<machine>/<harness>/<path>.zst
+                               └── per-session results ──▶ POST /api/v1/sessions ──▶ quench_sessions
+harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶ POST /api/v1/otlp/* ──▶ otel_logs, otel_metrics_*
+```
+
+- **Machine routes and owner routes.** Every machine route takes its machine from the token. The
+  owner routes (`/api/v1/archive/sessions`, `transcripts`, `transcript`) need the owner's session
+  cookie.
+- **Core: transcripts and results.** `agent-archive.ts` keeps `archive.json` (path, size, mtime,
+  SHA-256) so each file is shipped once per change, oldest first, at most 256 MiB raw per cycle.
+  The hub checks the SHA-256 after decompressing under a 512 MiB cap, secret-scans the text,
+  stores the compressed bytes through `DataDir`, and indexes them in `quench_transcripts`.
+  `quench_sessions` is a `ReplacingMergeTree(ComputedAt)`. Tokens Codex does not record stay
+  `NULL`, and corrections come from cached verdicts only.
+- **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
+  unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
+  at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow
+  the ClickHouse OTel exporter's columns, plus a materialized `Machine` and `SessionId`. The
+  sessions route joins `otel_logs` per session for cost, API requests and errors, latency and
+  tool failures. When a field is missing, the response says so in `otel.missing`.
+- **ClickHouse.** `clickhouse.ts` writes `config.xml` and `users.xml` into its own 0700 folder:
+  loopback HTTP only, no native port, the memory settings in decisions. It starts the server,
+  waits for `/ping`, and restarts it with backoff. `schema.ts` creates the tables (monthly
+  partitions, `ttl_only_drop_parts`) and sets the TTL from `--retention` on every start, without
+  rewriting parts.
+- **Container.** The root `Dockerfile` builds on the pinned `clickhouse/clickhouse-server` LTS
+  image, with volumes `/data` (hub) and `/clickhouse`. `packages/hub/test/scale.sh` loads
+  synthetic rows over a year into a memory-limited container, then runs year-long GROUP BYs.
+
 ## Reading at scale
 
 `readSessions` streams one session at a time with a small concurrency limit, and each
