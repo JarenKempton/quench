@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import type { Home } from "@quench/history";
 import type { Provider } from "@quench/judge";
 import { correctionsJson, shownHistory } from "./corrections.ts";
+import { reportJson } from "./report.ts";
 import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
 import { worktreesJson } from "./worktrees.ts";
@@ -87,6 +88,8 @@ export function lastResult(
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
 
+export type RunningUi = UiServer & { warm: () => Promise<void> };
+
 export function serveUi(options: {
   port: number;
   api: Readonly<Record<string, Load>>;
@@ -159,13 +162,14 @@ export type UiFlags = {
 
 const NO_JUDGE = { judge: null };
 
-export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Error> {
+export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | Error> {
   const port = Number(flags.port ?? "0");
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
   const api = {
+    report: lastResult(() => reportJson(home, flags.days)),
     skills: lastResult(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
     corrections: lastResult(async () =>
       flags.judge?.id
@@ -183,7 +187,11 @@ export async function startUi(home: Home, flags: UiFlags): Promise<UiServer | Er
     secrets: lastResult(() => secretsJson(home, flags)),
   };
   try {
-    return serveUi({ port, api, assets: await uiAssets() });
+    const server = serveUi({ port, api, assets: await uiAssets() });
+    const warm = async () => {
+      for (const load of [api.report, api.skills]) await load({ refresh: false }).catch(() => {});
+    };
+    return { ...server, warm };
   } catch (error) {
     return new Error(
       `quench ui could not listen on ${LOOPBACK}:${port}: ${(error as Error).message}`,
@@ -198,6 +206,7 @@ export async function ui(home: Home, flags: UiFlags): Promise<number> {
     return 1;
   }
   process.stdout.write(`quench ui at ${server.url}\nRead-only; Ctrl-C stops it.\n`);
+  void server.warm();
   if (flags.open)
     try {
       Bun.spawn(openCommand(server.url), { stdout: "ignore", stderr: "ignore" });

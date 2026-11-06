@@ -10,7 +10,7 @@ packages/secrets    offline credential detection over history, configs and files
 packages/fleet      fleet contracts (zod), tree hashes, the importer and the read-only skills planner
 packages/hub        the fleet hub server (`quench hub serve`) and its client (`quench connect`)
 packages/cli        the `quench` command; composition and formatting
-packages/ui         the `quench ui` page: React over `/api/skills` and `/api/corrections`, built to static files the binary embeds
+packages/ui         the `quench ui` page: React over `/api/report`, `/api/skills` and `/api/corrections`, built to static files the binary embeds
 ```
 
 ## The Session model

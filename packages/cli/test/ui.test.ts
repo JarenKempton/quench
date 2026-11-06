@@ -31,6 +31,7 @@ const assets = new Map<string, Blob>([
 const server = serveUi({
   port: 0,
   api: {
+    report: async () => ({ harnesses: [] }),
     skills: async () => ({ skills: [] }),
     corrections: async () => ({ judge: null }),
   },
@@ -54,7 +55,7 @@ test("binds 127.0.0.1 only", async () => {
 });
 
 test("every response carries the strict CSP, DENY framing and no-store", async () => {
-  for (const path of ["/", "/api/skills", "/api/corrections", "/missing.js"]) {
+  for (const path of ["/", "/api/report", "/api/skills", "/api/corrections", "/missing.js"]) {
     const { headers } = await get(server.port, path);
     expect(headers["content-security-policy"]).toBe(CSP);
     expect(headers["x-frame-options"]).toBe("DENY");
@@ -71,9 +72,10 @@ test("a foreign Host header is rejected, so DNS rebinding can't read the API", a
     `localhost:${server.port}`,
     "127.0.0.1:1",
   ]) {
-    for (const path of ["/api/skills", "/api/corrections"]) {
+    for (const path of ["/api/report", "/api/skills", "/api/corrections"]) {
       const response = await get(server.port, path, host);
       expect(response.status).toBe(421);
+      expect(response.body).not.toContain("harnesses");
       expect(response.body).not.toContain("skills");
       expect(response.body).not.toContain("judge");
     }
@@ -180,6 +182,77 @@ test(
   },
   cliRunsTimeout,
 );
+
+test(
+  "/api/report equals quench report --json on the same home, kept until a refresh reads it again",
+  async () => {
+    const dir = await home();
+    const expected = await quench(dir, "report", "--json");
+    expect(expected.code).toBe(0);
+    const want = JSON.parse(expected.stdout);
+    expect(want.harnesses[0].days).toHaveLength(1);
+    expect(want.harnesses[0].startParts.map((p: { kind: string }) => p.kind)).toContain("skills");
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+      judge: null,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const served = await get(running.port, "/api/report");
+      expect(served.status).toBe(200);
+      expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
+      expect(JSON.parse(served.body)).toEqual(want);
+      await Bun.write(
+        join(dir, ".claude/projects/demo/s2.jsonl"),
+        lines([
+          {
+            type: "user",
+            sessionId: "s2",
+            timestamp: at(5),
+            message: { role: "user", content: "hi" },
+          },
+          {
+            type: "assistant",
+            timestamp: at(4),
+            message: {
+              id: "m2",
+              model: "model-y",
+              content: [],
+              usage: { input_tokens: 7, output_tokens: 1 },
+            },
+          },
+        ]),
+      );
+      const sessions = async (path: string) => {
+        const response = await get(running.port, path);
+        return {
+          refreshing: response.headers["x-quench-refreshing"],
+          sessions: JSON.parse(response.body).harnesses[0].sessions,
+        };
+      };
+      expect((await sessions("/api/report")).sessions).toBe(want.harnesses[0].sessions);
+      expect(await sessions("/api/report?refresh=1")).toMatchObject({ refreshing: "true" });
+      let after = await sessions("/api/report");
+      while (after.refreshing === "true") {
+        await Bun.sleep(50);
+        after = await sessions("/api/report");
+      }
+      expect(after.sessions).toBe(want.harnesses[0].sessions + 1);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+test("only the named API endpoints answer", async () => {
+  for (const path of ["/api/", "/api/constructor", "/api/toString", "/api/report/x"])
+    expect((await get(server.port, path)).status).toBe(404);
+});
 
 async function tree(dir: string): Promise<string[]> {
   const entries = (await readdir(dir, { recursive: true })).sort();
@@ -453,7 +526,7 @@ test("a burst of reloads starts at most one scan; ?refresh=1 or an old result st
 });
 
 test(
-  "no secrets scan starts until /api/secrets is requested",
+  "no secrets scan starts until /api/secrets is requested, even after warming",
   async () => {
     const { dir } = await housekeepingHome();
     const key = join(dir, ".quench/local/secrets.key");
@@ -466,6 +539,7 @@ test(
     });
     if (running instanceof Error) throw running;
     try {
+      await running.warm();
       await get(running.port, "/");
       await Bun.sleep(200);
       expect(await Bun.file(key).exists()).toBe(false);

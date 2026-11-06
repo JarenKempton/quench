@@ -14,6 +14,8 @@ export type ReadOutcome =
   | { ok: true; session: Session }
   | { ok: false; ref: SessionRef; error: unknown };
 
+const letOthersRun = () => Bun.sleep(0);
+
 export async function* readSessions(
   refs: readonly SessionRef[],
   concurrency = 4,
@@ -32,6 +34,7 @@ export async function* readSessions(
     const ref = refs[next++];
     if (ref) pending.push(read(ref));
     onRead(++done, refs.length);
+    await letOthersRun();
     if (outcome) yield outcome;
   }
 }

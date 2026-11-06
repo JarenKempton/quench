@@ -53,7 +53,7 @@ Usage:
   quench skills plan --source <dir> --machine <name> [--project <dir>] --json
                                        what installing a skills checkout would change on this machine (read-only)
   quench ui [--port <n>] [--open] [--days 30] [--source <dir>]
-                                       a local page of your skills on 127.0.0.1 (random port by default); read-only
+                                       a local page of starting load and skills on 127.0.0.1 (random port by default); read-only
   quench hub serve [--data <dir>] [--listen <host:port>] [--url <public url>] [--mirror <git remote>]
                    [--tls-cert <pem> --tls-key <pem> | --http]
                                        run the fleet hub; first run needs QUENCH_HUB_PASSWORD (--http: loopback only)

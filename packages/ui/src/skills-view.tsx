@@ -20,6 +20,7 @@ import {
   skillFile,
   suggestion,
   type Flag,
+  type Harness,
   type SkillRecord,
   type SkillsReport,
 } from "./skills.ts";
@@ -91,14 +92,20 @@ const count = (n: number | null, lowerBound = false) =>
 const chars = (n: number | null) =>
   n === null ? "–" : n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`;
 
-export function SkillsView({ report }: { report: SkillsReport }) {
+export function SkillsView({
+  report,
+  agent = null,
+}: {
+  report: SkillsReport;
+  agent?: Harness | null;
+}) {
   const rows = useMemo(
     () => report.skills.map((record) => ({ record, flags: flagsOf(record, report) })),
     [report],
   );
   const harnesses = [...new Set(rows.map((r) => r.record.harness))];
   const origins = [...new Set(rows.map((r) => r.record.origin ?? "unknown"))].sort();
-  const [harness, setHarness] = useState(ALL);
+  const [harness, setHarness] = useState<string>(agent && harnesses.includes(agent) ? agent : ALL);
   const [origin, setOrigin] = useState(ALL);
   const [flagged, setFlagged] = useState(false);
   const [sort, setSort] = useState<{ key: Key; desc: boolean }>({ key: "flags", desc: true });

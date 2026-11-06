@@ -5,11 +5,14 @@ import type { CorrectionsResponse } from "./corrections.ts";
 import { Fresh } from "./fresh.tsx";
 import { HOUSEKEEPING, HousekeepingView } from "./housekeeping-view.tsx";
 import { cn } from "./lib/utils.ts";
+import { OverviewView } from "./overview-view.tsx";
+import type { Report } from "./report.ts";
 import { SkillsView } from "./skills-view.tsx";
-import type { SkillsReport } from "./skills.ts";
+import type { Harness, SkillsReport } from "./skills.ts";
 import { useApis, type Load, type State } from "./use-api.ts";
 
 const TABS = [
+  ["overview", "Overview"],
   ["skills", "Skills"],
   ["corrections", "Corrections"],
   ["housekeeping", "Housekeeping"],
@@ -17,21 +20,27 @@ const TABS = [
 
 type Tab = (typeof TABS)[number][0];
 
-const tabOf = (hash: string): Tab => TABS.find(([id]) => `#${id}` === hash)?.[0] ?? "skills";
+const routeOf = (hash: string) => {
+  const [path = "", query = ""] = hash.split("?");
+  const tab = TABS.find(([id]) => `#${id}` === path)?.[0] ?? "overview";
+  return { tab, agent: new URLSearchParams(query).get("agent") };
+};
 
+const REPORT = "/api/report";
 const SKILLS = "/api/skills";
 const CORRECTIONS = "/api/corrections";
 
 const PATHS: Record<Tab, readonly string[]> = {
+  overview: [REPORT],
   skills: [SKILLS],
   corrections: [CORRECTIONS],
   housekeeping: HOUSEKEEPING,
 };
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(() => tabOf(location.hash));
+  const [{ tab, agent }, setRoute] = useState(() => routeOf(location.hash));
   useEffect(() => {
-    const follow = () => setTab(tabOf(location.hash));
+    const follow = () => setRoute(routeOf(location.hash));
     addEventListener("hashchange", follow);
     return () => removeEventListener("hashchange", follow);
   }, []);
@@ -62,7 +71,14 @@ export function App() {
         </div>
         <span className="font-mono text-xs text-muted-foreground">read-only</span>
       </header>
-      {tab === "skills" && <SkillsPage state={stateOf<SkillsReport>(SKILLS)} load={load} />}
+      {tab === "overview" && <OverviewPage state={stateOf<Report>(REPORT)} load={load} />}
+      {tab === "skills" && (
+        <SkillsPage
+          state={stateOf<SkillsReport>(SKILLS)}
+          load={load}
+          agent={agent as Harness | null}
+        />
+      )}
       {tab === "corrections" && (
         <CorrectionsPage state={stateOf<CorrectionsResponse>(CORRECTIONS)} load={load} />
       )}
@@ -73,7 +89,29 @@ export function App() {
 
 type Page<T> = { state: State<T>; load: Load };
 
-function SkillsPage({ state, load }: Page<SkillsReport>) {
+function OverviewPage({ state, load }: Page<Report>) {
+  return (
+    <Loading state={state} load={() => load(REPORT)} what="your sessions">
+      {(report) => (
+        <>
+          <Days days={report.days}>
+            <Fresh state={state} refresh={() => load(REPORT, true)} />
+          </Days>
+          {report.harnesses.length ? (
+            <OverviewView report={report} />
+          ) : (
+            <Message title="No sessions found">
+              No agent session started in the last {report.days} days. Run quench ui --days 90 to
+              look further back.
+            </Message>
+          )}
+        </>
+      )}
+    </Loading>
+  );
+}
+
+function SkillsPage({ state, load, agent }: Page<SkillsReport> & { agent: Harness | null }) {
   return (
     <Loading state={state} load={() => load(SKILLS)} what="your skills">
       {(report) => (
@@ -82,7 +120,7 @@ function SkillsPage({ state, load }: Page<SkillsReport>) {
             <Fresh state={state} refresh={() => load(SKILLS, true)} />
           </Days>
           {report.skills.length ? (
-            <SkillsView report={report} />
+            <SkillsView key={agent} report={report} agent={agent} />
           ) : (
             <Message title="No skills found">
               None of your agents have skills on disk, and no session in the last {report.days} days
