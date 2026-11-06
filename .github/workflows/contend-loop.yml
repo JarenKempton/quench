@@ -18,10 +18,10 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: |
           fails=0
-          for i in $(seq 30); do
+          for i in $(seq 40); do
             if ! bun test packages/cli/test/skills-apply-safety.test.ts -t "24 processes" > out.txt 2>&1; then
               fails=$((fails+1)); echo "=== run $i failed"; cat out.txt
             else echo "run $i ok"; fi
           done
-          echo "failures: $fails/30"
+          echo "failures: $fails/40"
           test "$fails" = 0

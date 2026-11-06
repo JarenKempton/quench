@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { hostname } from "node:os";
+import { setTimeout as sleep } from "node:timers/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { BundleManifest } from "./bundle.ts";
@@ -58,6 +59,8 @@ export type JournalOp = z.infer<typeof JournalOp>;
 export const MARKER = ".quench-owner";
 const LOCK_LIMIT_MS = 60 * 60 * 1000;
 const BREAKER_LIMIT_MS = 60 * 1000;
+const CREATE_TRIES = 40;
+const CREATE_RETRY_MS = 25;
 
 export const statePaths = (state: string) => ({
   ledger: join(state, "ledger.json"),
@@ -250,11 +253,25 @@ const LockInfo = z
   .object({ pid: z.number().int().positive(), host: z.string(), startedAt: z.iso.datetime() })
   .strict();
 
+const deletePending = (error: NodeJS.ErrnoException) =>
+  process.platform === "win32" && (error.code === "EPERM" || error.code === "EACCES");
+
+async function create(path: string, text: string) {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await writeFile(path, text, { flag: "wx" });
+    } catch (error) {
+      if (!deletePending(error as NodeJS.ErrnoException) || tries === CREATE_TRIES) throw error;
+      await sleep(CREATE_RETRY_MS);
+    }
+  }
+}
+
 const busy = (detail: string) => new Error(`another apply is running (${detail})`);
 
 async function breakStale(lock: string) {
   const breaker = `${lock}.break`;
-  const claim = () => writeFile(breaker, String(process.pid), { flag: "wx" });
+  const claim = () => create(breaker, String(process.pid));
   const claimed = await claim().then(
     () => true,
     async (error: NodeJS.ErrnoException) => {
@@ -298,7 +315,7 @@ export async function withLock<T>(state: string, work: () => Promise<T>): Promis
     host: hostname(),
     startedAt: new Date().toISOString(),
   });
-  const take = () => writeFile(lock, mine, { flag: "wx" });
+  const take = () => create(lock, mine);
   await take().catch(async (error: NodeJS.ErrnoException) => {
     if (error.code !== "EEXIST") throw error;
     await breakStale(lock);
