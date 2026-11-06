@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appendFile, chmod, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { appendFile, chmod, mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HarnessJudge, Jev, VerdictCache } from "@quench/judge";
@@ -148,7 +148,7 @@ type History = {
   source: string;
   versions: {
     from: string;
-    bytes: number;
+    bytes: number | null;
     loaded: { sessions: number; withHumanCorrection: number; judged: number };
   }[];
   changes: { grewBy: number; shown: boolean; grewWithoutDrop: boolean; rates: object }[];
@@ -288,4 +288,37 @@ test("commit dates that go backwards in log order never make a span end before i
     if (v.to !== null) expect(Date.parse(v.to)).toBeGreaterThanOrEqual(Date.parse(v.from));
     if (i) expect(Date.parse(v.from)).toBeGreaterThanOrEqual(Date.parse(spans[i - 1]!.from));
   }
+});
+
+test("a blob missing from a partial clone counts as unknown size and is never fetched", async () => {
+  if (process.platform === "win32") return;
+  const home = await fixture();
+  const work = join(home, "work");
+  const origin = join(home, "origin");
+  await rename(work, origin);
+  git(origin, day(3, 1), "config", "uploadpack.allowFilter", "true");
+  git(home, day(3, 1), "clone", "-q", "--filter=blob:none", `file://${origin}`, work);
+  const marker = join(home, "FETCHED");
+  const script = join(home, "ssh.sh");
+  await Bun.write(script, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+  await chmod(script, 0o755);
+  git(work, day(3, 1), "remote", "set-url", "origin", "ssh://example.invalid/repo.git");
+  git(work, day(3, 1), "config", "core.sshCommand", script);
+  git(work, day(3, 1), "config", "remote.origin.uploadpack", script);
+  const old = Bun.spawnSync(["git", "rev-parse", "HEAD~1:CLAUDE.md"], { cwd: work })
+    .stdout.toString()
+    .trim();
+  Bun.spawnSync(["git", "cat-file", "--batch-check"], {
+    cwd: work,
+    stdin: Buffer.from(`${old}\n`),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(await Bun.file(marker).exists()).toBe(true);
+  await rm(marker);
+  const { json } = await run(home);
+  expect(await Bun.file(marker).exists()).toBe(false);
+  const file = (json.history.files as History[]).find((f) => f.path.endsWith("CLAUDE.md"))!;
+  expect(file.source).toBe("git");
+  expect(file.versions.map((v) => v.bytes)).toEqual([null, 48]);
 });

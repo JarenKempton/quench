@@ -7,7 +7,7 @@ import type { Reply } from "@quench/judge";
 import { plural } from "../format.ts";
 import { sessionOutcomes, tally } from "../skills/co-occurrence.ts";
 import type { SessionContext } from "./context.ts";
-import { snapshots, versionsOf, type Span, type Versions } from "./file-versions.ts";
+import { DELETED, snapshots, versionsOf, type Span, type Versions } from "./file-versions.ts";
 
 export const BASIS = "correlation, not cause";
 
@@ -158,7 +158,8 @@ const counts = (c: VersionCounts) =>
 
 const share = (r: number | null) => (r === null ? "–" : `${Math.round(100 * r)}%`);
 
-const size = (bytes: number | null) => (bytes === null ? "deleted" : `${bytes} B`);
+const size = (v: FileVersion) =>
+  v.bytes !== null ? `${v.bytes} B` : DELETED.test(v.treeHash) ? "deleted" : "size unknown";
 
 export function renderHistories(found: Histories, path: (file: string) => string): string {
   const shown = found.files.filter((f) => f.sessions >= found.floor);
@@ -175,7 +176,7 @@ export function renderHistories(found: Histories, path: (file: string) => string
     if (!file.versions.length) lines.push("    No snapshot yet; history starts with this run.");
     for (const v of file.versions.filter((v) => v.loaded.sessions || v.without.sessions))
       lines.push(
-        `    ${v.from.slice(0, 10)} → ${v.to ? v.to.slice(0, 10) : "now"}  ${size(v.bytes)}  loaded: ${counts(v.loaded)}  ·  others: ${counts(v.without)}`,
+        `    ${v.from.slice(0, 10)} → ${v.to ? v.to.slice(0, 10) : "now"}  ${size(v)}  loaded: ${counts(v.loaded)}  ·  others: ${counts(v.without)}`,
       );
     for (const c of file.changes.filter((c) => c.grewWithoutDrop))
       lines.push(

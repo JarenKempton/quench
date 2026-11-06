@@ -7,7 +7,8 @@ export type Span = { treeHash: string; from: number; until: number | null; bytes
 export type Versions = { source: "git" | "snapshots"; spans: Span[] };
 
 const FILE = ".quench/local/snapshots.json";
-const DELETED = /^0+$/;
+export const DELETED = /^0+$/;
+const GIT_TIMEOUT_MS = 10_000;
 
 type Seen = { sha256: string; bytes: number; first: number; last: number };
 type Stored = { v: 1; files: Record<string, Seen[]> };
@@ -22,12 +23,15 @@ const OFF = [
   "diff.external=",
   "core.hooksPath=/dev/null",
   "log.mailmap=false",
+  "protocol.allow=never",
+  "core.sshCommand=false",
 ].flatMap((setting) => ["-c", setting]);
 
 const isolated = () => ({
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_NO_LAZY_FETCH: "1",
   GIT_TERMINAL_PROMPT: "0",
   GIT_PAGER: "cat",
   PAGER: "cat",
@@ -41,6 +45,7 @@ function git(dir: string, args: string[], input?: string): string | null {
       stdin: input === undefined ? "ignore" : Buffer.from(input),
       stdout: "pipe",
       stderr: "ignore",
+      timeout: GIT_TIMEOUT_MS,
     },
   );
   return result.success ? result.stdout.toString() : null;
