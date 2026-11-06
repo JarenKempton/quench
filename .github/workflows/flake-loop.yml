@@ -3,11 +3,12 @@ on:
   push:
     branches: [fix/judge-macos-flakes]
 jobs:
-  suite:
+  judge:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        load: [none, stress]
+        shard: [1, 2]
     runs-on: macos-latest
     defaults:
       run:
@@ -18,18 +19,8 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: sysctl -n hw.ncpu machdep.cpu.brand_string; sw_vers; df -h /
-      - name: full suite x8 with stall probe
+      - if: matrix.load == 'stress'
         run: |
-          bun .github/flake/probe.ts "$RUNNER_TEMP/probe" > "$RUNNER_TEMP/probe.out" &
-          probe=$!
-          fails=0
-          for i in $(seq 8); do
-            echo "=== iteration $i $(date -u +%FT%T)"
-            if (set -o pipefail; bun test 2>&1 | perl -MPOSIX=strftime -MTime::HiRes=time -pe '$t=time; printf "%s.%03d ", strftime("%H:%M:%S", gmtime($t)), ($t*1000)%1000' > "$RUNNER_TEMP/run.txt"); then :; else fails=$((fails+1)); fi
-            grep -E '\(fail\)|timed out|dangling|Expected|Received|^ *[0-9]+ (pass|fail)$' "$RUNNER_TEMP/run.txt" || true
-          done
-          kill $probe
-          echo "=== probe"
-          cat "$RUNNER_TEMP/probe.out"
-          echo "suite failures: $fails/8"
+          for _ in 1 2 3 4; do nohup sh -c 'while :; do :; done' >/dev/null 2>&1 & done
+          nohup sh -c 'while :; do dd if=/dev/zero of="$RUNNER_TEMP/dd.bin" bs=1m count=512 conv=sync 2>/dev/null; sync; done' >/dev/null 2>&1 &
+      - run: .github/flake/loop.sh 50 packages/judge/test/harness.test.ts packages/judge/test/themes.test.ts
