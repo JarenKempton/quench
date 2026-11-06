@@ -32,11 +32,19 @@ const located = (e: Entry): Located => ({
   endLine: e.endLine,
 });
 
+const FILLER = new Set(
+  `about after again also always another anything asks because been being both could does doing
+  each even every from have here into just like make makes many more most much must need needs
+  never only other over please really same says should some such than that their them then there
+  these they this those through user users very want wants were what when where which while will
+  with without would your yours trigger triggers skill skills used uses using`.split(/\s+/),
+);
+
 const words = (text: string) =>
   new Set(
     normal(text)
       .split(" ")
-      .filter((w) => w.length >= 4),
+      .filter((w) => w.length >= 4 && !FILLER.has(w)),
   );
 
 const entriesOf = (path: string, rules: RuleCandidate[]): Entry[] =>

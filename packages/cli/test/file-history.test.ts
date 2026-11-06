@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, stat } from "node:fs/promises";
+import { appendFile, chmod, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HarnessJudge, Jev, VerdictCache } from "@quench/judge";
@@ -20,6 +20,17 @@ const MEMORY = `- [Checks](checks.md) — what to run first
 `;
 
 const ENTRY = `Always run bun test, bunx tsc and bunx vp check before you report a change as done.
+`;
+
+const TEA = `When the user wants tea, reply with jokes from their notes.
+`;
+
+const PDF = `---
+name: pdf
+description: Use when the user wants to work with PDF files from their documents.
+---
+
+Fill and merge PDF forms.
 `;
 
 function git(cwd: string, at: string, ...args: string[]) {
@@ -106,6 +117,8 @@ async function fixture(judge = Jev.id, laterCorrected = 5) {
   const memory = join(home, ".claude/projects/-work/memory");
   await Bun.write(join(memory, "MEMORY.md"), MEMORY);
   await Bun.write(join(memory, "checks.md"), ENTRY);
+  await Bun.write(join(memory, "tea.md"), TEA);
+  await Bun.write(join(home, ".claude/skills/pdf/SKILL.md"), PDF);
   const dir = join(home, ".claude/projects/-work");
   const cache = await VerdictCache.open(join(home, ".quench/local"), judge);
   for (const c of [...cases(1, 3), ...cases(2, laterCorrected)]) {
@@ -227,4 +240,52 @@ test("a memory entry that overlaps a skill is flagged with both locations", asyn
     },
   ]);
   expect(text).toMatch(/checks\.md:1 {2}↔ {2}skill verify .*SKILL\.md:6/);
+});
+
+test("git runs with the repo's, global and system config neutralised, so no planted program runs", async () => {
+  if (process.platform === "win32") return;
+  const home = await fixture();
+  const work = join(home, "work");
+  const marker = join(home, "PWNED");
+  const script = join(home, "gpg.sh");
+  await Bun.write(script, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+  await chmod(script, 0o755);
+  await Bun.write(join(work, "CLAUDE.md"), "Use Bun.\nSigned.\n");
+  git(work, day(3, 1), "add", "CLAUDE.md");
+  const tree = Bun.spawnSync(["git", "write-tree"], { cwd: work }).stdout.toString().trim();
+  const parent = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: work })
+    .stdout.toString()
+    .trim();
+  const stamp = Date.parse(day(3, 1)) / 1000;
+  const commit = `tree ${tree}\nparent ${parent}\nauthor t <t@t> ${stamp} +0000\ncommitter t <t@t> ${stamp} +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEz\n -----END PGP SIGNATURE-----\n\nsigned\n`;
+  const made = Bun.spawnSync(["git", "hash-object", "-t", "commit", "-w", "--stdin"], {
+    cwd: work,
+    stdin: Buffer.from(commit),
+  });
+  git(work, day(3, 1), "update-ref", "HEAD", made.stdout.toString().trim());
+  const planted = `[log]\n\tshowSignature = true\n[gpg]\n\tprogram = ${script}\n[core]\n\tpager = ${script}\n\tfsmonitor = ${script}\n`;
+  await appendFile(join(work, ".git/config"), planted);
+  await Bun.write(join(home, ".gitconfig"), planted);
+  Bun.spawnSync(["git", "log", "-1", "--format=%H"], { cwd: work, stdout: "pipe", stderr: "pipe" });
+  expect(await Bun.file(marker).exists()).toBe(true);
+  await rm(marker);
+  const { json } = await run(home);
+  expect(await Bun.file(marker).exists()).toBe(false);
+  const file = (json.history.files as History[]).find((f) => f.path.endsWith("CLAUDE.md"))!;
+  expect(file.versions).toHaveLength(3);
+});
+
+test("commit dates that go backwards in log order never make a span end before it starts", async () => {
+  const home = await fixture();
+  const work = join(home, "work");
+  await Bun.write(join(work, "CLAUDE.md"), "Use Bun.\nSkewed.\n");
+  git(work, "2025-12-01T00:00:00Z", "commit", "-q", "-am", "skewed");
+  const { json } = await run(home);
+  const file = (json.history.files as History[]).find((f) => f.path.endsWith("CLAUDE.md"))!;
+  const spans = file.versions as unknown as { from: string; to: string | null }[];
+  expect(spans).toHaveLength(3);
+  for (const [i, v] of spans.entries()) {
+    if (v.to !== null) expect(Date.parse(v.to)).toBeGreaterThanOrEqual(Date.parse(v.from));
+    if (i) expect(Date.parse(v.from)).toBeGreaterThanOrEqual(Date.parse(spans[i - 1]!.from));
+  }
 });

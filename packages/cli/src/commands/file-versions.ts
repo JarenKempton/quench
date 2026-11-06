@@ -12,12 +12,37 @@ const DELETED = /^0+$/;
 type Seen = { sha256: string; bytes: number; first: number; last: number };
 type Stored = { v: 1; files: Record<string, Seen[]> };
 
+const OFF = [
+  "log.showSignature=false",
+  "gpg.program=false",
+  "gpg.ssh.program=false",
+  "gpg.x509.program=false",
+  "core.fsmonitor=false",
+  "core.pager=cat",
+  "diff.external=",
+  "core.hooksPath=/dev/null",
+  "log.mailmap=false",
+].flatMap((setting) => ["-c", setting]);
+
+const isolated = () => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_PAGER: "cat",
+  PAGER: "cat",
+});
+
 function git(dir: string, args: string[], input?: string): string | null {
-  const result = Bun.spawnSync(["git", "--no-optional-locks", "-C", dir, ...args], {
-    stdin: input === undefined ? "ignore" : Buffer.from(input),
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+  const result = Bun.spawnSync(
+    ["git", "--no-optional-locks", "--no-pager", ...OFF, "-C", dir, ...args],
+    {
+      env: isolated(),
+      stdin: input === undefined ? "ignore" : Buffer.from(input),
+      stdout: "pipe",
+      stderr: "ignore",
+    },
+  );
   return result.success ? result.stdout.toString() : null;
 }
 
@@ -26,7 +51,17 @@ const blobId = (bytes: Uint8Array) =>
 
 export async function gitVersions(path: string): Promise<Span[] | null> {
   const dir = dirname(path);
-  const log = git(dir, ["log", "--format=@%ct", "--raw", "--no-abbrev", "--", basename(path)]);
+  const log = git(dir, [
+    "log",
+    "--no-show-signature",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--format=@%ct",
+    "--raw",
+    "--no-abbrev",
+    "--",
+    basename(path),
+  ]);
   if (!log) return null;
   const commits: { at: number; blob: string }[] = [];
   let at: number | null = null;
@@ -39,6 +74,8 @@ export async function gitVersions(path: string): Promise<Span[] | null> {
   }
   if (!commits.length) return null;
   commits.reverse();
+  for (let i = 1; i < commits.length; i++)
+    commits[i]!.at = Math.max(commits[i]!.at, commits[i - 1]!.at);
   const blobs = [...new Set(commits.map((c) => c.blob).filter((b) => !DELETED.test(b)))];
   const sizes = new Map<string, number>();
   for (const line of (git(dir, ["cat-file", "--batch-check"], `${blobs.join("\n")}\n`) ?? "").split(
