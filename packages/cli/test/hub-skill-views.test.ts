@@ -14,7 +14,7 @@ import {
   stopHubs,
   type Running,
 } from "../../hub/test/helpers.ts";
-import { agentCycle } from "../src/commands/agent.ts";
+import { agentCycle } from "../src/commands/agent-cycle.ts";
 import { lines } from "./run.ts";
 
 const DAY = 86_400_000;

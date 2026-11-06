@@ -96,6 +96,16 @@ export class DataDir {
     return path;
   }
 
+  async existing(...parts: string[]) {
+    let path = this.root;
+    await this.plainDir(path);
+    for (let i = 1; i <= parts.length; i++) {
+      path = this.path(...parts.slice(0, i));
+      await this.plainDir(path);
+    }
+    return path;
+  }
+
   async fresh(parent: string[], prefix: string) {
     await this.dir(...parent);
     const name = `${prefix}${random()}`;

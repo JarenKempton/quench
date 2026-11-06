@@ -16,13 +16,8 @@ import { dirname, join } from "node:path";
 import { installations } from "@quench/fleet";
 import { readJournal, readLedger } from "@quench/fleet/apply";
 import { Home } from "@quench/history";
-import {
-  agentCycle,
-  agentInstall,
-  agentUninstall,
-  serviceFor,
-  statusFile,
-} from "../src/commands/agent.ts";
+import { agentCycle, statusFile } from "../src/commands/agent-cycle.ts";
+import { agentInstall, agentUninstall, serviceFor } from "../src/commands/agent.ts";
 import { skillsApply, skillsPlan, skillsStatus, stateDir } from "../src/commands/skills.ts";
 
 afterAll(cleanup);

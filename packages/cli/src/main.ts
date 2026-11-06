@@ -71,8 +71,9 @@ Usage:
   quench skills eval <skill> --candidate <dir> [--limit 5] [--max-cost 1] [--yes] [--json]
                                        replay first prompts against the installed and a candidate skill in scratch
                                        Claude Code homes (Linux, macOS); shows a cost estimate and asks first
-  quench agent install|uninstall|run --source <dir> --machine <name> [--interval 300] [--once]
-                                       a user service that keeps applying the source; never updates itself
+  quench agent install|uninstall|run [--source <dir> --machine <name>] [--interval 300] [--once]
+                                       a user service that keeps applying the paired hub's bundle, or the
+                                       source, and reports to the hub; never updates itself
   quench corrections [--days 30] [--examples 10] [--dry-run] [--json]
                                        corrections from people and agents, counted separately
   quench corrections [session-file...] [--session <id>]... [--causes] [--json]

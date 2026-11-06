@@ -12,6 +12,8 @@ import {
 import { judgeChoice, readConfig, secretsIn, writeConfig, type Config } from "../config.ts";
 import { plural, shortPath } from "../format.ts";
 import { prompt } from "../prompt.ts";
+import { clientDir, loadConnection } from "@quench/hub/client";
+import { connect } from "./hub.ts";
 import { profile } from "./profile.ts";
 
 export const STEPS = ["agents", "summary", "judge", "hub", "ui"] as const;
@@ -280,11 +282,54 @@ async function trial(
   return `Test passed: ${chosen.id} answered "${judgment.kind}" for a made-up correction.`;
 }
 
-async function hub(): Promise<Outcome> {
-  out(
-    "  Not available yet: hub pairing arrives with quench connect. Run quench setup hub once it ships.\n",
+export function connectLine(line: string) {
+  const words = line.trim().split(/\s+/);
+  if (words[0] === "quench") words.shift();
+  if (words[0] === "connect") words.shift();
+  const flag = (name: string) => {
+    const at = words.indexOf(name);
+    return at === -1 ? undefined : words.splice(at, 2)[1];
+  };
+  const code = flag("--code");
+  const pin = flag("--pin");
+  const [url, ...extra] = words;
+  if (!url || !code || extra.length || url.startsWith("-"))
+    return new Error(
+      "paste the whole line: quench connect <url> --code XXXX-XXXX [--pin sha256:…]",
+    );
+  return { url, code, ...(pin ? { pin } : {}) };
+}
+
+async function hub(context: Context): Promise<Outcome> {
+  const paired = await loadConnection(clientDir(context.home.dir)).then(
+    ({ connection }) => connection,
+    () => null,
   );
-  return "skipped";
+  if (paired) {
+    out(`  Paired with ${paired.url} as ${paired.machine}.\n`);
+    return "done";
+  }
+  out(
+    "  A hub decides which skills each machine gets. Its Add machine button shows a quench connect line.\n",
+  );
+  if (context.yes) {
+    out("  Skipped: run quench setup hub and paste that line to pair.\n");
+    return "skipped";
+  }
+  for (;;) {
+    const answer = await context.ask("  Paste the quench connect line (or skip): ", true);
+    if (answer === null) return "stopped";
+    if (!answer.trim() || answer.trim() === "skip") return "skipped";
+    const parsed = connectLine(answer);
+    if (parsed instanceof Error) {
+      out(`  ${parsed.message}\n`);
+      continue;
+    }
+    if ((await connect(context.home, [parsed.url], parsed)) === 0) {
+      out("  Next: quench agent install keeps this machine's skills applied from the hub.\n");
+      return "done";
+    }
+  }
 }
 
 async function ui(): Promise<Outcome> {

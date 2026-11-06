@@ -146,6 +146,12 @@ retired with it and live in git history.
   files of their own assigned skills, keyed by hash, and their identity comes from their token.
   A self-signed hub is trusted by SPKI pin; verification is never turned off for requests, and
   plain HTTP is loopback only.
+- **The agent keeps the last good bundle when the hub is unreachable** ([#157](https://github.com/JarenKempton/quench/issues/157)).
+  Without `--source`, `quench agent run` follows the paired hub: it applies a bundle only after every
+  file matches its hash and every skill folder its tree hash, so a failed or partial fetch never
+  becomes an empty bundle and never removes anything. The first snapshot after missed or failed polls
+  carries `staleSince`; the hub shows that window until the next snapshot clears it. Before every git
+  subprocess the hub re-checks that `GIT_DIR` is a plain folder inside its data folder.
 - **The CLI comes first, then a local web page.** A desktop app comes later, if ever:
   monthly check-ins don't need a resident process.
 - **Agents ask Quench through a skill that runs `quench … --json`**, not an MCP server,

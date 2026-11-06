@@ -21,6 +21,7 @@ import {
   plan,
   targetPath,
   type HarnessId,
+  type BundleManifest,
   type InstalledState,
   type Plan,
   type ProjectCheckout,
@@ -60,7 +61,18 @@ const UNREADABLE = {
   executables: null,
 };
 
-export type SkillsOptions = { source: string; machine: string; projects?: string[] };
+export type BundleInput = {
+  bundle: BundleManifest;
+  sources: Record<string, string>;
+  warnings: string[];
+};
+
+export type SkillsOptions = {
+  source?: string;
+  bundle?: BundleInput;
+  machine: string;
+  projects?: string[];
+};
 
 export const stateDir = (home: Home) => join(home.dir, ".quench", "fleet");
 
@@ -122,9 +134,19 @@ async function codexNotes(home: Home) {
   ];
 }
 
+async function sourceBundle(source: string, machine: string): Promise<BundleInput> {
+  const { fleet, warnings } = await loadFleet(source);
+  const built = await buildBundle(source, fleet, machine);
+  const sources: Record<string, string> = {};
+  for (const name of Object.keys(built.bundle.skills))
+    sources[name] = join(source, ...own(fleet.skills, name)!.path.split("/"));
+  return { bundle: built.bundle, sources, warnings: [...warnings, ...built.warnings] };
+}
+
 export async function skillsContext(home: Home, options: SkillsOptions) {
-  const { fleet, warnings } = await loadFleet(options.source);
-  const built = await buildBundle(options.source, fleet, options.machine);
+  const built =
+    options.bundle ?? (options.source ? await sourceBundle(options.source, options.machine) : null);
+  if (!built) throw new Error("no skills source or hub bundle given");
   const roots = {} as Record<HarnessId, string>;
   const linkedRoots: string[] = [];
   const pins: Record<string, string> = {};
@@ -172,9 +194,6 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
     installed[path] = mine.has(path)
       ? await rawState(absolute(home, path)).catch(() => UNREADABLE)
       : await inspect(absolute(home, path));
-  const sources: Record<string, string> = {};
-  for (const name of Object.keys(built.bundle.skills))
-    sources[name] = join(options.source, ...own(fleet.skills, name)!.path.split("/"));
   const interrupted = await readJournal(state);
   const result = plan({
     bundle: built.bundle,
@@ -182,7 +201,6 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
     installed,
     ledger,
     warnings: [
-      ...warnings,
       ...built.warnings,
       ...(interrupted
         ? [
@@ -199,7 +217,7 @@ export async function skillsContext(home: Home, options: SkillsOptions) {
     apply: {
       plan: result,
       bundle: built.bundle,
-      sources,
+      sources: built.sources,
       state,
       absolute: (path: string) => absolute(home, path),
       installed,

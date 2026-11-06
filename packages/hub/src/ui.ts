@@ -71,14 +71,19 @@ export const messagePage = (
 
 const when = (ms: number | null) => (ms ? new Date(ms).toISOString() : "never");
 
+const staleness = (state: MachineState) =>
+  state.staleness
+    ? `<br><span class="warn">stale from ${escape(state.staleness.since)} until ${escape(state.staleness.until)}</span>`
+    : "";
+
 const stateCell = (state: MachineState | null) =>
   state
-    ? Object.entries(state.harnesses)
+    ? (Object.entries(state.harnesses)
         .map(
           ([h, s]) =>
             `${escape(h)}: ${s.snapshot.installs.length} installed, ${s.snapshot.conflicts} conflicts${s.stale ? " (stale)" : ""}`,
         )
-        .join("<br>") || "no complete harness yet"
+        .join("<br>") || "no complete harness yet") + staleness(state)
     : "no snapshot yet";
 
 export function dashboard(input: {

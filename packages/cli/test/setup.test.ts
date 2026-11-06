@@ -69,7 +69,7 @@ test("setup --judge none --yes runs without a terminal, a hub or a key, and resu
   expect(run.stdout).toContain(`, in ${join("~", ".claude")}\n`);
   expect(run.stdout).toContain("Step 2/5 · What your sessions start with");
   expect(run.stdout).toContain("No judge: quench corrections stays off");
-  expect(run.stdout).toContain("Not available yet: hub pairing arrives with quench connect");
+  expect(run.stdout).toContain("Skipped: run quench setup hub and paste that line to pair.");
   expect(run.stdout).toContain("Setup finished; skipped: hub, ui.");
   expect(await config(home)).toEqual({
     judge: { name: "none" },
@@ -95,7 +95,7 @@ test("setup tests an OpenAI-compatible judge on a canned exchange and keeps its 
   const home = await freshHome();
   bodies.length = 0;
   answer = '{"kind":"correction","sender":"person","confidence":0.9}';
-  const typed = `openai\n${baseUrl}\nsmall-model\nsk-local-test\n`;
+  const typed = `openai\n${baseUrl}\nsmall-model\nsk-local-test\n\n`;
   const run = await quench(home, ["setup", "judge"], typed);
   expect(run.stderr).toBe("");
   expect(run.code).toBe(0);
@@ -146,7 +146,7 @@ test("setup stops cleanly without answers, and rejects unknown steps and judges"
 
 test.skipIf(posix)("setup on Windows never offers claude", async () => {
   const home = await freshHome();
-  const run = await quench(home, ["setup", "judge"], "claude\nskip\n");
+  const run = await quench(home, ["setup", "judge"], "claude\nskip\n\n");
   expect(run.stdout).not.toContain("claude -p, signed in as you");
   expect(run.stdout).toContain("Pick one of jev, openai, none, or skip.");
   expect(run.code).toBe(0);
@@ -246,6 +246,8 @@ test.skipIf(!posix)(
     await type("Base URL", `${baseUrl}\r`);
     await type("Model", "small-model\r");
     await type("API key", `sk-${CANARY}\r`);
+    await type("Paste the quench connect line", `--code ${CANARY}\r`);
+    await type("paste the whole line", "\r");
     const exited = await Promise.race([proc.exited, Bun.sleep(10_000).then(() => "hung")]);
     if (exited === "hung") proc.kill();
     expect(exited).toBe(0);

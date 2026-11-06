@@ -61,7 +61,8 @@ Update in place with `quench update` (it uses the GitHub CLI, signed in with `gh
 
 Then run `quench setup`. It finds your agents' history (sessions and days per harness), prints the
 summary, lets you pick a judge (tested on one made-up exchange, so none of your history is sent),
-and would pair with a hub and open `quench ui` once those ship. Every step can be skipped; run it
+and pairs with a hub when you paste the `quench connect` line its Add machine button shows. `quench ui`
+is not shipped yet. Every step can be skipped; run it
 again to resume where it stopped, or `quench setup judge` to redo one step. `quench setup --judge
 none --yes` asks nothing and needs no key or hub. After that, `quench` with no arguments shows the
 profile of every agent and project in your history.
@@ -89,7 +90,7 @@ profile of every agent and project in your history.
 | `quench skills plan --source <dir>`             | What a skills checkout would change here, with `--machine <name> --json`; read-only                    |
 | `quench skills apply --plan <hash>`             | Copies the planned skill folders; foreign or edited folders are left as conflicts                      |
 | `quench skills status`                          | Conflicts, drift and install history from the ledger; exits 1 on conflicts or drift                    |
-| `quench agent install\|uninstall\|run`          | A user service that keeps applying `--source` every `--interval`; never self-updates                   |
+| `quench agent install\|uninstall\|run`          | A user service that keeps applying the paired hub's bundle, or `--source`; never self-updates          |
 | `quench skills eval <skill> --candidate <dir>`  | Replays first prompts on the installed and a candidate skill in scratch Claude Code homes; asks first  |
 
 `quench skills eval <skill> --candidate <dir>` tests a skill change against your own past prompts
