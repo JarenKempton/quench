@@ -138,7 +138,7 @@ test.skipIf(!CLICKHOUSE)(
 
     const quiet = await quench(homes.quiet!, ["agent", "run", "--once", "--interval", "60"]);
     expect(quiet.stderr).toBe("");
-    expect(quiet.stdout).toContain("archived 4 sessions (4 results)");
+    expect(quiet.stdout).toContain("archived 4 sessions (4 results, 4 tasks)");
 
     const otlpPort = await freePort();
     const agent = Bun.spawn(
@@ -245,6 +245,19 @@ test.skipIf(!CLICKHOUSE)(
     ])
       expect(await ch.exec(`SELECT * FROM ${table} FORMAT JSONEachRow`)).not.toContain(CANARY);
     expect(await readdir(join(homes.traced!, ".quench/fleet/otlp"))).toEqual([]);
+    const taskRows = () =>
+      ch.rows<{ Harnesses: string[]; Sessions: number; Split: string }>(
+        "SELECT Harnesses, Sessions, Split FROM quench_tasks FINAL WHERE Machine = 'quiet' ORDER BY StartedAt",
+      );
+    const tasksBefore = await taskRows();
+    expect(
+      tasksBefore.map((t) => `${t.Harnesses.join("+")}:${t.Sessions}:${t.Split}`).sort(),
+    ).toEqual([
+      "claude-code:1:heuristic",
+      "claude-code:1:heuristic",
+      "codex:1:heuristic",
+      "pi:1:heuristic",
+    ]);
 
     const again = await quench(homes.quiet!, ["agent", "run", "--once", "--interval", "60"]);
     expect(again.stdout).not.toContain("archived");
@@ -255,7 +268,8 @@ test.skipIf(!CLICKHOUSE)(
     );
     await utimes(resumed, new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000));
     const grown = await quench(homes.quiet!, ["agent", "run", "--once", "--interval", "60"]);
-    expect(grown.stdout).toContain("archived 1 sessions (1 results)");
+    expect(grown.stdout).toContain("archived 1 sessions (1 results, 0 tasks)");
+    expect(await taskRows()).toEqual(tasksBefore);
     const [latest] = await ch.rows<{ Bytes: number }>(
       "SELECT Bytes FROM quench_transcripts FINAL WHERE Machine = 'quiet' AND Path = {path:String}",
       { path: claude.Path },

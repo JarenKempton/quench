@@ -3,11 +3,14 @@ import { basename, join, relative, sep } from "node:path";
 import {
   ANALYSIS_VERSION,
   MAX_SESSION_ROWS,
+  MAX_TASK_MEMBERS,
+  MAX_TASK_ROWS,
   MAX_TRANSCRIPT_BYTES,
   MAX_UPLOAD_BYTES,
   sha256,
   TranscriptPath,
   type SessionResult,
+  type TaskResult,
 } from "@quench/fleet";
 import {
   discoverAll,
@@ -18,19 +21,24 @@ import {
   type Session,
   type SessionRef,
 } from "@quench/history";
-import { putTranscript, postSessions } from "@quench/hub/client";
-import { behaviour, runs } from "@quench/insights";
+import { putTranscript, postSessions, postTasks } from "@quench/hub/client";
+import { behaviour, runs, segments, tasks, type Segment } from "@quench/insights";
 import { Jev, judgeReplies, VerdictCache } from "@quench/judge";
 import { replacePrivateFile } from "../private-file.ts";
 
 export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
 
-type Shipped = Record<string, { sha256: string; size: number; mtimeMs: number }>;
+type Shipped = Record<
+  string,
+  { sha256: string; size: number; mtimeMs: number; segments?: Segment[] }
+>;
+type Posted = Record<string, { hash: string; startedAt: string }>;
 
 export type ArchiveStatus = {
   uploaded: number;
   results: number;
+  tasks: number;
   bytes: number;
   stored: number;
   waiting: number;
@@ -39,10 +47,11 @@ export type ArchiveStatus = {
 };
 
 const stateFile = (dir: string) => join(dir, "archive.json");
+const tasksFile = (dir: string) => join(dir, "tasks.json");
 
-async function readShipped(dir: string): Promise<Shipped> {
+async function readJson<T>(path: string): Promise<T | Record<string, never>> {
   try {
-    return JSON.parse(await readFile(stateFile(dir), "utf8")) as Shipped;
+    return JSON.parse(await readFile(path, "utf8")) as T;
   } catch {
     return {};
   }
@@ -54,6 +63,61 @@ const count = <K extends string>(map: Partial<Record<K, number>>, key: K) => {
 
 const unique = (values: (string | null)[]) =>
   [...new Set(values.filter((v): v is string => !!v))].sort();
+
+export async function sessionSegments(session: Session, verdicts: VerdictCache) {
+  const sessionRuns = runs(session);
+  const { replies } = await judgeReplies(
+    [
+      {
+        id: session.id,
+        path: session.path,
+        harness: session.harness,
+        cwd: session.cwd,
+        runs: sessionRuns,
+      },
+    ],
+    verdicts,
+    null,
+  );
+  const newGoals = new Set(replies.flatMap((r) => (r.kind === "new_request" ? [r.position] : [])));
+  return segments(session, sessionRuns, newGoals);
+}
+
+export function taskResults(shipped: Shipped, posted: Posted) {
+  const current = tasks(Object.values(shipped).flatMap((entry) => entry.segments ?? []));
+  const rows: TaskResult[] = current.map((task) => ({
+    ...task,
+    members: task.members.slice(0, MAX_TASK_MEMBERS),
+    markers: task.markers.slice(0, 100),
+    removed: false,
+    analysisVersion: ANALYSIS_VERSION,
+  }));
+  const seen = new Set(rows.map((r) => r.taskId));
+  const next: Posted = {};
+  const due: TaskResult[] = [];
+  for (const row of rows) {
+    const hash = sha256(new TextEncoder().encode(JSON.stringify(row)));
+    next[row.taskId] = { hash, startedAt: row.startedAt };
+    if (posted[row.taskId]?.hash !== hash) due.push(row);
+  }
+  for (const [taskId, { startedAt }] of Object.entries(posted))
+    if (!seen.has(taskId))
+      due.push({
+        taskId,
+        removed: true,
+        startedAt,
+        endedAt: startedAt,
+        split: "heuristic",
+        boundary: "session-start",
+        markers: [],
+        members: [],
+        harnesses: [],
+        sessions: 0,
+        runs: 0,
+        analysisVersion: ANALYSIS_VERSION,
+      });
+  return { due, next };
+}
 
 export async function sessionResult(
   session: Session,
@@ -131,13 +195,14 @@ export async function archiveCycle(
   const status: ArchiveStatus = {
     uploaded: 0,
     results: 0,
+    tasks: 0,
     bytes: 0,
     stored: 0,
     waiting: 0,
     skipped: {},
     error: null,
   };
-  const shipped = await readShipped(dir);
+  const shipped: Shipped = await readJson<Shipped>(stateFile(dir));
   const refs = await discoverAll(home);
   const children = new Map<string, number>();
   for (const ref of refs)
@@ -160,7 +225,7 @@ export async function archiveCycle(
       continue;
     }
     const known = shipped[keyOf(ref, path)];
-    if (known && known.size === info.size && known.mtimeMs === info.mtimeMs) continue;
+    if (known?.segments && known.size === info.size && known.mtimeMs === info.mtimeMs) continue;
     if (info.size > MAX_TRANSCRIPT_BYTES) {
       count(status.skipped, "too-large");
       continue;
@@ -188,12 +253,17 @@ export async function archiveCycle(
       const bytes = await readFile(item.ref.path);
       const digest = sha256(bytes);
       const key = keyOf(item.ref, item.path);
-      const entry = { sha256: digest, size: bytes.length, mtimeMs: item.mtimeMs };
+      const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
+      const entry = {
+        sha256: digest,
+        size: bytes.length,
+        mtimeMs: item.mtimeMs,
+        segments: session ? await sessionSegments(session, verdicts) : [],
+      };
       if (shipped[key]?.sha256 === digest) {
-        shipped[key] = entry;
+        pending.push({ key, entry, result: null });
         continue;
       }
-      const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
       if (!session) count(status.skipped, "unreadable");
       const compressed = await Bun.zstdCompress(bytes, { level: 10 });
       if (compressed.length > MAX_UPLOAD_BYTES) {
@@ -225,6 +295,12 @@ export async function archiveCycle(
       if (pending.length >= MAX_SESSION_ROWS) await flush();
     }
     await flush();
+    const posted: Posted = await readJson<Posted>(tasksFile(dir));
+    const { due: taskRows, next } = taskResults(shipped, posted);
+    for (let i = 0; i < taskRows.length; i += MAX_TASK_ROWS)
+      await postTasks(dir, taskRows.slice(i, i + MAX_TASK_ROWS));
+    status.tasks = taskRows.length;
+    if (taskRows.length) await replacePrivateFile(tasksFile(dir), `${JSON.stringify(next)}\n`);
   } catch (error) {
     status.error = (error as Error).message;
   }
@@ -235,5 +311,5 @@ export const archiveLine = (status: ArchiveStatus) =>
   status.error
     ? `; archive: ${status.error}`
     : status.uploaded || status.waiting
-      ? `; archived ${status.uploaded} sessions (${status.results} results), ${status.waiting} waiting`
+      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting`
       : "";

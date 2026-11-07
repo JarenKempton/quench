@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { createZstdCompress } from "node:zlib";
 import { join } from "node:path";
-import { MAX_TRANSCRIPT_BYTES, sha256, type SessionResult } from "@quench/fleet";
+import { MAX_TRANSCRIPT_BYTES, sha256, type SessionResult, type TaskResult } from "@quench/fleet";
 import { Owner, startHub, stopHubs, temp, type Running } from "./helpers.ts";
 
 const CLICKHOUSE = process.env.QUENCH_TEST_CLICKHOUSE;
@@ -142,6 +142,50 @@ test.skipIf(skip)("a newer analysis wins even when an older one is posted after 
   expect(await runsOf()).toEqual([22]);
   await running.archive!.ch.exec("OPTIMIZE TABLE quench_sessions FINAL");
   expect(await runsOf()).toEqual([22]);
+});
+
+const task = (runs: number, removed = false): TaskResult => ({
+  taskId: "a".repeat(32),
+  removed,
+  startedAt: "2026-10-20T10:00:00.000Z",
+  endedAt: "2026-10-20T11:00:00.000Z",
+  split: "marker",
+  boundary: "session-start",
+  markers: ["branch:t3/abc"],
+  members: [
+    { harness: "claude-code", sessionId: "lane", firstTurn: 0, lastTurn: 4 },
+    { harness: "codex", sessionId: "later", firstTurn: 0, lastTurn: 1 },
+  ],
+  harnesses: ["claude-code", "codex"],
+  sessions: 2,
+  runs,
+  analysisVersion: 1,
+});
+
+const postTask = (t: TaskResult) =>
+  asMachine("/api/v1/tasks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ tasks: [t] }),
+  });
+
+const tasksNow = () =>
+  running.archive!.ch.rows<{ Runs: number; Members: unknown[] }>(
+    "SELECT Runs, Members FROM quench_tasks FINAL WHERE Machine = 'laptop'",
+  );
+
+test.skipIf(skip)("a task row replaces itself and a removed task disappears", async () => {
+  expect((await postTask(task(6))).status).toBe(200);
+  expect((await postTask(task(7))).status).toBe(200);
+  const [row, ...rest] = await tasksNow();
+  expect(rest).toEqual([]);
+  expect(row!.Runs).toBe(7);
+  expect(row!.Members).toHaveLength(2);
+  expect((await postTask({ ...task(7), taskId: "nope" })).status).toBe(400);
+  expect((await postTask(task(0, true))).status).toBe(200);
+  expect(await tasksNow()).toEqual([]);
+  await running.archive!.ch.exec("OPTIMIZE TABLE quench_tasks FINAL");
+  expect(await tasksNow()).toEqual([]);
 });
 
 test.skipIf(skip)("the secret scan flags a synthetic token on arrival", async () => {
