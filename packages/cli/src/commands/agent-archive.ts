@@ -3,6 +3,7 @@ import { basename, join, relative, sep } from "node:path";
 import {
   ANALYSIS_VERSION,
   MAX_SESSION_ROWS,
+  MAX_MARKER_CHARS,
   MAX_TASK_MEMBERS,
   MAX_TASK_ROWS,
   MAX_TRANSCRIPT_BYTES,
@@ -88,7 +89,7 @@ export function taskResults(shipped: Shipped, posted: Posted) {
   const rows: TaskResult[] = current.map((task) => ({
     ...task,
     members: task.members.slice(0, MAX_TASK_MEMBERS),
-    markers: task.markers.slice(0, 100),
+    markers: task.markers.filter((m) => m.length <= MAX_MARKER_CHARS).slice(0, 100),
     removed: false,
     analysisVersion: ANALYSIS_VERSION,
   }));
@@ -244,9 +245,10 @@ export async function archiveCycle(
     pending.length = 0;
     await replacePrivateFile(stateFile(dir), `${JSON.stringify(shipped)}\n`);
   };
+  let segmented = 0;
   try {
     for (const item of due) {
-      if (status.bytes >= CYCLE_BYTES) {
+      if (status.bytes + segmented >= CYCLE_BYTES) {
         status.waiting++;
         continue;
       }
@@ -261,7 +263,9 @@ export async function archiveCycle(
         segments: session ? await sessionSegments(session, verdicts) : [],
       };
       if (shipped[key]?.sha256 === digest) {
+        segmented += bytes.length;
         pending.push({ key, entry, result: null });
+        if (pending.length >= MAX_SESSION_ROWS) await flush();
         continue;
       }
       if (!session) count(status.skipped, "unreadable");

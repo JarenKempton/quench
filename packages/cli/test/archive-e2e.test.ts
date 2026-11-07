@@ -261,6 +261,21 @@ test.skipIf(!CLICKHOUSE)(
 
     const again = await quench(homes.quiet!, ["agent", "run", "--once", "--interval", "60"]);
     expect(again.stdout).not.toContain("archived");
+    const state = join(homes.quiet!, ".quench/fleet/archive.json");
+    const before = JSON.parse(await readFile(state, "utf8")) as Record<
+      string,
+      { segments?: unknown }
+    >;
+    await Bun.write(
+      state,
+      JSON.stringify(
+        Object.fromEntries(Object.entries(before).map(([k, { segments: _s, ...v }]) => [k, v])),
+      ),
+    );
+    const migrated = await quench(homes.quiet!, ["agent", "run", "--once", "--interval", "60"]);
+    expect(migrated.stdout).not.toContain("archived");
+    expect(JSON.parse(await readFile(state, "utf8"))).toEqual(before);
+    expect(await taskRows()).toEqual(tasksBefore);
     const resumed = join(homes.quiet!, ".claude", claude.Path);
     await Bun.write(
       resumed,

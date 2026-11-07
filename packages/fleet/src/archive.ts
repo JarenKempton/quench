@@ -6,7 +6,8 @@ export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;
 export const MAX_TASK_ROWS = 100;
-export const MAX_TASK_MEMBERS = 500;
+export const MAX_TASK_MEMBERS = 200;
+export const MAX_MARKER_CHARS = 600;
 
 export const TranscriptPath = z
   .string()
@@ -64,7 +65,7 @@ export const TaskResult = z
     endedAt: Timestamp,
     split: z.enum(["marker", "heuristic"]),
     boundary: z.enum(["session-start", "marker", "new-goal", "idle-gap"]),
-    markers: z.array(z.string().min(1).max(600)).max(100),
+    markers: z.array(z.string().min(1).max(MAX_MARKER_CHARS)).max(100),
     members: z
       .array(
         z
