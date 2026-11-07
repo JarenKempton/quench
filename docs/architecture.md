@@ -310,7 +310,8 @@ With `--clickhouse-bin` (or `--clickhouse <url>`) the hub also keeps a long-term
 
 ```
 harness session files ──▶ quench agent ──zstd──▶ PUT /api/v1/transcripts ──▶ <data>/archive/<machine>/<harness>/<path>.zst
-                               └── per-session results ──▶ POST /api/v1/sessions ──▶ quench_sessions
+                               ├── per-session results ──▶ POST /api/v1/sessions ──▶ quench_sessions
+                               └── tasks ──────────────▶ POST /api/v1/tasks ────▶ quench_tasks
 harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶ POST /api/v1/otlp/* ──▶ otel_logs, otel_metrics_*
 ```
 
@@ -326,6 +327,18 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   indexed in `quench_transcripts`. `quench_sessions` is a `ReplacingMergeTree` versioned on
   `AnalysisVersion`, then `ComputedAt`, so an older analysis posted late never replaces a newer
   one. Tokens Codex does not record stay `NULL`, and corrections come from cached verdicts only.
+- **Tasks.** A task is one goal from start to finish (#184). `@quench/insights` `tasks.ts` cuts
+  each top-level session into segments by turn (run index): a non-default branch keeps the whole
+  session one segment; otherwise a run citing a different GitHub pull or issue id starts a new
+  segment, the same id holds one together, and with no ids a `new_request` reply (cached verdicts
+  only) or an idle gap over 60 minutes starts one. Segments that share a marker (branch, Jira key
+  in a branch name, `owner/repo#n`) join into one task, across sessions and harnesses. A run citing
+  more than three ids joins nothing by them. The agent keeps each session's segments in
+  `archive.json`, rebuilds every task each cycle, and posts only changed ones; `tasks.json` holds
+  what it posted, so a task that merged into another is posted again with `Removed = 1`.
+  `quench_tasks` is a `ReplacingMergeTree(Version, Removed)` keyed by `(Machine, TaskId)`, versioned
+  like `quench_sessions`; the id is a hash of the first member, so a rerun gives the same rows.
+  Later verdict columns arrive with `ALTER TABLE … ADD COLUMN` and a newer `AnalysisVersion`.
 - **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
   unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
   at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow

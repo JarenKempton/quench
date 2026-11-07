@@ -200,6 +200,10 @@ retired with it and live in git history.
   over a scratch home, and improved analyses write rows with a newer `AnalysisVersion`.
   Transcripts are the one hub path that keeps prompts and tool output. They are readable only by
   the owner and secret-scanned on arrival.
+- **Session-level judgments use the task as their unit** ([#184](https://github.com/JarenKempton/quench/issues/184)).
+  A task is one goal from start to finish and may span native sessions and harnesses. Markers
+  decide first (branch, PR or ticket ids); otherwise a new user goal or an idle gap starts a task.
+  Rows hold counts, fixed labels and marker ids only, never history text.
 - **OTLP leaves a machine only through the quench agent, filtered first** ([#176](https://github.com/JarenKempton/quench/issues/176)).
   `--otlp` listens on loopback for OTLP/HTTP JSON only. Before anything is spooled, it drops
   `codex.sse_event`, prompts, tool arguments, parameters and output, `user.email`, account ids,

@@ -7,6 +7,7 @@ import {
   type LogsRequest,
   type MetricsRequest,
   type SessionResult,
+  type TaskResult,
   type TranscriptUpload,
 } from "@quench/fleet";
 import type { ClickHouse, Params } from "./clickhouse.ts";
@@ -174,6 +175,30 @@ export function sessionRow(machine: string, s: SessionResult, fallback: string, 
   };
 }
 
+export function taskRow(machine: string, t: TaskResult, now: Date) {
+  return {
+    Machine: machine,
+    TaskId: t.taskId,
+    StartedAt: msTime(t.startedAt),
+    EndedAt: msTime(t.endedAt),
+    Split: t.split,
+    Boundary: t.boundary,
+    Markers: t.markers,
+    Members: t.members.map((m) => ({
+      Harness: m.harness,
+      SessionId: m.sessionId,
+      FirstTurn: m.firstTurn,
+      LastTurn: m.lastTurn,
+    })),
+    Harnesses: t.harnesses,
+    Sessions: t.sessions,
+    Runs: t.runs,
+    AnalysisVersion: t.analysisVersion,
+    ComputedAt: msTime(now.toISOString()),
+    Removed: t.removed ? 1 : 0,
+  };
+}
+
 const API_EVENTS = "('claude_code.api_request', 'codex.api_request')";
 const ERROR_EVENTS = "('claude_code.api_error')";
 const TOOL_EVENTS = "('claude_code.tool_result', 'codex.tool_result')";
@@ -284,6 +309,13 @@ export class Archive {
       sessionRow(machine, s, known.get(`${s.harness}\0${s.path}`) ?? now.toISOString(), now),
     );
     await this.ch.insert("quench_sessions", rows);
+    return rows.length;
+  }
+
+  async tasks(machine: string, tasks: TaskResult[]) {
+    const now = new Date(this.now());
+    const rows = tasks.map((t) => taskRow(machine, t, now));
+    await this.ch.insert("quench_tasks", rows);
     return rows.length;
   }
 

@@ -5,6 +5,9 @@ export const ANALYSIS_VERSION = 1;
 export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;
+export const MAX_TASK_ROWS = 25;
+export const MAX_TASK_MEMBERS = 200;
+export const MAX_MARKER_CHARS = 600;
 
 export const TranscriptPath = z
   .string()
@@ -53,6 +56,32 @@ export type SessionResult = z.infer<typeof SessionResult>;
 export const SessionResults = z
   .object({ sessions: z.array(SessionResult).max(MAX_SESSION_ROWS) })
   .strict();
+
+export const TaskResult = z
+  .object({
+    taskId: z.string().regex(/^[0-9a-f]{32}$/),
+    removed: z.boolean(),
+    startedAt: Timestamp,
+    endedAt: Timestamp,
+    split: z.enum(["marker", "heuristic"]),
+    boundary: z.enum(["session-start", "marker", "new-goal", "idle-gap"]),
+    markers: z.array(z.string().min(1).max(MAX_MARKER_CHARS)).max(100),
+    members: z
+      .array(
+        z
+          .object({ harness: HarnessId, sessionId: Label, firstTurn: Count, lastTurn: Count })
+          .strict(),
+      )
+      .max(MAX_TASK_MEMBERS),
+    harnesses: z.array(HarnessId).max(20),
+    sessions: Count,
+    runs: Count,
+    analysisVersion: Count,
+  })
+  .strict();
+export type TaskResult = z.infer<typeof TaskResult>;
+
+export const TaskResults = z.object({ tasks: z.array(TaskResult).max(MAX_TASK_ROWS) }).strict();
 
 export const TranscriptUpload = z
   .object({

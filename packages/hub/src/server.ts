@@ -10,6 +10,7 @@ import {
   MAX_UPLOAD_BYTES,
   MetricsRequest,
   SessionResults,
+  TaskResults,
   TranscriptUpload,
   FleetFile,
   MachineName,
@@ -391,6 +392,15 @@ export async function serveHub(options: ServeOptions) {
       if (!parsed.success)
         return json({ error: "invalid session results", issues: parsed.error.issues }, 400);
       return json({ machine, rows: await archive.sessions(machine, parsed.data.sessions) });
+    }
+    if (path === "/api/v1/tasks" && req.method === "POST") {
+      if (!archive) return noArchive();
+      const body = await readCapped(req, MAX_SESSIONS_BODY);
+      if (!body) return tooLarge();
+      const parsed = TaskResults.safeParse(parseJson(body));
+      if (!parsed.success)
+        return json({ error: "invalid task results", issues: parsed.error.issues }, 400);
+      return json({ machine, rows: await archive.tasks(machine, parsed.data.tasks) });
     }
     if (path === "/api/v1/transcripts" && req.method === "PUT") {
       if (!archive) return noArchive();
