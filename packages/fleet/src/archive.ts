@@ -5,7 +5,7 @@ export const ANALYSIS_VERSION = 1;
 export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;
-export const MAX_TASK_ROWS = 100;
+export const MAX_TASK_ROWS = 25;
 export const MAX_TASK_MEMBERS = 200;
 export const MAX_MARKER_CHARS = 600;
 
