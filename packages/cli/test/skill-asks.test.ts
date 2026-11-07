@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { namesSkill, prose, wordsOf } from "@quench/history";
+import { cliRunsTimeout } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -315,211 +316,219 @@ const row = (r: Record<string, unknown>) => ({
   fix: r.fix,
 });
 
-test("profile skills counts plain-word asks per skill, relays apart, and keeps asked skills off the cut list", async () => {
-  const home = await fixture();
-  const text = await quench(home, ["profile", "skills"]);
-  expect(text.code).toBe(0);
-  expect(text.stdout).toContain(
-    [
-      "Asked in plain words · messages people typed that named a skill · last 30 days",
-      "  Agent        Skill        Used         Asked  Asked and loaded  Asked, not loaded  Note",
-      "  Claude Code  tide-pool       3             3                 2                  1  2 loaded by a delegate",
-      "  Claude Code  code-check      1             2                 1                  1",
-      "  Claude Code  deep-review     1             2                 1                  1  1 loaded by a delegate",
-      "  Claude Code  ship-it         1             1                 0                  1  only loads from /ship-it (disable-model-invocation)",
-      "  Claude Code  deploy-gate     0             1                 0                  1  only loads from /deploy-gate (disable-model-invocation)",
-      "  Codex        deep-review     1             1                 1                  0",
-      "  Claude Code  night-watch     1             1                 1                  0",
-      "  Claude Code  weather         0  not measured      not measured       not measured  1 mention, one-word name",
-      "  Relayed by agents or automation, not counted as asked: 3 messages naming 5 skills",
-      "  Sender not recorded, not counted as asked: 1 message naming 1 skill",
-    ].join("\n"),
-  );
-  const cut = text.stdout.slice(
-    text.stdout.indexOf("Cut list"),
-    text.stdout.indexOf("Asked in plain words"),
-  );
-  expect(cut).toContain("tidy-notes");
-  expect(cut).not.toContain("deep-review");
-  expect(cut).not.toContain("weather");
-  for (const said of Object.values(SAID)) expect(text.stdout).not.toContain(said);
+test(
+  "profile skills counts plain-word asks per skill, relays apart, and keeps asked skills off the cut list",
+  async () => {
+    const home = await fixture();
+    const text = await quench(home, ["profile", "skills"]);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(
+      [
+        "Asked in plain words · messages people typed that named a skill · last 30 days",
+        "  Agent        Skill        Used         Asked  Asked and loaded  Asked, not loaded  Note",
+        "  Claude Code  tide-pool       3             3                 2                  1  2 loaded by a delegate",
+        "  Claude Code  code-check      1             2                 1                  1",
+        "  Claude Code  deep-review     1             2                 1                  1  1 loaded by a delegate",
+        "  Claude Code  ship-it         1             1                 0                  1  only loads from /ship-it (disable-model-invocation)",
+        "  Claude Code  deploy-gate     0             1                 0                  1  only loads from /deploy-gate (disable-model-invocation)",
+        "  Codex        deep-review     1             1                 1                  0",
+        "  Claude Code  night-watch     1             1                 1                  0",
+        "  Claude Code  weather         0  not measured      not measured       not measured  1 mention, one-word name",
+        "  Relayed by agents or automation, not counted as asked: 3 messages naming 5 skills",
+        "  Sender not recorded, not counted as asked: 1 message naming 1 skill",
+      ].join("\n"),
+    );
+    const cut = text.stdout.slice(
+      text.stdout.indexOf("Cut list"),
+      text.stdout.indexOf("Asked in plain words"),
+    );
+    expect(cut).toContain("tidy-notes");
+    expect(cut).not.toContain("deep-review");
+    expect(cut).not.toContain("weather");
+    for (const said of Object.values(SAID)) expect(text.stdout).not.toContain(said);
 
-  const out = await quench(home, ["profile", "skills", "--json"]);
-  const parsed = JSON.parse(out.stdout);
-  expect(parsed.recordedSkillAsks.rows.map(row)).toEqual([
-    {
-      harness: "claude-code",
-      name: "tide-pool",
-      used: 3,
-      measured: "matched",
-      asked: 3,
-      askedAndLoaded: 2,
-      askedNotLoaded: 1,
-      viaDelegate: 2,
-      relayed: 1,
-      unknownSender: 0,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "code-check",
-      used: 1,
-      measured: "matched",
-      asked: 2,
-      askedAndLoaded: 1,
-      askedNotLoaded: 1,
-      viaDelegate: 0,
-      relayed: 1,
-      unknownSender: 0,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "deep-review",
-      used: 1,
-      measured: "matched",
-      asked: 2,
-      askedAndLoaded: 1,
-      askedNotLoaded: 1,
-      viaDelegate: 1,
-      relayed: 0,
-      unknownSender: 0,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "ship-it",
-      used: 1,
-      measured: "matched",
-      asked: 1,
-      askedAndLoaded: 0,
-      askedNotLoaded: 1,
-      viaDelegate: 0,
-      relayed: 1,
-      unknownSender: 0,
-      fix: "only loads from /name",
-    },
-    {
-      harness: "claude-code",
-      name: "deploy-gate",
-      used: 0,
-      measured: "matched",
-      asked: 1,
-      askedAndLoaded: 0,
-      askedNotLoaded: 1,
-      viaDelegate: 0,
-      relayed: 0,
-      unknownSender: 0,
-      fix: "only loads from /name",
-    },
-    {
-      harness: "codex",
-      name: "deep-review",
-      used: 1,
-      measured: "matched",
-      asked: 1,
-      askedAndLoaded: 1,
-      askedNotLoaded: 0,
-      viaDelegate: 0,
-      relayed: 1,
-      unknownSender: 1,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "night-watch",
-      used: 1,
-      measured: "matched",
-      asked: 1,
-      askedAndLoaded: 1,
-      askedNotLoaded: 0,
-      viaDelegate: 0,
-      relayed: 0,
-      unknownSender: 0,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "tidy-notes",
-      used: 0,
-      measured: "matched",
-      asked: 0,
-      askedAndLoaded: 0,
-      askedNotLoaded: 0,
-      viaDelegate: 0,
-      relayed: 1,
-      unknownSender: 0,
-      fix: null,
-    },
-    {
-      harness: "claude-code",
-      name: "weather",
-      used: 0,
-      measured: "not measured",
-      asked: null,
-      askedAndLoaded: null,
-      askedNotLoaded: null,
-      viaDelegate: 0,
-      relayed: 0,
-      unknownSender: 0,
-      fix: null,
-    },
-  ]);
-  expect(parsed.recordedSkillAsks.relayed).toEqual({ messages: 3, skills: 5 });
-  for (const said of Object.values(SAID)) expect(out.stdout).not.toContain(said);
-  expect(parsed.limitations.some((l: string) => l.includes("Codex and Pi record no sender"))).toBe(
-    true,
-  );
-  const tidy = parsed.recordedSkillCuts.cuts.find(
-    (c: { agents: string[]; skills: string[] }) =>
-      c.agents.includes("claude-code") && c.skills.includes("tidy-notes"),
-  );
-  expect(tidy.relayed).toBe(1);
-  const cuts = parsed.recordedSkillCuts.cuts.flatMap((c: { skills: string[] }) => c.skills);
-  expect(cuts).toContain("tidy-notes");
-  expect(cuts).not.toContain("deep-review");
-  expect(cuts).not.toContain("weather");
-});
+    const out = await quench(home, ["profile", "skills", "--json"]);
+    const parsed = JSON.parse(out.stdout);
+    expect(parsed.recordedSkillAsks.rows.map(row)).toEqual([
+      {
+        harness: "claude-code",
+        name: "tide-pool",
+        used: 3,
+        measured: "matched",
+        asked: 3,
+        askedAndLoaded: 2,
+        askedNotLoaded: 1,
+        viaDelegate: 2,
+        relayed: 1,
+        unknownSender: 0,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "code-check",
+        used: 1,
+        measured: "matched",
+        asked: 2,
+        askedAndLoaded: 1,
+        askedNotLoaded: 1,
+        viaDelegate: 0,
+        relayed: 1,
+        unknownSender: 0,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "deep-review",
+        used: 1,
+        measured: "matched",
+        asked: 2,
+        askedAndLoaded: 1,
+        askedNotLoaded: 1,
+        viaDelegate: 1,
+        relayed: 0,
+        unknownSender: 0,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "ship-it",
+        used: 1,
+        measured: "matched",
+        asked: 1,
+        askedAndLoaded: 0,
+        askedNotLoaded: 1,
+        viaDelegate: 0,
+        relayed: 1,
+        unknownSender: 0,
+        fix: "only loads from /name",
+      },
+      {
+        harness: "claude-code",
+        name: "deploy-gate",
+        used: 0,
+        measured: "matched",
+        asked: 1,
+        askedAndLoaded: 0,
+        askedNotLoaded: 1,
+        viaDelegate: 0,
+        relayed: 0,
+        unknownSender: 0,
+        fix: "only loads from /name",
+      },
+      {
+        harness: "codex",
+        name: "deep-review",
+        used: 1,
+        measured: "matched",
+        asked: 1,
+        askedAndLoaded: 1,
+        askedNotLoaded: 0,
+        viaDelegate: 0,
+        relayed: 1,
+        unknownSender: 1,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "night-watch",
+        used: 1,
+        measured: "matched",
+        asked: 1,
+        askedAndLoaded: 1,
+        askedNotLoaded: 0,
+        viaDelegate: 0,
+        relayed: 0,
+        unknownSender: 0,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "tidy-notes",
+        used: 0,
+        measured: "matched",
+        asked: 0,
+        askedAndLoaded: 0,
+        askedNotLoaded: 0,
+        viaDelegate: 0,
+        relayed: 1,
+        unknownSender: 0,
+        fix: null,
+      },
+      {
+        harness: "claude-code",
+        name: "weather",
+        used: 0,
+        measured: "not measured",
+        asked: null,
+        askedAndLoaded: null,
+        askedNotLoaded: null,
+        viaDelegate: 0,
+        relayed: 0,
+        unknownSender: 0,
+        fix: null,
+      },
+    ]);
+    expect(parsed.recordedSkillAsks.relayed).toEqual({ messages: 3, skills: 5 });
+    for (const said of Object.values(SAID)) expect(out.stdout).not.toContain(said);
+    expect(
+      parsed.limitations.some((l: string) => l.includes("Codex and Pi record no sender")),
+    ).toBe(true);
+    const tidy = parsed.recordedSkillCuts.cuts.find(
+      (c: { agents: string[]; skills: string[] }) =>
+        c.agents.includes("claude-code") && c.skills.includes("tidy-notes"),
+    );
+    expect(tidy.relayed).toBe(1);
+    const cuts = parsed.recordedSkillCuts.cuts.flatMap((c: { skills: string[] }) => c.skills);
+    expect(cuts).toContain("tidy-notes");
+    expect(cuts).not.toContain("deep-review");
+    expect(cuts).not.toContain("weather");
+  },
+  cliRunsTimeout,
+);
 
-test("one-word names count as asked only through the opt-in Jev judgment, cached", async () => {
-  const home = await fixture();
-  const sent: unknown[] = [];
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    routes: {
-      "/v1/systemone": {
-        POST: async (request) => {
-          sent.push(await request.json());
-          return Response.json({
-            model: "jev-test",
-            answers: { ask: { type: "choice", choice: "mentioned" } },
-            usage: { input_tokens: 1, output_tokens: 1 },
-          });
+test(
+  "one-word names count as asked only through the opt-in Jev judgment, cached",
+  async () => {
+    const home = await fixture();
+    const sent: unknown[] = [];
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      routes: {
+        "/v1/systemone": {
+          POST: async (request) => {
+            sent.push(await request.json());
+            return Response.json({
+              model: "jev-test",
+              answers: { ask: { type: "choice", choice: "mentioned" } },
+              usage: { input_tokens: 1, output_tokens: 1 },
+            });
+          },
         },
       },
-    },
-    fetch: () => new Response("not found", { status: 404 }),
-  });
-  try {
-    const env = { TYPESAFE_API_KEY: "ts_test_key", TYPESAFE_BASE_URL: server.url.origin };
-    const out = await quench(home, ["profile", "skills", "--json", "--asks"], env);
-    expect(out.code).toBe(0);
-    const parsed = JSON.parse(out.stdout);
-    const weather = parsed.recordedSkillAsks.rows.find(
-      (r: { name: string }) => r.name === "weather",
-    );
-    expect(row(weather)).toMatchObject({ measured: "judged", asked: 0, askedNotLoaded: 0 });
-    expect(sent).toHaveLength(1);
-    expect(JSON.stringify(sent[0])).toContain(SAID.weather);
-    const cuts = parsed.recordedSkillCuts.cuts.flatMap((c: { skills: string[] }) => c.skills);
-    expect(cuts).toContain("weather");
-    await quench(home, ["profile", "skills", "--json", "--asks"], env);
-    expect(sent).toHaveLength(1);
-  } finally {
-    await server.stop(true);
-  }
-});
+      fetch: () => new Response("not found", { status: 404 }),
+    });
+    try {
+      const env = { TYPESAFE_API_KEY: "ts_test_key", TYPESAFE_BASE_URL: server.url.origin };
+      const out = await quench(home, ["profile", "skills", "--json", "--asks"], env);
+      expect(out.code).toBe(0);
+      const parsed = JSON.parse(out.stdout);
+      const weather = parsed.recordedSkillAsks.rows.find(
+        (r: { name: string }) => r.name === "weather",
+      );
+      expect(row(weather)).toMatchObject({ measured: "judged", asked: 0, askedNotLoaded: 0 });
+      expect(sent).toHaveLength(1);
+      expect(JSON.stringify(sent[0])).toContain(SAID.weather);
+      const cuts = parsed.recordedSkillCuts.cuts.flatMap((c: { skills: string[] }) => c.skills);
+      expect(cuts).toContain("weather");
+      await quench(home, ["profile", "skills", "--json", "--asks"], env);
+      expect(sent).toHaveLength(1);
+    } finally {
+      await server.stop(true);
+    }
+  },
+  cliRunsTimeout,
+);
 
 test("names match as words outside code, paths and URLs, with typos and sound-alikes anchored by an exact word", () => {
   const ask = (text: string, name: string) => namesSkill(prose(text), wordsOf(name));
