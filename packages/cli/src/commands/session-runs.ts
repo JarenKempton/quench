@@ -4,14 +4,16 @@ import type { SessionRuns } from "@quench/judge";
 import { reading } from "../progress.ts";
 import { contextOf, type SessionContext } from "./context.ts";
 
+export type BranchedRuns = SessionRuns & { branch: string | null };
+
 export async function sessionRuns(
   refs: readonly SessionRef[],
   homeDir: string,
   enrich?: SessionEnricher,
   contexts?: Map<string, SessionContext>,
   byPath = false,
-): Promise<SessionRuns[]> {
-  const parents = new Map<string, SessionRuns>();
+): Promise<BranchedRuns[]> {
+  const parents = new Map<string, BranchedRuns>();
   const childStarts = new Map<string, (Date | null)[]>();
   for await (const outcome of readSessions(refs, 4, reading())) {
     if (!outcome.ok) continue;
@@ -26,6 +28,7 @@ export async function sessionRuns(
         path: s.path,
         harness: s.harness,
         cwd: s.cwd,
+        branch: s.branch,
         runs: runs(enrich?.(s) ?? s),
       });
     }

@@ -32,6 +32,7 @@ import { fileHistories, renderHistories } from "./file-history.ts";
 import { renderOverlaps, skillOverlaps, skillsInContext } from "./skill-overlap.ts";
 import { SCHEMA_VERSION, scopedReport, scopeRefs, unread, type Scope } from "./scope.ts";
 import { sessionRuns } from "./session-runs.ts";
+import { spiralTasks } from "./spiral-tasks.ts";
 import { json, quote, shortPath } from "../format.ts";
 
 const MIN_BUCKET = 15;
@@ -137,7 +138,12 @@ export async function corrections(home: Home, options: Options): Promise<number>
         judged.replies,
         await ThemeCache.open(join(home.dir, ".quench/local/themes.jsonl"), JevThemes.id),
         themeJudge,
-        { limit: options.themeLimit, examples: options.examples, since },
+        {
+          limit: options.themeLimit,
+          examples: options.examples,
+          since,
+          spiral: await spiralTasks(sessions, judged.replies),
+        },
       )
     : null;
   const causeJudge =
@@ -415,6 +421,7 @@ function renderThemes(themes: Themes, judged: Judged, days: number, calls: Calls
     `Reply classification by ${calls.judge}: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
     `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
+    `Failed-Spiral tasks: ${themes.spiral.failedTasks} · ${themes.spiral.tasks} back a group (people ${themes.spiral.fromPeople.tasks} · agents / automation ${themes.spiral.fromAutomation.tasks}) · ${themes.spiral.corrections} grouped corrections inside them`,
     `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
     "",
     "Recurring across sessions (representative quotations, not draft rules)",
@@ -425,6 +432,7 @@ function renderThemes(themes: Themes, judged: Judged, days: number, calls: Calls
       `  ${theme.corrections} corrections · ${theme.sessions} sessions · preceding-run models: ${theme.models.join(", ") || "unknown"} (${theme.unknownModels} unknown)`,
       `    People: ${theme.fromPeople.corrections} corrections across ${theme.fromPeople.sessions} sessions · agents / automation: ${theme.fromAutomation.corrections} across ${theme.fromAutomation.sessions} sessions`,
       `    ${theme.representativeSender}: ${quote(theme.representative)}`,
+      `    Inside failed-Spiral tasks: people ${theme.spiral.fromPeople.corrections} corrections in ${theme.spiral.fromPeople.tasks} tasks · agents / automation ${theme.spiral.fromAutomation.corrections} in ${theme.spiral.fromAutomation.tasks} tasks`,
       `    Attribution: ${theme.senderSources.harness} harness · ${theme.senderSources.host} host · ${theme.senderSources.judge} model-inferred`,
     );
     for (const example of theme.examples)

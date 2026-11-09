@@ -356,3 +356,31 @@ test("the maximum analysis limit bounds fresh calls and exemplar choices even fo
   expect(Math.max(...judge.inputs.map((input) => Object.keys(input.choices).length))).toBe(51);
   expect(Math.max(...judge.inputs.map((input) => input.state.exemplars.length))).toBe(49);
 });
+
+test("corrections inside failed-Spiral tasks count per sender and per distinct task", async () => {
+  const cache = await ThemeCache.open(await path(), JevThemes.id);
+  const list = [
+    reply("a", "Stop retrying the same command."),
+    reply("b", "Same retry again.", { position: 2 }),
+    reply("c", "Relay: stop the retry loop.", { sender: "automation" }),
+    reply("d", "Outside any spiral."),
+  ];
+  const tasks: Record<string, string> = { a: "t1", b: "t1", c: "t2" };
+  const result = await groupCorrections(list, cache, scripted(["new", "t0", "t0", "t0"]), {
+    ...options,
+    spiral: { failed: 3, task: (r) => tasks[r.sessionId] ?? null },
+  });
+  expect(result.spiral).toEqual({
+    failedTasks: 3,
+    corrections: 3,
+    tasks: 2,
+    fromPeople: { corrections: 2, tasks: 1 },
+    fromAutomation: { corrections: 1, tasks: 1 },
+  });
+  expect(result.themes[0]!.spiral).toEqual({
+    corrections: 3,
+    tasks: 2,
+    fromPeople: { corrections: 2, tasks: 1 },
+    fromAutomation: { corrections: 1, tasks: 1 },
+  });
+});
