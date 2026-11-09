@@ -58,7 +58,12 @@ const REVERT = /\bgit\s+revert\b/;
 const ran = (run: Run, pattern: RegExp) =>
   run.commands.some((c) => c.command && pattern.test(c.command) && run.calls[c.call - 1]?.ok);
 
-const failed = (run: Run) => run.calls.some((c) => c.ok === false);
+const failures = (run: Run) =>
+  new Set(
+    run.calls.flatMap((c) =>
+      c.failure ? [JSON.stringify([c.failure.kind, c.failure.what, c.failure.error])] : [],
+    ),
+  );
 
 export function segmentSignals(
   runs: readonly Run[],
@@ -76,6 +81,7 @@ export function segmentSignals(
   let corrections = 0;
   let rising = 0;
   let lastTokens: number | null = null;
+  let lastFailures = new Set<string>();
   for (let turn = segment.firstTurn; turn <= segment.lastTurn; turn++) {
     const run = runs[turn];
     if (!run) continue;
@@ -90,12 +96,17 @@ export function segmentSignals(
     corrections = corrected.has(turn) ? corrections + 1 : 0;
     if (corrections === SPIRAL_REPEATS) signals.spiral.push(mark("repeated-correction"));
     const tokens = tokensProcessed(run);
+    const failed = failures(run);
+    const same = [...failed].some((f) => lastFailures.has(f));
     rising =
-      failed(run) && tokens !== null && (lastTokens === null || tokens > lastTokens)
-        ? rising + 1
-        : 0;
+      !failed.size || tokens === null
+        ? 0
+        : same && lastTokens !== null && tokens > lastTokens
+          ? rising + 1
+          : 1;
     if (rising === SPIRAL_REPEATS) signals.spiral.push(mark("rising-cost"));
     lastTokens = tokens;
+    lastFailures = failed;
     signals.tokens = signals.tokens === null || tokens === null ? null : signals.tokens + tokens;
     signals.seconds += durationSeconds(run) ?? 0;
     signals.toolCalls += run.toolCalls;
@@ -126,7 +137,11 @@ function judgeOwn(segments: JudgedSegment[]): Own {
     );
   const landings = all("landed").sort((a, b) => a.at.localeCompare(b.at));
   const first = landings[0];
-  const undone = first ? all("undone").filter((u) => u.at >= first.at) : [];
+  const undone = first
+    ? all("undone").filter(
+        (u) => u.at > first.at || (u.at === first.at && u.reason === "corrected"),
+      )
+    : [];
   const landed: Own["landed"] = !first
     ? { verdict: "unknown", reason: "not-seen", evidence: [] }
     : undone.length

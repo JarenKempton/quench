@@ -342,9 +342,9 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
 - **Task judgments.** `judgments.ts` scores three verdicts per task from signals, with no LLM call
   (#185), each `pass`, `fail` or `unknown` plus a fixed reason and up to 20 evidence ids
   (`harness:session#turn`, or baseline task ids). Landed: a successful `gh pr merge` or
-  `gh issue close` with no `git revert` or correction reply (cached verdicts) at or after it.
+  `gh issue close` with no later `git revert`, nor a correction reply (cached verdicts) to that run or after.
   Spiral: a retry loop (the same failure three times in a run), three corrections in a row, or
-  three runs in a row that fail a tool call while tokens rise. History records no edit paths, so a
+  three runs in a row that hit the same failure while tokens rise. History records no edit paths, so a
   repeated file edit counts only when it fails the same way. Efficiency: tokens and wall time
   within twice the median of at least five landed tasks on the same harnesses, else
   `no-baseline`. Signals are kept per segment in `archive.json`; segments without them are re-read.

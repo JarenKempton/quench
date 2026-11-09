@@ -86,6 +86,8 @@ test("a blocked merge does not land, and a closed ticket does", () => {
     "unknown",
   );
   expect(only(judged("b", turn(0, shell(0, "gh issue close 3")))).landed.reason).toBe("closed");
+  const sameTurn = turn(0, [...shell(0, "git revert abc"), ...shell(0, "gh pr merge 3")]);
+  expect(only(judged("c", sameTurn)).landed.verdict).toBe("pass");
 });
 
 test("the same failure three times, three corrections in a row, or rising failing cost is a spiral", () => {
@@ -105,8 +107,14 @@ test("the same failure three times, three corrections in a row, or rising failin
     reason: "repeated-correction",
     evidence: ["claude-code:c#2"],
   });
-  const rising = [0, 5, 10].flatMap((m) => turn(m, shell(m, `make ${m}`, exit), 1_000 * (m + 1)));
-  expect(only(judged("d", rising)).spiral.reason).toBe("rising-cost");
+  const rising = (commands: string[]) =>
+    commands.flatMap((c, i) => turn(i * 5, shell(i * 5, c, exit), 1_000 * (i + 1)));
+  expect(only(judged("d", rising(["bun test", "bun test", "bun test"]))).spiral.reason).toBe(
+    "rising-cost",
+  );
+  expect(only(judged("f", rising(["grep foo", "ls missing", "bun test"]))).spiral.verdict).toBe(
+    "pass",
+  );
   expect(only(judged("e", turn(0))).spiral.verdict).toBe("unknown");
 });
 
