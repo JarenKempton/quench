@@ -41,6 +41,7 @@ test(
                 addedLines: ["mcp__busy__ping"],
                 failedMcpServers: [
                   { name: "down", errorCode: "CONNECTION_CLOSED", error: "qerrorq at 10.0.0.1" },
+                  { name: "qsecretq=https://x/y", errorCode: "HTTP_500" },
                 ],
                 needsAuthMcpServers: ["locked"],
               },

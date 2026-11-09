@@ -132,6 +132,33 @@ describe("Claude Code", () => {
       [false, ["mcp__biz__list_items"]],
     ]);
   });
+
+  test("an API error line with an error object still parses, and a model_not_found error names the model", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "quench-claude-"));
+    await Bun.write(
+      join(dir, ".claude/projects/-x/t.jsonl"),
+      [
+        { type: "system", subtype: "api_error", error: { message: "429 rate limited" } },
+        {
+          type: "assistant",
+          error: "model_not_found",
+          message: {
+            model: "<synthetic>",
+            content: [
+              { type: "text", text: "issue with the selected model (claude-opus-4-8[1m])." },
+            ],
+          },
+        },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n"),
+    );
+    const [s] = await all(new Home(dir));
+    expect(s?.diagnostics.unparsed).toBe(0);
+    expect(s?.events.filter((e) => e.type === "unknown_model")).toMatchObject([
+      { model: "claude-opus-4-8" },
+    ]);
+  });
 });
 
 test("Claude Code records the request's system prompt, tool definitions and deferred tools", async () => {

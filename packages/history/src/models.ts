@@ -3,7 +3,8 @@ const MODEL =
 
 export const modelNamesIn = (text: string): string[] => [...new Set(text.match(MODEL) ?? [])];
 
-export const modelFamily = (model: string) => model.replace(/-\d.*$/, "");
+export const modelFamily = (model: string) =>
+  model.replace(/-\d{8}$/, "").replace(/-\d+(?:[-.]\d+)?(?=-|$)/, "");
 
 export function modelVersion(model: string): number | null {
   const found = /-(\d+)(?:[-.](\d{1,2})(?!\d))?/.exec(model);

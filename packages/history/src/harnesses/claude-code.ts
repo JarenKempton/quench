@@ -107,7 +107,7 @@ const Line = z.looseObject({
     .nullish(),
   toolUseResult: z.unknown().optional(),
   /** On an assistant line Claude Code wrote for a failed API call: the error kind, such as `model_not_found`. */
-  error: z.string().nullish(),
+  error: z.unknown().optional(),
   /** On a tool result line: how the call was allowed or refused; `source` is `hook`, `config`, `user_abort`, `user_reject`… */
   permissionDecision: z
     .looseObject({
@@ -647,19 +647,25 @@ function promptParts(raw: unknown): EventKind[] {
 
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,39}$/;
 
+const SERVER_NAME = /^[A-Za-z0-9][\w. -]{0,63}$/;
+
 function mcpStatus(
   failed: { name: string; errorCode?: string | null | undefined }[],
-  needsLogin: (string | { name: string })[],
+  needsAuth: (string | { name: string })[],
 ): EventKind[] {
-  if (!failed.length && !needsLogin.length) return [];
+  const named = failed.filter((f) => SERVER_NAME.test(f.name));
+  const needsLogin = needsAuth
+    .map((n) => (typeof n === "string" ? n : n.name))
+    .filter((name) => SERVER_NAME.test(name));
+  if (!named.length && !needsLogin.length) return [];
   return [
     {
       type: "mcp_status",
-      failed: failed.map((f) => ({
+      failed: named.map((f) => ({
         server: f.name,
         code: f.errorCode && ERROR_CODE.test(f.errorCode) ? f.errorCode : null,
       })),
-      needsLogin: needsLogin.map((n) => (typeof n === "string" ? n : n.name)),
+      needsLogin,
     },
   ];
 }

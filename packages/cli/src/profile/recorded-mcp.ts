@@ -118,7 +118,7 @@ export function renderMcpHealth(rows: McpHealth[], days: number): string[] {
       ],
       [3],
     ),
-    "  Unused: on in config, never called. Failing and needs login: as Claude Code recorded at session start.",
+    "  Unused: on in config, never called. Failing and needs login: sessions where Claude Code recorded the server failing to connect or waiting for login at any point.",
   ];
 }
 
