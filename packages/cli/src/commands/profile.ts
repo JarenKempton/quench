@@ -374,11 +374,12 @@ async function profileProject(home: Home, project: Project, places: SessionPlace
 
 async function unjudged(home: Home): Promise<string | null> {
   const config = await readConfig(home.dir);
-  if (typeof typesafeKey(config, process.env) === "string") return null;
+  const keyed = typeof typesafeKey(config, process.env) === "string";
   const choice = judgeChoice(config, process.env);
   const judged =
     !(choice instanceof Error) &&
     choice.name !== "none" &&
     !(choice.name === "jev" && !choice.apiKey);
+  if (keyed) return judged ? null : "quench corrections";
   return `${judged ? "grouping and causes in quench corrections" : "quench corrections"} and one-word skill names in quench profile skills --asks`;
 }

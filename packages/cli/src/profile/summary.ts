@@ -45,7 +45,7 @@ export function summary(result: Profile, homeDir: string): string[] {
     ...(result.unjudged
       ? [
           "",
-          `${dim(`No judge key set: ${result.unjudged} are not measured.`)} ${accent("→ quench setup judge")}`,
+          `${dim(`Not measured until a judge is set up: ${result.unjudged}.`)} ${accent("→ quench setup judge")}`,
         ]
       : []),
     "",

@@ -71,14 +71,13 @@ mv "$tmp/$asset" "$bin_dir/quench"
 echo "Installed quench ($release) to $bin_dir/quench"
 
 rc_path() {
-  probe=$1
-  shift
-  limit=$(command -v timeout || true)
-  if [ -n "$limit" ]; then
-    env -i HOME="$HOME" PATH=/usr/bin:/bin "$limit" 5 "$probe" "$@" </dev/null 2>/dev/null
-  else
-    env -i HOME="$HOME" PATH=/usr/bin:/bin "$probe" "$@" </dev/null 2>/dev/null
-  fi
+  env -i HOME="$HOME" PATH=/usr/bin:/bin "$@" </dev/null >"$tmp/rc" 2>/dev/null &
+  probe=$!
+  (sleep 5 && kill -9 "$probe" 2>/dev/null) &
+  watcher=$!
+  wait "$probe" 2>/dev/null || true
+  kill "$watcher" 2>/dev/null || true
+  cat "$tmp/rc"
 }
 
 shell_name=$(basename "${SHELL:-sh}")
