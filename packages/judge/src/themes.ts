@@ -18,6 +18,16 @@ export interface ThemeJudge {
   assign(input: ThemeInput): Promise<ThemeDecision>;
 }
 
+type SpiralTally = { corrections: number; tasks: number };
+type SpiralEvidence = SpiralTally & { fromPeople: SpiralTally; fromAutomation: SpiralTally };
+type Options = {
+  limit: number;
+  examples: number;
+  since: Date;
+  spiral?: { failed: number; task: SpiralTask };
+};
+type SpiralTask = (reply: Reply) => string | null;
+
 type Group = { id: string; exchange: Exchange; members: Reply[]; classifiers: Set<string> };
 /** Evidence summary for one corrective-intent group, including groups seen in only one session. */
 export type Theme = {
@@ -30,6 +40,7 @@ export type Theme = {
   corrections: number;
   /** Distinct (harness, native session ID) pairs, not proof of independent occurrences across forks. */
   sessions: number;
+  spiral: SpiralEvidence;
   /** True when the group appears in at least two native sessions. */
   recurring: boolean;
   /** Distinct last-recorded coding-agent models in the preceding runs, not the grouping models. */
@@ -63,7 +74,7 @@ export async function groupCorrections(
   replies: readonly Reply[],
   cache: ThemeCache,
   judge: ThemeJudge | null,
-  options: { limit: number; examples: number; since: Date },
+  options: Options,
 ) {
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > MAX_THEME_LIMIT)
     throw new Error(`Theme limit must be between 1 and ${MAX_THEME_LIMIT}`);
@@ -175,8 +186,15 @@ export async function groupCorrections(
       "Native session IDs do not prove independent occurrences; copied fork history can inflate evidence.",
       "Agent corrections are supervision evidence, not confirmed human preferences or rule proposals.",
     ],
+    spiral: {
+      failedTasks: options.spiral?.failed ?? 0,
+      ...spiralEvidence(
+        groups.flatMap((g) => g.members),
+        options.spiral?.task,
+      ),
+    },
     themes: groups
-      .map((group) => evidence(group, options.examples))
+      .map((group) => evidence(group, options.examples, options.spiral?.task))
       .sort(
         (a, b) =>
           b.sessions - a.sessions ||
@@ -221,13 +239,36 @@ function occurrences(replies: readonly Reply[]) {
   return { corrections: replies.length, sessions, recurring: sessions >= 2 };
 }
 
-function evidence(group: Group, examples: number): Theme {
+function spiralTally(replies: readonly Reply[], spiralTask: SpiralTask | undefined): SpiralTally {
+  const tasks = replies.flatMap((r) => spiralTask?.(r) ?? []);
+  return { corrections: tasks.length, tasks: new Set(tasks).size };
+}
+
+function spiralEvidence(
+  replies: readonly Reply[],
+  spiralTask: SpiralTask | undefined,
+): SpiralEvidence {
+  return {
+    ...spiralTally(replies, spiralTask),
+    fromPeople: spiralTally(
+      replies.filter((r) => r.sender === "person"),
+      spiralTask,
+    ),
+    fromAutomation: spiralTally(
+      replies.filter((r) => r.sender === "automation"),
+      spiralTask,
+    ),
+  };
+}
+
+function evidence(group: Group, examples: number, spiralTask: SpiralTask | undefined): Theme {
   const senderSources = { harness: 0, host: 0, judge: 0, unknown: 0 };
   for (const r of group.members) senderSources[r.senderSource] += 1;
   return {
     representative: group.members[0]!.run.reply!,
     representativeSender: group.members[0]!.sender,
     ...occurrences(group.members),
+    spiral: spiralEvidence(group.members, spiralTask),
     fromPeople: occurrences(group.members.filter((r) => r.sender === "person")),
     fromAutomation: occurrences(group.members.filter((r) => r.sender === "automation")),
     models: [

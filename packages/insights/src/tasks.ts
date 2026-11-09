@@ -81,7 +81,7 @@ const markerRepo = (runs: readonly Run[]) => {
 const iso = (at: Date | null) => at?.toISOString() ?? null;
 
 export function segments(
-  session: Session,
+  session: Pick<Session, "harness" | "id" | "parent" | "branch" | "cwd">,
   runs: readonly Run[],
   newGoals: ReadonlySet<number>,
   knownRepo: string | null = null,

@@ -443,3 +443,80 @@ test(
   },
   cliRunsTimeout,
 );
+
+test(
+  "corrections in a failed-Spiral task back their theme with sender attribution",
+  async () => {
+    const home = await mkdtemp(join(tmpdir(), "quench-cli-spiral-"));
+    const sessions = join(home, ".claude/projects/demo");
+    await mkdir(sessions, { recursive: true });
+    const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
+    const replies = ["Stop, that is wrong.", "Still wrong.", "Wrong again."];
+    const lines = [];
+    for (const [i, text] of ["work", ...replies].entries()) {
+      lines.push({
+        type: "user",
+        sessionId: "s",
+        timestamp: `2026-10-20T10:0${i}:00Z`,
+        promptSource: "sdk",
+        message: { role: "user", content: text },
+      });
+      if (i === replies.length) break;
+      lines.push({
+        type: "assistant",
+        timestamp: `2026-10-20T10:0${i}:30Z`,
+        message: {
+          id: `m${i}`,
+          model: "model-s",
+          content: [{ type: "text", text: "done" }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      });
+      await cache.remember([
+        [
+          { assistantSaid: "done", reply: replies[i]! },
+          { kind: "correction", sender: "person", confidence: 1 },
+        ],
+      ]);
+    }
+    await Bun.write(
+      join(sessions, "s.jsonl"),
+      lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
+    );
+    let grouping = 0;
+    const server = jev(() =>
+      Response.json({
+        model: "local-test-model",
+        answers: {
+          theme: {
+            type: "choice",
+            choice: grouping++ === 0 ? "new" : "t0",
+            confidence: 1,
+            probabilities: {},
+          },
+        },
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    );
+    try {
+      const env = { TYPESAFE_API_KEY: "local-test-only", TYPESAFE_BASE_URL: server.url.toString() };
+      const result = await run(home, args, env);
+      expect(result.code).toBe(0);
+      const out = JSON.parse(result.stdout);
+      expect(out.themes.spiral).toEqual({
+        failedTasks: 1,
+        corrections: 3,
+        tasks: 1,
+        fromPeople: { corrections: 3, tasks: 1 },
+        fromAutomation: { corrections: 0, tasks: 0 },
+      });
+      expect(out.themes.themes[0].spiral.fromPeople).toEqual({ corrections: 3, tasks: 1 });
+      const text = await run(home, ["corrections", "--themes", "--days", "36500"], env);
+      expect(text.stdout).toContain("Failed-Spiral tasks: 1 · 1 back a group");
+      expect(text.stdout).toContain("representative quotations, not draft rules");
+    } finally {
+      await server.stop(true);
+    }
+  },
+  cliRunsTimeout,
+);
