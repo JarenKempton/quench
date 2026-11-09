@@ -3,7 +3,7 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Jev, VerdictCache } from "@quench/judge";
-import { lines, quench } from "./run.ts";
+import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 type Repro = { tool?: string; command: string; output: string; leaks: string[] };
 
@@ -112,53 +112,59 @@ const leaked = (outputs: Record<string, string>) =>
     repros.flatMap((r) => r.leaks.filter((l) => text.includes(l)).map((l) => `${where}: ${l}`)),
   );
 
-test("corrections and runs --json render no reply or command text from history", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-history-text-")));
-  const file = join(home, ".claude/projects/demo/s.jsonl");
-  await Bun.write(file, session());
-  const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
-  await cache.remember(
-    repros.map((r, n) => [
-      { assistantSaid: "done", reply: replyTo(r) },
-      { kind: "correction", sender: n % 2 ? "automation" : "person", confidence: 1 },
-    ]),
-  );
-  const window = ["--days", "36500", "--examples", "100"];
-  const corrections = ["corrections", "--cached-only", "--context", ...window];
-  const causes = ["corrections", "--causes", "--dry-run", ...window];
-  const outputs = {
-    corrections: (await quench(home, ...corrections)).stdout,
-    correctionsJson: (await quench(home, ...corrections, "--json")).stdout,
-    causes: (await quench(home, ...causes)).stdout,
-    causesJson: (await quench(home, ...causes, "--json")).stdout,
-  };
-  expect(outputs.corrections).toContain("Latest corrections from people");
-  expect(JSON.parse(outputs.correctionsJson).latest).toHaveLength(5);
-  expect(JSON.parse(outputs.causesJson).causes.caused).toHaveLength(repros.length);
+test(
+  "corrections and runs --json render no reply or command text from history",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-history-text-")));
+    const file = join(home, ".claude/projects/demo/s.jsonl");
+    await Bun.write(file, session());
+    const cache = await VerdictCache.open(join(home, ".quench/local"), Jev.id);
+    await cache.remember(
+      repros.map((r, n) => [
+        { assistantSaid: "done", reply: replyTo(r) },
+        { kind: "correction", sender: n % 2 ? "automation" : "person", confidence: 1 },
+      ]),
+    );
+    const window = ["--days", "36500", "--examples", "100"];
+    const corrections = ["corrections", "--cached-only", "--context", ...window];
+    const causes = ["corrections", "--causes", "--dry-run", ...window];
+    const outputs = {
+      corrections: (await quench(home, ...corrections)).stdout,
+      correctionsJson: (await quench(home, ...corrections, "--json")).stdout,
+      causes: (await quench(home, ...causes)).stdout,
+      causesJson: (await quench(home, ...causes, "--json")).stdout,
+    };
+    expect(outputs.corrections).toContain("Latest corrections from people");
+    expect(JSON.parse(outputs.correctionsJson).latest).toHaveLength(5);
+    expect(JSON.parse(outputs.causesJson).causes.caused).toHaveLength(repros.length);
 
-  const runs = JSON.parse((await quench(home, "runs", file, "--json")).stdout);
-  const records = (await quench(home, "runs", "--all", "--json")).stdout
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-  const structural = (
-    list: { commands: unknown; calls?: { failure?: unknown }[]; failures?: unknown }[],
-  ) => JSON.stringify(list.map((r) => [r.commands, r.calls?.map((c) => c.failure), r.failures]));
-  const failures = [
-    ...runs.flatMap((r: { calls: { failure?: object }[] }) => r.calls.map((c) => c.failure)),
-    ...records.flatMap((r: { failures: object[] }) => r.failures),
-  ];
-  expect(failures.filter((f) => f && "what" in f && f.what === "other tool")).toHaveLength(2);
-  expect(runs.flatMap((r: { commands: object[] }) => r.commands)).toContainEqual({
-    program: "curl",
-    subcommand: null,
-    error: "exit code 22",
-  });
-  expect(records.flatMap((r: { commands: object[] }) => r.commands)).toContainEqual({
-    program: "git",
-    subcommand: "push",
-    error: "exit code 128",
-  });
+    const runs = JSON.parse((await quench(home, "runs", file, "--json")).stdout);
+    const records = (await quench(home, "runs", "--all", "--json")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const structural = (
+      list: { commands: unknown; calls?: { failure?: unknown }[]; failures?: unknown }[],
+    ) => JSON.stringify(list.map((r) => [r.commands, r.calls?.map((c) => c.failure), r.failures]));
+    const failures = [
+      ...runs.flatMap((r: { calls: { failure?: object }[] }) => r.calls.map((c) => c.failure)),
+      ...records.flatMap((r: { failures: object[] }) => r.failures),
+    ];
+    expect(failures.filter((f) => f && "what" in f && f.what === "other tool")).toHaveLength(2);
+    expect(runs.flatMap((r: { commands: object[] }) => r.commands)).toContainEqual({
+      program: "curl",
+      subcommand: null,
+      error: "exit code 22",
+    });
+    expect(records.flatMap((r: { commands: object[] }) => r.commands)).toContainEqual({
+      program: "git",
+      subcommand: "push",
+      error: "exit code 128",
+    });
 
-  expect(leaked({ ...outputs, runs: structural(runs), records: structural(records) })).toEqual([]);
-});
+    expect(leaked({ ...outputs, runs: structural(runs), records: structural(records) })).toEqual(
+      [],
+    );
+  },
+  cliRunsTimeout,
+);

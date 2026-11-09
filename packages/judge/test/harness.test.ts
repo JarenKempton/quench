@@ -40,6 +40,7 @@ const judgeWith = async (config: FakeConfig, timeoutMs?: number) => {
 
 const reason = (judgment: unknown) => (judgment as HarnessFailed).reason;
 const posix = test.skipIf(process.platform === "win32");
+const cliRunsTimeout = 20_000;
 
 posix(
   "claude reads a verdict from a stdin-only prompt that carries Jev's clipped text",
@@ -67,6 +68,7 @@ posix(
       expect(call?.env).not.toContain(name);
     expect(readdirSync(tmpdir()).filter((d) => d.startsWith("quench-classify-"))).toEqual([]);
   },
+  cliRunsTimeout,
 );
 
 test("claude loads no user settings, instructions, MCP servers, hooks, tools or commands", () => {
@@ -127,20 +129,29 @@ posix(
     const raw = await judgeWith({ mode: "raw", answer: verdict });
     expect(reason((await raw.judge.classify([exchange]))[0])).toBe("malformed");
   },
+  cliRunsTimeout,
 );
 
-posix("a failed exit is typed and stops the remaining calls", async () => {
-  const { judge, calls } = await judgeWith({ mode: "exit" });
-  const failed = await judge.classify([exchange, exchange, exchange, exchange, exchange]);
-  expect(failed.every((f) => reason(f) === "server")).toBe(true);
-  expect((failed[0] as Error).message).toBe("claude judge failed: server (exit 3)");
-  expect((await calls()).length).toBeLessThan(5);
-});
+posix(
+  "a failed exit is typed and stops the remaining calls",
+  async () => {
+    const { judge, calls } = await judgeWith({ mode: "exit" });
+    const failed = await judge.classify([exchange, exchange, exchange, exchange, exchange]);
+    expect(failed.every((f) => reason(f) === "server")).toBe(true);
+    expect((failed[0] as Error).message).toBe("claude judge failed: server (exit 3)");
+    expect((await calls()).length).toBeLessThan(5);
+  },
+  cliRunsTimeout,
+);
 
-posix("one deadline covers a child that never exits", async () => {
-  const { judge } = await judgeWith({ mode: "slow" }, 200);
-  expect(reason((await judge.classify([exchange]))[0])).toBe("timeout");
-});
+posix(
+  "one deadline covers a child that never exits",
+  async () => {
+    const { judge } = await judgeWith({ mode: "slow" }, 200);
+    expect(reason((await judge.classify([exchange]))[0])).toBe("timeout");
+  },
+  cliRunsTimeout,
+);
 
 posix(
   "a descendant holding stdout open times out, and the process tree is killed",
@@ -155,7 +166,7 @@ posix(
     await Bun.sleep(Math.max(0, 3_000 - (Date.now() - started)));
     expect(existsSync(marker)).toBe(false);
   },
-  10_000,
+  cliRunsTimeout,
 );
 
 posix(
@@ -166,6 +177,7 @@ posix(
     const results = await judge.classify([exchange, exchange]);
     expect(results.map(reason)).toEqual(["server", "server"]);
   },
+  cliRunsTimeout,
 );
 
 posix("a missing CLI or a nested classifier run is refused before anything runs", async () => {

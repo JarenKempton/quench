@@ -32,17 +32,18 @@ description: Use when the user wants to work with PDF files from their documents
 Fill and merge PDF forms.
 `;
 
-export function git(cwd: string, at: string, ...args: string[]) {
-  const result = Bun.spawnSync(
+export async function git(cwd: string, at: string, ...args: string[]) {
+  const proc = Bun.spawn(
     ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args],
     {
       cwd,
       env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at },
-      stdout: "pipe",
+      stdout: "ignore",
       stderr: "pipe",
     },
   );
-  if (!result.success) throw new Error(result.stderr.toString());
+  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+  if (code !== 0) throw new Error(stderr);
 }
 
 export type Case = { id: string; at: string; corrected: boolean };
@@ -105,13 +106,13 @@ export async function fixture(judge = Jev.id, laterCorrected = 5) {
   const home = await mkdtemp(join(tmpdir(), "quench-file-history-"));
   const work = join(home, "work");
   await mkdir(work, { recursive: true });
-  git(work, day(1, 1), "init", "-q");
-  git(work, day(1, 1), "config", "core.autocrlf", "false");
+  await git(work, day(1, 1), "init", "-q");
+  await git(work, day(1, 1), "config", "core.autocrlf", "false");
   await Bun.write(join(work, "CLAUDE.md"), "Use Bun.\n");
-  git(work, day(1, 1), "add", "CLAUDE.md");
-  git(work, day(1, 1), "commit", "-q", "-m", "one");
+  await git(work, day(1, 1), "add", "CLAUDE.md");
+  await git(work, day(1, 1), "commit", "-q", "-m", "one");
   await Bun.write(join(work, "CLAUDE.md"), "Use Bun.\nRun every check twice before you stop.\n");
-  git(work, day(2, 1), "commit", "-q", "-am", "two");
+  await git(work, day(2, 1), "commit", "-q", "-am", "two");
   await Bun.write(join(home, ".claude/skills/verify/SKILL.md"), SKILL);
   const memory = join(home, ".claude/projects/-work/memory");
   await Bun.write(join(memory, "MEMORY.md"), MEMORY);

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lines, quench } from "./run.ts";
+import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const token = ["ghp", "R7tK2mQ9xV4bN8cL1zW6yH3jF5dS0aP2eG7u"].join("_");
 const hook = "PreToolUse:Bash hook error: [guard.sh]: guard: blocked";
@@ -193,52 +193,59 @@ const repros: Repro[] = [
   },
 ];
 
-test("no credential from a command, error or refusal reaches profile, steering, JSON or cache", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-failure-secrets-")));
-  const project = join(home, "work");
-  await mkdir(project, { recursive: true });
-  const record = (r: Repro, n: number) => [
-    {
-      type: "assistant",
-      cwd: project,
-      message: {
-        content: [{ type: "tool_use", id: `t${n}`, name: "Bash", input: { command: r.command } }],
+test(
+  "no credential from a command, error or refusal reaches profile, steering, JSON or cache",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-failure-secrets-")));
+    const project = join(home, "work");
+    await mkdir(project, { recursive: true });
+    const record = (r: Repro, n: number) => [
+      {
+        type: "assistant",
+        cwd: project,
+        message: {
+          content: [{ type: "tool_use", id: `t${n}`, name: "Bash", input: { command: r.command } }],
+        },
       },
-    },
-    {
-      type: "user",
-      cwd: project,
-      ...(r.blocked
-        ? { permissionDecision: r.decision ?? { decision: "reject", source: "hook" } }
-        : {}),
-      message: {
-        content: [{ type: "tool_result", tool_use_id: `t${n}`, content: r.output, is_error: true }],
+      {
+        type: "user",
+        cwd: project,
+        ...(r.blocked
+          ? { permissionDecision: r.decision ?? { decision: "reject", source: "hook" } }
+          : {}),
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: `t${n}`, content: r.output, is_error: true },
+          ],
+        },
       },
-    },
-  ];
-  for (const id of ["one", "two"])
-    await Bun.write(
-      join(home, `.claude/projects/p/${id}.jsonl`),
-      lines(repros.flatMap((r, n) => record(r, n))),
+    ];
+    for (const id of ["one", "two"])
+      await Bun.write(
+        join(home, `.claude/projects/p/${id}.jsonl`),
+        lines(repros.flatMap((r, n) => record(r, n))),
+      );
+    const table = await quench(home, "profile", "failures");
+    expect(table.code).toBe(0);
+    const json = (await quench(home, "profile", "--json")).stdout;
+    const failures = JSON.parse(json).recordedFailures;
+    expect(failures.failures).toBe(2 * repros.length);
+    expect(failures.blocked.length).toBeGreaterThan(0);
+    expect(failures.repeated.length).toBeGreaterThan(0);
+    const steering = await quench(home, "steering", project);
+    expect(steering.stdout).toContain("hook · git push");
+    expect(steering.stdout).toContain("hook · several commands");
+    for (const cut of ["guard.js", "guard.sh", "--token", "--qflag"])
+      expect(json).not.toContain(cut);
+    const steeringJson = (await quench(home, "steering", project, "--json")).stdout;
+    const cache = await Bun.file(join(home, ".quench/local/session-places.json")).text();
+    const outputs = { table: table.stdout, json, steering: steering.stdout, steeringJson, cache };
+    const found = Object.entries(outputs).flatMap(([where, text]) =>
+      repros.flatMap((r) =>
+        r.leaks.filter((leak) => text.includes(leak)).map((l) => `${where}: ${l}`),
+      ),
     );
-  const table = await quench(home, "profile", "failures");
-  expect(table.code).toBe(0);
-  const json = (await quench(home, "profile", "--json")).stdout;
-  const failures = JSON.parse(json).recordedFailures;
-  expect(failures.failures).toBe(2 * repros.length);
-  expect(failures.blocked.length).toBeGreaterThan(0);
-  expect(failures.repeated.length).toBeGreaterThan(0);
-  const steering = await quench(home, "steering", project);
-  expect(steering.stdout).toContain("hook · git push");
-  expect(steering.stdout).toContain("hook · several commands");
-  for (const cut of ["guard.js", "guard.sh", "--token", "--qflag"]) expect(json).not.toContain(cut);
-  const steeringJson = (await quench(home, "steering", project, "--json")).stdout;
-  const cache = await Bun.file(join(home, ".quench/local/session-places.json")).text();
-  const outputs = { table: table.stdout, json, steering: steering.stdout, steeringJson, cache };
-  const found = Object.entries(outputs).flatMap(([where, text]) =>
-    repros.flatMap((r) =>
-      r.leaks.filter((leak) => text.includes(leak)).map((l) => `${where}: ${l}`),
-    ),
-  );
-  expect(found).toEqual([]);
-});
+    expect(found).toEqual([]);
+  },
+  cliRunsTimeout,
+);

@@ -4,6 +4,7 @@ import type { Home } from "@quench/history";
 import { clientDir, loadConnection } from "@quench/hub/client";
 import { agentCycle, applyAndReport, statusFile } from "./agent-cycle.ts";
 import { hubCycle, hubLine } from "./agent-hub.ts";
+import { DEFAULT_OTLP, otelSettings, otlpLine, otlpListen, startOtlp } from "./agent-otlp.ts";
 import { stateDir } from "./skills.ts";
 
 export type AgentOptions = {
@@ -12,6 +13,7 @@ export type AgentOptions = {
   projects?: string[];
   interval: number;
   homeFlags: string[];
+  otlp?: string;
 };
 
 const summary = (status: Awaited<ReturnType<typeof applyAndReport>>) =>
@@ -20,6 +22,20 @@ const summary = (status: Awaited<ReturnType<typeof applyAndReport>>) =>
     : `applied ${status.applied.length}, conflicts ${status.conflicts.length}`;
 
 export async function agentRun(home: Home, options: AgentOptions & { once: boolean }) {
+  const otlp =
+    options.otlp && !options.source ? await startOtlp(clientDir(home.dir), options.otlp) : null;
+  try {
+    return await cycles(home, options, otlp);
+  } finally {
+    await otlp?.stop();
+  }
+}
+
+async function cycles(
+  home: Home,
+  options: AgentOptions & { once: boolean },
+  otlp: Awaited<ReturnType<typeof startOtlp>> | null,
+) {
   for (;;) {
     let line: string;
     let failed: boolean;
@@ -33,7 +49,8 @@ export async function agentRun(home: Home, options: AgentOptions & { once: boole
       failed = !!status.error || status.conflicts.length > 0;
     } else {
       const status = await hubCycle(home, options);
-      line = `${status.snapshot.takenAt} ${summary(status)}${hubLine(status)}`;
+      await otlp?.flush();
+      line = `${status.snapshot.takenAt} ${summary(status)}${hubLine(status)}${otlp ? otlpLine(otlp.stats) : ""}`;
       failed = !!status.error || !!status.hub.error || status.conflicts.length > 0;
     }
     process.stdout.write(`${line}\n`);
@@ -224,6 +241,7 @@ export async function agentInstall(
     ...(options.source ? ["--source", resolve(options.source)] : []),
     ...(options.machine ? ["--machine", options.machine] : []),
     ...(options.projects ?? []).flatMap((p) => ["--project", resolve(p)]),
+    ...(options.otlp ? ["--otlp", options.otlp] : []),
     "--interval",
     String(options.interval),
     ...options.homeFlags,
@@ -260,10 +278,13 @@ export async function agentUninstall(
   return { file: service.file };
 }
 
-const USAGE = `usage: quench agent install [--source <dir> --machine <name>] [--project <dir>] [--interval 300]
+const USAGE = `usage: quench agent install [--source <dir> --machine <name>] [--project <dir>] [--interval 300] [--otlp <host:port>]
        quench agent uninstall
-       quench agent run [--source <dir> --machine <name>] [--project <dir>] [--interval 300] [--once]
-       Without --source, the agent follows the hub this machine is paired with (quench connect).
+       quench agent run [--source <dir> --machine <name>] [--project <dir>] [--interval 300] [--once] [--otlp <host:port>]
+       quench agent otel [--otlp <host:port>]
+       Without --source, the agent follows the hub this machine is paired with (quench connect),
+       and ships its session transcripts and per-session results to the hub's archive.
+       --otlp also listens for OTLP/HTTP JSON on that loopback address, strips it, and forwards it.
 `;
 
 export async function agent(
@@ -276,10 +297,11 @@ export async function agent(
     interval: number;
     once: boolean;
     homeFlags: string[];
+    otlp?: string;
   },
 ) {
   const [sub] = rest;
-  if (!sub || !["install", "uninstall", "run"].includes(sub) || rest.length !== 1) {
+  if (!sub || !["install", "uninstall", "run", "otel"].includes(sub) || rest.length !== 1) {
     process.stderr.write(USAGE);
     return 1;
   }
@@ -292,6 +314,15 @@ export async function agent(
     return 1;
   }
   try {
+    if (flags.otlp !== undefined) otlpListen(flags.otlp);
+    if (sub === "otel") {
+      process.stdout.write(otelSettings(flags.otlp ?? DEFAULT_OTLP));
+      return 0;
+    }
+    if (flags.otlp !== undefined && flags.source) {
+      process.stderr.write("--otlp forwards to the paired hub; it cannot be used with --source\n");
+      return 1;
+    }
     if (sub === "uninstall") {
       const { file } = await agentUninstall(home);
       process.stdout.write(`removed the Quench agent service (${file})\n`);
@@ -315,6 +346,7 @@ export async function agent(
       projects: flags.projects,
       interval: flags.interval,
       homeFlags: flags.homeFlags,
+      ...(flags.otlp ? { otlp: flags.otlp } : {}),
     };
     if (sub === "run") return await agentRun(home, { ...options, once: flags.once });
     const { file, warnings } = await agentInstall(home, options);

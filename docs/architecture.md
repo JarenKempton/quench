@@ -304,6 +304,65 @@ connect` exchanges it for a `qp_` token kept in `propose-token` (0600), stored h
   both sides have 10 sessions that loaded the skill. Its diff comes from the hub repo (commits
   whose folder tree hash matches each side); revert offers that commit through `/revert`.
 
+## Analytics archive
+
+With `--clickhouse-bin` (or `--clickhouse <url>`) the hub also keeps a long-term archive (#176).
+
+```
+harness session files ──▶ quench agent ──zstd──▶ PUT /api/v1/transcripts ──▶ <data>/archive/<machine>/<harness>/<path>.zst
+                               ├── per-session results ──▶ POST /api/v1/sessions ──▶ quench_sessions
+                               └── tasks ──────────────▶ POST /api/v1/tasks ────▶ quench_tasks
+harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶ POST /api/v1/otlp/* ──▶ otel_logs, otel_metrics_*
+```
+
+- **Machine routes and owner routes.** Every machine route takes its machine from the token. The
+  owner routes (`/api/v1/archive/sessions`, `transcripts`, `transcript`) need the owner's session
+  cookie.
+- **Core: transcripts and results.** `agent-archive.ts` keeps `archive.json` (path, size, mtime,
+  SHA-256) so each file is shipped once per change, oldest first, at most 256 MiB raw per cycle.
+  The hub takes one transcript at a time and answers 429 while busy, so the agent retries next
+  cycle. `intake.ts` streams each upload to a temp file under the data folder, refusing more than
+  64 MiB compressed or 256 MiB decompressed as the bytes arrive, while it hashes and secret-scans
+  the decompressed stream line by line. Only a matching SHA-256 moves the file into place,
+  indexed in `quench_transcripts`. `quench_sessions` is a `ReplacingMergeTree` versioned on
+  `AnalysisVersion`, then `ComputedAt`, so an older analysis posted late never replaces a newer
+  one. Tokens Codex does not record stay `NULL`, and corrections come from cached verdicts only.
+- **Tasks.** A task is one goal from start to finish (#184). `@quench/insights` `tasks.ts` cuts
+  each top-level session into segments by turn (run index): a non-default branch keeps the whole
+  session one segment; otherwise a run citing a different GitHub pull or issue id starts a new
+  segment, the same id holds one together, and with no ids a `new_request` reply (cached verdicts
+  only) or an idle gap over 60 minutes starts one. Segments that share a marker (branch, Jira key
+  in a branch name, `owner/repo#n`) join into one task, across sessions and harnesses. A run citing
+  more than three ids joins nothing by them. The agent keeps each session's segments in
+  `archive.json`, rebuilds every task each cycle, and posts only changed ones; `tasks.json` holds
+  what it posted, so a task that merged into another is posted again with `Removed = 1`.
+  `quench_tasks` is a `ReplacingMergeTree(Version, Removed)` keyed by `(Machine, TaskId)`, versioned
+  like `quench_sessions`; the id is a hash of the first member, so a rerun gives the same rows.
+  Later verdict columns arrive with `ALTER TABLE … ADD COLUMN` and a newer `AnalysisVersion`.
+- **Task judgments.** `judgments.ts` scores three verdicts per task from signals, with no LLM call
+  (#185), each `pass`, `fail` or `unknown` plus a fixed reason and up to 20 evidence ids
+  (`harness:session#turn`, or baseline task ids). Landed: a successful `gh pr merge` or
+  `gh issue close` with no later `git revert`, nor a correction reply (cached verdicts) to that run or after.
+  Spiral: a retry loop (the same failure three times in a run), three corrections in a row, or
+  three runs in a row that hit the same failure while tokens rise. History records no edit paths, so a
+  repeated file edit counts only when it fails the same way. Efficiency: tokens and wall time
+  within twice the median of at least five landed tasks on the same harnesses, else
+  `no-baseline`. Signals are kept per segment in `archive.json`; segments without them are re-read.
+- **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
+  unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
+  at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow
+  the ClickHouse OTel exporter's columns, plus a materialized `Machine` and `SessionId`. The
+  sessions route joins `otel_logs` per session for cost, API requests and errors, latency and
+  tool failures. When a field is missing, the response says so in `otel.missing`.
+- **ClickHouse.** `clickhouse.ts` writes `config.xml` and `users.xml` into its own 0700 folder:
+  loopback HTTP only, no native port, the memory settings in decisions. It starts the server,
+  waits for `/ping`, and restarts it with backoff. `schema.ts` creates the tables (monthly
+  partitions, `ttl_only_drop_parts`) and sets the TTL from `--retention` on every start, without
+  rewriting parts.
+- **Container.** The root `Dockerfile` builds on the pinned `clickhouse/clickhouse-server` LTS
+  image, with volumes `/data` (hub) and `/clickhouse`. `packages/hub/test/scale.sh` loads
+  synthetic rows over a year into a memory-limited container, then runs year-long GROUP BYs.
+
 ## Reading at scale
 
 `readSessions` streams one session at a time with a small concurrency limit, and each

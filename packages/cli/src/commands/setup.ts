@@ -11,13 +11,14 @@ import {
 } from "@quench/judge";
 import { judgeChoice, readConfig, secretsIn, writeConfig, type Config } from "../config.ts";
 import { plural, shortPath } from "../format.ts";
+import { STEPS } from "../names.ts";
 import { prompt } from "../prompt.ts";
 import { clientDir, loadConnection } from "@quench/hub/client";
 import { connect } from "./hub.ts";
 import { profile } from "./profile.ts";
 import { ui as serveUi } from "./ui.ts";
 
-export const STEPS = ["agents", "summary", "judge", "hub", "ui"] as const;
+export { STEPS };
 type Step = (typeof STEPS)[number];
 type Outcome = "done" | "skipped" | "stopped";
 type Env = Record<string, string | undefined>;

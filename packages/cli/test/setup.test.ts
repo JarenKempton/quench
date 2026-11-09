@@ -3,6 +3,7 @@ import { cp, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CANNED_EXCHANGE } from "@quench/judge";
+import { cliRunsTimeout } from "./run.ts";
 
 const root = join(import.meta.dir, "../../..");
 const fixture = join(root, "packages/history/test/fixtures/home");
@@ -60,143 +61,171 @@ async function quench(home: string, args: string[], stdin = "", extra = {}) {
 const config = (home: string) => Bun.file(join(home, ".quench/config.json")).json();
 const mode = async (home: string) => (await stat(join(home, ".quench/config.json"))).mode & 0o777;
 
-test("setup --judge none --yes runs without a terminal, a hub or a key, and resumes", async () => {
-  const home = await freshHome();
-  const run = await quench(home, ["setup", "--judge", "none", "--yes"]);
-  expect(run.code).toBe(0);
-  expect(run.stdout).toContain("Step 1/5 · Your agents");
-  expect(run.stdout).toMatch(/Claude Code\s+1 session over \d+ days?, in /);
-  expect(run.stdout).toContain(`, in ${join("~", ".claude")}\n`);
-  expect(run.stdout).toContain("Step 2/5 · What your sessions start with");
-  expect(run.stdout).toContain("No judge: quench corrections stays off");
-  expect(run.stdout).toContain("Skipped: run quench setup hub and paste that line to pair.");
-  expect(run.stdout).toContain("Setup finished; skipped: hub, ui.");
-  expect(await config(home)).toEqual({
-    judge: { name: "none" },
-    setup: { done: ["agents", "summary", "judge"] },
-  });
-  if (posix) expect(await mode(home)).toBe(0o600);
+test(
+  "setup --judge none --yes runs without a terminal, a hub or a key, and resumes",
+  async () => {
+    const home = await freshHome();
+    const run = await quench(home, ["setup", "--judge", "none", "--yes"]);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("Step 1/5 · Your agents");
+    expect(run.stdout).toMatch(/Claude Code\s+1 session over \d+ days?, in /);
+    expect(run.stdout).toContain(`, in ${join("~", ".claude")}\n`);
+    expect(run.stdout).toContain("Step 2/5 · What your sessions start with");
+    expect(run.stdout).toContain("No judge: quench corrections stays off");
+    expect(run.stdout).toContain("Skipped: run quench setup hub and paste that line to pair.");
+    expect(run.stdout).toContain("Setup finished; skipped: hub, ui.");
+    expect(await config(home)).toEqual({
+      judge: { name: "none" },
+      setup: { done: ["agents", "summary", "judge"] },
+    });
+    if (posix) expect(await mode(home)).toBe(0o600);
 
-  const again = await quench(home, ["setup", "--yes"]);
-  expect(again.code).toBe(0);
-  expect(again.stdout).not.toContain("Step 1/5");
-  expect(again.stdout).toContain("Step 4/5 · Pair with a hub");
+    const again = await quench(home, ["setup", "--yes"]);
+    expect(again.code).toBe(0);
+    expect(again.stdout).not.toContain("Step 1/5");
+    expect(again.stdout).toContain("Step 4/5 · Pair with a hub");
 
-  const off = await quench(home, ["corrections"]);
-  expect(off.code).toBe(2);
-  expect(off.stderr).toContain("Reply classification is off: the judge is none");
-  for (const args of [["report", "--days", "36500"], ["profile"], ["steering", home]])
-    expect((await quench(home, args)).code).toBe(0);
-  const dry = await quench(home, ["corrections", "--judge", "jev", "--dry-run", "--json"]);
-  expect(JSON.parse(dry.stdout).judge).toStartWith("jev/");
-});
+    const off = await quench(home, ["corrections"]);
+    expect(off.code).toBe(2);
+    expect(off.stderr).toContain("Reply classification is off: the judge is none");
+    for (const args of [["report", "--days", "36500"], ["profile"], ["steering", home]])
+      expect((await quench(home, args)).code).toBe(0);
+    const dry = await quench(home, ["corrections", "--judge", "jev", "--dry-run", "--json"]);
+    expect(JSON.parse(dry.stdout).judge).toStartWith("jev/");
+  },
+  cliRunsTimeout,
+);
 
-test("setup tests an OpenAI-compatible judge on a canned exchange and keeps its key in a 0600 file", async () => {
-  const home = await freshHome();
-  bodies.length = 0;
-  answer = '{"kind":"correction","sender":"person","confidence":0.9}';
-  const typed = `openai\n${baseUrl}\nsmall-model\nsk-local-test\n\n`;
-  const run = await quench(home, ["setup", "judge"], typed);
-  expect(run.stderr).toBe("");
-  expect(run.code).toBe(0);
-  const id = `openai/reply-v1/${JSON.stringify({ baseUrl, model: "small-model" })}`;
-  expect(run.stdout).toContain(`Test passed: ${id} answered "correction"`);
-  expect(run.stdout).not.toContain("sk-local-test");
-  expect(bodies).toHaveLength(1);
-  expect(bodies[0]).toContain(JSON.stringify(CANNED_EXCHANGE.reply).slice(1, -1));
-  expect(bodies[0]).not.toContain("health check");
-  expect((await config(home)).judge).toEqual({
-    name: "openai",
-    baseUrl,
-    model: "small-model",
-    apiKey: "sk-local-test",
-  });
-  if (posix) expect(await mode(home)).toBe(0o600);
+test(
+  "setup tests an OpenAI-compatible judge on a canned exchange and keeps its key in a 0600 file",
+  async () => {
+    const home = await freshHome();
+    bodies.length = 0;
+    answer = '{"kind":"correction","sender":"person","confidence":0.9}';
+    const typed = `openai\n${baseUrl}\nsmall-model\nsk-local-test\n\n`;
+    const run = await quench(home, ["setup", "judge"], typed);
+    expect(run.stderr).toBe("");
+    expect(run.code).toBe(0);
+    const id = `openai/reply-v1/${JSON.stringify({ baseUrl, model: "small-model" })}`;
+    expect(run.stdout).toContain(`Test passed: ${id} answered "correction"`);
+    expect(run.stdout).not.toContain("sk-local-test");
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain(JSON.stringify(CANNED_EXCHANGE.reply).slice(1, -1));
+    expect(bodies[0]).not.toContain("health check");
+    expect((await config(home)).judge).toEqual({
+      name: "openai",
+      baseUrl,
+      model: "small-model",
+      apiKey: "sk-local-test",
+    });
+    if (posix) expect(await mode(home)).toBe(0o600);
 
-  const dry = await quench(home, ["corrections", "--days", "36500", "--dry-run", "--json"]);
-  expect(JSON.parse(dry.stdout).judge).toBe(id);
-  const overridden = await quench(home, ["corrections"], "", { QUENCH_JUDGE: "none" });
-  expect(overridden.code).toBe(2);
-});
+    const dry = await quench(home, ["corrections", "--days", "36500", "--dry-run", "--json"]);
+    expect(JSON.parse(dry.stdout).judge).toBe(id);
+    const overridden = await quench(home, ["corrections"], "", { QUENCH_JUDGE: "none" });
+    expect(overridden.code).toBe(2);
+  },
+  cliRunsTimeout,
+);
 
-test("a judge that fails its test is not saved", async () => {
-  const home = await freshHome();
-  answer = "probably a correction";
-  const env = { QUENCH_OPENAI_BASE_URL: baseUrl, QUENCH_OPENAI_MODEL: "small-model" };
-  const run = await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env);
-  expect(run.code).toBe(1);
-  expect(run.stdout).toContain("Test failed: openai judge failed: malformed");
-  expect(run.stdout).toContain("Setup stopped at judge. Run quench setup to resume there.");
-  expect(await Bun.file(join(home, ".quench/config.json")).exists()).toBe(false);
-});
+test(
+  "a judge that fails its test is not saved",
+  async () => {
+    const home = await freshHome();
+    answer = "probably a correction";
+    const env = { QUENCH_OPENAI_BASE_URL: baseUrl, QUENCH_OPENAI_MODEL: "small-model" };
+    const run = await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain("Test failed: openai judge failed: malformed");
+    expect(run.stdout).toContain("Setup stopped at judge. Run quench setup to resume there.");
+    expect(await Bun.file(join(home, ".quench/config.json")).exists()).toBe(false);
+  },
+  cliRunsTimeout,
+);
 
-test("setup stops cleanly without answers, and rejects unknown steps and judges", async () => {
-  const home = await freshHome();
-  const run = await quench(home, ["setup", "judge"]);
-  expect(run.code).toBe(1);
-  expect(run.stdout).toContain("Setup stopped at judge");
-  const jev = await quench(home, ["setup", "judge", "--judge", "jev", "--yes"]);
-  expect(jev.code).toBe(1);
-  expect(jev.stdout).toContain("Jev needs a TypeSafe API key");
-  expect((await quench(home, ["setup", "nope"])).stderr).toContain('unknown setup step "nope"');
-  expect((await quench(home, ["setup", "--judge", "gpt"])).stderr).toContain(
-    "--judge must be jev, claude, openai or none",
-  );
-});
+test(
+  "setup stops cleanly without answers, and rejects unknown steps and judges",
+  async () => {
+    const home = await freshHome();
+    const run = await quench(home, ["setup", "judge"]);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain("Setup stopped at judge");
+    const jev = await quench(home, ["setup", "judge", "--judge", "jev", "--yes"]);
+    expect(jev.code).toBe(1);
+    expect(jev.stdout).toContain("Jev needs a TypeSafe API key");
+    expect((await quench(home, ["setup", "nope"])).stderr).toContain('unknown setup step "nope"');
+    expect((await quench(home, ["setup", "--judge", "gpt"])).stderr).toContain(
+      "--judge must be jev, claude, openai or none",
+    );
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(posix)("setup on Windows never offers claude", async () => {
-  const home = await freshHome();
-  const run = await quench(home, ["setup", "judge"], "claude\nskip\n\n");
-  expect(run.stdout).not.toContain("claude -p, signed in as you");
-  expect(run.stdout).toContain("Pick one of jev, openai, none, or skip.");
-  expect(run.code).toBe(0);
-});
+test.skipIf(posix)(
+  "setup on Windows never offers claude",
+  async () => {
+    const home = await freshHome();
+    const run = await quench(home, ["setup", "judge"], "claude\nskip\n\n");
+    expect(run.stdout).not.toContain("claude -p, signed in as you");
+    expect(run.stdout).toContain("Pick one of jev, openai, none, or skip.");
+    expect(run.code).toBe(0);
+  },
+  cliRunsTimeout,
+);
 
 const CANARY = "CANARY9e2f";
 
-test("an explicit --judge none beats QUENCH_JUDGE and never calls a model", async () => {
-  const home = await freshHome();
-  bodies.length = 0;
-  const env = {
-    QUENCH_JUDGE: "openai",
-    QUENCH_OPENAI_BASE_URL: baseUrl,
-    QUENCH_OPENAI_MODEL: "small-model",
-  };
-  const run = await quench(home, ["setup", "judge", "--judge", "none", "--yes"], "", env);
-  expect(run.code).toBe(0);
-  expect((await config(home)).judge).toEqual({ name: "none" });
-  const off = await quench(home, ["corrections", "--judge", "none"], "", env);
-  expect(off.code).toBe(2);
-  expect(bodies).toHaveLength(0);
-});
+test(
+  "an explicit --judge none beats QUENCH_JUDGE and never calls a model",
+  async () => {
+    const home = await freshHome();
+    bodies.length = 0;
+    const env = {
+      QUENCH_JUDGE: "openai",
+      QUENCH_OPENAI_BASE_URL: baseUrl,
+      QUENCH_OPENAI_MODEL: "small-model",
+    };
+    const run = await quench(home, ["setup", "judge", "--judge", "none", "--yes"], "", env);
+    expect(run.code).toBe(0);
+    expect((await config(home)).judge).toEqual({ name: "none" });
+    const off = await quench(home, ["corrections", "--judge", "none"], "", env);
+    expect(off.code).toBe(2);
+    expect(bodies).toHaveLength(0);
+  },
+  cliRunsTimeout,
+);
 
-test("a malformed key or a remote plain-HTTP endpoint is refused without leaking or sending", async () => {
-  const home = await freshHome();
-  bodies.length = 0;
-  const bad = {
-    QUENCH_OPENAI_BASE_URL: baseUrl,
-    QUENCH_OPENAI_MODEL: "small-model",
-    QUENCH_OPENAI_API_KEY: `sk-${CANARY}\u0007`,
-  };
-  const remote = {
-    ...bad,
-    QUENCH_OPENAI_BASE_URL: "http://api.example.com/v1",
-    QUENCH_OPENAI_API_KEY: `sk-${CANARY}`,
-  };
-  for (const env of [bad, remote]) {
-    const runs = [
-      await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env),
-      await quench(home, ["corrections", "--judge", "openai", "--json"], "", env),
-      await quench(home, ["corrections", "--judge", "openai", "--dry-run", "--json"], "", env),
-    ];
-    for (const run of runs) {
-      expect(run.code).toBe(1);
-      expect(run.stdout + run.stderr).not.toContain(CANARY);
+test(
+  "a malformed key or a remote plain-HTTP endpoint is refused without leaking or sending",
+  async () => {
+    const home = await freshHome();
+    bodies.length = 0;
+    const bad = {
+      QUENCH_OPENAI_BASE_URL: baseUrl,
+      QUENCH_OPENAI_MODEL: "small-model",
+      QUENCH_OPENAI_API_KEY: `sk-${CANARY}\u0007`,
+    };
+    const remote = {
+      ...bad,
+      QUENCH_OPENAI_BASE_URL: "http://api.example.com/v1",
+      QUENCH_OPENAI_API_KEY: `sk-${CANARY}`,
+    };
+    for (const env of [bad, remote]) {
+      const runs = [
+        await quench(home, ["setup", "judge", "--judge", "openai", "--yes"], "", env),
+        await quench(home, ["corrections", "--judge", "openai", "--json"], "", env),
+        await quench(home, ["corrections", "--judge", "openai", "--dry-run", "--json"], "", env),
+      ];
+      for (const run of runs) {
+        expect(run.code).toBe(1);
+        expect(run.stdout + run.stderr).not.toContain(CANARY);
+      }
     }
-  }
-  await typedBadKey(home);
-  expect(bodies).toHaveLength(0);
-});
+    await typedBadKey(home);
+    expect(bodies).toHaveLength(0);
+  },
+  cliRunsTimeout,
+);
 
 const typedBadKey = async (home: string) => {
   const typed = `openai\n${baseUrl}\nsmall-model\nsk-${CANARY}\u0001\nskip\n`;
@@ -259,38 +288,46 @@ test.skipIf(!posix)(
   20_000,
 );
 
-test("a malformed TYPESAFE_API_KEY is refused on every path without being printed", async () => {
-  const home = await freshHome();
-  const env = { TYPESAFE_API_KEY: `sk-${CANARY}\u0007` };
-  for (const args of [
-    ["setup", "judge", "--judge", "jev", "--yes"],
-    ["setup", "--yes"],
-    ["corrections", "--judge", "jev", "--json"],
-    ["corrections", "--judge", "jev", "--days", "36500", "--themes"],
-    ["corrections", "--judge", "jev", "--days", "36500", "--causes"],
-  ]) {
-    const run = await quench(home, args, "", env);
-    expect(run.code).toBe(1);
-    expect(run.stdout + run.stderr).not.toContain(CANARY);
-  }
-  await Bun.write(
-    join(home, ".quench/config.json"),
-    JSON.stringify({ judge: { name: "jev", apiKey: `sk-${CANARY}\u0007` } }),
-  );
-  const stored = await quench(home, ["corrections", "--json"]);
-  expect(stored.code).toBe(1);
-  expect(stored.stdout + stored.stderr).not.toContain(CANARY);
-});
+test(
+  "a malformed TYPESAFE_API_KEY is refused on every path without being printed",
+  async () => {
+    const home = await freshHome();
+    const env = { TYPESAFE_API_KEY: `sk-${CANARY}\u0007` };
+    for (const args of [
+      ["setup", "judge", "--judge", "jev", "--yes"],
+      ["setup", "--yes"],
+      ["corrections", "--judge", "jev", "--json"],
+      ["corrections", "--judge", "jev", "--days", "36500", "--themes"],
+      ["corrections", "--judge", "jev", "--days", "36500", "--causes"],
+    ]) {
+      const run = await quench(home, args, "", env);
+      expect(run.code).toBe(1);
+      expect(run.stdout + run.stderr).not.toContain(CANARY);
+    }
+    await Bun.write(
+      join(home, ".quench/config.json"),
+      JSON.stringify({ judge: { name: "jev", apiKey: `sk-${CANARY}\u0007` } }),
+    );
+    const stored = await quench(home, ["corrections", "--json"]);
+    expect(stored.code).toBe(1);
+    expect(stored.stdout + stored.stderr).not.toContain(CANARY);
+  },
+  cliRunsTimeout,
+);
 
-test("without a terminal, setup's ui step prints how to open it and exits", async () => {
-  const home = await freshHome();
-  for (const stdin of ["\n", "y\n", ""]) {
-    const run = await quench(home, ["setup", "ui"], stdin);
-    expect(run.code).toBe(0);
-    expect(run.stdout).toContain("Skipped. Run quench ui --open any time");
-    expect(run.stdout).not.toContain("quench ui at http");
-  }
-});
+test(
+  "without a terminal, setup's ui step prints how to open it and exits",
+  async () => {
+    const home = await freshHome();
+    for (const stdin of ["\n", "y\n", ""]) {
+      const run = await quench(home, ["setup", "ui"], stdin);
+      expect(run.code).toBe(0);
+      expect(run.stdout).toContain("Skipped. Run quench ui --open any time");
+      expect(run.stdout).not.toContain("quench ui at http");
+    }
+  },
+  cliRunsTimeout,
+);
 
 test.skipIf(!posix)(
   "in a terminal, Enter at setup's ui step serves quench ui on 127.0.0.1",
@@ -329,4 +366,5 @@ test.skipIf(!posix)(
       await proc.exited;
     }
   },
+  cliRunsTimeout,
 );

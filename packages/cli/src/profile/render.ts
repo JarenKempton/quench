@@ -1,3 +1,4 @@
+import { HOME_FLAGS, SECTIONS } from "../names.ts";
 import { bold, dim, heading, title } from "../style.ts";
 import {
   harnessById,
@@ -55,13 +56,7 @@ export type Profile = {
   };
 };
 
-export const HOME_FLAGS = {
-  "claude-home": "claude-code",
-  "codex-home": "codex",
-  "pi-home": "pi",
-} as const;
-
-export const SECTIONS = ["projects", "mcp", "instructions", "skills", "failures"] as const;
+export { HOME_FLAGS, SECTIONS };
 
 export type View = "summary" | "full" | (typeof SECTIONS)[number];
 

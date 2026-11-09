@@ -130,6 +130,15 @@ export class DataDir {
     }
   }
 
+  async create(parts: string[], mode = 0o600) {
+    await this.dir(...parts.slice(0, -1));
+    return open(
+      this.path(...parts),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NOFOLLOW,
+      mode,
+    );
+  }
+
   async link(parts: string[], target: string) {
     await this.dir(...parts.slice(0, -1));
     await symlink(target, this.path(...parts));
