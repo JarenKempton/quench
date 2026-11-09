@@ -1,6 +1,6 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve, win32 } from "node:path";
-import { harnessById, type Home } from "@quench/history";
+import { harnessById, hookScriptsIn, type Home } from "@quench/history";
 
 export type ConfigHome = {
   path: string;
@@ -48,9 +48,7 @@ export async function claudeConfigHomes(home: Home, since: Date): Promise<Config
         instructionBytes: (await stat(join(path, "CLAUDE.md")).catch(() => null))?.size ?? 0,
         settings: settings[0] !== null,
         hooks: settings.reduce<number>((n, s) => n + hookCount(s), 0),
-        hookScripts: [
-          ...new Set(commands.flatMap((c) => scriptOf(c.command, home.dir, path) ?? [])),
-        ].map((script) => win32.basename(script)),
+        hookScripts: [...new Set(commands.flatMap((c) => hookScriptsIn(c.command)))],
         dead: (await Promise.all(commands.map((c) => deadCommand(c, home.dir, path)))).flatMap(
           (d) => d ?? [],
         ),
@@ -151,7 +149,7 @@ async function deadCommand(
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  if (lines.every((l) => l.startsWith("#")))
+  if (lines.length && lines.every((l) => l.startsWith("#")))
     return {
       file: hook.file,
       event: hook.event,
@@ -161,4 +159,14 @@ async function deadCommand(
   const script = scriptOf(hook.command, homeDir, configDir);
   if (!script || (await stat(script).catch(() => null))) return null;
   return { file: hook.file, event: hook.event, script, problem: "missing" };
+}
+
+export async function projectHookScripts(roots: readonly string[]): Promise<string[]> {
+  const files = roots.flatMap((root) =>
+    ["settings.json", "settings.local.json"].map((name) => join(root, ".claude", name)),
+  );
+  const settings = await Promise.all(files.map(readJson));
+  return settings.flatMap((s, i) =>
+    hookCommands(files[i]!, s).flatMap((c) => hookScriptsIn(c.command)),
+  );
 }
