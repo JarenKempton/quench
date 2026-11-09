@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { quoteArg, shellFor } from "@quench/history";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const session = (home: string, cwd: string, id: string) =>
@@ -47,9 +48,9 @@ test(
       expect(summary.code).toBe(0);
       expect(summary.stdout).toContain(
         [
-          "  1. ~/.claude-proxy ran 2 sessions with no instructions or hooks",
-          "     ~/.claude has 3.1 KB of instructions and 2 hooks",
-          "     → quench --claude-home ~/.claude-proxy",
+          `  1. ~${sep}.claude-proxy ran 2 sessions with no instructions or hooks`,
+          `     ~${sep}.claude has 3.1 KB of instructions and 2 hooks`,
+          `     → quench --claude-home ${quoteArg(bare, shellFor())}`,
         ].join("\n"),
       );
       expect(summary.stdout).not.toContain(".claude-old");
@@ -62,6 +63,9 @@ test(
         { path: stale, sessions: 0, instructionBytes: 0, settings: false, hooks: 0 },
         { path: bare, sessions: 2, instructionBytes: 0, settings: false, hooks: 0 },
       ]);
+
+      const active = await quench(home, "--claude-home", bare);
+      expect(active.stdout).toContain(`~${sep}.claude has 3.1 KB of instructions and 2 hooks`);
 
       await rm(bare, { recursive: true });
       expect((await quench(home)).stdout).not.toContain("no instructions or hooks");

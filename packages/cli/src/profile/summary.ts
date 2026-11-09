@@ -1,4 +1,4 @@
-import { harnessById } from "@quench/history";
+import { harnessById, quoteArg, shellFor } from "@quench/history";
 import {
   ago,
   chars,
@@ -138,7 +138,7 @@ function worthALook(result: Profile, homeDir: string): string[] {
     items.push({
       headline: `${shortPath(bare.path, homeDir)} ran ${plural(bare.sessions, "session")} with no instructions or hooks`,
       detail: `${shortPath(unconfigured!.configured.path, homeDir)} has ${size(unconfigured!.configured.instructionBytes)} of instructions and ${plural(unconfigured!.configured.hooks, "hook")}`,
-      command: `quench --claude-home ${shortPath(bare.path, homeDir)}`,
+      command: `quench --claude-home ${quoteArg(bare.path, shellFor())}`,
     });
   const idle = result.projects.reduce((n, p) => n + (p.worktrees?.idle ?? 0), 0);
   if (idle)

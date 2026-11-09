@@ -18,7 +18,8 @@ export async function claudeConfigHomes(home: Home, since: Date): Promise<Config
     resolve(home.of(claude.home)),
     ...siblings
       .filter((e) => e.name === ".claude" || e.name.startsWith(".claude-"))
-      .map((e) => join(home.dir, e.name)),
+      .map((e) => join(home.dir, e.name))
+      .sort(),
   ]) {
     const real = await realpath(path).catch(() => null);
     if (real && !byReal.has(real) && (await stat(real)).isDirectory()) byReal.set(real, path);
