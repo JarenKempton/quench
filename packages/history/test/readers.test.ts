@@ -307,3 +307,22 @@ test("Claude Code counts a hook or permission-rule refusal as blocked, never a p
     ["unmarked", "rejected"],
   ]);
 });
+
+test("Claude Code keeps the session's last working branch, not a temporary one or main after it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quench-claude-"));
+  const says = (gitBranch: string) => ({
+    type: "user",
+    gitBranch,
+    message: { role: "user", content: "go" },
+  });
+  const write = (name: string, branches: string[]) =>
+    Bun.write(
+      join(dir, `.claude/projects/-x/${name}.jsonl`),
+      branches.map((b) => JSON.stringify(says(b))).join("\n") + "\n",
+    );
+  await write("a", ["t3/abc123", "HEAD", "t3/real-name", "main"]);
+  await write("b", ["main", "fix/thing"]);
+  await write("c", ["main"]);
+  const sessions = await all(new Home(dir));
+  expect(sessions.map((s) => s.branch)).toEqual(["t3/real-name", "fix/thing", "main"]);
+});

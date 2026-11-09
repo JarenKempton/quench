@@ -351,7 +351,7 @@ export async function archiveCycle(
 
 const offline = (status: ArchiveStatus) =>
   status.offline
-    ? `; Landed from transcripts for ${status.offline} repo${status.offline === 1 ? "" : "s"}, gh could not reach GitHub`
+    ? `; gh could not reach ${status.offline} repo${status.offline === 1 ? "" : "s"}, Landed there uses cached PR state or transcripts`
     : "";
 
 export const archiveLine = (status: ArchiveStatus) =>

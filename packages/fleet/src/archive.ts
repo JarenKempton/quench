@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { HarnessId, insideFolder, Sha256, Timestamp } from "./common.ts";
 
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;

@@ -26,6 +26,8 @@ import { knownUsage, mcpServerOf } from "../model.ts";
 
 const count = z.number().nullish();
 
+const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "trunk"]);
+
 export const ApiUsage = z.looseObject({
   /** Uncached input tokens. */
   input_tokens: count,
@@ -423,7 +425,12 @@ export const claudeCode: Harness<"claude-code"> = {
     const position = { line: 0 };
     for await (const line of jsonlLines(r.path, Line, diagnostics, position)) {
       cwd ??= line.cwd ?? null;
-      if (line.gitBranch && line.gitBranch !== "HEAD") branch = line.gitBranch;
+      if (
+        line.gitBranch &&
+        line.gitBranch !== "HEAD" &&
+        (!branch || !DEFAULT_BRANCHES.has(line.gitBranch))
+      )
+        branch = line.gitBranch;
       if (line.type === "attachment" && line.uuid) {
         if (attachments.has(line.uuid)) continue;
         attachments.add(line.uuid);

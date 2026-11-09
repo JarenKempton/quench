@@ -218,25 +218,28 @@ const closedAt = (pull: Pull) => pull.mergedAt ?? pull.closedAt ?? "\uffff";
 export function taskPulls(grouped: readonly JudgedSegment[][], pulls: readonly Pull[]) {
   const byId = new Map(pulls.map((p) => [pullId(p), p]));
   const byHead = Map.groupBy(pulls, (p) => `${p.repo}\0${p.head}`);
+  const headed = (m: JudgedSegment) =>
+    m.markers.flatMap((marker) =>
+      marker.startsWith("branch:") && m.repo
+        ? (byHead.get(`${m.repo}\0${marker.slice(7)}`) ?? []).filter(
+            (p) => closedAt(p) >= m.startedAt,
+          )
+        : [],
+    );
+  const byCwd = new Map<string, Set<Pull>>();
   const direct = grouped.map((members) => {
     const found = new Set<Pull>();
-    for (const m of members)
+    for (const m of members) {
       for (const marker of m.markers) {
         const id = byId.get(marker);
         if (id) found.add(id);
-        if (marker.startsWith("branch:") && m.repo)
-          for (const p of byHead.get(`${m.repo}\0${marker.slice(7)}`) ?? []) found.add(p);
       }
-    return [...found];
-  });
-  const byCwd = new Map<string, Set<Pull>>();
-  grouped.forEach((members, i) => {
-    for (const m of members) {
-      if (!m.cwd || !direct[i]!.length) continue;
-      const set = byCwd.get(m.cwd) ?? new Set();
-      for (const p of direct[i]!) set.add(p);
-      byCwd.set(m.cwd, set);
+      for (const p of headed(m)) {
+        found.add(p);
+        if (m.cwd) byCwd.set(m.cwd, (byCwd.get(m.cwd) ?? new Set()).add(p));
+      }
     }
+    return [...found];
   });
   return grouped.map((members, i) => {
     if (direct[i]!.length) return direct[i]!;

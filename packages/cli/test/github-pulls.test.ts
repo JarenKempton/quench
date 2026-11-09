@@ -70,6 +70,14 @@ test("with no gh the repo counts as offline and no PR state is invented", async 
     async () => null,
   );
   expect(result).toEqual({ pulls: [], fetched: 0, offline: 1 });
+  let asked = 0;
+  const later = await githubPulls(
+    dir,
+    [segment("2026-10-20T11:00:00Z", [])],
+    Date.now(),
+    async () => (asked++, null),
+  );
+  expect([asked, later.offline]).toEqual([0, 0]);
 });
 
 test("a fork's head never looks like a local branch, and only GitHub remotes name a repo", async () => {
@@ -84,4 +92,16 @@ test("a fork's head never looks like a local branch, and only GitHub remotes nam
   expect(await repoOf("/wt", remote("https://github.com/acme/widget"))).toBe("acme/widget");
   expect(await repoOf("/wt", remote("https://gitlab.com/acme/widget.git"))).toBeNull();
   expect(await repoOf(null)).toBeNull();
+});
+
+test("an open PR linked only by branch is asked for again with no new activity", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "quench-pulls-"));
+  dirs.push(dir);
+  const calls: string[][] = [];
+  const gh = async (command: string[]) => (calls.push(command), listed("OPEN"));
+  const now = Date.parse("2026-10-21T00:00:00Z");
+  await githubPulls(dir, [segment("2026-10-20T11:00:00Z", ["branch:t3/lane"])], now, gh);
+  await githubPulls(dir, [segment("2026-10-20T11:00:00Z", ["branch:t3/lane"])], now + 1, gh);
+  await githubPulls(dir, [segment("2026-10-20T11:00:00Z", ["branch:t3/done"])], now + 2, gh);
+  expect(calls).toHaveLength(2);
 });

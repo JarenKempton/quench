@@ -188,3 +188,13 @@ test("GitHub's PR state decides Landed for a task linked by branch, PR number or
   ]);
   expect(judgedTasks(lane)[0]!.landed.reason).toBe("not-seen");
 });
+
+test("a shared checkout's merges and a branch's old PR never land an unrelated task", () => {
+  const orch = judged("orch", turn(0, shell(0, "gh pr merge 9")), [], "/repo", "main");
+  const wip = judged("wip", turn(10), [], "/repo", "wip-x");
+  const tasks = judgedTasks([...orch, ...wip], [pull(9, "t3/other", "MERGED")]);
+  expect(tasks.map((t) => t.landed.reason)).toEqual(["merged", "not-seen"]);
+  const old = pull(3, "t3/reused", "MERGED", "2026-10-19T12:00:00Z");
+  const reused = judged("reused", turn(0), [], "/wt/two", "t3/reused");
+  expect(judgedTasks(reused, [old])[0]!.landed.reason).toBe("not-seen");
+});
