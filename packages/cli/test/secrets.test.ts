@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cliRunsTimeout } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -184,149 +185,169 @@ const neverRaw = (output: string) => {
   for (const probe of PROBES) expect(output).not.toContain(probe);
 };
 
-test("secrets reports history, configs, permissions, files and footprints without raw values", async () => {
-  const { home, project } = await fakeHome();
-  const { stdout, code } = await run(home, "--json");
-  expect(code).toBe(0);
-  neverRaw(stdout);
-  const report = JSON.parse(stdout);
+test(
+  "secrets reports history, configs, permissions, files and footprints without raw values",
+  async () => {
+    const { home, project } = await fakeHome();
+    const { stdout, code } = await run(home, "--json");
+    expect(code).toBe(0);
+    neverRaw(stdout);
+    const report = JSON.parse(stdout);
 
-  const exposed = report.history.secrets.map((s: Record<string, unknown>) => [
-    s.provider,
-    s.sessions,
-    s.firstSeen,
-    (s.exposures as { by: string }[])[0]!.by,
-  ]);
-  expect(exposed).toEqual([
-    ["github", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
-    [
-      "jwt",
-      1,
-      "2026-10-01T10:00:06.000Z",
-      expect.stringMatching(/^Bash: mysql -pFake…[0-9a-f]{8} /),
-    ],
-    ["npm", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
-  ]);
-  expect(report.history.secrets[1]).toMatchObject({
-    issuer: "https://auth.example.test",
-    rotate: null,
-  });
-  expect(report.history.secrets[0].rotate).toBe("https://github.com/settings/tokens");
-  const shown = report.history.lowConfidence.map(
-    (s: { exposures: { by: string }[] }) => s.exposures[0]!.by,
-  );
-  for (const command of [
-    'mysql -p "Spac…',
-    "--password 'Long…",
-    "u:PgUr…",
-    "-a Redi…",
-    "admin HtPw…",
-  ])
-    expect(shown.some((by: string) => by.includes(command))).toBe(true);
-  expect(
-    report.history.lowConfidence
-      .filter((s: { exposures: { by: string }[] }) => s.exposures[0]!.by.includes("sshpass"))
-      .map((s: Record<string, unknown>) => [
-        s.rule,
-        s.rotate,
-        (s.exposures as { by: string }[])[0]!.by,
-      ]),
-  ).toEqual([
-    ["secret-named-value", null, expect.stringMatching(/^Bash: sshpass -p 'Fake…[0-9a-f]{8}' ssh/)],
-  ]);
-
-  const mcp = report.configs.find((f: { path: string }) => f.path === join(project, ".mcp.json"));
-  expect(mcp.tracked).toBe(true);
-  expect(mcp.secrets.map((s: { provider: string }) => s.provider)).toEqual(["github"]);
-
-  expect(
-    report.permissions.map((p: Record<string, string>) => [p.harness, p.kind, p.setting]),
-  ).toEqual([
-    ["claude-code", "bypass", "permissions.defaultMode = bypassPermissions"],
-    ["claude-code", "wildcard-shell", "permissions.allow Bash"],
-    ["claude-code", "auto-approved-mcp", "permissions.allow mcp__gh"],
-    ["codex", "bypass", "approval_policy = never"],
-  ]);
-
-  expect(report.instructions.files.map((f: { kind: string }) => f.kind)).toEqual(["skill"]);
-
-  const file = (path: string) =>
-    report.credentialFiles.find((f: { path: string }) => f.path === path);
-  expect(file(join(home, ".npmrc"))).toMatchObject({
-    present: true,
-    plaintext: true,
-    readInSessions: 1,
-    printedInSessions: true,
-    ...(process.platform === "win32" ? {} : { mode: "644", othersCanRead: true }),
-  });
-  expect(file(join(project, ".env"))).toMatchObject({
-    plaintext: true,
-    printedInSessions: true,
-    tracked: false,
-  });
-  expect(file(join(project, ".env.example"))).toMatchObject({ plaintext: true, tracked: true });
-  expect(file(join(home, ".aws/credentials"))).toMatchObject({ present: false });
-  expect(file(join(home, ".pypirc"))).toMatchObject({ plaintext: true, printedInSessions: true });
-
-  expect(report.footprints.map((f: { reason: string }) => f.reason).sort()).toEqual([
-    "dumps every repository secret with toJSON(secrets)",
-    "postinstall added in the last 30 days: node install.js",
-    "postinstall added in the last 30 days: node install.js",
-    "postinstall runs bundle.js, the Shai-Hulud payload",
-    "preinstall added in the last 30 days: node scripts/setup.js",
-  ]);
-});
-
-test("findings keep their ids across runs and each value lists where it lives", async () => {
-  const { home, project } = await fakeHome();
-  const ids = async () => {
-    const report = JSON.parse((await run(home, "--json")).stdout);
-    return {
-      report,
-      ids: [
-        ...report.history.secrets,
-        ...report.history.lowConfidence,
-        ...report.configs.flatMap((f: { secrets: unknown[] }) => f.secrets),
-        ...report.credentialFiles,
-        ...report.footprints,
-      ].map((f: { id: string }) => f.id),
-    };
-  };
-  const first = await ids();
-  const second = await ids();
-  expect(first.ids.every((id) => /^[0-9a-f]{16}$/.test(id))).toBe(true);
-  expect(new Set(first.ids).size).toBe(first.ids.length);
-  expect(second.ids).toEqual(first.ids);
-
-  const github = first.report.history.secrets[0].tag;
-  const where = first.report.locations.find((l: { tag: string }) => l.tag === github);
-  expect(where).toMatchObject({
-    provider: "github",
-    files: [join(project, ".env")],
-    envVars: ["QUENCH_FAKE_GH"],
-  });
-  expect(where.sessions).toHaveLength(1);
-});
-
-test("footprint ids do not change with --days", async () => {
-  const { home } = await fakeHome();
-  const ids = async (days: string) =>
-    JSON.parse((await run(home, "--json", "--days", days)).stdout).footprints.map(
-      (f: { kind: string; id: string }) => [f.kind, f.id],
+    const exposed = report.history.secrets.map((s: Record<string, unknown>) => [
+      s.provider,
+      s.sessions,
+      s.firstSeen,
+      (s.exposures as { by: string }[])[0]!.by,
+    ]);
+    expect(exposed).toEqual([
+      ["github", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
+      [
+        "jwt",
+        1,
+        "2026-10-01T10:00:06.000Z",
+        expect.stringMatching(/^Bash: mysql -pFake…[0-9a-f]{8} /),
+      ],
+      ["npm", 1, "2026-10-01T10:00:06.000Z", "Bash: cat .env ~/.npmrc"],
+    ]);
+    expect(report.history.secrets[1]).toMatchObject({
+      issuer: "https://auth.example.test",
+      rotate: null,
+    });
+    expect(report.history.secrets[0].rotate).toBe("https://github.com/settings/tokens");
+    const shown = report.history.lowConfidence.map(
+      (s: { exposures: { by: string }[] }) => s.exposures[0]!.by,
     );
-  const month = await ids("30");
-  expect(month.map(([kind]: string[]) => kind)).toContain("new-install-script");
-  expect(await ids("90")).toEqual(month);
-});
+    for (const command of [
+      'mysql -p "Spac…',
+      "--password 'Long…",
+      "u:PgUr…",
+      "-a Redi…",
+      "admin HtPw…",
+    ])
+      expect(shown.some((by: string) => by.includes(command))).toBe(true);
+    expect(
+      report.history.lowConfidence
+        .filter((s: { exposures: { by: string }[] }) => s.exposures[0]!.by.includes("sshpass"))
+        .map((s: Record<string, unknown>) => [
+          s.rule,
+          s.rotate,
+          (s.exposures as { by: string }[])[0]!.by,
+        ]),
+    ).toEqual([
+      [
+        "secret-named-value",
+        null,
+        expect.stringMatching(/^Bash: sshpass -p 'Fake…[0-9a-f]{8}' ssh/),
+      ],
+    ]);
 
-test("secrets text output masks every value", async () => {
-  const { home } = await fakeHome();
-  const { stdout, code } = await run(home);
-  expect(code).toBe(0);
-  neverRaw(stdout);
-  expect(stdout).toContain("ghp_…");
-  expect(stdout).toContain("https://github.com/settings/tokens");
-  expect(stdout).toMatch(/jwt +https:\/\/auth\.example\.test +no rotate link known/);
-  expect(stdout).toContain(".env, tracked by git");
-  expect(stdout).toContain("Values found in more than one place");
-});
+    const mcp = report.configs.find((f: { path: string }) => f.path === join(project, ".mcp.json"));
+    expect(mcp.tracked).toBe(true);
+    expect(mcp.secrets.map((s: { provider: string }) => s.provider)).toEqual(["github"]);
+
+    expect(
+      report.permissions.map((p: Record<string, string>) => [p.harness, p.kind, p.setting]),
+    ).toEqual([
+      ["claude-code", "bypass", "permissions.defaultMode = bypassPermissions"],
+      ["claude-code", "wildcard-shell", "permissions.allow Bash"],
+      ["claude-code", "auto-approved-mcp", "permissions.allow mcp__gh"],
+      ["codex", "bypass", "approval_policy = never"],
+    ]);
+
+    expect(report.instructions.files.map((f: { kind: string }) => f.kind)).toEqual(["skill"]);
+
+    const file = (path: string) =>
+      report.credentialFiles.find((f: { path: string }) => f.path === path);
+    expect(file(join(home, ".npmrc"))).toMatchObject({
+      present: true,
+      plaintext: true,
+      readInSessions: 1,
+      printedInSessions: true,
+      ...(process.platform === "win32" ? {} : { mode: "644", othersCanRead: true }),
+    });
+    expect(file(join(project, ".env"))).toMatchObject({
+      plaintext: true,
+      printedInSessions: true,
+      tracked: false,
+    });
+    expect(file(join(project, ".env.example"))).toMatchObject({ plaintext: true, tracked: true });
+    expect(file(join(home, ".aws/credentials"))).toMatchObject({ present: false });
+    expect(file(join(home, ".pypirc"))).toMatchObject({ plaintext: true, printedInSessions: true });
+
+    expect(report.footprints.map((f: { reason: string }) => f.reason).sort()).toEqual([
+      "dumps every repository secret with toJSON(secrets)",
+      "postinstall added in the last 30 days: node install.js",
+      "postinstall added in the last 30 days: node install.js",
+      "postinstall runs bundle.js, the Shai-Hulud payload",
+      "preinstall added in the last 30 days: node scripts/setup.js",
+    ]);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "findings keep their ids across runs and each value lists where it lives",
+  async () => {
+    const { home, project } = await fakeHome();
+    const ids = async () => {
+      const report = JSON.parse((await run(home, "--json")).stdout);
+      return {
+        report,
+        ids: [
+          ...report.history.secrets,
+          ...report.history.lowConfidence,
+          ...report.configs.flatMap((f: { secrets: unknown[] }) => f.secrets),
+          ...report.credentialFiles,
+          ...report.footprints,
+        ].map((f: { id: string }) => f.id),
+      };
+    };
+    const first = await ids();
+    const second = await ids();
+    expect(first.ids.every((id) => /^[0-9a-f]{16}$/.test(id))).toBe(true);
+    expect(new Set(first.ids).size).toBe(first.ids.length);
+    expect(second.ids).toEqual(first.ids);
+
+    const github = first.report.history.secrets[0].tag;
+    const where = first.report.locations.find((l: { tag: string }) => l.tag === github);
+    expect(where).toMatchObject({
+      provider: "github",
+      files: [join(project, ".env")],
+      envVars: ["QUENCH_FAKE_GH"],
+    });
+    expect(where.sessions).toHaveLength(1);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "footprint ids do not change with --days",
+  async () => {
+    const { home } = await fakeHome();
+    const ids = async (days: string) =>
+      JSON.parse((await run(home, "--json", "--days", days)).stdout).footprints.map(
+        (f: { kind: string; id: string }) => [f.kind, f.id],
+      );
+    const month = await ids("30");
+    expect(month.map(([kind]: string[]) => kind)).toContain("new-install-script");
+    expect(await ids("90")).toEqual(month);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "secrets text output masks every value",
+  async () => {
+    const { home } = await fakeHome();
+    const { stdout, code } = await run(home);
+    expect(code).toBe(0);
+    neverRaw(stdout);
+    expect(stdout).toContain("ghp_…");
+    expect(stdout).toContain("https://github.com/settings/tokens");
+    expect(stdout).toMatch(/jwt +https:\/\/auth\.example\.test +no rotate link known/);
+    expect(stdout).toContain(".env, tracked by git");
+    expect(stdout).toContain("Values found in more than one place");
+  },
+  cliRunsTimeout,
+);

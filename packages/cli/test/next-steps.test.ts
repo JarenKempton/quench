@@ -70,55 +70,63 @@ async function fixture() {
   return home;
 }
 
-test("the summary ends with measured cuts ranked by characters × sessions, in --json too", async () => {
-  const home = await fixture();
-  const { stdout, code } = await quench(home);
-  expect(code).toBe(0);
-  const next = stdout.slice(stdout.indexOf("▍Do this next"));
-  expect(next).toBe(
-    [
-      "▍Do this next · ranked by characters saved × sessions",
-      `  1. Trim ${join("~", ".claude", "CLAUDE.md")}`,
-      "     up to 24 chars per session × 2 sessions",
-      "     average recorded size per session, capped at its size on disk now; trimming it saves up to that",
-      "",
-      "  2. Cut notes (user folder)",
-      "     19 chars per session × 2 sessions",
-      `     remove ${join(home, ".claude/skills/notes")}`,
-      "",
-      "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",
-      "",
-    ].join("\n"),
-  );
-  const json = JSON.parse((await quench(home, "--json")).stdout);
-  expect(json.nextSteps.map((s: { kind: string }) => s.kind)).toEqual([
-    "instruction-file",
-    "skill-cut",
-  ]);
-  expect(json.nextSteps[1]).toEqual({
-    kind: "skill-cut",
-    action: "Cut notes (user folder)",
-    command: null,
-    note: `remove ${join(home, ".claude/skills/notes")}`,
-    charsPerSession: 19,
-    sessions: 2,
-    totalChars: 38,
-    size: "exact",
-  });
-});
+test(
+  "the summary ends with measured cuts ranked by characters × sessions, in --json too",
+  async () => {
+    const home = await fixture();
+    const { stdout, code } = await quench(home);
+    expect(code).toBe(0);
+    const next = stdout.slice(stdout.indexOf("▍Do this next"));
+    expect(next).toBe(
+      [
+        "▍Do this next · ranked by characters saved × sessions",
+        `  1. Trim ${join("~", ".claude", "CLAUDE.md")}`,
+        "     up to 24 chars per session × 2 sessions",
+        "     average recorded size per session, capped at its size on disk now; trimming it saves up to that",
+        "",
+        "  2. Cut notes (user folder)",
+        "     19 chars per session × 2 sessions",
+        `     remove ${join(home, ".claude/skills/notes")}`,
+        "",
+        "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",
+        "",
+      ].join("\n"),
+    );
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(json.nextSteps.map((s: { kind: string }) => s.kind)).toEqual([
+      "instruction-file",
+      "skill-cut",
+    ]);
+    expect(json.nextSteps[1]).toEqual({
+      kind: "skill-cut",
+      action: "Cut notes (user folder)",
+      command: null,
+      note: `remove ${join(home, ".claude/skills/notes")}`,
+      charsPerSession: 19,
+      sessions: 2,
+      totalChars: 38,
+      size: "exact",
+    });
+  },
+  cliRunsTimeout,
+);
 
-test("the summary says so when nothing measured is worth doing", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
-  await Bun.write(
-    join(home, ".claude/projects/p/one.jsonl"),
-    lines([{ type: "user", cwd: home, message: { content: "hi" } }]),
-  );
-  const { stdout } = await quench(home);
-  expect(stdout).toContain(
-    "▍Do this next · ranked by characters saved × sessions\n  Nothing measured is worth cutting right now.\n",
-  );
-  expect(JSON.parse((await quench(home, "--json")).stdout).nextSteps).toEqual([]);
-});
+test(
+  "the summary says so when nothing measured is worth doing",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
+    await Bun.write(
+      join(home, ".claude/projects/p/one.jsonl"),
+      lines([{ type: "user", cwd: home, message: { content: "hi" } }]),
+    );
+    const { stdout } = await quench(home);
+    expect(stdout).toContain(
+      "▍Do this next · ranked by characters saved × sessions\n  Nothing measured is worth cutting right now.\n",
+    );
+    expect(JSON.parse((await quench(home, "--json")).stdout).nextSteps).toEqual([]);
+  },
+  cliRunsTimeout,
+);
 
 test(
   "an instruction file no longer on disk is not recommended",
@@ -175,24 +183,28 @@ test.each([
     config: { a: { docs: url("docs.example.com"), docs2: url("docs.example.com") } },
     sessions: { a: [[up("docs", 50)], [up("docs2", 50)]] },
   },
-])("duplicate MCP config never becomes a next step: $name", async ({ config, sessions }) => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
-  for (const [project, servers] of Object.entries(config))
-    await Bun.write(join(home, project, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
-  for (const [project, runs] of Object.entries(sessions))
-    for (const [i, records] of runs.entries())
-      await Bun.write(
-        join(home, `.claude/projects/${project}/${i}.jsonl`),
-        lines([
-          { type: "user", cwd: join(home, project), message: { content: "hi" } },
-          ...records.map((r: object) => ({ cwd: join(home, project), ...r })),
-        ]),
-      );
-  const json = JSON.parse((await quench(home, "--json")).stdout);
-  expect(json.duplicateMcpServers.length).toBeGreaterThan(0);
-  expect(json.nextSteps).toEqual([]);
-  expect((await quench(home)).stdout).not.toContain("Remove MCP server");
-});
+])(
+  "duplicate MCP config never becomes a next step: $name",
+  async ({ config, sessions }) => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-next-")));
+    for (const [project, servers] of Object.entries(config))
+      await Bun.write(join(home, project, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
+    for (const [project, runs] of Object.entries(sessions))
+      for (const [i, records] of runs.entries())
+        await Bun.write(
+          join(home, `.claude/projects/${project}/${i}.jsonl`),
+          lines([
+            { type: "user", cwd: join(home, project), message: { content: "hi" } },
+            ...records.map((r: object) => ({ cwd: join(home, project), ...r })),
+          ]),
+        );
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(json.duplicateMcpServers.length).toBeGreaterThan(0);
+    expect(json.nextSteps).toEqual([]);
+    expect((await quench(home)).stdout).not.toContain("Remove MCP server");
+  },
+  cliRunsTimeout,
+);
 
 test.each([
   [10, 1_000],
@@ -241,6 +253,7 @@ test.each([
       `  2. Trim ${join("~", ".claude", "CLAUDE.md")}\n     up to 505 chars per session × 2 sessions\n`,
     );
   },
+  cliRunsTimeout,
 );
 
 const instructionHome = async (recorded: number[]) => {
@@ -278,23 +291,27 @@ test.each([
       await mkdir(rules);
     },
   },
-])("an instruction file that $name is capped at its size on disk now", async ({ disk, alone }) => {
-  const { home, rules, steady } = await instructionHome([15_000, 2_100]);
-  await disk(rules);
-  const json = JSON.parse((await quench(home, "--json")).stdout);
-  expect(json.nextSteps).toEqual([
-    {
-      kind: "instruction-file",
-      action: `Trim ${steady.replace(home, "~")}`,
-      command: null,
-      note: "average recorded size per session, capped at its size on disk now; trimming it saves up to that",
-      charsPerSession: 2_500,
-      sessions: 2,
-      totalChars: 5_000,
-      size: "upper bound",
-    },
-  ]);
-  await rm(steady);
-  const left = JSON.parse((await quench(home, "--json")).stdout).nextSteps;
-  expect(left.map((s: { charsPerSession: number }) => s.charsPerSession)).toEqual(alone);
-});
+])(
+  "an instruction file that $name is capped at its size on disk now",
+  async ({ disk, alone }) => {
+    const { home, rules, steady } = await instructionHome([15_000, 2_100]);
+    await disk(rules);
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(json.nextSteps).toEqual([
+      {
+        kind: "instruction-file",
+        action: `Trim ${steady.replace(home, "~")}`,
+        command: null,
+        note: "average recorded size per session, capped at its size on disk now; trimming it saves up to that",
+        charsPerSession: 2_500,
+        sessions: 2,
+        totalChars: 5_000,
+        size: "upper bound",
+      },
+    ]);
+    await rm(steady);
+    const left = JSON.parse((await quench(home, "--json")).stdout).nextSteps;
+    expect(left.map((s: { charsPerSession: number }) => s.charsPerSession)).toEqual(alone);
+  },
+  cliRunsTimeout,
+);

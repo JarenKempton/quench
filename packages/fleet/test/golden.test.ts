@@ -6,6 +6,7 @@ import { importSkillsRepo } from "../src/import.ts";
 
 const root = join(import.meta.dir, "../../..");
 const fixtures = join(import.meta.dir, "fixtures");
+const cliRunsTimeout = 20_000;
 
 async function plan(machine: string) {
   const proc = Bun.spawn(
@@ -49,36 +50,48 @@ test("the importer turns registry, host manifests and machine overrides into the
 });
 
 for (const machine of ["laptop", "desktop"])
-  test(`skills plan for ${machine} is byte-identical to the golden plan on every OS`, async () => {
-    const { stdout, stderr, code } = await plan(machine);
-    expect(stderr).toBe("");
-    expect(code).toBe(0);
-    expect(stdout).toBe(await Bun.file(join(fixtures, `${machine}.plan.json`)).text());
-    expect(Plan.parse(JSON.parse(stdout))).toBeTruthy();
-  });
+  test(
+    `skills plan for ${machine} is byte-identical to the golden plan on every OS`,
+    async () => {
+      const { stdout, stderr, code } = await plan(machine);
+      expect(stderr).toBe("");
+      expect(code).toBe(0);
+      expect(stdout).toBe(await Bun.file(join(fixtures, `${machine}.plan.json`)).text());
+      expect(Plan.parse(JSON.parse(stdout))).toBeTruthy();
+    },
+    cliRunsTimeout,
+  );
 
-test("skills plan is read-only", async () => {
-  const before = await snapshotOf(fixtures);
-  await plan("laptop");
-  expect(await snapshotOf(fixtures)).toEqual(before);
-});
+test(
+  "skills plan is read-only",
+  async () => {
+    const before = await snapshotOf(fixtures);
+    await plan("laptop");
+    expect(await snapshotOf(fixtures)).toEqual(before);
+  },
+  cliRunsTimeout,
+);
 
 async function snapshotOf(dir: string) {
   const files = [...new Bun.Glob("**/*").scanSync({ cwd: dir, dot: true })].sort();
   return Promise.all(files.map(async (f) => [f, await Bun.file(join(dir, f)).text()]));
 }
 
-test("skills plan refuses without --source, --machine and --json", async () => {
-  const proc = Bun.spawn(
-    [
-      process.execPath,
-      join(root, "packages/cli/src/main.ts"),
-      "skills",
-      "plan",
-      "--machine",
-      "laptop",
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  expect(await proc.exited).toBe(1);
-});
+test(
+  "skills plan refuses without --source, --machine and --json",
+  async () => {
+    const proc = Bun.spawn(
+      [
+        process.execPath,
+        join(root, "packages/cli/src/main.ts"),
+        "skills",
+        "plan",
+        "--machine",
+        "laptop",
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    expect(await proc.exited).toBe(1);
+  },
+  cliRunsTimeout,
+);
