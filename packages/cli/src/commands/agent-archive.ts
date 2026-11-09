@@ -23,18 +23,25 @@ import {
   type SessionRef,
 } from "@quench/history";
 import { putTranscript, postSessions, postTasks } from "@quench/hub/client";
-import { behaviour, runs, segments, tasks, type Segment } from "@quench/insights";
+import {
+  behaviour,
+  judgedTasks,
+  runs,
+  segments,
+  segmentSignals,
+  type JudgedSegment,
+} from "@quench/insights";
 import {
   combine,
+  Guidance,
   guidanceBreaks,
-  loadedStandards,
   Jev,
   JEV_USD_PER_INPUT_TOKEN,
-  Guidance,
   JevGuidance,
-  KeyRejected,
   judgeGuidance,
   judgeReplies,
+  KeyRejected,
+  loadedStandards,
   ThemeCache,
   VerdictCache,
   type GuidanceInput,
@@ -55,7 +62,7 @@ type Shipped = Record<
     size: number;
     mtimeMs: number;
     guidedAt?: number;
-    segments?: (Segment & { guidance?: SegmentGuidance })[];
+    segments?: (JudgedSegment & { guidance?: SegmentGuidance })[];
   }
 >;
 type Guide = { cache: ThemeCache<GuidanceInput>; judge: GuidanceJudge | null };
@@ -111,15 +118,18 @@ export async function sessionSegments(
     verdicts,
     null,
   );
-  const newGoals = new Set(replies.flatMap((r) => (r.kind === "new_request" ? [r.position] : [])));
+  const at = (kind: string, shift: number) =>
+    new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
+  const corrected = at("correction", 1);
   const standards = await loadedStandards(session, sessionRuns, [
     ...(session.cwd ? [join(session.cwd, ".claude/skills")] : []),
     ...skillRoots,
   ]);
   const found = [];
-  for (const segment of segments(session, sessionRuns, newGoals))
+  for (const segment of segments(session, sessionRuns, at("new_request", 0)))
     found.push({
       ...segment,
+      signals: segmentSignals(sessionRuns, segment, corrected),
       guidance: await judgeGuidance(
         guidanceBreaks(
           session.id,
@@ -144,10 +154,18 @@ const PENDING: SegmentGuidance = { guidance: "pending", unreliableRule: null, tu
 const stored = (s: { guidance?: SegmentGuidance }) =>
   s.guidance && Guidance.safeParse(s.guidance.guidance).success ? s.guidance : PENDING;
 
+const UNJUDGED = {
+  landed: { verdict: "unknown", reason: "not-seen", evidence: [] },
+  spiral: { verdict: "unknown", reason: "no-tools", evidence: [] },
+  efficiency: { verdict: "unknown", reason: "no-usage", evidence: [] },
+  tokens: null,
+  seconds: 0,
+} satisfies Partial<TaskResult>;
+
 export function taskResults(shipped: Shipped, posted: Posted) {
   const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
   const guidance = new Map(all.map((s) => [memberKey(s), stored(s)]));
-  const rows: TaskResult[] = tasks(all).map((task) => {
+  const rows: TaskResult[] = judgedTasks(all).map((task) => {
     const judged = combine(task.members.map((m) => guidance.get(memberKey(m)) ?? PENDING));
     return {
       ...task,
@@ -183,6 +201,7 @@ export function taskResults(shipped: Shipped, posted: Posted) {
         harnesses: [],
         sessions: 0,
         runs: 0,
+        ...UNJUDGED,
         guidance: "skipped",
         guidanceUnreliableRule: null,
         guidanceTurns: 0,
@@ -332,7 +351,12 @@ export async function archiveCycle(
       !!judge &&
       now - (known?.guidedAt ?? 0) >= RETRY_MS &&
       !!known?.segments?.some((s) => stored(s).guidance === "pending");
-    if (known?.segments && known.size === info.size && known.mtimeMs === info.mtimeMs && !retry)
+    if (
+      known?.segments?.every((s) => s.signals) &&
+      known.size === info.size &&
+      known.mtimeMs === info.mtimeMs &&
+      !retry
+    )
       continue;
     if (info.size > MAX_TRANSCRIPT_BYTES) {
       count(status.skipped, "too-large");

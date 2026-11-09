@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { HarnessId, insideFolder, Sha256, Timestamp } from "./common.ts";
 
-export const ANALYSIS_VERSION = 1;
+export const ANALYSIS_VERSION = 2;
 export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;
@@ -57,6 +57,24 @@ export const SessionResults = z
   .object({ sessions: z.array(SessionResult).max(MAX_SESSION_ROWS) })
   .strict();
 
+const Evidence = z.array(z.string().min(1).max(300)).max(20);
+const judgment = <const R extends readonly [string, ...string[]]>(reasons: R) =>
+  z
+    .object({
+      verdict: z.enum(["pass", "fail", "unknown"]),
+      reason: z.enum(reasons),
+      evidence: Evidence,
+    })
+    .strict();
+
+export const TaskJudgments = {
+  landed: judgment(["merged", "closed", "reverted", "corrected", "not-seen"]),
+  spiral: judgment(["retry-loop", "repeated-correction", "rising-cost", "none", "no-tools"]),
+  efficiency: judgment(["within-baseline", "over-baseline", "no-baseline", "no-usage"]),
+  tokens: Tokens,
+  seconds: Count,
+};
+
 export const TaskResult = z
   .object({
     taskId: z.string().regex(/^[0-9a-f]{32}$/),
@@ -76,6 +94,7 @@ export const TaskResult = z
     harnesses: z.array(HarnessId).max(20),
     sessions: Count,
     runs: Count,
+    ...TaskJudgments,
     guidance: z.enum(["kept", "unknown", "skipped", "pending"]),
     guidanceUnreliableRule: z.string().min(1).max(220).nullable(),
     guidanceTurns: Count,

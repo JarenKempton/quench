@@ -17,7 +17,7 @@ import { treeHash } from "@quench/fleet";
 import { readTree } from "@quench/fleet/disk";
 import { evalSupported } from "../src/skills/eval.ts";
 import { startWatchdog } from "../src/skills/scratch.ts";
-import { lines } from "./run.ts";
+import { cliRunsTimeout, lines } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
 const windows = process.platform === "win32";
@@ -193,12 +193,16 @@ test("support is Linux and macOS only", () => {
   expect(evalSupported("win32")).toBe(false);
 });
 
-test.if(windows)("Windows returns an unsupported result and runs nothing", async () => {
-  const f = await fixture(STANDARD);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
-  expect(out.code).toBe(2);
-  expect(JSON.parse(out.stdout)).toMatchObject({ supported: false, platform: "win32" });
-});
+test.if(windows)(
+  "Windows returns an unsupported result and runs nothing",
+  async () => {
+    const f = await fixture(STANDARD);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+    expect(out.code).toBe(2);
+    expect(JSON.parse(out.stdout)).toMatchObject({ supported: false, platform: "win32" });
+  },
+  cliRunsTimeout,
+);
 
 test.skipIf(windows)(
   "replays first prompts on the installed version and the candidate in scratch homes",
@@ -250,93 +254,131 @@ test.skipIf(windows)(
     }
     expect(await listing(f.home)).toEqual(before);
   },
+  cliRunsTimeout,
 );
 
-test.skipIf(windows)("the text view shows the three columns side by side", async () => {
-  const f = await fixture(STANDARD.slice(0, 2));
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes"]);
-  expect(out.code).toBe(0);
-  expect(out.stdout).toContain("original (recorded)");
-  expect(out.stdout).toMatch(
-    /original \(recorded\)\s+│ current [0-9a-f]{12}\s+│ candidate [0-9a-f]{12}/,
-  );
-  expect(out.stdout).toContain(`prompt: tell me about zebra stripes ${CANARY}`);
-  expect(out.stdout).toContain("Wins 2 · losses 0 · ties 0");
-  expect(out.stdout).toContain("exclusion rate 0%");
-});
+test.skipIf(windows)(
+  "the text view shows the three columns side by side",
+  async () => {
+    const f = await fixture(STANDARD.slice(0, 2));
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes"]);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("original (recorded)");
+    expect(out.stdout).toMatch(
+      /original \(recorded\)\s+│ current [0-9a-f]{12}\s+│ candidate [0-9a-f]{12}/,
+    );
+    expect(out.stdout).toContain(`prompt: tell me about zebra stripes ${CANARY}`);
+    expect(out.stdout).toContain("Wins 2 · losses 0 · ties 0");
+    expect(out.stdout).toContain("exclusion rate 0%");
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("nothing runs without confirmation", async () => {
-  const f = await fixture(STANDARD);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate]);
-  expect(out.code).toBe(1);
-  expect(out.stderr).toContain("Run these replays?");
-  expect(out.stderr).toContain("Not run.");
-  expect(await calls(f.log)).toHaveLength(0);
-});
+test.skipIf(windows)(
+  "nothing runs without confirmation",
+  async () => {
+    const f = await fixture(STANDARD);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate]);
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("Run these replays?");
+    expect(out.stderr).toContain("Not run.");
+    expect(await calls(f.log)).toHaveLength(0);
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("refuses without a credential the scratch home can use", async () => {
-  const f = await fixture(STANDARD);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes"], {
-    ANTHROPIC_API_KEY: "",
-  });
-  expect(out.code).toBe(1);
-  expect(out.stderr).toContain("CLAUDE_CODE_OAUTH_TOKEN");
-  expect(await calls(f.log)).toHaveLength(0);
-});
+test.skipIf(windows)(
+  "refuses without a credential the scratch home can use",
+  async () => {
+    const f = await fixture(STANDARD);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes"], {
+      ANTHROPIC_API_KEY: "",
+    });
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(await calls(f.log)).toHaveLength(0);
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("hard caps on prompts and spend", async () => {
-  const f = await fixture(STANDARD);
-  const many = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--limit", "21"]);
-  expect(many.code).toBe(1);
-  expect(many.stderr).toContain("--limit must be a number above 0 and at most 20");
-  const rich = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--max-cost", "11"]);
-  expect(rich.code).toBe(1);
-  const cheap = await evalRun(f, [
-    "zebra",
-    "--candidate",
-    f.candidate,
-    "--yes",
-    "--max-cost",
-    "0.0001",
-  ]);
-  expect(cheap.code).toBe(1);
-  expect(cheap.stderr).toContain("is above --max-cost");
-  expect(await calls(f.log)).toHaveLength(0);
-});
+test.skipIf(windows)(
+  "hard caps on prompts and spend",
+  async () => {
+    const f = await fixture(STANDARD);
+    const many = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--limit", "21"]);
+    expect(many.code).toBe(1);
+    expect(many.stderr).toContain("--limit must be a number above 0 and at most 20");
+    const rich = await evalRun(f, [
+      "zebra",
+      "--candidate",
+      f.candidate,
+      "--yes",
+      "--max-cost",
+      "11",
+    ]);
+    expect(rich.code).toBe(1);
+    const cheap = await evalRun(f, [
+      "zebra",
+      "--candidate",
+      f.candidate,
+      "--yes",
+      "--max-cost",
+      "0.0001",
+    ]);
+    expect(cheap.code).toBe(1);
+    expect(cheap.stderr).toContain("is above --max-cost");
+    expect(await calls(f.log)).toHaveLength(0);
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("a replay that loads a plugin is stopped and counted as failed", async () => {
-  const f = await fixture([{ id: "p1", day: 20, text: "zebra leak plugin", skill: "zebra" }]);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
-  expect(out.code).toBe(0);
-  const result = JSON.parse(out.stdout);
-  expect(result.prompts[0].current).toEqual({ failed: "isolation not confirmed: plugins loaded" });
-  expect(result.summary).toMatchObject({ failed: 1, wins: 0, exclusionRate: null });
-});
+test.skipIf(windows)(
+  "a replay that loads a plugin is stopped and counted as failed",
+  async () => {
+    const f = await fixture([{ id: "p1", day: 20, text: "zebra leak plugin", skill: "zebra" }]);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+    expect(out.code).toBe(0);
+    const result = JSON.parse(out.stdout);
+    expect(result.prompts[0].current).toEqual({
+      failed: "isolation not confirmed: plugins loaded",
+    });
+    expect(result.summary).toMatchObject({ failed: 1, wins: 0, exclusionRate: null });
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("no replay starts once the next one could pass the spend cap", async () => {
-  const f = await fixture([
-    { id: "c1", day: 20, text: "zebra costly one", skill: "zebra" },
-    { id: "c2", day: 21, text: "zebra costly two", skill: "zebra" },
-  ]);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
-  expect(out.code).toBe(0);
-  const seen = await calls(f.log);
-  expect(seen).toHaveLength(1);
-  expect(seen[0].argv[seen[0].argv.indexOf("--max-budget-usd") + 1]).toBe("1.0000");
-  const result = JSON.parse(out.stdout);
-  expect(result.summary).toMatchObject({ notRun: 2, stopped: "spend cap reached" });
-  expect(result.summary.spentUsd).toBeCloseTo(0.75);
-});
+test.skipIf(windows)(
+  "no replay starts once the next one could pass the spend cap",
+  async () => {
+    const f = await fixture([
+      { id: "c1", day: 20, text: "zebra costly one", skill: "zebra" },
+      { id: "c2", day: 21, text: "zebra costly two", skill: "zebra" },
+    ]);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+    expect(out.code).toBe(0);
+    const seen = await calls(f.log);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].argv[seen[0].argv.indexOf("--max-budget-usd") + 1]).toBe("1.0000");
+    const result = JSON.parse(out.stdout);
+    expect(result.summary).toMatchObject({ notRun: 2, stopped: "spend cap reached" });
+    expect(result.summary.spentUsd).toBeCloseTo(0.75);
+  },
+  cliRunsTimeout,
+);
 
-test.skipIf(windows)("a skill that errors when it runs never wins or ties", async () => {
-  const f = await fixture([{ id: "d1", day: 20, text: "zebra deny shell", skill: "zebra" }]);
-  const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
-  expect(out.code).toBe(0);
-  const result = JSON.parse(out.stdout);
-  expect(result.prompts[0].current).toMatchObject({ triggered: true, errored: true });
-  expect(result.prompts[0].outcome).toBe("errored");
-  expect(result.summary).toMatchObject({ wins: 0, ties: 0, losses: 0, errored: 1 });
-});
+test.skipIf(windows)(
+  "a skill that errors when it runs never wins or ties",
+  async () => {
+    const f = await fixture([{ id: "d1", day: 20, text: "zebra deny shell", skill: "zebra" }]);
+    const out = await evalRun(f, ["zebra", "--candidate", f.candidate, "--yes", "--json"]);
+    expect(out.code).toBe(0);
+    const result = JSON.parse(out.stdout);
+    expect(result.prompts[0].current).toMatchObject({ triggered: true, errored: true });
+    expect(result.prompts[0].outcome).toBe("errored");
+    expect(result.summary).toMatchObject({ wins: 0, ties: 0, losses: 0, errored: 1 });
+  },
+  cliRunsTimeout,
+);
 
 test.skipIf(windows)(
   "an interrupt stops the replay's process group and removes its scratch home",
@@ -377,6 +419,7 @@ test.skipIf(windows)(
     expect(alive).toBe(false);
     expect(await stat(join(child!.config, "..")).catch(() => null)).toBeNull();
   },
+  cliRunsTimeout,
 );
 
 const alive = (pid: number) => {
@@ -461,6 +504,7 @@ test.skipIf(windows)(
     sleeper.kill();
     expect((await readdir(index)).sort()).toEqual([token(3), token(4)]);
   },
+  cliRunsTimeout,
 );
 
 test.skipIf(windows)(

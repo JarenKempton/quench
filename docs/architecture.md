@@ -339,6 +339,15 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   `quench_tasks` is a `ReplacingMergeTree(Version, Removed)` keyed by `(Machine, TaskId)`, versioned
   like `quench_sessions`; the id is a hash of the first member, so a rerun gives the same rows.
   Later verdict columns arrive with `ALTER TABLE … ADD COLUMN` and a newer `AnalysisVersion`.
+- **Task judgments.** `judgments.ts` scores three verdicts per task from signals, with no LLM call
+  (#185), each `pass`, `fail` or `unknown` plus a fixed reason and up to 20 evidence ids
+  (`harness:session#turn`, or baseline task ids). Landed: a successful `gh pr merge` or
+  `gh issue close` with no later `git revert`, nor a correction reply (cached verdicts) to that run or after.
+  Spiral: a retry loop (the same failure three times in a run), three corrections in a row, or
+  three runs in a row that hit the same failure while tokens rise. History records no edit paths, so a
+  repeated file edit counts only when it fails the same way. Efficiency: tokens and wall time
+  within twice the median of at least five landed tasks on the same harnesses, else
+  `no-baseline`. Signals are kept per segment in `archive.json`; segments without them are re-read.
 - **Guidance kept** (#186). Within each segment, the first turn after a compaction or an idle gap
   over 60 minutes (up to three per segment) is judged against standing rules only: corrections,
   always/never or from-now-on sentences in earlier prompts, and the same sentences in instruction
