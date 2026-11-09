@@ -1,5 +1,6 @@
 import { judgedTasks, segments, segmentSignals } from "@quench/insights";
 import type { Reply } from "@quench/judge";
+import { repoOf } from "./github-pulls.ts";
 import type { BranchedRuns } from "./session-runs.ts";
 
 const sessionKey = (s: { harness: string; sessionId: string }) => `${s.harness}\0${s.sessionId}`;
@@ -7,13 +8,16 @@ const sessionKey = (s: { harness: string; sessionId: string }) => `${s.harness}\
 const turns = (replies: readonly Reply[], kind: Reply["kind"], shift: number) =>
   new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
 
-export function spiralTasks(sessions: readonly BranchedRuns[], replies: readonly Reply[]) {
+export async function spiralTasks(sessions: readonly BranchedRuns[], replies: readonly Reply[]) {
   const bySession = Map.groupBy(replies, sessionKey);
+  const repos = new Map<string | null, Promise<string | null>>();
+  const repoFor = (cwd: string | null) => repos.get(cwd) ?? repos.set(cwd, repoOf(cwd)).get(cwd)!;
+  const known = await Promise.all(sessions.map((s) => repoFor(s.cwd)));
   const judged = judgedTasks(
-    sessions.flatMap((s) => {
+    sessions.flatMap((s, i) => {
       const own = bySession.get(sessionKey({ harness: s.harness, sessionId: s.id })) ?? [];
       const corrected = turns(own, "correction", 1);
-      return segments({ ...s, parent: null }, s.runs, turns(own, "new_request", 0)).map(
+      return segments({ ...s, parent: null }, s.runs, turns(own, "new_request", 0), known[i]).map(
         (segment) => ({ ...segment, signals: segmentSignals(s.runs, segment, corrected) }),
       );
     }),

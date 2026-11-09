@@ -142,7 +142,7 @@ export async function corrections(home: Home, options: Options): Promise<number>
           limit: options.themeLimit,
           examples: options.examples,
           since,
-          spiral: spiralTasks(sessions, judged.replies),
+          spiral: await spiralTasks(sessions, judged.replies),
         },
       )
     : null;
