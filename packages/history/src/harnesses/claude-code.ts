@@ -420,6 +420,7 @@ export const claudeCode: Harness<"claude-code"> = {
     const attachments = new Set<string>();
     const queued = new Map<string, Event[]>();
     const delivered = new Set<Event>();
+    const running = new Map<string, { finishedLine: number | null }>();
     let cwd: string | null = null;
     let branch: string | null = null;
     const position = { line: 0 };
@@ -436,7 +437,15 @@ export const claudeCode: Harness<"claude-code"> = {
         attachments.add(line.uuid);
       }
       const at = date(line.timestamp);
+      for (const finished of finishedTasks(line)) {
+        const task = running.get(finished);
+        if (task) task.finishedLine ??= position.line;
+      }
       for (const kind of eventsOf(line)) {
+        if (kind.type === "tool_result" && kind.backgrounded) {
+          running.set(kind.backgrounded.task, kind.backgrounded);
+          if (kind.callId) running.set(kind.callId, kind.backgrounded);
+        }
         const id = line.message?.id;
         const seen = kind.type === "inference" && id ? inferenceAt.get(id) : undefined;
         if (seen !== undefined) {
@@ -509,6 +518,30 @@ function requestShape(shape: NonNullable<Line["shape"]>): EventKind {
         deferred: tool.defer_loading === true,
       })) ?? null,
   };
+}
+
+const TIMED_OUT_TO_BACKGROUND =
+  /^Command did not complete within its \d+s timeout and was moved to the background \(ID: ([^)]+)\)/;
+
+function backgroundedOf(text: string): { backgrounded?: { task: string; finishedLine: null } } {
+  const task = TIMED_OUT_TO_BACKGROUND.exec(text)?.[1];
+  return task ? { backgrounded: { task, finishedLine: null } } : {};
+}
+
+const StopInput = z.looseObject({ task_id: z.string() });
+
+function finishedTasks(line: Line): string[] {
+  const stopped = blocks(line.message?.content).flatMap((b) => {
+    const input = b.type === "tool_use" && b.name === "TaskStop" && StopInput.safeParse(b.input);
+    return input && input.success ? [input.data.task_id] : [];
+  });
+  const attachment = Attachment.safeParse(line.attachment);
+  const prompt = attachment.success ? attachment.data.prompt : undefined;
+  const text = typeof prompt === "string" ? prompt : textOf(line.message?.content);
+  if (!text.includes("<task-notification>") || !/<status>[a-z]+<\/status>/.test(text))
+    return stopped;
+  const call = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(text)?.[1];
+  return call ? [...stopped, call] : stopped;
 }
 
 function queuedPrompt(raw: unknown): EventKind[] {
@@ -745,6 +778,7 @@ function user(line: Line): EventKind[] {
         ...referencedTools(b.content),
         ...(failure ? { failure } : {}),
         ...(fileRead ? { fileRead } : {}),
+        ...backgroundedOf(text),
       };
     });
   }

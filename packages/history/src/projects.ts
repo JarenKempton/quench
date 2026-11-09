@@ -3,7 +3,12 @@ import { join, resolve } from "node:path";
 import { repositoryRoot, subdirs } from "./files.ts";
 import type { Home } from "./home.ts";
 import type { HarnessId, InjectedInstruction, SessionEnricher } from "./model.ts";
-import { recordedFailures, type SessionFailure } from "./failures.ts";
+import {
+  recordedBackgrounded,
+  recordedFailures,
+  type SessionBackgrounded,
+  type SessionFailure,
+} from "./failures.ts";
 import { discoverAll, readSessions, type Progress } from "./read.ts";
 import { sessionAsks, type SessionAsks } from "./skill-asks.ts";
 import { startingContext, type StartingContext } from "./start.ts";
@@ -24,6 +29,7 @@ export type SessionPlace = {
   skills: SessionSkills | null;
   mcp: { server: string; calls: number }[];
   failures: SessionFailure[];
+  backgrounded: SessionBackgrounded[];
   start: StartingContext;
   asks: (SessionAsks & { key: string }) | null;
 };
@@ -95,6 +101,7 @@ export async function sessionPlaces(
       skills: recordedSkills(outcome.session),
       mcp: recordedMcp(outcome.session),
       failures: recordedFailures(outcome.session),
+      backgrounded: recordedBackgrounded(outcome.session),
       start: startingContext(outcome.session),
       asks: asking ? await asksOf(asking, outcome.session) : null,
     };

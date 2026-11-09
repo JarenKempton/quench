@@ -62,6 +62,7 @@ import { splitInstructions, splitSkills, type InstructionFile } from "../profile
 export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
+  'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with exactly the same text, started before Claude Code recorded a notification that the first finished or the agent stopped it; a session that ended first counts as never finished. A re-run with any change in text is not counted, so this is a lower bound. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands". Codex and Pi record no such result.',
   "Stored credentials are the high-confidence secrets quench secrets finds in harness settings, MCP config and prompt history files of your home and the projects profiled here, each value counted once; values, prefixes and tags are never shown. Session transcripts and repo git history are not scanned for it, and quench secrets may cover other projects.",
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
   "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",

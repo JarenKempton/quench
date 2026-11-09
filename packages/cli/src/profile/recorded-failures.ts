@@ -27,11 +27,23 @@ export type BlockedRule = {
   example: string;
 };
 
+export type BackgroundedCount = {
+  backgrounded: number;
+  rerun: number;
+  sessions: number;
+};
+
+export type BackgroundedCommands = BackgroundedCount & {
+  commands: (BackgroundedCount & { what: string; example: string })[];
+  models: (BackgroundedCount & { model: string | null; harness: HarnessId })[];
+};
+
 export type FailureSummary = {
   failures: number;
   chars: number;
   repeated: RepeatedFailure[];
   blocked: BlockedRule[];
+  backgrounded: BackgroundedCommands;
 };
 
 const KINDS: Record<string, string> = {
@@ -83,7 +95,114 @@ export function repeatedFailures(placesByRoot: Map<string, SessionPlace[]>): Fai
     .map(({ most: _, ...row }) => row)
     .filter((r) => r.failures >= 3 || r.sessions >= 2)
     .sort((a, b) => b.failures - a.failures || b.chars - a.chars);
-  return { failures, chars: total, repeated, blocked: blockedRules([...placesByRoot]) };
+  return {
+    failures,
+    chars: total,
+    repeated,
+    blocked: blockedRules([...placesByRoot]),
+    backgrounded: backgroundedCommands([...placesByRoot.values()].flat()),
+  };
+}
+
+export function backgroundedCommands(places: readonly SessionPlace[]): BackgroundedCommands {
+  const total: BackgroundedCount = { backgrounded: 0, rerun: 0, sessions: 0 };
+  const commands = new Map<string, BackgroundedCommands["commands"][number] & { most: number }>();
+  const models = new Map<string, BackgroundedCommands["models"][number]>();
+  for (const place of places) {
+    const rows = place.backgrounded;
+    if (!rows.some((r) => r.backgrounded)) continue;
+    total.sessions++;
+    const seen = new Set<BackgroundedCount>();
+    for (const r of rows) {
+      const command =
+        commands.get(r.what) ??
+        commands
+          .set(r.what, {
+            what: r.what,
+            backgrounded: 0,
+            rerun: 0,
+            sessions: 0,
+            example: place.session,
+            most: 0,
+          })
+          .get(r.what)!;
+      const modelKey = `${r.model}\0${place.harness}`;
+      const model =
+        models.get(modelKey) ??
+        models
+          .set(modelKey, {
+            model: r.model,
+            harness: place.harness,
+            backgrounded: 0,
+            rerun: 0,
+            sessions: 0,
+          })
+          .get(modelKey)!;
+      for (const row of [total, command, model]) {
+        row.backgrounded += r.backgrounded;
+        row.rerun += r.rerun;
+      }
+      seen.add(command).add(model);
+      if (r.backgrounded > command.most)
+        [command.most, command.example] = [r.backgrounded, place.session];
+    }
+    for (const row of seen) row.sessions++;
+  }
+  const ranked = <T extends BackgroundedCount>(rows: Iterable<T>) =>
+    [...rows]
+      .filter((r) => r.backgrounded || r.rerun)
+      .sort((a, b) => b.backgrounded - a.backgrounded || b.rerun - a.rerun);
+  return {
+    ...total,
+    commands: ranked(commands.values()).map(({ most: _, ...row }) => row),
+    models: ranked(models.values()),
+  };
+}
+
+export function renderBackgrounded(summary: BackgroundedCommands, days: number): string[] {
+  if (!summary.backgrounded) return [];
+  const commands = summary.commands.slice(0, SHOWN);
+  const lines = [
+    "",
+    heading(
+      `Kept running after a timeout · moved to the background, then re-run · last ${days} days`,
+    ),
+    ...table(
+      [
+        ["Command", "Backgrounded", "Re-run before done", "Sessions", "Example session"],
+        ...commands.map((r) => [
+          r.what,
+          count(r.backgrounded),
+          count(r.rerun),
+          count(r.sessions),
+          r.example,
+        ]),
+      ],
+      [1, 2, 3],
+    ),
+    "",
+    ...table(
+      [
+        ["Model", "Agent", "Backgrounded", "Re-run before done", "Sessions"],
+        ...summary.models
+          .slice(0, SHOWN)
+          .map((r) => [
+            r.model ?? "unknown",
+            harnessById[r.harness].label,
+            count(r.backgrounded),
+            count(r.rerun),
+            count(r.sessions),
+          ]),
+      ],
+      [2, 3, 4],
+    ),
+  ];
+  if (summary.commands.length > commands.length)
+    lines.push(`  … ${summary.commands.length - commands.length} more in --json`);
+  lines.push(
+    `  ${count(summary.backgrounded)} commands hit their timeout and kept running in the background. Re-run before done: the same command started again before the first reported finishing.`,
+  );
+  return lines;
 }
 
 export function blockedRules(places: [root: string, places: SessionPlace[]][]): BlockedRule[] {
@@ -161,11 +280,14 @@ export function renderBlocked(
 }
 
 export function renderFailures(summary: FailureSummary, days: number, homeDir: string): string[] {
-  const lines = renderBlocked(
-    summary.blocked,
-    homeDir,
-    `Blocked by hooks and permissions · rules agents keep hitting · last ${days} days`,
-  );
+  const lines = [
+    ...renderBlocked(
+      summary.blocked,
+      homeDir,
+      `Blocked by hooks and permissions · rules agents keep hitting · last ${days} days`,
+    ),
+    ...renderBackgrounded(summary.backgrounded, days),
+  ];
   if (!summary.repeated.length) return lines;
   const shown = summary.repeated.slice(0, SHOWN);
   lines.push(
