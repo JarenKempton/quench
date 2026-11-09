@@ -115,6 +115,30 @@ ORDER BY (Machine, Harness, SessionId, Path)
 SETTINGS ttl_only_drop_parts = 1`,
   },
   {
+    name: "quench_tasks",
+    ttl: "toDateTime(StartedAt)",
+    ddl: `CREATE TABLE IF NOT EXISTS quench_tasks (
+  Machine LowCardinality(String),
+  TaskId FixedString(32),
+  StartedAt DateTime64(3),
+  EndedAt DateTime64(3),
+  Split LowCardinality(String),
+  Boundary LowCardinality(String),
+  Markers Array(String),
+  Members Array(Tuple(Harness LowCardinality(String), SessionId String, FirstTurn UInt32, LastTurn UInt32)),
+  Harnesses Array(LowCardinality(String)),
+  Sessions UInt32,
+  Runs UInt32,
+  AnalysisVersion UInt32,
+  ComputedAt DateTime64(3),
+  Removed UInt8,
+  Version UInt64 MATERIALIZED toUInt64(AnalysisVersion) * 10000000000000 + toUInt64(toUnixTimestamp64Milli(ComputedAt))
+) ENGINE = ReplacingMergeTree(Version, Removed)
+PARTITION BY toYYYYMM(StartedAt)
+ORDER BY (Machine, TaskId)
+SETTINGS ttl_only_drop_parts = 1`,
+  },
+  {
     name: "quench_transcripts",
     ttl: "toDateTime(ModifiedAt)",
     ddl: `CREATE TABLE IF NOT EXISTS quench_transcripts (

@@ -23,6 +23,7 @@ import {
   TreeHash,
   type ProposalSubmission,
   type SessionResult,
+  type TaskResult,
   type Snapshot,
   type TranscriptUpload,
 } from "@quench/fleet";
@@ -324,6 +325,18 @@ export const postSessions = (dir: string, sessions: SessionResult[]) =>
       body: JSON.stringify({ sessions }),
     },
     "session results refused",
+  );
+
+export const postTasks = (dir: string, tasks: TaskResult[]) =>
+  asMachine(
+    dir,
+    "/api/v1/tasks",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tasks }),
+    },
+    "task results refused",
   );
 
 export const putTranscript = (dir: string, upload: TranscriptUpload, compressed: Uint8Array) =>
