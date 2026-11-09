@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { cliRunsTimeout, quench } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
@@ -388,7 +388,7 @@ test(
         [
           "▍Worth a look",
           "  1. 3 credentials stored in plaintext in MCP config",
-          "     ~/.claude.json · ~/repo/.mcp.json",
+          `     ~${sep}.claude.json · ~${sep}repo${sep}.mcp.json`,
           "     → quench secrets",
         ].join("\n"),
       );
