@@ -9,7 +9,15 @@ export const MAX_EVIDENCE = 20;
 
 export type Verdict = "pass" | "fail" | "unknown";
 
-export const LANDED_REASONS = ["merged", "closed", "reverted", "corrected", "not-seen"] as const;
+export const LANDED_REASONS = [
+  "merged",
+  "closed",
+  "reverted",
+  "corrected",
+  "open",
+  "unmerged",
+  "not-seen",
+] as const;
 export const SPIRAL_REASONS = [
   "retry-loop",
   "repeated-correction",
@@ -50,6 +58,18 @@ export type SegmentSignals = {
 };
 
 export type JudgedSegment = Segment & { signals?: SegmentSignals };
+
+export type Pull = {
+  repo: string;
+  number: number;
+  head: string;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  createdAt: string;
+  closedAt: string | null;
+  mergedAt: string | null;
+};
+
+export const pullId = (pull: Pick<Pull, "repo" | "number">) => `github:${pull.repo}#${pull.number}`;
 
 const MERGE = /\bgh\s+pr\s+merge\b/;
 const CLOSE = /\bgh\s+issue\s+close\b/;
@@ -126,7 +146,7 @@ const median = (values: number[]) => {
 
 type Own = Omit<Judgments, "efficiency">;
 
-function judgeOwn(segments: JudgedSegment[]): Own {
+function judgeOwn(segments: JudgedSegment[], pulls: readonly Pull[]): Own {
   const known = segments.flatMap((s) => (s.signals ? [{ segment: s, signals: s.signals }] : []));
   const all = <K extends "landed" | "undone" | "spiral">(key: K) =>
     known.flatMap(({ segment, signals }) =>
@@ -135,15 +155,25 @@ function judgeOwn(segments: JudgedSegment[]): Own {
         id: ref(segment, m.turn),
       })),
     );
-  const landings = all("landed").sort((a, b) => a.at.localeCompare(b.at));
+  const merged = pulls.flatMap((p) =>
+    p.mergedAt ? [{ at: p.mergedAt, reason: "merged", id: pullId(p), turn: -1 }] : [],
+  );
+  const landings = (pulls.length ? merged : all("landed")).sort((a, b) => a.at.localeCompare(b.at));
   const first = landings[0];
+  const pending = pulls.some((p) => p.state === "OPEN");
   const undone = first
     ? all("undone").filter(
         (u) => u.at > first.at || (u.at === first.at && u.reason === "corrected"),
       )
     : [];
   const landed: Own["landed"] = !first
-    ? { verdict: "unknown", reason: "not-seen", evidence: [] }
+    ? !pulls.length
+      ? { verdict: "unknown", reason: "not-seen", evidence: [] }
+      : {
+          verdict: pending ? "unknown" : "fail",
+          reason: pending ? "open" : "unmerged",
+          evidence: cap(pulls.map(pullId)),
+        }
     : undone.length
       ? {
           verdict: "fail",
@@ -183,14 +213,61 @@ function judgeOwn(segments: JudgedSegment[]): Own {
 
 export const taskKind = (task: Task) => task.harnesses.join("+");
 
-export function judgedTasks(all: readonly JudgedSegment[]): (Task & Judgments)[] {
+const worktreeBranch = (cwd: string) => cwd.split(/[\\/]/).at(-1)!.replace("-", "/");
+
+const closedAt = (pull: Pull) => pull.mergedAt ?? pull.closedAt ?? "\uffff";
+
+export function taskPulls(grouped: readonly JudgedSegment[][], pulls: readonly Pull[]) {
+  const byId = new Map(pulls.map((p) => [pullId(p), p]));
+  const byHead = Map.groupBy(pulls, (p) => `${p.repo}\0${p.head}`);
+  const headed = (m: JudgedSegment) =>
+    m.markers.flatMap((marker) =>
+      marker.startsWith("branch:") && m.repo
+        ? (byHead.get(`${m.repo}\0${marker.slice(7)}`) ?? []).filter(
+            (p) => closedAt(p) >= m.startedAt,
+          )
+        : [],
+    );
+  const byCwd = new Map<string, Set<Pull>>();
+  const direct = grouped.map((members) => {
+    const found = new Set<Pull>();
+    for (const m of members) {
+      for (const marker of m.markers) {
+        const id = byId.get(marker);
+        if (id) found.add(id);
+      }
+      for (const p of headed(m)) {
+        found.add(p);
+        if (m.cwd) byCwd.set(m.cwd, (byCwd.get(m.cwd) ?? new Set()).add(p));
+      }
+    }
+    return [...found];
+  });
+  return grouped.map((members, i) => {
+    if (direct[i]!.length) return direct[i]!;
+    const found = new Set<Pull>();
+    for (const m of members) {
+      if (!m.cwd || !m.markers.includes(`branch:${worktreeBranch(m.cwd)}`)) continue;
+      const window = [...(byCwd.get(m.cwd) ?? [])]
+        .filter((p) => closedAt(p) >= m.startedAt)
+        .sort((a, b) => closedAt(a).localeCompare(closedAt(b)))[0];
+      if (window) found.add(window);
+    }
+    return [...found];
+  });
+}
+
+export function judgedTasks(
+  all: readonly JudgedSegment[],
+  pulls: readonly Pull[] = [],
+): (Task & Judgments)[] {
   const byKey = new Map(all.map((s) => [`${s.harness}\0${s.sessionId}\0${s.firstTurn}`, s]));
-  const own = tasks(all).map((task) => ({
-    task,
-    own: judgeOwn(
-      task.members.map((m) => byKey.get(`${m.harness}\0${m.sessionId}\0${m.firstTurn}`)!),
-    ),
-  }));
+  const found = tasks(all);
+  const grouped = found.map((task) =>
+    task.members.map((m) => byKey.get(`${m.harness}\0${m.sessionId}\0${m.firstTurn}`)!),
+  );
+  const linked = taskPulls(grouped, pulls);
+  const own = found.map((task, i) => ({ task, own: judgeOwn(grouped[i]!, linked[i]!) }));
   const landed = own.filter((o) => o.own.landed.verdict === "pass" && o.own.tokens !== null);
   return own.map(({ task, own }) => {
     const peers = landed.filter((o) => o.task !== task && taskKind(o.task) === taskKind(task));

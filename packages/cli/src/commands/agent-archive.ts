@@ -30,6 +30,7 @@ import {
   segments,
   segmentSignals,
   type JudgedSegment,
+  type Pull,
 } from "@quench/insights";
 import {
   combine,
@@ -50,6 +51,7 @@ import {
 } from "@quench/judge";
 import { judgeChoice, readConfig } from "../config.ts";
 import { replacePrivateFile } from "../private-file.ts";
+import { githubPulls, repoOf, run, type Run } from "./github-pulls.ts";
 
 export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
@@ -76,6 +78,7 @@ export type ArchiveStatus = {
   bytes: number;
   stored: number;
   waiting: number;
+  offline: number;
   skipped: Record<string, number>;
   error: string | null;
 };
@@ -103,6 +106,7 @@ export async function sessionSegments(
   verdicts: VerdictCache,
   guide: Guide,
   skillRoots: readonly string[] = [],
+  exec: Run = run,
 ) {
   const sessionRuns = runs(session);
   const { replies } = await judgeReplies(
@@ -126,7 +130,8 @@ export async function sessionSegments(
     ...skillRoots,
   ]);
   const found = [];
-  for (const segment of segments(session, sessionRuns, at("new_request", 0)))
+  const repo = await repoOf(session.cwd, exec);
+  for (const segment of segments(session, sessionRuns, at("new_request", 0), repo))
     found.push({
       ...segment,
       signals: segmentSignals(sessionRuns, segment, corrected),
@@ -162,10 +167,10 @@ const UNJUDGED = {
   seconds: 0,
 } satisfies Partial<TaskResult>;
 
-export function taskResults(shipped: Shipped, posted: Posted) {
+export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pull[] = []) {
   const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
   const guidance = new Map(all.map((s) => [memberKey(s), stored(s)]));
-  const rows: TaskResult[] = judgedTasks(all).map((task) => {
+  const rows: TaskResult[] = judgedTasks(all, pulls).map((task) => {
     const judged = combine(task.members.map((m) => guidance.get(memberKey(m)) ?? PENDING));
     return {
       ...task,
@@ -283,6 +288,7 @@ export async function archiveCycle(
   home: Home,
   dir: string,
   now = Date.now(),
+  exec: Run = run,
 ): Promise<ArchiveStatus> {
   const status: ArchiveStatus = {
     uploaded: 0,
@@ -292,6 +298,7 @@ export async function archiveCycle(
     bytes: 0,
     stored: 0,
     waiting: 0,
+    offline: 0,
     skipped: {},
     error: null,
   };
@@ -352,7 +359,7 @@ export async function archiveCycle(
       now - (known?.guidedAt ?? 0) >= RETRY_MS &&
       !!known?.segments?.some((s) => stored(s).guidance === "pending");
     if (
-      known?.segments?.every((s) => s.signals) &&
+      known?.segments?.every((s) => s.signals && s.repo !== undefined) &&
       known.size === info.size &&
       known.mtimeMs === info.mtimeMs &&
       !retry
@@ -388,9 +395,13 @@ export async function archiveCycle(
       const key = keyOf(item.ref, item.path);
       const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
       const segments = session
-        ? await sessionSegments(session, verdicts, guide, [
-            join(home.of(harnessById["claude-code"].home), "skills"),
-          ])
+        ? await sessionSegments(
+            session,
+            verdicts,
+            guide,
+            [join(home.of(harnessById["claude-code"].home), "skills")],
+            exec,
+          )
         : [];
       const entry = {
         sha256: digest,
@@ -437,7 +448,10 @@ export async function archiveCycle(
     }
     await flush();
     const posted: Posted = await readJson<Posted>(tasksFile(dir));
-    const { due: taskRows, next } = taskResults(shipped, posted);
+    const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
+    const github = await githubPulls(dir, all, now, exec);
+    status.offline = github.offline;
+    const { due: taskRows, next } = taskResults(shipped, posted, github.pulls);
     for (let i = 0; i < taskRows.length; i += MAX_TASK_ROWS)
       await postTasks(dir, taskRows.slice(i, i + MAX_TASK_ROWS));
     status.tasks = taskRows.length;
@@ -448,9 +462,14 @@ export async function archiveCycle(
   return status;
 }
 
+const offline = (status: ArchiveStatus) =>
+  status.offline
+    ? `; gh could not reach ${status.offline} repo${status.offline === 1 ? "" : "s"}, Landed there uses cached PR state or transcripts`
+    : "";
+
 export const archiveLine = (status: ArchiveStatus) =>
   status.error
     ? `; archive: ${status.error}`
     : status.uploaded || status.waiting
-      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting${status.judgeTokens ? `, judge $${(status.judgeTokens * JEV_USD_PER_INPUT_TOKEN).toFixed(4)}` : ""}`
-      : "";
+      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting${status.judgeTokens ? `, judge $${(status.judgeTokens * JEV_USD_PER_INPUT_TOKEN).toFixed(4)}` : ""}${offline(status)}`
+      : offline(status);

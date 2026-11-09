@@ -4,6 +4,7 @@ import {
   judgedTasks,
   MIN_BASELINE,
   runs,
+  type Pull,
   segments,
   segmentSignals,
   type JudgedSegment,
@@ -41,19 +42,25 @@ const turn = (mins: number, body: Event[] = [], tokens = 1_000): Event[] => [
   { type: "message", author: "assistant", origin: "typed", text: "done", at: at(mins, 30) },
 ];
 
-const judged = (id: string, events: Event[], corrected: number[] = []): JudgedSegment[] => {
+const judged = (
+  id: string,
+  events: Event[],
+  corrected: number[] = [],
+  cwd: string | null = null,
+  branch = `t3/${id}`,
+): JudgedSegment[] => {
   const session: Session = {
     id,
     harness: "claude-code",
     path: `/dev/null/${id}`,
-    cwd: null,
-    branch: `t3/${id}`,
+    cwd,
+    branch,
     parent: null,
     events,
     diagnostics: { lines: events.length, unparsed: 0 },
   };
   const all = runs(session);
-  return segments(session, all, new Set()).map((s) => ({
+  return segments(session, all, new Set(), cwd ? "Acme/Widget" : null).map((s) => ({
     ...s,
     signals: segmentSignals(all, s, new Set(corrected)),
   }));
@@ -132,4 +139,69 @@ test("efficiency reports no baseline until enough landed tasks of the same kind 
   expect(by("p9")).toEqual(expect.objectContaining({ verdict: "fail", reason: "over-baseline" }));
   expect(by("p8")).toEqual(expect.objectContaining({ verdict: "pass", reason: "within-baseline" }));
   expect(by("p8").evidence).toHaveLength(MIN_BASELINE + 1);
+});
+
+const pull = (
+  number: number,
+  head: string,
+  state: Pull["state"],
+  end = "2026-10-20T12:00:00Z",
+): Pull => ({
+  repo: "acme/widget",
+  number,
+  head,
+  state,
+  createdAt: "2026-10-20T09:00:00Z",
+  closedAt: state === "OPEN" ? null : end,
+  mergedAt: state === "MERGED" ? end : null,
+});
+
+test("GitHub's PR state decides Landed for a task linked by branch, PR number or worktree", () => {
+  const lane = judged("lane", turn(0, shell(0, "gh pr create --fill")), [], "/wt/t3-abc123");
+  expect(judgedTasks(lane, [pull(7, "t3/lane", "MERGED")])[0]!.landed).toEqual({
+    verdict: "pass",
+    reason: "merged",
+    evidence: ["github:acme/widget#7"],
+  });
+  expect(judgedTasks(lane, [pull(7, "t3/lane", "OPEN")])[0]!.landed.reason).toBe("open");
+  expect(judgedTasks(lane, [pull(7, "t3/lane", "CLOSED")])[0]!.landed).toEqual({
+    verdict: "fail",
+    reason: "unmerged",
+    evidence: ["github:acme/widget#7"],
+  });
+  expect(judgedTasks(lane, [pull(7, "someone:t3/lane", "MERGED")])[0]!.landed.reason).toBe(
+    "not-seen",
+  );
+  const bare = judged(
+    "orch",
+    turn(0, shell(0, "gh pr merge 9 --squash", exit)),
+    [],
+    "/wt/main",
+    "main",
+  );
+  expect(judgedTasks(bare, [pull(9, "t3/other", "MERGED")])[0]!.landed.reason).toBe("merged");
+  const temp = judged("t3-hash", turn(30), [], "/wt/t3-abc123", "t3/abc123");
+  const both = judgedTasks([...lane, ...temp], [pull(7, "t3/lane", "MERGED")]);
+  expect(both.map((t) => t.landed.evidence)).toEqual([
+    ["github:acme/widget#7"],
+    ["github:acme/widget#7"],
+  ]);
+  expect(judgedTasks(lane)[0]!.landed.reason).toBe("not-seen");
+});
+
+test("a shared checkout's merges and a branch's old PR never land an unrelated task", () => {
+  const orch = judged("orch", turn(0, shell(0, "gh pr merge 9")), [], "/repo", "main");
+  const wip = judged("wip", turn(10), [], "/repo", "wip-x");
+  const tasks = judgedTasks([...orch, ...wip], [pull(9, "t3/other", "MERGED")]);
+  expect(tasks.map((t) => t.landed.reason)).toEqual(["merged", "not-seen"]);
+  const feat = judged("feat", turn(20), [], "/repo", "feat-a");
+  const experiment = judged("exp", turn(5), [], "/repo", "experiment-b");
+  const both = judgedTasks([...feat, ...experiment], [pull(10, "feat-a", "MERGED")]);
+  expect(both.map((t) => [t.members[0]!.sessionId, t.landed.reason])).toEqual([
+    ["exp", "not-seen"],
+    ["feat", "merged"],
+  ]);
+  const old = pull(3, "t3/reused", "MERGED", "2026-10-19T12:00:00Z");
+  const reused = judged("reused", turn(0), [], "/wt/two", "t3/reused");
+  expect(judgedTasks(reused, [old])[0]!.landed.reason).toBe("not-seen");
 });

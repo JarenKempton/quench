@@ -1,7 +1,18 @@
 import { afterAll, expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, utimes } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import { Archive } from "../../hub/src/archive.ts";
 import { Owner, startHub, stopHubs } from "../../hub/test/helpers.ts";
@@ -28,6 +39,7 @@ const env = (home: string) => ({
   ...process.env,
   HOME: home,
   USERPROFILE: home,
+  PATH: `${join(root, "bin")}${delimiter}${process.env.PATH}`,
   CLAUDE_CONFIG_DIR: "",
   CODEX_HOME: "",
   PI_CODING_AGENT_DIR: "",
@@ -95,6 +107,9 @@ test.skipIf(!CLICKHOUSE)(
   `a machine without OTel and one with synthetic OTLP archive history and results to a hub with ClickHouse${NO_CLICKHOUSE ? ` (skipped: ${NO_CLICKHOUSE})` : ""}`,
   async () => {
     root = await mkdtemp(join(tmpdir(), "quench-archive-"));
+    await mkdir(join(root, "bin"));
+    await writeFile(join(root, "bin", "gh"), "#!/bin/sh\nexit 1\n");
+    await chmod(join(root, "bin", "gh"), 0o755);
     const sent: string[] = [];
     for (const method of ["logs", "metrics"] as const) {
       const original = Archive.prototype[method] as (...args: unknown[]) => Promise<number>;

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { HarnessId, insideFolder, Sha256, Timestamp } from "./common.ts";
 
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 export const MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export const MAX_SESSION_ROWS = 500;
@@ -68,7 +68,7 @@ const judgment = <const R extends readonly [string, ...string[]]>(reasons: R) =>
     .strict();
 
 export const TaskJudgments = {
-  landed: judgment(["merged", "closed", "reverted", "corrected", "not-seen"]),
+  landed: judgment(["merged", "closed", "reverted", "corrected", "open", "unmerged", "not-seen"]),
   spiral: judgment(["retry-loop", "repeated-correction", "rising-cost", "none", "no-tools"]),
   efficiency: judgment(["within-baseline", "over-baseline", "no-baseline", "no-usage"]),
   tokens: Tokens,
