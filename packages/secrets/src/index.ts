@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { repositoryRoot, type Home, type Progress } from "@quench/history";
 import { scanConfigs } from "./configs.ts";
@@ -94,6 +95,15 @@ export async function secretsReport(
       "Nothing is changed or redacted.",
     ],
   };
+}
+
+export async function storedCredentials(home: Home, projects: readonly string[]) {
+  const { files } = await scanConfigs(home, projects, masker(randomBytes(32)));
+  return files.map((file) => ({
+    path: file.path,
+    kind: file.kind,
+    credentials: file.secrets.length,
+  }));
 }
 
 export type SecretsReport = Awaited<ReturnType<typeof secretsReport>>;

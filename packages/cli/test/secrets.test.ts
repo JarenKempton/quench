@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, realpath } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cliRunsTimeout, quench } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
 
@@ -330,3 +331,50 @@ test("secrets text output masks every value", async () => {
   expect(stdout).toContain(".env, tracked by git");
   expect(stdout).toContain("Values found in more than one place");
 });
+
+test(
+  "the summary counts plaintext credentials in configs without showing them or keying them",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-stored-")));
+    const project = join(home, "repo");
+    await mkdir(project, { recursive: true });
+    await Bun.spawn(["git", "init", "-q", project]).exited;
+    const server = (token: string) => ({ command: "gh-mcp", env: { GITHUB_TOKEN: token } });
+    await Bun.write(
+      join(home, ".claude.json"),
+      line({ mcpServers: { gh: server(FAKE.github), npm: server(FAKE.npm) } }),
+    );
+    await Bun.write(join(project, ".mcp.json"), line({ mcpServers: { gh: server(FAKE.mcp) } }));
+    await Bun.write(
+      join(home, ".codex/sessions/2026/10/20/a.jsonl"),
+      line({
+        type: "session_meta",
+        timestamp: "2026-10-20T10:00:00Z",
+        payload: { id: "a", cwd: project },
+      }) + "\n",
+    );
+
+    const { stdout, code } = await quench(home);
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      [
+        "▍Worth a look",
+        "  1. 3 credentials stored in plaintext in MCP config",
+        "     ~/.claude.json · ~/repo/.mcp.json",
+        "     → quench secrets",
+      ].join("\n"),
+    );
+    for (const value of [FAKE.github, FAKE.npm, FAKE.mcp])
+      expect(stdout).not.toContain(value.slice(4, 12));
+    expect(stdout).not.toContain("ghp_");
+    expect(stdout).not.toContain("npm_");
+    const json = JSON.parse((await quench(home, "--json")).stdout);
+    expect(json.storedCredentials).toEqual([
+      { path: join(home, ".claude.json"), kind: "mcp", credentials: 2 },
+      { path: join(project, ".mcp.json"), kind: "mcp", credentials: 1 },
+    ]);
+    expect(await Bun.file(join(home, ".quench/local/secrets.key")).exists()).toBe(false);
+    await rm(home, { recursive: true, force: true });
+  },
+  cliRunsTimeout,
+);
