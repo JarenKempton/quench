@@ -1,14 +1,16 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Event } from "@quench/history";
 import { runs } from "@quench/insights";
 import {
-  guidanceInputs,
+  cueSentences,
+  guidanceBreaks,
   JevGuidance,
   judgeGuidance,
   KeyRejected,
+  loadedStandards,
   ThemeCache,
   type GuidanceInput,
   type Reply,
@@ -32,17 +34,20 @@ const said = (text: string, minute: number): Event => ({
   text,
   at: at(minute),
 });
-
-const session = runs({
+const session = (events: Event[]) => ({
   id: "s",
-  harness: "claude-code",
+  harness: "claude-code" as const,
   path: "/unused",
   cwd: null,
   branch: "t3/lane",
   parent: null,
   diagnostics: { lines: 0, unparsed: 0 },
-  events: [
-    ...user("Use bun, never npm", 0),
+  events,
+});
+
+const history = runs(
+  session([
+    ...user("Fix the build. Never use npm here. Stay idle until I say go.", 0),
     said("Set up.", 1),
     ...user("No, run the tests with bun test", 5),
     said("Running.", 6),
@@ -51,8 +56,8 @@ const session = runs({
     said("Ran npm test.", 9),
     ...user("now the docs", 200),
     said("Docs updated.", 201),
-  ],
-});
+  ]),
+);
 
 const reply = (position: number, kind: Reply["kind"]): Reply => ({
   sessionId: "s",
@@ -60,7 +65,7 @@ const reply = (position: number, kind: Reply["kind"]): Reply => ({
   harness: "claude-code",
   cwd: null,
   position,
-  run: session[position - 1]!,
+  run: history[position - 1]!,
   kind,
   sender: "person",
   senderSource: "harness",
@@ -72,77 +77,122 @@ const cachePath = async () =>
   join(await mkdtemp(join(tmpdir(), "quench-guidance-")), "guidance.jsonl");
 const open = (path: string) => ThemeCache.open<GuidanceInput>(path, JevGuidance.id);
 
-test("only turns after a compaction or an idle gap are asked, against earlier rules and corrections", () => {
-  const inputs = guidanceInputs(session, replies, 0, 3);
-  expect(inputs.map((i) => [i.turn, i.input.state.after])).toEqual([
+test("always/never and from-now-on sentences are rules, must/don't need a judge, status lines are not", () => {
+  expect(
+    cueSentences(
+      "Stay idle until #12 merges. Never push to main. From now on, run bun test first. Don't merge yet. Never mind.",
+    ),
+  ).toEqual([
+    { text: "Never push to main.", ambiguous: false },
+    { text: "From now on, run bun test first.", ambiguous: false },
+    { text: "Don't merge yet.", ambiguous: true },
+  ]);
+});
+
+test("only turns after a compaction or an idle gap are judged, against corrections and standing rules", () => {
+  const breaks = guidanceBreaks("s", history, replies, 0, 3, []);
+  expect(breaks.map((b) => [b.turn, b.after])).toEqual([
     [2, "compaction"],
     [3, "idle-gap"],
   ]);
-  for (const { input } of inputs) {
-    expect(input.state.rules).toEqual([
-      { id: "turn_0", kind: "rule", text: "Use bun, never npm" },
-      { id: "turn_1", kind: "correction", text: "No, run the tests with bun test" },
-    ]);
-    expect(Object.keys(input.choices)).toEqual(["kept", "unknown", "turn_0", "turn_1"]);
-  }
-  expect(inputs[0]!.input.state.turn).toEqual({
+  expect(breaks[0]!.rules.map((r) => [r.evidence, r.kind, r.text])).toEqual([
+    ["s#0", "standing", "Never use npm here."],
+    ["s#1", "correction", "No, run the tests with bun test"],
+  ]);
+  expect(breaks[0]!.evidence).toEqual({
     prompt: "continue",
     assistant_said: "Ran npm test.",
     commands: [],
   });
-  expect(guidanceInputs(session, replies, 0, 1)).toEqual([]);
+  expect(guidanceBreaks("s", history, replies, 0, 1, [])).toEqual([]);
 });
 
-test("a broken rule wins with its id, costs are summed, and a cached verdict is not asked again", async () => {
+function scripted(answers: Record<string, string>) {
+  const asked: string[] = [];
+  return {
+    asked,
+    judge: {
+      id: JevGuidance.id,
+      guidance: async (input: GuidanceInput) => {
+        const kind = Object.keys(input.choices).find((k) => k in answers)!;
+        asked.push(kind);
+        return { choice: answers[kind]!, model: "jev-test", tokens: 100 };
+      },
+    },
+  };
+}
+
+test("a rule the turn breaks and nothing later lifts is broken with its id; reruns come from the cache", async () => {
   const path = await cachePath();
-  const asked: GuidanceInput[] = [];
-  const judge = {
-    id: JevGuidance.id,
-    guidance: async (input: GuidanceInput) => {
-      asked.push(input);
-      return {
-        choice: input.state.after === "compaction" ? "turn_0" : "kept",
-        model: "jev-test",
-        tokens: 1000,
-      };
-    },
-  };
-  const inputs = guidanceInputs(session, replies, 0, 3);
-  expect(await judgeGuidance("s", inputs, await open(path), judge)).toEqual({
-    guidance: "broken",
-    rule: "s#0",
-    turns: 2,
-    tokens: 2000,
-  });
-  expect(await judgeGuidance("s", inputs, await open(path), null)).toEqual({
-    guidance: "broken",
-    rule: "s#0",
-    turns: 2,
-    tokens: 2000,
-  });
-  expect(asked).toHaveLength(2);
+  const breaks = guidanceBreaks("s", history, replies, 0, 2, []);
+  const { judge, asked } = scripted({ kept: "r0", broke: "broke", lifted: "in_force" });
+  const first = await judgeGuidance(breaks, await open(path), judge);
+  expect(first).toEqual({ guidance: "broken", rule: "s#0", turns: 1, tokens: 300 });
+  expect(asked).toEqual(["kept", "broke", "lifted"]);
+  expect(await judgeGuidance(breaks, await open(path), null)).toEqual(first);
 });
 
-test("no break is skipped, no key is pending, a failure stays pending and a rejected key stops", async () => {
-  const cache = await open(await cachePath());
-  const inputs = guidanceInputs(session, replies, 0, 3);
-  expect(await judgeGuidance("s", [], cache, null)).toMatchObject({ guidance: "skipped" });
-  expect(await judgeGuidance("s", inputs, cache, null)).toMatchObject({
-    guidance: "pending",
-    turns: 2,
+test("a lifted or followed rule is dropped and the turn judged again", async () => {
+  const breaks = guidanceBreaks("s", history, replies, 0, 2, []);
+  const lifted = scripted({ kept: "r0", broke: "broke", lifted: "lifted" });
+  const kept = await judgeGuidance(breaks, await open(await cachePath()), lifted.judge);
+  expect(kept.guidance).toBe("kept");
+  expect(lifted.asked).toEqual(["kept", "broke", "lifted", "kept", "broke", "lifted"]);
+  const followed = scripted({ kept: "r0", broke: "followed" });
+  expect(await judgeGuidance(breaks, await open(await cachePath()), followed.judge)).toMatchObject({
+    guidance: "kept",
   });
-  const failing = {
-    id: JevGuidance.id,
-    guidance: async () => {
-      throw new Error("timeout");
-    },
-  };
-  expect(await judgeGuidance("s", inputs, cache, failing)).toMatchObject({ guidance: "pending" });
+});
+
+test("no break or no rule is skipped, no key is pending, and a rejected key stops", async () => {
+  const cache = await open(await cachePath());
+  const breaks = guidanceBreaks("s", history, replies, 0, 3, []);
+  expect(await judgeGuidance([], cache, null)).toMatchObject({ guidance: "skipped" });
+  expect(await judgeGuidance([{ ...breaks[0]!, rules: [] }], cache, null)).toMatchObject({
+    guidance: "skipped",
+  });
+  expect(await judgeGuidance(breaks, cache, null)).toMatchObject({ guidance: "pending", turns: 2 });
   const rejected = {
     id: JevGuidance.id,
     guidance: async () => {
       throw new KeyRejected(401);
     },
   };
-  expect(judgeGuidance("s", inputs, cache, rejected)).rejects.toBeInstanceOf(KeyRejected);
+  expect(judgeGuidance(breaks, cache, rejected)).rejects.toBeInstanceOf(KeyRejected);
+});
+
+test("a loaded instruction file counts only when it still matches what the session loaded", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "quench-standards-"));
+  const path = join(dir, "CLAUDE.md");
+  const text = "# Rules\n\n- Never push to main.\n- Keep files small.\n";
+  await writeFile(path, text);
+  const loaded = (textSha256: string) =>
+    session([
+      {
+        type: "instructions",
+        files: [
+          {
+            path,
+            directory: null,
+            label: null,
+            textSha256,
+            textChars: text.length,
+            textDiffersFromFile: null,
+          },
+        ],
+        unreadable: 0,
+        at: at(0),
+      },
+    ]);
+  const digest = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  expect(await loadedStandards(loaded(digest), [], [])).toEqual([
+    {
+      evidence: "CLAUDE.md:3",
+      from: -1,
+      kind: "standard",
+      text: "Never push to main.",
+      ambiguous: false,
+    },
+  ]);
+  expect(await loadedStandards(loaded("0".repeat(64)), [], [])).toEqual([]);
 });

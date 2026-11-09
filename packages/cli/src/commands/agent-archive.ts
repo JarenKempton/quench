@@ -26,7 +26,8 @@ import { putTranscript, postSessions, postTasks } from "@quench/hub/client";
 import { behaviour, runs, segments, tasks, type Segment } from "@quench/insights";
 import {
   combine,
-  guidanceInputs,
+  guidanceBreaks,
+  loadedStandards,
   Jev,
   JEV_USD_PER_INPUT_TOKEN,
   JevGuidance,
@@ -85,7 +86,12 @@ const count = <K extends string>(map: Partial<Record<K, number>>, key: K) => {
 const unique = (values: (string | null)[]) =>
   [...new Set(values.filter((v): v is string => !!v))].sort();
 
-export async function sessionSegments(session: Session, verdicts: VerdictCache, guide: Guide) {
+export async function sessionSegments(
+  session: Session,
+  verdicts: VerdictCache,
+  guide: Guide,
+  skillRoots: readonly string[] = [],
+) {
   const sessionRuns = runs(session);
   const { replies } = await judgeReplies(
     [
@@ -101,13 +107,23 @@ export async function sessionSegments(session: Session, verdicts: VerdictCache, 
     null,
   );
   const newGoals = new Set(replies.flatMap((r) => (r.kind === "new_request" ? [r.position] : [])));
+  const standards = await loadedStandards(session, sessionRuns, [
+    ...(session.cwd ? [join(session.cwd, ".claude/skills")] : []),
+    ...skillRoots,
+  ]);
   const found = [];
   for (const segment of segments(session, sessionRuns, newGoals))
     found.push({
       ...segment,
       guidance: await judgeGuidance(
-        session.id,
-        guidanceInputs(sessionRuns, replies, segment.firstTurn, segment.lastTurn),
+        guidanceBreaks(
+          session.id,
+          sessionRuns,
+          replies,
+          segment.firstTurn,
+          segment.lastTurn,
+          standards,
+        ),
         guide.cache,
         guide.judge,
       ),
@@ -330,7 +346,11 @@ export async function archiveCycle(
         sha256: digest,
         size: bytes.length,
         mtimeMs: item.mtimeMs,
-        segments: session ? await sessionSegments(session, verdicts, guide) : [],
+        segments: session
+          ? await sessionSegments(session, verdicts, guide, [
+              join(home.of(harnessById["claude-code"].home), "skills"),
+            ])
+          : [],
       };
       if (shipped[key]?.sha256 === digest) {
         segmented += bytes.length;

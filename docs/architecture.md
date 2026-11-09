@@ -340,14 +340,16 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   like `quench_sessions`; the id is a hash of the first member, so a rerun gives the same rows.
   Later verdict columns arrive with `ALTER TABLE … ADD COLUMN` and a newer `AnalysisVersion`.
 - **Guidance kept** (#186). Within each segment, the first turn after a compaction or an idle gap
-  over 60 minutes (up to three per segment) goes to Jev with the earlier prompts and corrections of
-  that segment (approvals, questions and harness notices left out; last six, clipped) and that
-  turn's prompt, closing text and commands, clipped. The choice is `kept`, `unknown` or the id of
-  the rule it went against; decisions are cached in `~/.quench/local/guidance.jsonl` with their input
-  tokens. A task with no such turn is `skipped`; one the agent could not judge yet (no
-  `TYPESAFE_API_KEY`, or a failed call) is `pending` and retried. `Guidance`, `GuidanceRule`
-  (`<session>#<turn>`), `GuidanceTurns` and `GuidanceCost` (USD at $0.042 per million input tokens)
-  land on the task's `quench_tasks` row.
+  over 60 minutes (up to three per segment) is judged against standing rules only: corrections,
+  always/never or from-now-on sentences in earlier prompts, and the same sentences in instruction
+  files whose text still hashes to what the session loaded, or in skills it invoked. Sentences with
+  only a softer cue (must, don't) go to Jev once as standing or one-off. Jev picks a rule the turn
+  went against, confirms it on that rule alone, and checks whether a later prompt lifted it; a lifted
+  or followed rule is dropped and the turn judged again. Decisions are cached in
+  `~/.quench/local/guidance.jsonl` with their input tokens. A task with no such turn or no rule is
+  `skipped`; one not judged yet (no `TYPESAFE_API_KEY`, or a failed call) is `pending` and retried.
+  `Guidance`, `GuidanceRule` (`<session>#<turn>` or `<file>:<line>`), `GuidanceTurns` and
+  `GuidanceCost` (USD at $0.042 per million input tokens) land on the task's `quench_tasks` row.
 - **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
   unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
   at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow

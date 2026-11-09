@@ -6,6 +6,7 @@ import {
   choice,
   PermissionDeniedError,
   TypeSafeClient,
+  type EntryType,
   type Fetch,
 } from "@typesafe-ai/sdk";
 import type { AskInput, AskJudge } from "./asks.ts";
@@ -252,7 +253,7 @@ export class JevGuidance implements GuidanceJudge {
   async guidance(input: GuidanceInput): Promise<ThemeDecision> {
     try {
       const result = await this.#client.systemOne({
-        state: input.state,
+        state: input.state as Record<string, EntryType>,
         questions: { guidance: choice(input.question, input.choices) },
       });
       const answer = jevAnswer(result, "guidance", Object.keys(input.choices), MODEL);

@@ -11,6 +11,7 @@ export {
   HarnessUnsupported,
 } from "./harness.ts";
 export * from "./guidance.ts";
+export * from "./standing.ts";
 export { Jev, JevAsks, JevCauses, JevGuidance, JevThemes, KeyRejected } from "./jev.ts";
 export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
