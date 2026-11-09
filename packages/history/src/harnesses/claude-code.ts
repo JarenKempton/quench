@@ -23,6 +23,7 @@ import type {
   Session,
 } from "../model.ts";
 import { knownUsage, mcpServerOf } from "../model.ts";
+import { modelNamesIn } from "../models.ts";
 
 const count = z.number().nullish();
 
@@ -105,6 +106,8 @@ const Line = z.looseObject({
     })
     .nullish(),
   toolUseResult: z.unknown().optional(),
+  /** On an assistant line Claude Code wrote for a failed API call: the error kind, such as `model_not_found`. */
+  error: z.string().nullish(),
   /** On a tool result line: how the call was allowed or refused; `source` is `hook`, `config`, `user_abort`, `user_reject`… */
   permissionDecision: z
     .looseObject({
@@ -143,6 +146,14 @@ const Attachment = z.looseObject({
   addedLines: z.array(z.string()).nullish(),
   /** On `mcp_instructions_delta`: each server's instructions. */
   addedBlocks: z.array(z.string()).nullish(),
+  /** On `deferred_tools_delta`: servers that failed to connect, with a short error code. */
+  failedMcpServers: z
+    .array(z.looseObject({ name: z.string(), errorCode: z.string().nullish() }))
+    .nullish(),
+  /** On `deferred_tools_delta`: servers waiting for the user to sign in. */
+  needsAuthMcpServers: z
+    .array(z.union([z.string(), z.looseObject({ name: z.string() })]))
+    .nullish(),
   commandMode: z.string().nullish(),
   prompt: z.unknown().optional(),
   isMeta: z.boolean().nullish(),
@@ -610,13 +621,18 @@ function promptParts(raw: unknown): EventKind[] {
   const attachment = Attachment.safeParse(raw);
   if (!attachment.success) return [];
   const a = attachment.data;
-  if (a.type === "deferred_tools_delta" && a.addedNames?.length)
+  if (a.type === "deferred_tools_delta")
     return [
-      {
-        type: "deferred_tools",
-        names: a.addedNames,
-        chars: joinedLength(a.addedLines ?? []),
-      },
+      ...(a.addedNames?.length
+        ? [
+            {
+              type: "deferred_tools" as const,
+              names: a.addedNames,
+              chars: joinedLength(a.addedLines ?? []),
+            },
+          ]
+        : []),
+      ...mcpStatus(a.failedMcpServers ?? [], a.needsAuthMcpServers ?? []),
     ];
   if (a.type === "mcp_instructions_delta" && a.addedNames?.length)
     return [
@@ -627,6 +643,25 @@ function promptParts(raw: unknown): EventKind[] {
       },
     ];
   return [];
+}
+
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,39}$/;
+
+function mcpStatus(
+  failed: { name: string; errorCode?: string | null | undefined }[],
+  needsLogin: (string | { name: string })[],
+): EventKind[] {
+  if (!failed.length && !needsLogin.length) return [];
+  return [
+    {
+      type: "mcp_status",
+      failed: failed.map((f) => ({
+        server: f.name,
+        code: f.errorCode && ERROR_CODE.test(f.errorCode) ? f.errorCode : null,
+      })),
+      needsLogin: needsLogin.map((n) => (typeof n === "string" ? n : n.name)),
+    },
+  ];
 }
 
 function skillListing(raw: unknown): EventKind[] {
@@ -698,6 +733,11 @@ function compaction(line: Line): EventKind {
 
 function assistant(line: Line): EventKind[] {
   const out: EventKind[] = [];
+  if (line.error === "model_not_found")
+    for (const block of blocks(line.message?.content))
+      if (block.type === "text")
+        for (const model of modelNamesIn(textOf(block.text)))
+          out.push({ type: "unknown_model", model });
   const u = line.message?.usage;
   if (u) {
     const usage = knownUsage(

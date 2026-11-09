@@ -15,7 +15,9 @@ import { startingContext, type StartingContext } from "./start.ts";
 import {
   recordedInstructions,
   recordedMcp,
+  recordedModels,
   recordedSkills,
+  type SessionMcp,
   type SessionSkills,
 } from "./recorded.ts";
 
@@ -27,7 +29,8 @@ export type SessionPlace = {
   at: Date | null;
   instructions: InjectedInstruction[] | null;
   skills: SessionSkills | null;
-  mcp: { server: string; calls: number }[];
+  mcp: SessionMcp[];
+  models: { used: string[]; unknown: string[] };
   failures: SessionFailure[];
   backgrounded: SessionBackgrounded[];
   start: StartingContext;
@@ -100,6 +103,7 @@ export async function sessionPlaces(
       instructions: recordedInstructions(outcome.session),
       skills: recordedSkills(outcome.session),
       mcp: recordedMcp(outcome.session),
+      models: recordedModels(outcome.session),
       failures: recordedFailures(outcome.session),
       backgrounded: recordedBackgrounded(outcome.session),
       start: startingContext(outcome.session),

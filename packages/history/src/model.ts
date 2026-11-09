@@ -149,7 +149,9 @@ export type EventKind =
   | { type: "skills"; listed: ListedSkill[]; chars: number }
   | { type: "prompt"; system: number | null; tools: PromptTool[] | null }
   | { type: "deferred_tools"; names: string[]; chars: number }
-  | { type: "mcp_instructions"; servers: string[]; chars: number };
+  | { type: "mcp_instructions"; servers: string[]; chars: number }
+  | { type: "unknown_model"; model: string }
+  | { type: "mcp_status"; failed: { server: string; code: string | null }[]; needsLogin: string[] };
 
 export type Event = EventKind & { at: Date | null; line?: number };
 

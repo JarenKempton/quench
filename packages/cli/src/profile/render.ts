@@ -14,7 +14,8 @@ import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.
 import type { ConfigHome } from "./config-homes.ts";
 import type { McpDuplicate } from "./mcp-duplicates.ts";
 import type { NextStep } from "./next-steps.ts";
-import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
+import { renderMcpHealth, renderMcpUse, type McpHealth, type McpUse } from "./recorded-mcp.ts";
+import { renderPinnedModels, type PinnedModel } from "./pinned-models.ts";
 import { renderMcpTools, type McpToolRecord } from "./recorded-mcp-tools.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import type { SkillCuts } from "./skill-cuts.ts";
@@ -46,6 +47,8 @@ export type Profile = {
   recordedSkillCuts: SkillCuts;
   recordedSkillAsks: SkillAsks;
   recordedMcp: McpUse[];
+  mcpHealth: McpHealth[];
+  pinnedModels: PinnedModel[];
   recordedMcpTools: McpToolRecord[];
   duplicateMcpServers: McpDuplicate[];
   recordedFailures: FailureSummary;
@@ -77,6 +80,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
       ),
       ...renderMcpTools(result.recordedMcpTools, result.days),
       ...renderMcpUse(result.recordedMcp, result.days),
+      ...renderMcpHealth(result.mcpHealth, result.days),
     ],
     instructions: () => [
       ...globalInstructions(result.globalInstructions, short),
@@ -85,6 +89,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
         claudeHome,
         roots: result.projects.map((p) => p.root),
       }),
+      ...renderPinnedModels(result.pinnedModels, homeDir),
     ],
     skills: () => [
       ...renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days),
@@ -109,6 +114,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
       claudeHome,
       roots: result.projects.map((p) => p.root),
     }),
+    ...renderPinnedModels(result.pinnedModels, homeDir),
     ...sections.skills(),
     ...sections.failures(),
     ...footer(result, homeDir),

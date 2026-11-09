@@ -68,10 +68,23 @@ export function skillUsesOf(event: Event, byPath: ReadonlyMap<string, string>): 
     .map(([, name]) => name);
 }
 
-export function recordedMcp(session: Session): { server: string; calls: number }[] {
+export type SessionMcp = {
+  server: string;
+  calls: number;
+  failed?: string | null;
+  needsLogin?: true;
+};
+
+export function recordedMcp(session: Session): SessionMcp[] {
   const calls = new Map<string, number>();
+  const failed = new Map<string, string | null>();
+  const needsLogin = new Set<string>();
   const ids = new Set<string>();
   for (const event of session.events) {
+    if (event.type === "mcp_status") {
+      for (const f of event.failed) failed.set(f.server, f.code ?? failed.get(f.server) ?? null);
+      for (const name of event.needsLogin) needsLogin.add(name);
+    }
     if (event.type !== "mcp_call") continue;
     if (event.id !== null && !event.inScript) {
       if (ids.has(event.id)) continue;
@@ -79,8 +92,24 @@ export function recordedMcp(session: Session): { server: string; calls: number }
     }
     calls.set(event.server, (calls.get(event.server) ?? 0) + 1);
   }
-  return [...calls].map(([server, n]) => ({ server: intern(server), calls: n }));
+  const servers = new Set([...calls.keys(), ...failed.keys(), ...needsLogin]);
+  return [...servers].map((server) => ({
+    server: intern(server),
+    calls: calls.get(server) ?? 0,
+    ...(failed.has(server) ? { failed: failed.get(server)! } : {}),
+    ...(needsLogin.has(server) ? { needsLogin: true as const } : {}),
+  }));
 }
 
 const interned = new Map<string, string>();
 export const intern = (text: string) => interned.get(text) ?? interned.set(text, text).get(text)!;
+
+export function recordedModels(session: Session): { used: string[]; unknown: string[] } {
+  const used = new Set<string>();
+  const unknown = new Set<string>();
+  for (const event of session.events) {
+    if (event.type === "inference" && event.model) used.add(intern(event.model));
+    if (event.type === "unknown_model") unknown.add(intern(event.model));
+  }
+  return { used: [...used], unknown: [...unknown] };
+}

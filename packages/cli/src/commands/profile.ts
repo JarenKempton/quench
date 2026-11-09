@@ -41,7 +41,8 @@ import { claudeConfigHomes } from "../profile/config-homes.ts";
 import { judgeChoice, readConfig } from "../config.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
-import { mcpUse } from "../profile/recorded-mcp.ts";
+import { mcpHealth, mcpUse } from "../profile/recorded-mcp.ts";
+import { hostConfigFiles, pinnedModels } from "../profile/pinned-models.ts";
 import { mcpToolRecords } from "../profile/recorded-mcp-tools.ts";
 import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
 import { trackedInRepo } from "../profile/skill-repos.ts";
@@ -63,6 +64,8 @@ import { splitInstructions, splitSkills, type InstructionFile } from "../profile
 export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
+  "MCP servers not working: failing and needs login come from the failedMcpServers and needsAuthMcpServers fields Claude Code records when it lists deferred tools, with the error code only when it is a short upper-case code; the error text is not kept. Unused means on in a config file on disk now and never called by that agent in range. Codex and Pi record no connection status.",
+  "Pinned model names are names from a fixed pattern (Claude, GPT, o-series and Gemini model ids) found in instruction files, skill files and host config (Claude settings, ~/.codex/config.toml, ~/.pi/agent/settings.json) on disk now. One is listed when no session in range used it and either sessions used a newer version of the same family or Claude Code recorded it failing with model_not_found; the name in that error is kept only when it matches the pattern.",
   "Hooks or status lines that can't run are Claude Code hook and statusLine commands in each Claude home's settings.json and settings.local.json whose script path (the first word, or the one after bash, sh, node, bun, python and similar) is absolute or starts with ~ or $HOME and does not exist, or whose every line is a # comment. Commands found on PATH and project settings are not checked.",
   'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with exactly the same text, started before Claude Code recorded a notification that the first finished or the agent stopped it; a session that ended first counts as never finished. A re-run with any change in text is not counted, so this is a lower bound. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands", shown with the top 3 known commands found in its chains. Codex and Pi record no such result.',
   "Stored credentials are the high-confidence secrets quench secrets finds in harness settings, MCP config and prompt history files of your home and the projects profiled here, each value counted once; values, prefixes and tags are never shown. Session transcripts and repo git history are not scanned for it, and quench secrets may cover other projects.",
@@ -183,6 +186,21 @@ export async function profile(
     ),
     recordedSkillAsks: asks,
     recordedMcp: mcpUse(places, configuredMcp),
+    mcpHealth: mcpHealth(places, configuredMcp),
+    pinnedModels: await pinnedModels(
+      [
+        ...[
+          ...globalInstructions.values(),
+          ...profiled.flatMap((p) => p.instructions.files),
+        ].flatMap((f) => f.sources.map((s) => s.realPath)),
+        ...[...globalSkills.values(), ...profiled.flatMap((p) => p.skills)].map((s) => s.realPath),
+        ...hostConfigFiles(
+          home,
+          configHomes.map((h) => h.path),
+        ),
+      ],
+      places,
+    ),
     recordedMcpTools: mcpToolRecords(places, configuredMcp),
     duplicateMcpServers: mcpDuplicates(
       [...globalMcp.values()],

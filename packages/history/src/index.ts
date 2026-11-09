@@ -78,3 +78,4 @@ export {
   type Worktree,
   type WorktreeCheck,
 } from "./worktrees.ts";
+export { modelFamily, modelNamesIn, modelVersion } from "./models.ts";

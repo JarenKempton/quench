@@ -18,6 +18,8 @@ import { commandLabel } from "./recorded-failures.ts";
 import { neverUsed } from "./skill-cuts.ts";
 import { skillSources } from "./recorded-skills.ts";
 import { renderNextSteps } from "./next-steps.ts";
+import type { McpHealth } from "./recorded-mcp.ts";
+import { pinnedDetail } from "./pinned-models.ts";
 import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
@@ -179,6 +181,38 @@ function worthALook(result: Profile, homeDir: string): string[] {
       detail: `${top.error ? `${top.error} · ` : ""}${plural(top.sessions, "session")} · ${chars(top.chars)} of output`,
       command: "quench profile failures",
     });
+  const pinned = result.pinnedModels;
+  if (pinned.length)
+    items.push({
+      headline: `${plural(pinned.length, "pinned model name")} ${pinned.length === 1 ? "looks" : "look"} outdated`,
+      detail: `${pinned
+        .slice(0, 3)
+        .map((p) => `${p.model} in ${shortPath(p.files[0]!, homeDir)}, ${pinnedDetail(p)}`)
+        .join(" · ")}${pinned.length > 3 ? ` · ${pinned.length - 3} more` : ""}`,
+      command: "quench profile instructions",
+    });
+  const health = (state: McpHealth["state"]) => result.mcpHealth.filter((r) => r.state === state);
+  const servers = (rows: McpHealth[], sessions: boolean) =>
+    `${rows
+      .slice(0, 3)
+      .map(
+        (r) =>
+          `${r.server} on ${harnessById[r.harness].label}${sessions ? ` ${plural(r.sessions, "session")}` : ""}${r.code ? ` (${r.code})` : ""}`,
+      )
+      .join(" · ")}${rows.length > 3 ? ` · ${rows.length - 3} more` : ""}`;
+  for (const [state, headline] of [
+    ["failing", "failed to connect"],
+    ["needs login", "waiting for login"],
+    ["unused", "on but never called"],
+  ] as const) {
+    const rows = health(state);
+    if (rows.length)
+      items.push({
+        headline: `${plural(rows.length, "MCP server")} ${headline}`,
+        detail: servers(rows, state !== "unused"),
+        command: "quench profile mcp",
+      });
+  }
   const loads = result.projects
     .filter((p) => p.recordedLoad.medianChars !== null && p.sessions)
     .map((p) => ({ root: p.root, chars: p.recordedLoad.medianChars! }))

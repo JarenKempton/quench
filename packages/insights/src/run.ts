@@ -286,6 +286,8 @@ export function splitRuns(session: Session, turns: boolean): Run[] {
       case "prompt":
       case "deferred_tools":
       case "mcp_instructions":
+      case "mcp_status":
+      case "unknown_model":
         continue;
       default:
         unhandled(event);
