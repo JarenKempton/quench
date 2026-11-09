@@ -5,7 +5,7 @@ import { correctionsJson, shownHistory } from "./corrections.ts";
 import { reportJson } from "./report.ts";
 import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
-import { tasksJson } from "./tasks.ts";
+import { tasksLoader } from "./tasks.ts";
 import { worktreesJson } from "./worktrees.ts";
 
 export const LOOPBACK = "127.0.0.1";
@@ -169,7 +169,9 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
+  const tasks: Load = lastResult(tasksLoader(home, flags, () => void tasks({ refresh: true })));
   const api = {
+    tasks,
     report: lastResult(() => reportJson(home, flags.days)),
     skills: lastResult(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
     corrections: lastResult(async () =>
@@ -184,7 +186,6 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
           )
         : NO_JUDGE,
     ),
-    tasks: lastResult(() => tasksJson(home, flags)),
     worktrees: lastResult(() => worktreesJson(home, flags)),
     secrets: lastResult(() => secretsJson(home, flags)),
   };

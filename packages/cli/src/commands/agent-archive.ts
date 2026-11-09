@@ -57,7 +57,7 @@ export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
 export const RETRY_MS = 6 * 3_600_000;
 
-type Shipped = Record<
+export type Shipped = Record<
   string,
   {
     sha256: string;
@@ -84,6 +84,7 @@ export type ArchiveStatus = {
 };
 
 const stateFile = (dir: string) => join(dir, "archive.json");
+export const archived = (dir: string) => readJson<Shipped>(stateFile(dir));
 const tasksFile = (dir: string) => join(dir, "tasks.json");
 
 async function readJson<T>(path: string): Promise<T | Record<string, never>> {
@@ -298,6 +299,11 @@ export async function sessionResult(
 
 const keyOf = (ref: SessionRef, path: string) => `${ref.harness}\0${path}`;
 
+export const transcriptPath = (home: Home, ref: SessionRef) =>
+  relative(home.of(harnessById[ref.harness].home), ref.path).split(sep).join("/");
+
+export const sessionKey = (home: Home, ref: SessionRef) => keyOf(ref, transcriptPath(home, ref));
+
 export async function archiveCycle(
   home: Home,
   dir: string,
@@ -361,7 +367,7 @@ export async function archiveCycle(
     retry: boolean;
   }[] = [];
   for (const ref of refs) {
-    const path = relative(home.of(harnessById[ref.harness].home), ref.path).split(sep).join("/");
+    const path = transcriptPath(home, ref);
     if (!TranscriptPath.safeParse(path).success) {
       count(status.skipped, "path");
       continue;

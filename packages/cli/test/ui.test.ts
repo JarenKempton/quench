@@ -328,7 +328,7 @@ test(
 );
 
 test(
-  "/api/tasks lists each task's verdicts from cached judgments only, with ids and labels but no history text, and writes nothing",
+  "/api/tasks lists each task's verdicts from cached judgments only, with ids and labels but no history text, and writes only its own segment cache",
   async () => {
     const dir = await fixture();
     let created = 0;
@@ -372,7 +372,10 @@ test(
       expect(created).toBe(0);
       for (const text of ["no, wrong", "thanks", "fix it", "Use Bun", "test suite", "done"])
         expect(served.body).not.toContain(text);
-      expect(await tree(dir)).toEqual(before);
+      const own = (e: string) =>
+        e.startsWith(`${join(".quench", "local")}:`) ||
+        e.startsWith(join(".quench", "local", "task-segments.json"));
+      expect((await tree(dir)).filter((e) => !own(e))).toEqual(before.filter((e) => !own(e)));
     } finally {
       await running.stop();
     }
