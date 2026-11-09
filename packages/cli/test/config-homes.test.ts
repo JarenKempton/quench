@@ -65,7 +65,7 @@ test(
           instructionBytes: 3100,
           settings: true,
           hooks: 2,
-          hookScripts: [],
+          hookScripts: ["guard.sh"],
           dead: [],
         },
         {

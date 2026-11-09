@@ -37,8 +37,8 @@ import { reading } from "../progress.ts";
 import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
-import { claudeConfigHomes } from "../profile/config-homes.ts";
-import { judgeChoice, readConfig } from "../config.ts";
+import { claudeConfigHomes, projectHookScripts } from "../profile/config-homes.ts";
+import { judgeChoice, readConfig, typesafeKey } from "../config.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
 import { mcpHealth, mcpUse } from "../profile/recorded-mcp.ts";
@@ -161,7 +161,7 @@ export async function profile(
   } = {
     observedAt: new Date().toISOString(),
     days: options.days,
-    judge: await judgeName(home),
+    unjudged: await unjudged(home),
     homes: await Promise.all(
       harnesses.map(async (h) => ({
         harness: h.id,
@@ -211,7 +211,10 @@ export async function profile(
     ),
     recordedFailures: repeatedFailures(
       found.placesByRoot,
-      new Set(configHomes.flatMap((h) => h.hookScripts)),
+      new Set([
+        ...configHomes.flatMap((h) => h.hookScripts),
+        ...(await projectHookScripts(found.projects.map((p) => p.root))),
+      ]),
     ),
     recordedStart: startSplit(places),
     projects: profiled,
@@ -369,8 +372,13 @@ async function profileProject(home: Home, project: Project, places: SessionPlace
   };
 }
 
-async function judgeName(home: Home): Promise<string | null> {
-  const choice = judgeChoice(await readConfig(home.dir), process.env);
-  if (choice instanceof Error || choice.name === "none") return null;
-  return choice.name === "jev" && !choice.apiKey ? null : choice.name;
+async function unjudged(home: Home): Promise<string | null> {
+  const config = await readConfig(home.dir);
+  if (typeof typesafeKey(config, process.env) === "string") return null;
+  const choice = judgeChoice(config, process.env);
+  const judged =
+    !(choice instanceof Error) &&
+    choice.name !== "none" &&
+    !(choice.name === "jev" && !choice.apiKey);
+  return `${judged ? "grouping and causes in quench corrections" : "quench corrections"} and one-word skill names in quench profile skills --asks`;
 }

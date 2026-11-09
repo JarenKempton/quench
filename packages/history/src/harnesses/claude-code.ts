@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { join, basename, win32 } from "node:path";
+import { join, basename } from "node:path";
 import { z } from "zod";
 import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
@@ -11,7 +11,7 @@ import { pluginSourceSpec, type SkillSource } from "../skill-sources.ts";
 import { claudeSkillCut, claudeSkillOrigins } from "./claude-code-skills.ts";
 import type { SkillRoot } from "../skills.ts";
 import { ancestorDirs, type SteeringRoot } from "../steering.ts";
-import { failureOf, type Denial } from "../failures.ts";
+import { failureOf, hookScriptsIn, type Denial } from "../failures.ts";
 import { date, injectedTag, jsonlLines, mcpCalls, sha256, textOf } from "../jsonl.ts";
 import type {
   CompactionTrigger,
@@ -832,12 +832,9 @@ const HOOK_EVENTS = new Set([
   "SessionEnd",
 ]);
 
-const HOOK_SCRIPT = /^[A-Za-z0-9][\w.-]{0,63}\.(sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl|ps1)$/;
-
 function hookScriptOf(text: string): string | null {
-  const command = /^\w+(?::\w+)? hook error: \[([^\]\s]+)/.exec(text.slice(0, 400))?.[1];
-  const script = command && win32.basename(command);
-  return script && HOOK_SCRIPT.test(script) ? script : null;
+  const command = /^\w+(?::\w+)? hook error: \[([^\]]{1,400})\]/.exec(text.slice(0, 600))?.[1];
+  return command ? (hookScriptsIn(command)[0] ?? null) : null;
 }
 
 function guardOf(line: Line): string {
