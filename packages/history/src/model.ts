@@ -41,7 +41,11 @@ export const knownUsage = (
 
 export type CompactionTrigger = "auto" | "manual" | "unknown";
 
-export type FileReadRequest = { path: string; offset: number | null; limit: number | null };
+export type FileReadRequest = {
+  path: string;
+  offset: number | null;
+  limit: number | null;
+};
 
 export type FileReadResult = {
   path: string | null;
@@ -78,11 +82,21 @@ export type Failure = {
   exitCode: number | null;
   line?: string | null;
   errorClass?: string;
+  hook?: string | null;
 };
 
-export type ListedSkill = { name: string; path: string | null; chars: number | null };
+export type ListedSkill = {
+  name: string;
+  path: string | null;
+  chars: number | null;
+};
 
-export type PromptTool = { name: string; server: string | null; chars: number; deferred: boolean };
+export type PromptTool = {
+  name: string;
+  server: string | null;
+  chars: number;
+  deferred: boolean;
+};
 
 export const mcpServerOf = (name: string): string | null => /^mcp__(.+?)__/.exec(name)?.[1] ?? null;
 
@@ -95,7 +109,12 @@ export type EventKind =
       sender?: SenderEvidence;
       queued?: true;
     }
-  | { type: "inference"; model: string | null; effort: string | null; usage: Usage }
+  | {
+      type: "inference";
+      model: string | null;
+      effort: string | null;
+      usage: Usage;
+    }
   | {
       type: "tool_call";
       id: string | null;
@@ -104,7 +123,13 @@ export type EventKind =
       shell?: ShellCommand[];
     }
   | { type: "invocation"; name: string; by: "model" | "user" }
-  | { type: "mcp_call"; id: string | null; server: string; tool: string; inScript?: boolean }
+  | {
+      type: "mcp_call";
+      id: string | null;
+      server: string;
+      tool: string;
+      inScript?: boolean;
+    }
   | {
       type: "tool_result";
       callId: string | null;
@@ -115,7 +140,11 @@ export type EventKind =
       fileRead?: FileReadResult;
       backgrounded?: { task: string; finishedLine: number | null };
     }
-  | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null }
+  | {
+      type: "compaction";
+      trigger: CompactionTrigger;
+      tokensBefore: number | null;
+    }
   | { type: "instructions"; files: InjectedInstruction[]; unreadable: number }
   | { type: "skills"; listed: ListedSkill[]; chars: number }
   | { type: "prompt"; system: number | null; tools: PromptTool[] | null }

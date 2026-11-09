@@ -14,6 +14,7 @@ import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts
 import { unconfiguredHomes } from "./config-homes.ts";
 import { fileLabel } from "./recorded-instructions.ts";
 import { renderStartSplit } from "./recorded-start.ts";
+import { commandLabel } from "./recorded-failures.ts";
 import { neverUsed } from "./skill-cuts.ts";
 import { renderNextSteps } from "./next-steps.ts";
 import type { Profile } from "./render.ts";
@@ -104,6 +105,19 @@ function worthALook(result: Profile, homeDir: string): string[] {
       detail: stored.map((f) => shortPath(f.path, homeDir)).join(" · "),
       command: "quench secrets",
     });
+  const dead = result.claudeConfigHomes.flatMap((h) => h.dead);
+  if (dead.length)
+    items.push({
+      headline: `${plural(dead.length, "hook or status line", "hooks or status lines")} can't run`,
+      detail: dead
+        .map((d) =>
+          d.script
+            ? `${d.event} ${shortPath(d.script, homeDir)} missing`
+            : `${d.event} ${d.problem}`,
+        )
+        .join(" · "),
+      command: `edit ${[...new Set(dead.map((d) => shortPath(d.file, homeDir)))].join(" and ")}`,
+    });
   const never = result.recordedSkills
     .filter((u) => u.useRecorded)
     .map((u) => ({
@@ -121,7 +135,7 @@ function worthALook(result: Profile, homeDir: string): string[] {
   const blocked = result.recordedFailures.blocked[0];
   if (blocked)
     items.push({
-      headline: `${blocked.guard} blocked ${blocked.command ? `"${blocked.command}" ` : ""}${count(blocked.blocks)}×`,
+      headline: `${blocked.hooks.length ? `${blocked.guard} ${blocked.hooks.join(" or ")}` : blocked.guard} blocked ${blocked.command ? `"${commandLabel(blocked.command, blocked.chained)}" ` : ""}${count(blocked.blocks)}×`,
       detail: `${plural(blocked.sessions, "session")} · ${blocked.projects
         .slice(0, 3)
         .map((p) => projectName(p.root, homeDir))
@@ -136,7 +150,7 @@ function worthALook(result: Profile, homeDir: string): string[] {
         `${count(kept.rerun)} re-run before done`,
         kept.commands
           .slice(0, 3)
-          .map((c) => `${c.what} ${count(c.backgrounded)}`)
+          .map((c) => `${commandLabel(c.what, c.chained)} ${count(c.backgrounded)}`)
           .join(", "),
         kept.models
           .slice(0, 3)
@@ -151,7 +165,7 @@ function worthALook(result: Profile, homeDir: string): string[] {
   const top = result.recordedFailures.repeated[0];
   if (top)
     items.push({
-      headline: `"${top.what}" failed ${count(top.failures)}× in ${projectName(top.root, homeDir)}`,
+      headline: `"${commandLabel(top.what, top.chained)}" failed ${count(top.failures)}× in ${projectName(top.root, homeDir)}`,
       detail: `${top.error ? `${top.error} · ` : ""}${plural(top.sessions, "session")} · ${chars(top.chars)} of output`,
       command: "quench profile failures",
     });

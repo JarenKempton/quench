@@ -923,6 +923,8 @@ test(
     expect(json.recordedFailures.blocked[0]).toEqual({
       guard: "PreToolUse hook",
       command: "git push",
+      chained: [],
+      hooks: [],
       blocks: 3,
       sessions: 1,
       projects: [{ root: project, blocks: 3 }],

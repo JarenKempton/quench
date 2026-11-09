@@ -703,6 +703,8 @@ test(
       {
         guard: "hook",
         command: "git push",
+        chained: [],
+        hooks: [],
         blocks: 2,
         sessions: 1,
         projects: [{ root: project, blocks: 2 }],

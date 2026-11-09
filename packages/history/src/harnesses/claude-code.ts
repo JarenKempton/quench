@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { join, basename, win32 } from "node:path";
 import { z } from "zod";
 import { filesWithExt, subdirs } from "../files.ts";
 import { sessionRef, type Harness, type SessionRef } from "../harness.ts";
@@ -95,7 +95,12 @@ const Line = z.looseObject({
     .looseObject({
       system: z.array(z.looseObject({ text: z.string().nullish() })).nullish(),
       tools: z
-        .array(z.looseObject({ name: z.string(), defer_loading: z.boolean().nullish() }))
+        .array(
+          z.looseObject({
+            name: z.string(),
+            defer_loading: z.boolean().nullish(),
+          }),
+        )
         .nullish(),
     })
     .nullish(),
@@ -213,9 +218,21 @@ const globalConfigOf = (home: Home) => {
 
 const settingsFiles = (configDir: string, project: string): ConfigFile[] => [
   { path: join(configDir, "settings.json"), scope: "user", kind: "settings" },
-  { path: join(configDir, "settings.local.json"), scope: "user", kind: "settings" },
-  { path: join(project, ".claude/settings.json"), scope: "project", kind: "settings" },
-  { path: join(project, ".claude/settings.local.json"), scope: "local", kind: "settings" },
+  {
+    path: join(configDir, "settings.local.json"),
+    scope: "user",
+    kind: "settings",
+  },
+  {
+    path: join(project, ".claude/settings.json"),
+    scope: "project",
+    kind: "settings",
+  },
+  {
+    path: join(project, ".claude/settings.local.json"),
+    scope: "local",
+    kind: "settings",
+  },
 ];
 
 export const claudeCode: Harness<"claude-code"> = {
@@ -261,7 +278,11 @@ export const claudeCode: Harness<"claude-code"> = {
     const main = repo && repo.top !== repo.root && !own ? [repo.root] : [];
     return [
       { path: join(home.of(HOME), "skills"), scope: "user", layout: "folders" },
-      { path: join(home.of(HOME), "commands"), scope: "user", layout: "commands" },
+      {
+        path: join(home.of(HOME), "commands"),
+        scope: "user",
+        layout: "commands",
+      },
       ...main.map(
         (dir): SkillRoot => ({
           path: join(dir, ".claude/skills"),
@@ -270,8 +291,16 @@ export const claudeCode: Harness<"claude-code"> = {
         }),
       ),
       ...dirs.flatMap((dir): SkillRoot[] => [
-        { path: join(dir, ".claude/skills"), scope: scope(dir), layout: "folders" },
-        { path: join(dir, ".claude/commands"), scope: scope(dir), layout: "commands" },
+        {
+          path: join(dir, ".claude/skills"),
+          scope: scope(dir),
+          layout: "folders",
+        },
+        {
+          path: join(dir, ".claude/commands"),
+          scope: scope(dir),
+          layout: "commands",
+        },
       ]),
     ];
   },
@@ -362,12 +391,24 @@ export const claudeCode: Harness<"claude-code"> = {
   async configs(home, project) {
     const configDir = home.of(HOME);
     const mcpFiles = (await ancestorDirs(project)).map(
-      (dir): ConfigFile => ({ path: join(dir, ".mcp.json"), scope: "project", kind: "mcp" }),
+      (dir): ConfigFile => ({
+        path: join(dir, ".mcp.json"),
+        scope: "project",
+        kind: "mcp",
+      }),
     );
     return [
       { path: globalConfigOf(home), scope: "user", kind: "mcp" },
-      { path: join(configDir, ".credentials.json"), scope: "user", kind: "credentials" },
-      { path: join(configDir, "history.jsonl"), scope: "user", kind: "prompts" },
+      {
+        path: join(configDir, ".credentials.json"),
+        scope: "user",
+        kind: "credentials",
+      },
+      {
+        path: join(configDir, "history.jsonl"),
+        scope: "user",
+        kind: "prompts",
+      },
       ...settingsFiles(configDir, project),
       ...mcpFiles,
     ];
@@ -523,7 +564,9 @@ function requestShape(shape: NonNullable<Line["shape"]>): EventKind {
 const TIMED_OUT_TO_BACKGROUND =
   /^Command did not complete within its \d+s timeout and was moved to the background \(ID: ([^)]+)\)/;
 
-function backgroundedOf(text: string): { backgrounded?: { task: string; finishedLine: null } } {
+function backgroundedOf(text: string): {
+  backgrounded?: { task: string; finishedLine: null };
+} {
   const task = TIMED_OUT_TO_BACKGROUND.exec(text)?.[1];
   return task ? { backgrounded: { task, finishedLine: null } } : {};
 }
@@ -569,7 +612,11 @@ function promptParts(raw: unknown): EventKind[] {
   const a = attachment.data;
   if (a.type === "deferred_tools_delta" && a.addedNames?.length)
     return [
-      { type: "deferred_tools", names: a.addedNames, chars: joinedLength(a.addedLines ?? []) },
+      {
+        type: "deferred_tools",
+        names: a.addedNames,
+        chars: joinedLength(a.addedLines ?? []),
+      },
     ];
   if (a.type === "mcp_instructions_delta" && a.addedNames?.length)
     return [
@@ -681,13 +728,21 @@ function assistant(line: Line): EventKind[] {
       const skill = block.name === "Skill" ? SkillInput.safeParse(block.input) : null;
       const shell = block.name === "Bash" ? BashInput.safeParse(block.input) : null;
       if (skill?.success) out.push({ type: "invocation", name: skill.data.skill, by: "model" });
-      out.push(...mcpCalls(block.name ?? "", { prefix: "^", suffix: "$", id: block.id ?? null }));
+      out.push(
+        ...mcpCalls(block.name ?? "", {
+          prefix: "^",
+          suffix: "$",
+          id: block.id ?? null,
+        }),
+      );
       out.push({
         type: "tool_call",
         id: block.id ?? null,
         name: block.name ?? "",
         ...(shell?.success
-          ? { shell: [{ command: shell.data.command, workdir: line.cwd ?? null }] }
+          ? {
+              shell: [{ command: shell.data.command, workdir: line.cwd ?? null }],
+            }
           : {}),
         ...(input?.success
           ? {
@@ -717,8 +772,9 @@ function denial(line: Line, text: string, single: boolean): Denial {
   const blocked = decision
     ? decision.decision === "reject" && BLOCKED_BY.has(decision.source ?? "")
     : BLOCKED_KINDS.has(line.toolDenialKind ?? "");
-  if (single && blocked) return { guard: guardOf(line) };
-  return rejected(text) ? "rejected" : null;
+  if (!single || !blocked) return rejected(text) ? "rejected" : null;
+  const guard = guardOf(line);
+  return { guard, hook: guard.endsWith("hook") ? hookScriptOf(text) : null };
 }
 
 const HOOK_EVENTS = new Set([
@@ -736,6 +792,14 @@ const HOOK_EVENTS = new Set([
   "SessionEnd",
 ]);
 
+const HOOK_SCRIPT = /^[A-Za-z0-9][\w.-]{0,63}\.(sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl|ps1)$/;
+
+function hookScriptOf(text: string): string | null {
+  const command = /^\w+(?::\w+)? hook error: \[([^\]\s]+)/.exec(text.slice(0, 400))?.[1];
+  const script = command && win32.basename(command);
+  return script && HOOK_SCRIPT.test(script) ? script : null;
+}
+
 function guardOf(line: Line): string {
   const decision = line.permissionDecision;
   if (decision?.source === "hook") {
@@ -746,7 +810,10 @@ function guardOf(line: Line): string {
   return line.toolDenialKind === "automode-blocked" ? "auto mode" : "permission rule";
 }
 
-const ToolReference = z.object({ type: z.literal("tool_reference"), tool_name: z.string() });
+const ToolReference = z.object({
+  type: z.literal("tool_reference"),
+  tool_name: z.string(),
+});
 
 function referencedTools(content: unknown): { loadedTools?: string[] } {
   if (!Array.isArray(content)) return {};
@@ -789,7 +856,11 @@ function user(line: Line): EventKind[] {
   if (command && !flagged)
     return [
       { type: "message", author: "user", origin: origin(line), text: command },
-      { type: "invocation", name: command.split(" ")[0]!.replace(/^\//, ""), by: "user" },
+      {
+        type: "invocation",
+        name: command.split(" ")[0]!.replace(/^\//, ""),
+        by: "user",
+      },
     ];
   const injected = flagged || injectedTag(text) || HARNESS_NOTES.some((n) => text.startsWith(n));
   return [
