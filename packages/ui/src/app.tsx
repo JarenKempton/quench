@@ -9,10 +9,13 @@ import { OverviewView } from "./overview-view.tsx";
 import type { Report } from "./report.ts";
 import { SkillsView } from "./skills-view.tsx";
 import type { Harness, SkillsReport } from "./skills.ts";
+import { TasksView } from "./tasks-view.tsx";
+import type { TasksReport } from "./tasks.ts";
 import { useApis, type Load, type State } from "./use-api.ts";
 
 const TABS = [
   ["overview", "Overview"],
+  ["tasks", "Tasks"],
   ["skills", "Skills"],
   ["corrections", "Corrections"],
   ["housekeeping", "Housekeeping"],
@@ -29,9 +32,11 @@ const routeOf = (hash: string) => {
 const REPORT = "/api/report";
 const SKILLS = "/api/skills";
 const CORRECTIONS = "/api/corrections";
+const TASKS = "/api/tasks";
 
 const PATHS: Record<Tab, readonly string[]> = {
   overview: [REPORT],
+  tasks: [TASKS],
   skills: [SKILLS],
   corrections: [CORRECTIONS],
   housekeeping: HOUSEKEEPING,
@@ -72,6 +77,7 @@ export function App() {
         <span className="font-mono text-xs text-muted-foreground">read-only</span>
       </header>
       {tab === "overview" && <OverviewPage state={stateOf<Report>(REPORT)} load={load} />}
+      {tab === "tasks" && <TasksPage state={stateOf<TasksReport>(TASKS)} load={load} />}
       {tab === "skills" && (
         <SkillsPage
           state={stateOf<SkillsReport>(SKILLS)}
@@ -101,6 +107,28 @@ function OverviewPage({ state, load }: Page<Report>) {
             <OverviewView report={report} />
           ) : (
             <Message title="No sessions found">
+              No agent session started in the last {report.days} days. Run quench ui --days 90 to
+              look further back.
+            </Message>
+          )}
+        </>
+      )}
+    </Loading>
+  );
+}
+
+function TasksPage({ state, load }: Page<TasksReport>) {
+  return (
+    <Loading state={state} load={() => load(TASKS)} what="your tasks">
+      {(report) => (
+        <>
+          <Days days={report.days}>
+            <Fresh state={state} refresh={() => load(TASKS, true)} />
+          </Days>
+          {report.tasks.length ? (
+            <TasksView report={report} />
+          ) : (
+            <Message title="No tasks found">
               No agent session started in the last {report.days} days. Run quench ui --days 90 to
               look further back.
             </Message>

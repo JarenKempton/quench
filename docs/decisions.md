@@ -51,7 +51,7 @@ retired with it and live in git history.
   over a plain protocol; it is not a library.
 - **`quench ui` is the one exception: React, Tailwind, Radix and shadcn/ui, build-only**
   ([#134](https://github.com/JarenKempton/quench/issues/134)). The data is live and local, so
-  every view renders in the browser from `/api/report`, `/api/skills` and `/api/corrections` (cached verdicts only, so opening it never calls a judge), and shadcn is built for React and Vite.
+  every view renders in the browser from `/api/report`, `/api/skills`, `/api/corrections` and `/api/tasks` (cached verdicts only, so opening it never calls a judge; Tasks answers from cached PR state and per-session segments in `~/.quench/local`, seeded from the agent's archive state when there is one, and asks `gh` in the background, refreshing once if PR state changed), and shadcn is built for React and Vite.
   `quench ui` reads the report and skills when it starts, so its first page waits on one scan, not two ([#169](https://github.com/JarenKempton/quench/issues/169)).
   Vite (already in the toolchain through Vite+) builds `packages/ui` to fixed-name static files
   that `bun build --compile` embeds; none of these packages ships as runtime code outside that

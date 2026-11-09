@@ -271,7 +271,7 @@ export function SkillsView({
   );
 }
 
-function Filter({
+export function Filter({
   label,
   value,
   onChange,

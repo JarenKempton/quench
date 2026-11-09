@@ -91,10 +91,7 @@ export async function githubPulls(
   now = Date.now(),
   exec: Run = run,
 ) {
-  let cache: Cache = {};
-  try {
-    cache = JSON.parse(await readFile(pullsFile(dir), "utf8")) as Cache;
-  } catch {}
+  const cache = await readCache(dir);
   const due = dueRepos(cache, segments, now);
   let failed = 0;
   for (const repo of due) {
@@ -129,10 +126,24 @@ export async function githubPulls(
     };
   }
   if (due.length) await replacePrivateFile(pullsFile(dir), `${JSON.stringify(cache)}\n`);
+  return { ...known(cache, segments), fetched: due.length - failed };
+}
+
+async function readCache(dir: string): Promise<Cache> {
+  try {
+    return JSON.parse(await readFile(pullsFile(dir), "utf8")) as Cache;
+  } catch {
+    return {};
+  }
+}
+
+function known(cache: Cache, segments: readonly JudgedSegment[]) {
   const needed = new Set(segments.flatMap((s) => (s.repo ? [s.repo] : [])));
   return {
     pulls: Object.values(cache).flatMap((c) => c.pulls),
-    fetched: due.length - failed,
     offline: [...needed].filter((repo) => cache[repo]?.failedAt).length,
   };
 }
+
+export const cachedPulls = async (dir: string, segments: readonly JudgedSegment[]) =>
+  known(await readCache(dir), segments);
