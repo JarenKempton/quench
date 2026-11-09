@@ -105,6 +105,27 @@ test("only turns after a compaction or an idle gap are judged, against correctio
     commands: [],
   });
   expect(guidanceBreaks("s", history, replies, 0, 1, [])).toEqual([]);
+  const ruleless = runs(
+    session([
+      ...user("start", 0),
+      said("a", 1),
+      { type: "compaction", trigger: "auto", tokensBefore: null, at: at(2) },
+      ...user("go on", 3),
+      said("b", 4),
+      { type: "compaction", trigger: "auto", tokensBefore: null, at: at(5) },
+      ...user("again", 6),
+      said("c", 7),
+      { type: "compaction", trigger: "auto", tokensBefore: null, at: at(8) },
+      ...user("more", 9),
+      said("d", 10),
+      ...user("Never push to main.", 11),
+      said("e", 12),
+      { type: "compaction", trigger: "auto", tokensBefore: null, at: at(13) },
+      ...user("last", 14),
+      said("f", 15),
+    ]),
+  );
+  expect(guidanceBreaks("s", ruleless, [], 0, 5, []).map((b) => b.turn)).toEqual([5]);
 });
 
 function scripted(answers: Record<string, string>) {

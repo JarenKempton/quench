@@ -30,7 +30,9 @@ import {
   loadedStandards,
   Jev,
   JEV_USD_PER_INPUT_TOKEN,
+  Guidance,
   JevGuidance,
+  KeyRejected,
   judgeGuidance,
   judgeReplies,
   ThemeCache,
@@ -39,10 +41,12 @@ import {
   type GuidanceJudge,
   type SegmentGuidance,
 } from "@quench/judge";
+import { judgeChoice, readConfig } from "../config.ts";
 import { replacePrivateFile } from "../private-file.ts";
 
 export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
+export const RETRY_MS = 6 * 3_600_000;
 
 type Shipped = Record<
   string,
@@ -50,6 +54,7 @@ type Shipped = Record<
     sha256: string;
     size: number;
     mtimeMs: number;
+    guidedAt?: number;
     segments?: (Segment & { guidance?: SegmentGuidance })[];
   }
 >;
@@ -136,9 +141,12 @@ const memberKey = (m: { harness: string; sessionId: string; firstTurn: number })
 
 const PENDING: SegmentGuidance = { guidance: "pending", unreliableRule: null, turns: 0, tokens: 0 };
 
+const stored = (s: { guidance?: SegmentGuidance }) =>
+  s.guidance && Guidance.safeParse(s.guidance.guidance).success ? s.guidance : PENDING;
+
 export function taskResults(shipped: Shipped, posted: Posted) {
   const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
-  const guidance = new Map(all.map((s) => [memberKey(s), s.guidance ?? PENDING]));
+  const guidance = new Map(all.map((s) => [memberKey(s), stored(s)]));
   const rows: TaskResult[] = tasks(all).map((task) => {
     const judged = combine(task.members.map((m) => guidance.get(memberKey(m)) ?? PENDING));
     return {
@@ -269,7 +277,12 @@ export async function archiveCycle(
     error: null,
   };
   const shipped: Shipped = await readJson<Shipped>(stateFile(dir));
-  const judge = JevGuidance.fromEnv();
+  const choice = judgeChoice(await readConfig(home.dir), process.env);
+  const judge =
+    !(choice instanceof Error) && choice.name === "jev" && choice.apiKey
+      ? new JevGuidance(choice.apiKey)
+      : null;
+  let rejected = false;
   const guide: Guide = {
     cache: await ThemeCache.open<GuidanceInput>(
       join(home.dir, ".quench/local/guidance.jsonl"),
@@ -278,9 +291,17 @@ export async function archiveCycle(
     judge: judge && {
       id: judge.id,
       guidance: async (input) => {
-        const decision = await judge.guidance(input);
-        status.judgeTokens += decision.tokens ?? 0;
-        return decision;
+        if (rejected) throw new Error("judge key rejected");
+        try {
+          const decision = await judge.guidance(input);
+          status.judgeTokens += decision.tokens ?? 0;
+          return decision;
+        } catch (error) {
+          if (!(error instanceof KeyRejected)) throw error;
+          rejected = true;
+          count(status.skipped, "judge-key-rejected");
+          throw new Error("judge key rejected");
+        }
       },
     },
   };
@@ -292,7 +313,8 @@ export async function archiveCycle(
         `${ref.harness}\0${ref.parent}`,
         (children.get(`${ref.harness}\0${ref.parent}`) ?? 0) + 1,
       );
-  const due: { ref: SessionRef; path: string; size: number; mtimeMs: number }[] = [];
+  const due: { ref: SessionRef; path: string; size: number; mtimeMs: number; retry: boolean }[] =
+    [];
   for (const ref of refs) {
     const path = relative(home.of(harnessById[ref.harness].home), ref.path).split(sep).join("/");
     if (!TranscriptPath.safeParse(path).success) {
@@ -306,20 +328,19 @@ export async function archiveCycle(
       continue;
     }
     const known = shipped[keyOf(ref, path)];
-    if (
-      known?.segments &&
-      known.size === info.size &&
-      known.mtimeMs === info.mtimeMs &&
-      !(judge && known.segments.some((s) => (s.guidance ?? PENDING).guidance === "pending"))
-    )
+    const retry =
+      !!judge &&
+      now - (known?.guidedAt ?? 0) >= RETRY_MS &&
+      !!known?.segments?.some((s) => stored(s).guidance === "pending");
+    if (known?.segments && known.size === info.size && known.mtimeMs === info.mtimeMs && !retry)
       continue;
     if (info.size > MAX_TRANSCRIPT_BYTES) {
       count(status.skipped, "too-large");
       continue;
     }
-    due.push({ ref, path, size: info.size, mtimeMs: info.mtimeMs });
+    due.push({ ref, path, size: info.size, mtimeMs: info.mtimeMs, retry });
   }
-  due.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  due.sort((a, b) => Number(a.retry) - Number(b.retry) || a.mtimeMs - b.mtimeMs);
   const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
   const pending: { key: string; entry: Shipped[string]; result: SessionResult | null }[] = [];
   const flush = async () => {
@@ -346,6 +367,7 @@ export async function archiveCycle(
         sha256: digest,
         size: bytes.length,
         mtimeMs: item.mtimeMs,
+        ...(judge ? { guidedAt: now } : {}),
         segments: session
           ? await sessionSegments(session, verdicts, guide, [
               join(home.of(harnessById["claude-code"].home), "skills"),

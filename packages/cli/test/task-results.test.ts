@@ -69,6 +69,14 @@ test("a task carries its worst guidance verdict, any unreliable rule id apart fr
       ]),
       c: entry([judged("c", "branch:t3/two", SKIPPED)]),
       d: entry([judged("d", "branch:t3/three", undefined)]),
+      e: entry([
+        judged("e", "branch:t3/four", {
+          guidance: "broken",
+          unreliableRule: "e#1",
+          turns: 1,
+          tokens: 0,
+        } as never),
+      ]),
     },
     {},
   );
@@ -83,6 +91,7 @@ test("a task carries its worst guidance verdict, any unreliable rule id apart fr
   ).toEqual([
     [2, "unknown", "b#3", 3, 1500 * JEV_USD_PER_INPUT_TOKEN],
     [1, "skipped", null, 0, 0],
+    [1, "pending", null, 0, 0],
     [1, "pending", null, 0, 0],
   ]);
 });

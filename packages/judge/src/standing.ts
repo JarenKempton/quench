@@ -84,9 +84,10 @@ export async function loadedStandards(
       for (const file of event.files) {
         const path = file.path ?? (file.directory ? join(file.directory, "AGENTS.md") : null);
         if (!path || seen.has(path)) continue;
-        seen.add(path);
         const text = await loadedText(path, file.textSha256);
-        if (text) rules.push(...fileRules(text, basename(path), -1));
+        if (!text) continue;
+        seen.add(path);
+        rules.push(...fileRules(text, basename(path), turnAt(event.at)));
       }
     if (event.type === "invocation") {
       const listed = skillPaths.get(event.name);

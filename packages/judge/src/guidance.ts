@@ -87,7 +87,7 @@ export function guidanceBreaks(
               run.startedAt.getTime() - before.endedAt.getTime() > IDLE_GAP_MS
             ? "idle-gap"
             : null;
-    if (after)
+    if (after && (said.length || standards.some((r) => r.from < t)))
       out.push({
         turn: t,
         after,
