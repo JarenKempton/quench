@@ -76,6 +76,10 @@ export const TaskResult = z
     harnesses: z.array(HarnessId).max(20),
     sessions: Count,
     runs: Count,
+    guidance: z.enum(["kept", "broken", "unknown", "skipped", "pending"]),
+    guidanceRule: z.string().min(1).max(220).nullable(),
+    guidanceTurns: Count,
+    guidanceCost: z.number().finite().nonnegative(),
     analysisVersion: Count,
   })
   .strict();

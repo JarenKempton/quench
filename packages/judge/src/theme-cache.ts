@@ -12,6 +12,7 @@ export const ThemeDecision = z.object({
   choice: z.string(),
   /** Actual model returned by the grouping service, not the coding-agent model being corrected. */
   model: ModelLabel,
+  tokens: z.number().int().nonnegative().optional(),
 });
 export type ThemeDecision = z.infer<typeof ThemeDecision>;
 

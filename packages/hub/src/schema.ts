@@ -23,7 +23,7 @@ PARTITION BY toYYYYMM(TimeUnix)
 ORDER BY (Machine, ServiceName, MetricName, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS ttl_only_drop_parts = 1`;
 
-export const TABLES: { name: string; ttl: string; ddl: string }[] = [
+export const TABLES: { name: string; ttl: string; ddl: string; columns?: string[] }[] = [
   {
     name: "otel_logs",
     ttl: "TimestampTime",
@@ -137,6 +137,12 @@ SETTINGS ttl_only_drop_parts = 1`,
 PARTITION BY toYYYYMM(StartedAt)
 ORDER BY (Machine, TaskId)
 SETTINGS ttl_only_drop_parts = 1`,
+    columns: [
+      "Guidance LowCardinality(String) DEFAULT 'pending' AFTER Runs",
+      "GuidanceRule String DEFAULT '' AFTER Guidance",
+      "GuidanceTurns UInt32 DEFAULT 0 AFTER GuidanceRule",
+      "GuidanceCost Float64 DEFAULT 0 AFTER GuidanceTurns",
+    ],
   },
   {
     name: "quench_transcripts",
@@ -165,6 +171,8 @@ export async function migrate(ch: ClickHouse, retention: string) {
   const interval = retentionInterval(retention);
   for (const table of TABLES) {
     await ch.exec(table.ddl);
+    for (const column of table.columns ?? [])
+      await ch.exec(`ALTER TABLE ${table.name} ADD COLUMN IF NOT EXISTS ${column}`);
     if (interval)
       await ch.exec(
         `ALTER TABLE ${table.name} MODIFY TTL ${table.ttl} + ${interval}`,

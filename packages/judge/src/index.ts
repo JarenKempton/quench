@@ -10,7 +10,8 @@ export {
   HarnessName,
   HarnessUnsupported,
 } from "./harness.ts";
-export { Jev, JevAsks, JevCauses, JevThemes, KeyRejected } from "./jev.ts";
+export * from "./guidance.ts";
+export { Jev, JevAsks, JevCauses, JevGuidance, JevThemes, KeyRejected } from "./jev.ts";
 export { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 export * from "./themes.ts";
 export {
