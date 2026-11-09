@@ -348,12 +348,13 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   PR by an `owner/repo#n` marker (a bare `gh pr <verb> <n>` resolves against the session's
   `origin` remote, or the repo its transcript cites most), by its branch matching the PR's head
   (Claude Code sessions keep their last non-default branch, so T3's temporary `t3/<hash>` gives way to the
-  real one), or else by worktree: a branch segment with no link of its own takes the first PR whose head
-  matched a branch in the same `cwd` and was still open when it started. A head match also needs
+  real one), or else by worktree: a segment on the worktree's own branch (`t3/<hash>` in `t3-<hash>`) with no
+  link takes the first PR whose head matched a branch in the same `cwd` and was still open when it
+  started. A head match also needs
   the PR open when the segment started, so a reused branch name does not inherit an old merge.
   `pulls.json` caches each repo's `gh pr list`; a repo is asked again only for new activity or an
-  open PR one of its segments links, and only for PRs updated since. An unreachable repo waits a
-  day before the next try. Without `gh` or network, Landed stays on cached PR state or transcript
+  open PR one of its segments links, and only for PRs updated since. An unreachable repo waits an
+  hour before the next try and counts as unreachable until it answers. Without `gh` or network, Landed stays on cached PR state or transcript
   signals and the agent line says how many repos it could not reach.
   Spiral: a retry loop (the same failure three times in a run), three corrections in a row, or
   three runs in a row that hit the same failure while tokens rise. History records no edit paths, so a

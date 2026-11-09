@@ -60,7 +60,7 @@ test("settled PRs and issue numbers come from the archive cache, and an open PR 
   expect(third).toEqual({ pulls: second.pulls, fetched: 0, offline: 0 });
 });
 
-test("with no gh the repo counts as offline and no PR state is invented", async () => {
+test("with no gh the repo stays offline through its backoff and no PR state is invented", async () => {
   const dir = await mkdtemp(join(tmpdir(), "quench-pulls-"));
   dirs.push(dir);
   const result = await githubPulls(
@@ -77,7 +77,7 @@ test("with no gh the repo counts as offline and no PR state is invented", async 
     Date.now(),
     async () => (asked++, null),
   );
-  expect([asked, later.offline]).toEqual([0, 0]);
+  expect([asked, later.offline]).toEqual([0, 1]);
 });
 
 test("a fork's head never looks like a local branch, and only GitHub remotes name a repo", async () => {

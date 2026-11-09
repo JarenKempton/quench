@@ -213,6 +213,8 @@ function judgeOwn(segments: JudgedSegment[], pulls: readonly Pull[]): Own {
 
 export const taskKind = (task: Task) => task.harnesses.join("+");
 
+const worktreeBranch = (cwd: string) => cwd.split(/[\\/]/).at(-1)!.replace("-", "/");
+
 const closedAt = (pull: Pull) => pull.mergedAt ?? pull.closedAt ?? "\uffff";
 
 export function taskPulls(grouped: readonly JudgedSegment[][], pulls: readonly Pull[]) {
@@ -245,7 +247,7 @@ export function taskPulls(grouped: readonly JudgedSegment[][], pulls: readonly P
     if (direct[i]!.length) return direct[i]!;
     const found = new Set<Pull>();
     for (const m of members) {
-      if (!m.cwd || !m.markers.some((x) => x.startsWith("branch:"))) continue;
+      if (!m.cwd || !m.markers.includes(`branch:${worktreeBranch(m.cwd)}`)) continue;
       const window = [...(byCwd.get(m.cwd) ?? [])]
         .filter((p) => closedAt(p) >= m.startedAt)
         .sort((a, b) => closedAt(a).localeCompare(closedAt(b)))[0];

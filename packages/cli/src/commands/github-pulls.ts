@@ -59,7 +59,7 @@ const parse = (repo: string, out: string): Pull[] | null => {
   }
 };
 
-const RETRY_MS = 24 * 60 * 60_000;
+const RETRY_MS = 60 * 60_000;
 
 function dueRepos(cache: Cache, segments: readonly JudgedSegment[], now: number) {
   const open = new Set(
@@ -96,7 +96,7 @@ export async function githubPulls(
     cache = JSON.parse(await readFile(pullsFile(dir), "utf8")) as Cache;
   } catch {}
   const due = dueRepos(cache, segments, now);
-  let offline = 0;
+  let failed = 0;
   for (const repo of due) {
     const known = cache[repo];
     const since = known?.fetchedAt ? ["--search", `updated:>=${known.fetchedAt.slice(0, 10)}`] : [];
@@ -117,7 +117,7 @@ export async function githubPulls(
     ]);
     const fresh = out === null ? null : parse(repo, out);
     if (!fresh) {
-      offline++;
+      failed++;
       cache[repo] = { fetchedAt: known?.fetchedAt ?? "", failedAt: at, pulls: known?.pulls ?? [] };
       continue;
     }
@@ -129,9 +129,10 @@ export async function githubPulls(
     };
   }
   if (due.length) await replacePrivateFile(pullsFile(dir), `${JSON.stringify(cache)}\n`);
+  const needed = new Set(segments.flatMap((s) => (s.repo ? [s.repo] : [])));
   return {
     pulls: Object.values(cache).flatMap((c) => c.pulls),
-    fetched: due.length - offline,
-    offline,
+    fetched: due.length - failed,
+    offline: [...needed].filter((repo) => cache[repo]?.failedAt).length,
   };
 }

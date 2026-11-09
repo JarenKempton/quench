@@ -157,7 +157,7 @@ const pull = (
 });
 
 test("GitHub's PR state decides Landed for a task linked by branch, PR number or worktree", () => {
-  const lane = judged("lane", turn(0, shell(0, "gh pr create --fill")), [], "/wt/one");
+  const lane = judged("lane", turn(0, shell(0, "gh pr create --fill")), [], "/wt/t3-abc123");
   expect(judgedTasks(lane, [pull(7, "t3/lane", "MERGED")])[0]!.landed).toEqual({
     verdict: "pass",
     reason: "merged",
@@ -180,7 +180,7 @@ test("GitHub's PR state decides Landed for a task linked by branch, PR number or
     "main",
   );
   expect(judgedTasks(bare, [pull(9, "t3/other", "MERGED")])[0]!.landed.reason).toBe("merged");
-  const temp = judged("t3-hash", turn(30), [], "/wt/one", "t3/abc123");
+  const temp = judged("t3-hash", turn(30), [], "/wt/t3-abc123", "t3/abc123");
   const both = judgedTasks([...lane, ...temp], [pull(7, "t3/lane", "MERGED")]);
   expect(both.map((t) => t.landed.evidence)).toEqual([
     ["github:acme/widget#7"],
@@ -194,6 +194,13 @@ test("a shared checkout's merges and a branch's old PR never land an unrelated t
   const wip = judged("wip", turn(10), [], "/repo", "wip-x");
   const tasks = judgedTasks([...orch, ...wip], [pull(9, "t3/other", "MERGED")]);
   expect(tasks.map((t) => t.landed.reason)).toEqual(["merged", "not-seen"]);
+  const feat = judged("feat", turn(20), [], "/repo", "feat-a");
+  const experiment = judged("exp", turn(5), [], "/repo", "experiment-b");
+  const both = judgedTasks([...feat, ...experiment], [pull(10, "feat-a", "MERGED")]);
+  expect(both.map((t) => [t.members[0]!.sessionId, t.landed.reason])).toEqual([
+    ["exp", "not-seen"],
+    ["feat", "merged"],
+  ]);
   const old = pull(3, "t3/reused", "MERGED", "2026-10-19T12:00:00Z");
   const reused = judged("reused", turn(0), [], "/wt/two", "t3/reused");
   expect(judgedTasks(reused, [old])[0]!.landed.reason).toBe("not-seen");
