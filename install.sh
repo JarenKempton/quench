@@ -73,7 +73,7 @@ echo "Installed quench ($release) to $bin_dir/quench"
 rc_path() {
   env -i HOME="$HOME" PATH=/usr/bin:/bin "$@" </dev/null >"$tmp/rc" 2>/dev/null &
   probe=$!
-  (sleep 5 && kill -9 "$probe" 2>/dev/null) &
+  (sleep 5 && kill -9 "$probe") >/dev/null 2>&1 &
   watcher=$!
   wait "$probe" 2>/dev/null || true
   kill "$watcher" 2>/dev/null || true
