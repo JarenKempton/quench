@@ -32,6 +32,7 @@ export {
   failureOf,
   recordedBackgrounded,
   recordedFailures,
+  hookScriptsIn,
   type SessionBackgrounded,
   type SessionFailure,
 } from "./failures.ts";
@@ -78,3 +79,4 @@ export {
   type Worktree,
   type WorktreeCheck,
 } from "./worktrees.ts";
+export { modelFamily, modelNamesIn, modelVersion } from "./models.ts";

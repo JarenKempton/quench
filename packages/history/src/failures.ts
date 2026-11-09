@@ -1,3 +1,4 @@
+import { win32 } from "node:path";
 import type { Event, Failure, Session } from "./model.ts";
 import {
   errorClassOf,
@@ -11,11 +12,12 @@ import {
   missingProgramOf,
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
-import { commandSignature, isChained, mainCommandSignature } from "./shell.ts";
+import { chainedSignatures, commandSignature, isChained, mainCommandSignature } from "./shell.ts";
 import { knownTool } from "./subcommands.ts";
 
 export type SessionBackgrounded = {
   what: string;
+  chained: Record<string, number>;
   model: string | null;
   backgrounded: number;
   rerun: number;
@@ -26,6 +28,8 @@ export type SessionFailure = {
   what: string | null;
   error: string | null;
   guard: string | null;
+  hooks: Record<string, number>;
+  chained: Record<string, number>;
   failures: number;
   longestRun: number;
   chars: number;
@@ -36,7 +40,14 @@ type ToolResult = Extract<Event, { type: "tool_result" }>;
 
 const SCANNED = 4000;
 
-export type Denial = { guard: string } | "rejected" | null;
+const HOOK_SCRIPT = /^[A-Za-z0-9][\w.-]{0,63}\.(sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl|ps1)$/;
+
+export const hookScriptsIn = (command: string): string[] =>
+  (command.match(/[^\s"']+/g) ?? [])
+    .map((word) => win32.basename(word))
+    .filter((name) => HOOK_SCRIPT.test(name));
+
+export type Denial = { guard: string; hook?: string | null } | "rejected" | null;
 
 export function failureOf(
   text: string,
@@ -55,7 +66,13 @@ function classified(head: string, exitCode: number | null, denial: Denial): Fail
     const line = firstLineOf(head);
     return { kind, detail: line && failureSummary(line), exitCode, line };
   };
-  if (denial && denial !== "rejected") return { kind: "blocked", detail: denial.guard, exitCode };
+  if (denial && denial !== "rejected")
+    return {
+      kind: "blocked",
+      detail: denial.guard,
+      exitCode,
+      hook: denial.hook ?? null,
+    };
   if (mentionsInvalidInput(head)) return summarised("invalid-input");
   if (denial === "rejected") return summarised("rejected");
 
@@ -67,7 +84,13 @@ function classified(head: string, exitCode: number | null, denial: Denial): Fail
   if (missingPath !== null || mentionsMissingPath(head))
     return { kind: "missing-path", detail: missingPath, exitCode };
 
-  if (exitCode) return { kind: "exit-code", detail: null, exitCode, line: errorLineOf(head) };
+  if (exitCode)
+    return {
+      kind: "exit-code",
+      detail: null,
+      exitCode,
+      line: errorLineOf(head),
+    };
   return summarised("error");
 }
 
@@ -104,6 +127,8 @@ export function recordedFailures(session: Session): SessionFailure[] {
 
     const row = rowFor(rows, key, event.failure.kind, keyed);
     row.failures++;
+    if (call && keyed.what === "several commands") countChained(row.chained, call);
+    if (keyed.hook) row.hooks[keyed.hook] = (row.hooks[keyed.hook] ?? 0) + 1;
     row.longestRun = Math.max(row.longestRun, runLength);
     row.chars += event.chars;
   }
@@ -121,7 +146,12 @@ export function failedCall(
 function failureKey(
   failure: Failure,
   call: ToolCall | undefined,
-): { what: string | null; error: string | null; guard: string | null } | null {
+): {
+  what: string | null;
+  error: string | null;
+  guard: string | null;
+  hook: string | null;
+} | null {
   const signature = shellSignatureOf(call);
   if (isNothingFound(failure, signature)) return null;
   const blocked = failure.kind === "blocked";
@@ -132,6 +162,7 @@ function failureKey(
       : (signature ?? (call?.shell || !call ? null : knownTool(call.name))),
     error: blocked ? null : (failure.errorClass ?? "other"),
     guard: blocked ? failure.detail : null,
+    hook: blocked ? (failure.hook ?? null) : null,
   };
 }
 
@@ -144,7 +175,10 @@ export function recordedBackgrounded(session: Session): SessionBackgrounded[] {
     const what = mainCommandOf(call);
     const model = calls.get(call.id!)!.model;
     const key = `${what}\0${model}`;
-    return rows.get(key) ?? rows.set(key, { what, model, backgrounded: 0, rerun: 0 }).get(key)!;
+    return (
+      rows.get(key) ??
+      rows.set(key, { what, chained: {}, model, backgrounded: 0, rerun: 0 }).get(key)!
+    );
   };
   let model: string | null = null;
   for (const event of session.events) {
@@ -165,7 +199,9 @@ export function recordedBackgrounded(session: Session): SessionBackgrounded[] {
     if (event.type !== "tool_result" || !event.backgrounded || event.callId === null) continue;
     const call = calls.get(event.callId)?.call;
     if (!call) continue;
-    rowOf(call).backgrounded++;
+    const row = rowOf(call);
+    row.backgrounded++;
+    if (row.what === "several commands") countChained(row.chained, call);
     running.push({
       text: commandText(call),
       from: event.line ?? 0,
@@ -183,6 +219,14 @@ const mainCommandOf = (call: ToolCall) =>
   (call.shell!.length === 1 && call.shell![0]!.command
     ? mainCommandSignature(call.shell![0]!.command)
     : "several commands") ?? "other command";
+
+function countChained(counts: Record<string, number>, call: ToolCall) {
+  const chained = (call.shell ?? []).flatMap((shell) =>
+    shell.command && isChained(shell.command) ? chainedSignatures(shell.command) : [],
+  );
+  for (const what of new Set(chained))
+    if (what !== "other command") counts[what] = (counts[what] ?? 0) + 1;
+}
 
 const commandText = (call: ToolCall) =>
   call.shell!.map((shell) => shell.command?.trim() ?? "").join("\n");
@@ -211,7 +255,12 @@ function rowFor(
   rows: Map<string, SessionFailure>,
   key: string,
   kind: Failure["kind"],
-  keyed: { what: string | null; error: string | null; guard: string | null },
+  keyed: {
+    what: string | null;
+    error: string | null;
+    guard: string | null;
+    hook: string | null;
+  },
 ): SessionFailure {
   const existing = rows.get(key);
   if (existing) return existing;
@@ -220,6 +269,8 @@ function rowFor(
     what: keyed.what && intern(keyed.what),
     error: keyed.error && intern(keyed.error),
     guard: keyed.guard && intern(keyed.guard),
+    hooks: {},
+    chained: {},
     failures: 0,
     longestRun: 0,
     chars: 0,

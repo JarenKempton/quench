@@ -59,9 +59,33 @@ test(
 
       const json = JSON.parse((await quench(home, "--json")).stdout);
       expect(json.claudeConfigHomes).toEqual([
-        { path: configured, sessions: 1, instructionBytes: 3100, settings: true, hooks: 2 },
-        { path: stale, sessions: 0, instructionBytes: 0, settings: false, hooks: 0 },
-        { path: bare, sessions: 2, instructionBytes: 0, settings: false, hooks: 0 },
+        {
+          path: configured,
+          sessions: 1,
+          instructionBytes: 3100,
+          settings: true,
+          hooks: 2,
+          hookScripts: ["guard.sh"],
+          dead: [],
+        },
+        {
+          path: stale,
+          sessions: 0,
+          instructionBytes: 0,
+          settings: false,
+          hooks: 0,
+          hookScripts: [],
+          dead: [],
+        },
+        {
+          path: bare,
+          sessions: 2,
+          instructionBytes: 0,
+          settings: false,
+          hooks: 0,
+          hookScripts: [],
+          dead: [],
+        },
       ]);
 
       const active = await quench(home, "--claude-home", bare);

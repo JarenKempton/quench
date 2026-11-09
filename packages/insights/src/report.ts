@@ -142,6 +142,8 @@ class Tally {
         case "prompt":
         case "deferred_tools":
         case "mcp_instructions":
+        case "mcp_status":
+        case "unknown_model":
         case "mcp_call":
           break;
         default:

@@ -37,10 +37,12 @@ import { reading } from "../progress.ts";
 import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
-import { claudeConfigHomes } from "../profile/config-homes.ts";
+import { claudeConfigHomes, projectHookScripts } from "../profile/config-homes.ts";
+import { judgeChoice, readConfig, typesafeKey } from "../config.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
-import { mcpUse } from "../profile/recorded-mcp.ts";
+import { mcpHealth, mcpUse } from "../profile/recorded-mcp.ts";
+import { hostConfigFiles, pinnedModels } from "../profile/pinned-models.ts";
 import { mcpToolRecords } from "../profile/recorded-mcp-tools.ts";
 import { skillUse, type PlaceOrigin } from "../profile/recorded-skills.ts";
 import { trackedInRepo } from "../profile/skill-repos.ts";
@@ -62,7 +64,10 @@ import { splitInstructions, splitSkills, type InstructionFile } from "../profile
 export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
-  'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with exactly the same text, started before Claude Code recorded a notification that the first finished or the agent stopped it; a session that ended first counts as never finished. A re-run with any change in text is not counted, so this is a lower bound. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands". Codex and Pi record no such result.',
+  "MCP servers not working: failing and needs login come from the failedMcpServers and needsAuthMcpServers fields Claude Code records when it lists deferred tools, with the error code only when it is a short upper-case code; the error text is not kept. Unused means on in a config file on disk now and never called by that agent in range. Codex and Pi record no connection status.",
+  "Pinned model names are names from a fixed pattern (Claude, GPT, o-series and Gemini model ids) found in instruction files, skill files and host config (Claude settings, ~/.codex/config.toml, ~/.pi/agent/settings.json) on disk now. One is listed when no session in range used it and either sessions used a newer version of the same family or Claude Code recorded it failing with model_not_found; the name in that error is kept only when it matches the pattern.",
+  "Hooks or status lines that can't run are Claude Code hook and statusLine commands in each Claude home's settings.json and settings.local.json whose script path (the first word, or the one after bash, sh, node, bun, python and similar) is absolute or starts with ~ or $HOME and does not exist, or whose every line is a # comment. Commands found on PATH and project settings are not checked.",
+  'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with exactly the same text, started before Claude Code recorded a notification that the first finished or the agent stopped it; a session that ended first counts as never finished. A re-run with any change in text is not counted, so this is a lower bound. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands", shown with the top 3 known commands found in its chains. Codex and Pi record no such result.',
   "Stored credentials are the high-confidence secrets quench secrets finds in harness settings, MCP config and prompt history files of your home and the projects profiled here, each value counted once; values, prefixes and tags are never shown. Session transcripts and repo git history are not scanned for it, and quench secrets may cover other projects.",
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
   "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
@@ -74,8 +79,8 @@ const LIMITATIONS = [
   "The cut list groups never-used skills by what removes them: a plugin or a skill folder. Listed is the characters of each skill's own entry in the recorded listings, summed over every session that listed the target; sessions whose listing has no per-skill text make the size a lower bound, or unknown when none has it, and rank after known sizes. A target any agent still uses, or one whose use an agent does not record, gets no command. The Codex command is written for this machine's shell, carries an overridden CODEX_HOME, and is shown, never run. A project skill whose SKILL.md, or folder link, git tracks is one target per repository and path inside it, counted across every worktree; it gets no command, since removing it is a change to the repository. Any other folder is its own target. Folders and symlinks never get a command, only the path to remove; the only command is Codex plugin removal. Claude Code names are matched to a user folder first, then the project folder nearest the session's directory.",
   "Asked in plain words counts messages a person typed that name a skill: Claude Code prompts it recorded as typed, and on any agent messages T3 Code recorded as typed by you in its app. Messages an agent, automation or T3 itself sent are relayed and counted apart; Codex and Pi record no sender, so without T3 Code history their messages are sender unknown and never counted as asked. A name matches as words, hyphens read as spaces, a plugin prefix dropped, with one-letter typos or the same sound allowed in all but one of its words. A one-word name is not measured unless --asks has Jev judge each message that names it. Loaded means the skill loaded in the run that message started. Loaded also counts a Claude Code subagent or a T3 Code delegated thread that started during that run and loaded the skill; a subagent's own prompts count as relayed. Names come from the session's own listing and the skill folders on disk now for the session's folder. Skills asked for, not measured, or named by a sender Quench cannot identify are left out of the cut list; mentions only relayed by agents are not, and are shown beside the cut. Code, paths and URLs in a message are not matched. disable-model-invocation is read from SKILL.md and flagged for Claude Code only.",
   "MCP servers called are the server names in MCP tool calls sessions recorded: Claude Code's mcp__server__tool calls and Codex's direct or code-mode tools.mcp__server__tool calls. In local config means a configured server of the same agent has the same name, ignoring case and punctuation; anything else came from an account connector, a plugin, a server the host app passed in (such as --mcp-config), or config since removed.",
-  "Blocked calls are tool results Claude Code recorded as refused by a hook or a permission rule (its permissionDecision, or toolDenialKind in older versions), grouped by the guard, taken only from recorded fields (a documented hook event when Claude Code records one, otherwise hook, permission rule or auto mode), and the command key. The refusal text and the hook's own command are never read for it. Claude Code versions that wrote neither field, Codex and Pi record no such marker, so their refusals are not counted as blocks.",
-  'Repeated failures are tool results a session recorded as errors, grouped per project by kind, command key and error class. A command key is the program\'s file name when it is on a fixed list of common tools (any other program is "other command") and, for git, gh, bun, npm, pnpm, yarn, docker, kubectl, cargo, go, uv and pip, a subcommand from a fixed list; never flags, arguments or values. A command whose raw text contains &&, ;, | or a newline anywhere, quoted or not, is "several commands". Calls that ran no shell command are keyed by tool name. The error class comes from a fixed list (auth failed, permission denied, timeout, network, not found, conflict, exit code N, other) matched on the raw result; no error or command text is stored, cached or shown. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results\' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.',
+  "Blocked calls are tool results Claude Code recorded as refused by a hook or a permission rule (its permissionDecision, or toolDenialKind in older versions), grouped by the guard, taken only from recorded fields (a documented hook event when Claude Code records one, otherwise hook, permission rule or auto mode), and the command key. The refusal text is read only for the file name of the hook script it names, kept only when it matches a hook script configured in a Claude settings file; nothing else from it is kept. Claude Code versions that wrote neither field, Codex and Pi record no such marker, so their refusals are not counted as blocks.",
+  'Repeated failures are tool results a session recorded as errors, grouped per project by kind, command key and error class. A command key is the program\'s file name when it is on a fixed list of common tools (any other program is "other command") and, for git, gh, bun, npm, pnpm, yarn, docker, kubectl, cargo, go, uv and pip, a subcommand from a fixed list; never flags, arguments or values. A command whose raw text contains &&, ;, | or a newline anywhere, quoted or not, is "several commands", shown with the top 3 known commands found in its chains. Calls that ran no shell command are keyed by tool name. The error class comes from a fixed list (auth failed, permission denied, timeout, network, not found, conflict, exit code N, other) matched on the raw result; no error or command text is stored, cached or shown. Kind comes from the first 4,000 characters of the error text. Codex records no error flag, so its failures are commands whose script printed a nonzero exit code, a lower bound. A nonzero exit is not always a mistake (grep finding nothing exits 1). Output is the failed results\' size; the tokens of the turns around them are not counted. Shown when a failure happened at least 3 times or in 2 sessions.',
   "MCP servers are entries in each agent's config files, shown by name, transport and command name or URL host only; arguments, environment, headers and full URLs are never read out. Duplicates are servers of one agent, in effect for the same project, with the same URL (ignoring query) or the same command and arguments, compared by fingerprint. Plugin and managed servers are not read.",
   "Do this next lists at most 5 measured cuts, ranked by characters × sessions: never-used skill targets with a known listing size and no use, and the largest recorded instruction file whose newest recorded copy is still on disk. A cut's characters per session is its listed total over the sessions that listed it; an instruction file's is the sizes sessions recorded loading it, summed and averaged, capped at the file's size on disk now, and trimming saves up to that; empty or unreadable files are left out. A command is shown only where one is safe, otherwise only what to remove. Duplicate MCP servers are not measured per session yet, and hook blocks are counted in calls, not characters, so neither appears.",
   "MCP tool definitions are what session history recorded at the first request: tool count and the JSON size of each schema, per server, from the latest session that recorded it. Up front means the request carried the schemas; deferred means the harness listed the tools by name for tool search, so schemas load on demand and are not starting load, and Claude Code records no schema for them. A server no session recorded is not recorded, never estimated; servers are matched to config by name, ignoring case and punctuation.",
@@ -148,10 +153,15 @@ export async function profile(
     judged.judge,
     judged.newlyJudged,
   );
+  const configHomes = await claudeConfigHomes(home, since);
   const configuredMcp = [...globalMcp.values(), ...profiled.flatMap((p) => p.mcpServers)];
-  const result: Omit<Profile, "nextSteps"> & { observedAt: string; limitations: string[] } = {
+  const result: Omit<Profile, "nextSteps"> & {
+    observedAt: string;
+    limitations: string[];
+  } = {
     observedAt: new Date().toISOString(),
     days: options.days,
+    unjudged: await unjudged(home),
     homes: await Promise.all(
       harnesses.map(async (h) => ({
         harness: h.id,
@@ -160,7 +170,7 @@ export async function profile(
         sessions: places.filter((p) => p.harness === h.id).length,
       })),
     ),
-    claudeConfigHomes: await claudeConfigHomes(home, since),
+    claudeConfigHomes: configHomes,
     unreadable,
     globalInstructions: [...globalInstructions.values()],
     globalSkills: [...globalSkills.values()],
@@ -176,12 +186,36 @@ export async function profile(
     ),
     recordedSkillAsks: asks,
     recordedMcp: mcpUse(places, configuredMcp),
+    mcpHealth: mcpHealth(places, configuredMcp),
+    pinnedModels: await pinnedModels(
+      [
+        ...[
+          ...globalInstructions.values(),
+          ...profiled.flatMap((p) => p.instructions.files),
+        ].flatMap((f) => f.sources.map((s) => s.realPath)),
+        ...[...globalSkills.values(), ...profiled.flatMap((p) => p.skills)].map((s) => s.realPath),
+        ...hostConfigFiles(
+          home,
+          configHomes.map((h) => h.path),
+        ),
+      ],
+      places,
+    ),
     recordedMcpTools: mcpToolRecords(places, configuredMcp),
     duplicateMcpServers: mcpDuplicates(
       [...globalMcp.values()],
-      profiled.map((p) => ({ name: projectName(p.root, home.dir), mcpServers: p.mcpServers })),
+      profiled.map((p) => ({
+        name: projectName(p.root, home.dir),
+        mcpServers: p.mcpServers,
+      })),
     ),
-    recordedFailures: repeatedFailures(found.placesByRoot),
+    recordedFailures: repeatedFailures(
+      found.placesByRoot,
+      new Set([
+        ...configHomes.flatMap((h) => h.hookScripts),
+        ...(await projectHookScripts(found.projects.map((p) => p.root))),
+      ]),
+    ),
     recordedStart: startSplit(places),
     projects: profiled,
     missingDirectories: found.missing,
@@ -219,7 +253,11 @@ async function askVerdicts(
   places: readonly SessionPlace[],
   since: Date,
   options: { asks?: boolean; typesafeKey?: string | undefined },
-): Promise<{ verdict: AskVerdicts; judge: string | null; newlyJudged: number }> {
+): Promise<{
+  verdict: AskVerdicts;
+  judge: string | null;
+  newlyJudged: number;
+}> {
   const none = { verdict: () => null, judge: null, newlyJudged: 0 };
   if (!options.asks || !options.typesafeKey) return none;
   const wanted = new Map<string, SkillAsk[]>();
@@ -332,4 +370,16 @@ async function profileProject(home: Home, project: Project, places: SessionPlace
       warnings: [...steering.warnings, ...skills.warnings, ...mcp.warnings],
     },
   };
+}
+
+async function unjudged(home: Home): Promise<string | null> {
+  const config = await readConfig(home.dir);
+  const keyed = typeof typesafeKey(config, process.env) === "string";
+  const choice = judgeChoice(config, process.env);
+  const judged =
+    !(choice instanceof Error) &&
+    choice.name !== "none" &&
+    !(choice.name === "jev" && !choice.apiKey);
+  if (keyed) return judged ? null : "quench corrections";
+  return `${judged ? "grouping and causes in quench corrections" : "quench corrections"} and one-word skill names in quench profile skills --asks`;
 }

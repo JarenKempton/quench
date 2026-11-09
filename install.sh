@@ -70,7 +70,28 @@ chmod 755 "$tmp/$asset"
 mv "$tmp/$asset" "$bin_dir/quench"
 echo "Installed quench ($release) to $bin_dir/quench"
 
+rc_path() {
+  env -i HOME="$HOME" PATH=/usr/bin:/bin "$@" </dev/null >"$tmp/rc" 2>/dev/null &
+  probe=$!
+  (sleep 5 && kill -9 "$probe") >/dev/null 2>&1 &
+  watcher=$!
+  wait "$probe" 2>/dev/null || true
+  kill "$watcher" 2>/dev/null || true
+  cat "$tmp/rc"
+}
+
+shell_name=$(basename "${SHELL:-sh}")
 case ":$PATH:" in
-  *":$bin_dir:"*) ;;
+  *":$bin_dir:"*)
+    case $shell_name in
+      bash | zsh)
+        found=$(rc_path "$SHELL" -ic 'printf "\nPATH=%s\n" "$PATH"' | sed -n 's/^PATH=//p' | tail -n 1) || found=
+        case ":$found:" in
+          :: | *":$bin_dir:"*) ;;
+          *) echo "$bin_dir is on PATH here but not in a new $shell_name shell that only reads ~/.${shell_name}rc, which some agents start from. Add export PATH=\"$bin_dir:\$PATH\" to ~/.${shell_name}rc" ;;
+        esac
+        ;;
+    esac
+    ;;
   *) echo "Add it to your PATH: export PATH=\"$bin_dir:\$PATH\"" ;;
 esac

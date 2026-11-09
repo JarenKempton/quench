@@ -119,6 +119,7 @@ test(
           CLAUDE_CONFIG_DIR: "",
           CODEX_HOME: "",
           FORCE_COLOR: "1",
+          TYPESAFE_API_KEY: "must-not-be-used",
         },
         stdout: "pipe",
       }).stdout,
@@ -153,7 +154,7 @@ test(
         "",
         "Agent columns: the project's own instruction files on disk now in its most recently used folder; global files come on top.",
         "Recorded/session: median instruction text sessions logged loading, global files included. Older harness versions logged none.",
-        "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in and plugin skills are not counted yet.",
+        "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in, plugin, project and other-home skills are not counted here; Recorded skills counts every skill sessions listed, by source.",
         "",
       ].join("\n"),
     );
@@ -694,11 +695,11 @@ test(
         "  Claude Code         2       3      63 chars     2         0           1",
         `  Codex               1       2     ${180 + home.length} chars     1         0           1`,
         `  Pi                  1       2     ${316 + 2 * home.length} chars     1         0           1`,
-        "  Sources · Claude Code: 3 not on disk now",
+        "  Sources · Claude Code: 3 different, 3 per session · 3 not on disk now",
         "  Most used · Claude Code: review 2, deploy 1",
-        "  Sources · Codex: 2 not on disk now",
+        "  Sources · Codex: 2 different, 2 per session · 2 not on disk now",
         "  Most used · Codex: notes 1",
-        "  Sources · Pi: 2 not on disk now",
+        "  Sources · Pi: 2 different, 2 per session · 2 not on disk now",
         "  Most used · Pi: notes 1",
         "",
         "▍Cut list · listed, never used · ranked by listing size × sessions listed",
@@ -923,6 +924,8 @@ test(
     expect(json.recordedFailures.blocked[0]).toEqual({
       guard: "PreToolUse hook",
       command: "git push",
+      chained: [],
+      hooks: [],
       blocks: 3,
       sessions: 1,
       projects: [{ root: project, blocks: 3 }],
@@ -1127,7 +1130,35 @@ test(
     const { stdout, code } = await quench(home, "--no-cache");
     expect(code).toBe(0);
     expect(stdout).toContain(
-      `Claude Code instructions, largest: ${p("~/code/app/CLAUDE.md")} · 1.2k chars over 2 sessions`,
+      `Claude Code instructions, largest: ${p("~/code/app/CLAUDE.md")} · 600 chars per session · 1.2k chars over 2 sessions`,
+    );
+    expect(stdout).not.toContain("Not measured until");
+    const keyless = () =>
+      new Response(
+        Bun.spawn(["bun", main, "--no-cache"], {
+          env: {
+            ...process.env,
+            HOME: home,
+            CLAUDE_CONFIG_DIR: "",
+            CODEX_HOME: "",
+            TYPESAFE_API_KEY: "",
+          },
+          stdout: "pipe",
+        }).stdout,
+      ).text();
+    expect(await keyless()).toContain(
+      "Not measured until a judge is set up: quench corrections and one-word skill names in quench profile skills --asks. → quench setup judge",
+    );
+    await Bun.write(
+      join(home, ".quench/config.json"),
+      JSON.stringify({ judge: { name: "claude" } }),
+    );
+    expect(await keyless()).toContain(
+      "Not measured until a judge is set up: grouping and causes in quench corrections and one-word skill names in quench profile skills --asks.",
+    );
+    await Bun.write(join(home, ".quench/config.json"), JSON.stringify({ judge: { name: "none" } }));
+    expect((await quench(home, "--no-cache")).stdout).toContain(
+      "Not measured until a judge is set up: quench corrections.",
     );
   },
   cliRunsTimeout,

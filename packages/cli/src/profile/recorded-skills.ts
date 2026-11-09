@@ -127,7 +127,7 @@ export function renderSkillUse(uses: SkillUse[], cuts: SkillCuts, days: number):
   ];
   for (const u of uses) {
     const label = harnessById[u.harness].label;
-    lines.push(`  Sources · ${label}: ${sources(u)}`);
+    lines.push(`  Sources · ${label}: ${skillSources(u)}`);
     const used = u.skills.filter((s) => s.usedIn);
     if (u.useRecorded && used.length)
       lines.push(`  Most used · ${label}: ${list(used.map((s) => `${s.name} ${s.usedIn}`))}`);
@@ -141,12 +141,12 @@ export function renderSkillUse(uses: SkillUse[], cuts: SkillCuts, days: number):
   return [...lines, ...renderCuts(cuts)];
 }
 
-function sources(u: SkillUse): string {
+export function skillSources(u: SkillUse): string {
   const counts = new Map<string, number>();
   for (const s of u.skills)
     counts.set(sourceOf(s.origin), (counts.get(sourceOf(s.origin)) ?? 0) + 1);
-  return [...counts]
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, n]) => `${n} ${label}`)
-    .join(" · ");
+  return [
+    `${count(u.skills.length)} different, ${u.medianListed ?? 0} per session`,
+    ...[...counts].sort((a, b) => b[1] - a[1]).map(([label, n]) => `${n} ${label}`),
+  ].join(" · ");
 }

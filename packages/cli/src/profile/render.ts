@@ -14,7 +14,8 @@ import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.
 import type { ConfigHome } from "./config-homes.ts";
 import type { McpDuplicate } from "./mcp-duplicates.ts";
 import type { NextStep } from "./next-steps.ts";
-import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
+import { renderMcpHealth, renderMcpUse, type McpHealth, type McpUse } from "./recorded-mcp.ts";
+import { renderPinnedModels, type PinnedModel } from "./pinned-models.ts";
 import { renderMcpTools, type McpToolRecord } from "./recorded-mcp-tools.ts";
 import { renderSkillUse, type SkillUse } from "./recorded-skills.ts";
 import type { SkillCuts } from "./skill-cuts.ts";
@@ -34,6 +35,7 @@ export type ProfiledProject = Project & {
 
 export type Profile = {
   days: number;
+  unjudged: string | null;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
   claudeConfigHomes: ConfigHome[];
   unreadable: number;
@@ -45,6 +47,8 @@ export type Profile = {
   recordedSkillCuts: SkillCuts;
   recordedSkillAsks: SkillAsks;
   recordedMcp: McpUse[];
+  mcpHealth: McpHealth[];
+  pinnedModels: PinnedModel[];
   recordedMcpTools: McpToolRecord[];
   duplicateMcpServers: McpDuplicate[];
   recordedFailures: FailureSummary;
@@ -76,6 +80,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
       ),
       ...renderMcpTools(result.recordedMcpTools, result.days),
       ...renderMcpUse(result.recordedMcp, result.days),
+      ...renderMcpHealth(result.mcpHealth, result.days),
     ],
     instructions: () => [
       ...globalInstructions(result.globalInstructions, short),
@@ -84,6 +89,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
         claudeHome,
         roots: result.projects.map((p) => p.root),
       }),
+      ...renderPinnedModels(result.pinnedModels, homeDir),
     ],
     skills: () => [
       ...renderSkillUse(result.recordedSkills, result.recordedSkillCuts, result.days),
@@ -108,6 +114,7 @@ export function render(result: Profile, homeDir: string, view: View): string[] {
       claudeHome,
       roots: result.projects.map((p) => p.root),
     }),
+    ...renderPinnedModels(result.pinnedModels, homeDir),
     ...sections.skills(),
     ...sections.failures(),
     ...footer(result, homeDir),
@@ -194,7 +201,7 @@ function footer(result: Profile, homeDir: string): string[] {
   if (result.recordedInstructions.length)
     lines.push("Disk now: whether the last recorded text still matches the file today.");
   lines.push(
-    "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in and plugin skills are not counted yet.",
+    "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in, plugin, project and other-home skills are not counted here; Recorded skills counts every skill sessions listed, by source.",
   );
   return lines;
 }

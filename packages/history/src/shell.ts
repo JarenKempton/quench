@@ -15,7 +15,12 @@ export type ShellRead = {
 };
 
 type Word = { text: string; dynamic: boolean };
-type Segment = { words: Word[]; inputs: Word[]; piped: boolean; heredoc: string | null };
+type Segment = {
+  words: Word[];
+  inputs: Word[];
+  piped: boolean;
+  heredoc: string | null;
+};
 
 const READERS: Record<string, string> = {
   cat: "",
@@ -45,7 +50,11 @@ const OPERATORS = ["&&", "||", ";;", "|&", "|", ";", "&", "\n", "(", ")"];
 
 export function shellReads(
   command: string,
-  places: { workdir: string | null; sessionFolder: string | null; home: string | null },
+  places: {
+    workdir: string | null;
+    sessionFolder: string | null;
+    home: string | null;
+  },
 ): ShellRead[] {
   const reads: ShellRead[] = [];
   let dir: { path: string; base: ShellReadBase } | null = places.workdir
@@ -132,6 +141,10 @@ export function mainCommandSignature(command: string): string | null {
   const main = mainSegments(command);
   if (!main.length) return null;
   return main.length === 1 ? signatureOf(main[0]!) : "several commands";
+}
+
+export function chainedSignatures(command: string): string[] {
+  return [...new Set(mainSegments(command).flatMap((words) => signatureOf(words) ?? []))];
 }
 
 const mainSegments = (command: string): Word[][] =>
@@ -273,7 +286,10 @@ function located(
     };
   if (word.text === "~" || word.text.startsWith("~/"))
     return home
-      ? { path: pathStyle(home).join(home, word.text.slice(1)), base: as ?? "home" }
+      ? {
+          path: pathStyle(home).join(home, word.text.slice(1)),
+          base: as ?? "home",
+        }
       : null;
   if (word.text.startsWith("~") || !dir) return null;
   return { path: style.resolve(dir.path, word.text), base: as ?? dir.base };
