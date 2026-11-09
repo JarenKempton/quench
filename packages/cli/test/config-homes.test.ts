@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cliRunsTimeout, lines, quench } from "./run.ts";
@@ -21,6 +21,7 @@ test(
       await mkdir(work);
       const configured = join(home, ".claude");
       const bare = join(home, ".claude-proxy");
+      const target = join(home, "dotfiles/claude-proxy");
       const stale = join(home, ".claude-old");
       await Bun.write(join(configured, "CLAUDE.md"), "x".repeat(3100));
       await Bun.write(
@@ -33,13 +34,16 @@ test(
         }),
       );
       await session(configured, work, "a");
-      await session(bare, work, "b");
-      await session(bare, work, "c");
+      await session(target, work, "b");
+      await session(target, work, "c");
+      await Bun.write(join(target, "projects/p/c/subagents/agent-1.jsonl"), "");
+      await symlink(target, bare);
+      await symlink(configured, join(home, ".claude-alias"));
       await session(stale, work, "d");
       const old = new Date(Date.now() - 60 * 86_400_000);
       await utimes(join(stale, "projects/p/d.jsonl"), old, old);
 
-      const summary = await quench(home);
+      const summary = await quench(home, "--claude-home", `${configured}/`);
       expect(summary.code).toBe(0);
       expect(summary.stdout).toContain(
         [

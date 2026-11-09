@@ -1,5 +1,5 @@
-import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, realpath, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { harnessById, type Home } from "@quench/history";
 
 export type ConfigHome = {
@@ -13,21 +13,26 @@ export type ConfigHome = {
 export async function claudeConfigHomes(home: Home, since: Date): Promise<ConfigHome[]> {
   const claude = harnessById["claude-code"];
   const siblings = await readdir(home.dir, { withFileTypes: true }).catch(() => []);
-  const paths = new Set([
-    home.of(claude.home),
+  const byReal = new Map<string, string>();
+  for (const path of [
+    resolve(home.of(claude.home)),
     ...siblings
-      .filter((e) => e.isDirectory() && (e.name === ".claude" || e.name.startsWith(".claude-")))
+      .filter((e) => e.name === ".claude" || e.name.startsWith(".claude-"))
       .map((e) => join(home.dir, e.name)),
-  ]);
+  ]) {
+    const real = await realpath(path).catch(() => null);
+    if (real && !byReal.has(real) && (await stat(real)).isDirectory()) byReal.set(real, path);
+  }
   return Promise.all(
-    [...paths].sort().map(async (path) => {
+    [...byReal.values()].sort().map(async (path) => {
       const refs = await claude.discover(home.withVar(claude.home.variable, path));
       const settings = await Promise.all(
         ["settings.json", "settings.local.json"].map((name) => readJson(join(path, name))),
       );
       return {
         path,
-        sessions: refs.filter((r) => !r.modified || r.modified >= since).length,
+        sessions: refs.filter((r) => r.parent === null && (!r.modified || r.modified >= since))
+          .length,
         instructionBytes: (await stat(join(path, "CLAUDE.md")).catch(() => null))?.size ?? 0,
         settings: settings[0] !== null,
         hooks: settings.reduce<number>((n, s) => n + hookCount(s), 0),
