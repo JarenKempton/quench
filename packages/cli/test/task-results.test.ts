@@ -44,7 +44,7 @@ test("a marker too long for the hub is dropped instead of refusing the batch", (
   expect(due[0]!.markers).toEqual([]);
 });
 
-test("a task carries its worst guidance verdict, the broken rule's id and the summed judge cost", () => {
+test("a task carries its worst guidance verdict, any unreliable rule id apart from it, and the summed judge cost", () => {
   const judged = (sessionId: string, marker: string, guidance: SegmentGuidance | undefined) => ({
     ...segment(sessionId, "2026-10-20T10:00:00.000Z", [marker]),
     ...(guidance ? { guidance } : {}),
@@ -52,10 +52,20 @@ test("a task carries its worst guidance verdict, the broken rule's id and the su
   const { due } = taskResults(
     {
       a: entry([
-        judged("a", "branch:t3/one", { guidance: "kept", rule: null, turns: 1, tokens: 500 }),
+        judged("a", "branch:t3/one", {
+          guidance: "kept",
+          unreliableRule: null,
+          turns: 1,
+          tokens: 500,
+        }),
       ]),
       b: entry([
-        judged("b", "branch:t3/one", { guidance: "broken", rule: "b#3", turns: 2, tokens: 1000 }),
+        judged("b", "branch:t3/one", {
+          guidance: "unknown",
+          unreliableRule: "b#3",
+          turns: 2,
+          tokens: 1000,
+        }),
       ]),
       c: entry([judged("c", "branch:t3/two", SKIPPED)]),
       d: entry([judged("d", "branch:t3/three", undefined)]),
@@ -63,9 +73,15 @@ test("a task carries its worst guidance verdict, the broken rule's id and the su
     {},
   );
   expect(
-    due.map((t) => [t.sessions, t.guidance, t.guidanceRule, t.guidanceTurns, t.guidanceCost]),
+    due.map((t) => [
+      t.sessions,
+      t.guidance,
+      t.guidanceUnreliableRule,
+      t.guidanceTurns,
+      t.guidanceCost,
+    ]),
   ).toEqual([
-    [2, "broken", "b#3", 3, 1500 * JEV_USD_PER_INPUT_TOKEN],
+    [2, "unknown", "b#3", 3, 1500 * JEV_USD_PER_INPUT_TOKEN],
     [1, "skipped", null, 0, 0],
     [1, "pending", null, 0, 0],
   ]);

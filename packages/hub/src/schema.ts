@@ -139,8 +139,8 @@ ORDER BY (Machine, TaskId)
 SETTINGS ttl_only_drop_parts = 1`,
     columns: [
       "Guidance LowCardinality(String) DEFAULT 'pending' AFTER Runs",
-      "GuidanceRule String DEFAULT '' AFTER Guidance",
-      "GuidanceTurns UInt32 DEFAULT 0 AFTER GuidanceRule",
+      "GuidanceUnreliableRule String DEFAULT '' AFTER Guidance",
+      "GuidanceTurns UInt32 DEFAULT 0 AFTER GuidanceUnreliableRule",
       "GuidanceCost Float64 DEFAULT 0 AFTER GuidanceTurns",
     ],
   },

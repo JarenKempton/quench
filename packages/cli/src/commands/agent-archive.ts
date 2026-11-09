@@ -134,7 +134,7 @@ export async function sessionSegments(
 const memberKey = (m: { harness: string; sessionId: string; firstTurn: number }) =>
   JSON.stringify([m.harness, m.sessionId, m.firstTurn]);
 
-const PENDING: SegmentGuidance = { guidance: "pending", rule: null, turns: 0, tokens: 0 };
+const PENDING: SegmentGuidance = { guidance: "pending", unreliableRule: null, turns: 0, tokens: 0 };
 
 export function taskResults(shipped: Shipped, posted: Posted) {
   const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
@@ -147,7 +147,7 @@ export function taskResults(shipped: Shipped, posted: Posted) {
       markers: task.markers.filter((m) => m.length <= MAX_MARKER_CHARS).slice(0, 100),
       removed: false,
       guidance: judged.guidance,
-      guidanceRule: judged.rule,
+      guidanceUnreliableRule: judged.unreliableRule,
       guidanceTurns: judged.turns,
       guidanceCost: judged.tokens * JEV_USD_PER_INPUT_TOKEN,
       analysisVersion: ANALYSIS_VERSION,
@@ -176,7 +176,7 @@ export function taskResults(shipped: Shipped, posted: Posted) {
         sessions: 0,
         runs: 0,
         guidance: "skipped",
-        guidanceRule: null,
+        guidanceUnreliableRule: null,
         guidanceTurns: 0,
         guidanceCost: 0,
         analysisVersion: ANALYSIS_VERSION,

@@ -194,7 +194,7 @@ export function taskRow(machine: string, t: TaskResult, now: Date) {
     Sessions: t.sessions,
     Runs: t.runs,
     Guidance: t.guidance,
-    GuidanceRule: t.guidanceRule ?? "",
+    GuidanceUnreliableRule: t.guidanceUnreliableRule ?? "",
     GuidanceTurns: t.guidanceTurns,
     GuidanceCost: t.guidanceCost,
     AnalysisVersion: t.analysisVersion,

@@ -5,7 +5,7 @@ import { clip, cueSentences, type Rule } from "./standing.ts";
 import { ThemeCache, type ThemeDecision } from "./theme-cache.ts";
 import type { Reply } from "./replies.ts";
 
-export const Guidance = z.enum(["kept", "broken", "unknown", "skipped", "pending"]);
+export const Guidance = z.enum(["kept", "unknown", "skipped", "pending"]);
 export type Guidance = z.infer<typeof Guidance>;
 
 export const JEV_USD_PER_INPUT_TOKEN = 0.042 / 1_000_000;
@@ -34,7 +34,7 @@ export interface GuidanceJudge {
 
 export type SegmentGuidance = {
   guidance: Guidance;
-  rule: string | null;
+  unreliableRule: string | null;
   turns: number;
   tokens: number;
 };
@@ -47,7 +47,12 @@ export type Break = {
   evidence: { prompt: string; assistant_said: string; commands: string[] };
 };
 
-export const SKIPPED: SegmentGuidance = { guidance: "skipped", rule: null, turns: 0, tokens: 0 };
+export const SKIPPED: SegmentGuidance = {
+  guidance: "skipped",
+  unreliableRule: null,
+  turns: 0,
+  tokens: 0,
+};
 
 export function guidanceBreaks(
   sessionId: string,
@@ -168,8 +173,7 @@ export function combine(parts: readonly SegmentGuidance[]): SegmentGuidance {
   const judged = parts.filter((p) => p.guidance !== "skipped");
   const turns = parts.reduce((n, p) => n + p.turns, 0);
   const tokens = parts.reduce((n, p) => n + p.tokens, 0);
-  const broken = judged.find((p) => p.guidance === "broken");
-  if (broken) return { guidance: "broken", rule: broken.rule, turns, tokens };
+  const unreliableRule = judged.find((p) => p.unreliableRule)?.unreliableRule ?? null;
   const guidance: Guidance = !judged.length
     ? "skipped"
     : judged.some((p) => p.guidance === "pending")
@@ -177,7 +181,7 @@ export function combine(parts: readonly SegmentGuidance[]): SegmentGuidance {
       : judged.some((p) => p.guidance === "unknown")
         ? "unknown"
         : "kept";
-  return { guidance, rule: null, turns, tokens };
+  return { guidance, unreliableRule, turns, tokens };
 }
 
 export async function judgeGuidance(
@@ -206,7 +210,12 @@ export async function judgeGuidance(
     parts.push(
       verdict === null
         ? SKIPPED
-        : { guidance: verdict.guidance, rule: verdict.rule, turns: 1, tokens: 0 },
+        : {
+            guidance: verdict.guidance,
+            unreliableRule: verdict.unreliableRule,
+            turns: 1,
+            tokens: 0,
+          },
     );
   }
   return { ...combine(parts), tokens };
@@ -215,8 +224,8 @@ export async function judgeGuidance(
 async function judgeBreak(
   b: Break,
   ask: (input: GuidanceInput) => Promise<string | null>,
-): Promise<{ guidance: Guidance; rule: string | null } | null> {
-  const pending = { guidance: "pending" as const, rule: null };
+): Promise<{ guidance: Guidance; unreliableRule: string | null } | null> {
+  const pending = { guidance: "pending" as const, unreliableRule: null };
   const kept: Rule[] = [];
   for (const rule of b.rules) {
     if (!rule.ambiguous) kept.push(rule);
@@ -232,11 +241,12 @@ async function judgeBreak(
   for (let lifts = 0; lifts <= MAX_LIFTS && rules.length; lifts++) {
     const choice = await ask(keptInput(b.after, rules, b.evidence));
     if (choice === null) return pending;
-    if (choice === "kept" || choice === "unknown") return { guidance: choice, rule: null };
+    if (choice === "kept" || choice === "unknown")
+      return { guidance: choice, unreliableRule: null };
     const rule = rules[Number(choice.slice(1))]!;
     const broke = await ask(brokeInput(rule, b.evidence));
     if (broke === null) return pending;
-    if (broke === "unclear") return { guidance: "unknown", rule: null };
+    if (broke === "unclear") return { guidance: "unknown", unreliableRule: null };
     if (broke === "followed") {
       rules = rules.filter((r) => r !== rule);
       continue;
@@ -247,8 +257,10 @@ async function judgeBreak(
       .slice(-LATER);
     const lifted = later.length ? await ask(liftInput(rule, later)) : "in_force";
     if (lifted === null) return pending;
-    if (lifted === "in_force") return { guidance: "broken", rule: rule.evidence };
+    if (lifted === "in_force") return { guidance: "unknown", unreliableRule: rule.evidence };
     rules = rules.filter((r) => r !== rule);
   }
-  return rules.length ? { guidance: "unknown", rule: null } : { guidance: "kept", rule: null };
+  return rules.length
+    ? { guidance: "unknown", unreliableRule: null }
+    : { guidance: "kept", unreliableRule: null };
 }

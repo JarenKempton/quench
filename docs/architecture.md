@@ -348,8 +348,11 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   or followed rule is dropped and the turn judged again. Decisions are cached in
   `~/.quench/local/guidance.jsonl` with their input tokens. A task with no such turn or no rule is
   `skipped`; one not judged yet (no `TYPESAFE_API_KEY`, or a failed call) is `pending` and retried.
-  `Guidance`, `GuidanceRule` (`<session>#<turn>` or `<file>:<line>`), `GuidanceTurns` and
-  `GuidanceCost` (USD at $0.042 per million input tokens) land on the task's `quench_tasks` row.
+  `Guidance` (kept, unknown, skipped or pending), `GuidanceTurns` and `GuidanceCost` (USD at $0.042
+  per million input tokens) land on the task's `quench_tasks` row. A break the judge confirms is not
+  a verdict: hand-checked precision was 9%, because the judge sees only shell commands and closing
+  text. The task stays `unknown` and the rule id (`<session>#<turn>` or `<file>:<line>`) goes to
+  `GuidanceUnreliableRule`, which nothing reads as a verdict.
 - **Add-on: OTel.** `agent-otlp.ts` validates with the OTLP zod schemas in `@quench/fleet`, so
   unknown fields fall away, then runs `stripLogs`/`stripMetrics`. It spools zstd batches, capped
   at 256 MiB with the oldest dropped first and counted, and forwards them verbatim. Tables follow

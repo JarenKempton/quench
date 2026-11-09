@@ -122,12 +122,12 @@ function scripted(answers: Record<string, string>) {
   };
 }
 
-test("a rule the turn breaks and nothing later lifts is broken with its id; reruns come from the cache", async () => {
+test("a break the judge confirms is unknown with its rule id kept apart as unreliable; reruns come from the cache", async () => {
   const path = await cachePath();
   const breaks = guidanceBreaks("s", history, replies, 0, 2, []);
   const { judge, asked } = scripted({ kept: "r0", broke: "broke", lifted: "in_force" });
   const first = await judgeGuidance(breaks, await open(path), judge);
-  expect(first).toEqual({ guidance: "broken", rule: "s#0", turns: 1, tokens: 300 });
+  expect(first).toEqual({ guidance: "unknown", unreliableRule: "s#0", turns: 1, tokens: 300 });
   expect(asked).toEqual(["kept", "broke", "lifted"]);
   expect(await judgeGuidance(breaks, await open(path), null)).toEqual(first);
 });
