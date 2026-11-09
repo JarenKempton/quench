@@ -4,7 +4,6 @@ import { Jev, JevGuidance, ThemeCache, VerdictCache, type GuidanceInput } from "
 import { reading } from "../progress.ts";
 import { sessionSegments, taskRows } from "./agent-archive.ts";
 import { githubPulls, run, type Run } from "./github-pulls.ts";
-import { stateDir } from "./skills.ts";
 
 export async function tasksJson(home: Home, options: { days: number }, exec: Run = run) {
   const local = join(home.dir, ".quench/local");
@@ -19,7 +18,7 @@ export async function tasksJson(home: Home, options: { days: number }, exec: Run
   for await (const outcome of readSessions(await discoverAll(home, since), 4, reading()))
     if (outcome.ok)
       segments.push(...(await sessionSegments(outcome.session, verdicts, guide, skills, exec)));
-  const github = await githubPulls(stateDir(home), segments, Date.now(), exec);
+  const github = await githubPulls(local, segments, Date.now(), exec);
   return {
     days: options.days,
     offline: github.offline,
