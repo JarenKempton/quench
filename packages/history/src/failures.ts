@@ -11,7 +11,7 @@ import {
   missingProgramOf,
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
-import { commandSignature, isChained, mainCommandSignature, mainCommandText } from "./shell.ts";
+import { commandSignature, isChained, mainCommandSignature } from "./shell.ts";
 import { knownTool } from "./subcommands.ts";
 
 export type SessionBackgrounded = {
@@ -180,7 +180,7 @@ const mainCommandOf = (call: ToolCall) =>
     : "several commands") ?? "other command";
 
 const commandText = (call: ToolCall) =>
-  call.shell!.map((shell) => mainCommandText(shell.command ?? "")).join("\n");
+  call.shell!.map((shell) => shell.command?.trim() ?? "").join("\n");
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   if (event.callId === null) return false;

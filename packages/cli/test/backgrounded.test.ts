@@ -37,7 +37,7 @@ test(
       lines([
         bash("a", "model-a", "cd work && bun run typecheck 2>&1 | tail -20"),
         timedOut("a"),
-        bash("b", "model-a", "bun run typecheck"),
+        bash("b", "model-a", "cd work && bun run typecheck 2>&1 | tail -20"),
         timedOut("b"),
         bash("l", "model-a", "bun run lint"),
         result("l", "ok"),
@@ -67,6 +67,15 @@ test(
         timedOut("e"),
         bash("f", "model-b", "git commit -m 'secret words'"),
         result("f", "done"),
+        {
+          type: "assistant",
+          cwd: project,
+          message: {
+            content: [{ type: "tool_use", id: "s", name: "TaskStop", input: { task_id: "ex" } }],
+          },
+        },
+        bash("g", "model-b", "git commit -m 'secret words'"),
+        result("g", "done"),
       ]),
     );
 

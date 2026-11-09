@@ -134,11 +134,6 @@ export function mainCommandSignature(command: string): string | null {
   return main.length === 1 ? signatureOf(main[0]!) : "several commands";
 }
 
-export function mainCommandText(command: string): string {
-  const main = mainSegments(command);
-  return main.length === 1 ? main[0]!.map((w) => w.text).join(" ") : command.trim();
-}
-
 const mainSegments = (command: string): Word[][] =>
   segments(command).flatMap((segment) => {
     const words = wordsOf(segment);
