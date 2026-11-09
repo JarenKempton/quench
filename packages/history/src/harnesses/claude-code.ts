@@ -647,7 +647,7 @@ function promptParts(raw: unknown): EventKind[] {
 
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,39}$/;
 
-const SERVER_NAME = /^[A-Za-z0-9][\w. -]{0,63}$/;
+const SERVER_NAME = /^[A-Za-z0-9][\w.: -]{0,63}$/;
 
 function mcpStatus(
   failed: { name: string; errorCode?: string | null | undefined }[],

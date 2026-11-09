@@ -43,7 +43,7 @@ test(
                   { name: "down", errorCode: "CONNECTION_CLOSED", error: "qerrorq at 10.0.0.1" },
                   { name: "qsecretq=https://x/y", errorCode: "HTTP_500" },
                 ],
-                needsAuthMcpServers: ["locked"],
+                needsAuthMcpServers: ["locked", "plugin:acme:docs"],
               },
             },
             {
@@ -85,8 +85,8 @@ test(
           "     down on Claude Code 2 sessions (CONNECTION_CLOSED)",
           "     → quench profile mcp",
           "",
-          "  3. 1 MCP server waiting for login",
-          "     locked on Claude Code 2 sessions",
+          "  3. 2 MCP servers waiting for login",
+          "     locked on Claude Code 2 sessions · plugin:acme:docs on Claude Code 2 sessions",
           "     → quench profile mcp",
           "",
           "  4. 1 MCP server on but never called",
@@ -100,10 +100,11 @@ test(
       const mcp = await quench(home, "profile", "mcp");
       expect(mcp.stdout).toContain(
         [
-          "  Server  Agent        State        Sessions  Error code",
-          "  down    Claude Code  failing             2  CONNECTION_CLOSED",
-          "  locked  Claude Code  needs login         2",
-          "  quiet   Claude Code  unused              —",
+          "  Server            Agent        State        Sessions  Error code",
+          "  down              Claude Code  failing             2  CONNECTION_CLOSED",
+          "  locked            Claude Code  needs login         2",
+          "  plugin:acme:docs  Claude Code  needs login         2",
+          "  quiet             Claude Code  unused              —",
         ].join("\n"),
       );
       const instructions = await quench(home, "profile", "instructions");
