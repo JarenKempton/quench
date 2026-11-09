@@ -38,6 +38,7 @@ import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
 import { claudeConfigHomes } from "../profile/config-homes.ts";
+import { judgeChoice, readConfig } from "../config.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
@@ -157,6 +158,7 @@ export async function profile(
   } = {
     observedAt: new Date().toISOString(),
     days: options.days,
+    judge: await judgeName(home),
     homes: await Promise.all(
       harnesses.map(async (h) => ({
         harness: h.id,
@@ -347,4 +349,10 @@ async function profileProject(home: Home, project: Project, places: SessionPlace
       warnings: [...steering.warnings, ...skills.warnings, ...mcp.warnings],
     },
   };
+}
+
+async function judgeName(home: Home): Promise<string | null> {
+  const choice = judgeChoice(await readConfig(home.dir), process.env);
+  if (choice instanceof Error || choice.name === "none") return null;
+  return choice.name === "jev" && !choice.apiKey ? null : choice.name;
 }

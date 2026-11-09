@@ -107,10 +107,10 @@ test(
     );
     expect(stdout).toContain(
       [
-        "  Sources · Claude Code: 2 user folder · 1 plugin · 1 project folder · 1 not on disk now · 1 built-in",
+        "  Sources · Claude Code: 6 different, 6 per session · 2 user folder · 1 plugin · 1 project folder · 1 not on disk now · 1 built-in",
         "  Most used · Claude Code: keep 2",
         "  Built in, can't be removed · Claude Code: simplify",
-        "  Sources · Codex: 3 plugin · 1 not on disk now · 1 built-in · 1 user folder",
+        "  Sources · Codex: 6 different, 6 per session · 3 plugin · 1 not on disk now · 1 built-in · 1 user folder",
         "  Built in, can't be removed · Codex: plan",
       ].join("\n"),
     );

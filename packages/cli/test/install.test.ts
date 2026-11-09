@@ -1,6 +1,6 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -63,6 +63,31 @@ test.skipIf(!posix)("install.sh installs the latest stable binary after checking
   expect((await stat(join(run.bin, "quench"))).mode & 0o777).toBe(0o755);
   expect(run.stdout).toContain(`Add it to your PATH: export PATH="${run.bin}:$PATH"`);
 });
+
+const bash = Bun.which("bash");
+
+test.skipIf(!posix || !bash)(
+  "install.sh warns when non-login bash shells leave the install folder off PATH",
+  async () => {
+    release("/latest/download", shAsset);
+    const home = await mkdtemp(join(tmpdir(), "quench-install-home-"));
+    const bin = join(home, ".local/bin");
+    const env = {
+      HOME: home,
+      SHELL: bash!,
+      QUENCH_INSTALL_DIR: bin,
+      PATH: `${bin}${delimiter}${process.env.PATH}`,
+    };
+    const warning = `${bin} is not on PATH in non-login bash shells`;
+    const bare = await sh(env);
+    expect(bare.code).toBe(0);
+    expect(bare.stdout).toContain(
+      `${warning}, which agents run commands in. Add export PATH="${bin}:$PATH" to ~/.bashrc`,
+    );
+    await writeFile(join(home, ".bashrc"), 'export PATH="$HOME/.local/bin:$PATH"\n');
+    expect((await sh(env)).stdout).not.toContain(warning);
+  },
+);
 
 test.skipIf(!posix)("install.sh refuses a binary whose checksum does not match", async () => {
   release("/latest/download", shAsset, `${sha("other")}  ${shAsset}\n`);

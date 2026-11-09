@@ -16,6 +16,7 @@ import { fileLabel } from "./recorded-instructions.ts";
 import { renderStartSplit } from "./recorded-start.ts";
 import { commandLabel } from "./recorded-failures.ts";
 import { neverUsed } from "./skill-cuts.ts";
+import { skillSources } from "./recorded-skills.ts";
 import { renderNextSteps } from "./next-steps.ts";
 import type { Profile } from "./render.ts";
 
@@ -39,6 +40,12 @@ export function summary(result: Profile, homeDir: string): string[] {
     ...worthALook(result, homeDir),
     ...busiest(result, homeDir),
     ...renderNextSteps(result.nextSteps),
+    ...(result.judge
+      ? []
+      : [
+          "",
+          `${dim("No judge set: quench corrections and one-word skill names in quench profile skills --asks are not measured.")} ${accent("→ quench setup judge")}`,
+        ]),
     "",
     dim(
       "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",
@@ -87,9 +94,12 @@ function startingLoad(result: Profile, homeDir: string): string[] {
     ),
     `  ${dim("Projects add their own instruction files on top.")}`,
     ...rows.flatMap((r) =>
+      r.skills ? [`  ${dim(`${r.label} skills: ${skillSources(r.skills)}`)}`] : [],
+    ),
+    ...rows.flatMap((r) =>
       r.largest
         ? [
-            `  ${dim(`${r.label} instructions, largest: ${fileLabel(r.largest.file, context)} · ${chars(r.largest.load.chars)} over ${plural(r.largest.load.sessions, "session")}`)}`,
+            `  ${dim(`${r.label} instructions, largest: ${fileLabel(r.largest.file, context)} · ${chars(Math.round(r.largest.load.chars / r.largest.load.sessions))} per session · ${chars(r.largest.load.chars)} over ${plural(r.largest.load.sessions, "session")}`)}`,
           ]
         : [],
     ),

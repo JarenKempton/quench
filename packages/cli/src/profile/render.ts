@@ -34,6 +34,7 @@ export type ProfiledProject = Project & {
 
 export type Profile = {
   days: number;
+  judge: string | null;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
   claudeConfigHomes: ConfigHome[];
   unreadable: number;
@@ -194,7 +195,7 @@ function footer(result: Profile, homeDir: string): string[] {
   if (result.recordedInstructions.length)
     lines.push("Disk now: whether the last recorded text still matches the file today.");
   lines.push(
-    "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in and plugin skills are not counted yet.",
+    "Skills: model-visible skills and their up-front name + description size; bodies load on demand. Built-in, plugin, project and other-home skills are not counted here; Recorded skills counts every skill sessions listed, by source.",
   );
   return lines;
 }

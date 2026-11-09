@@ -74,3 +74,14 @@ case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "Add it to your PATH: export PATH=\"$bin_dir:\$PATH\"" ;;
 esac
+
+shell_name=$(basename "${SHELL:-sh}")
+case $shell_name in
+  bash | zsh)
+    rc_path=$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$SHELL" -ic 'printf %s "$PATH"' </dev/null 2>/dev/null) || rc_path=
+    case ":$rc_path:" in
+      *":$bin_dir:"*) ;;
+      *) echo "$bin_dir is not on PATH in non-login $shell_name shells, which agents run commands in. Add export PATH=\"$bin_dir:\$PATH\" to ~/.${shell_name}rc" ;;
+    esac
+    ;;
+esac
