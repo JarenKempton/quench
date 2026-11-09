@@ -79,14 +79,17 @@ test.skipIf(!posix || !bash)(
       PATH: `${bin}${delimiter}${process.env.PATH}`,
     };
     const warning = `${bin} is on PATH here but not in a new bash shell`;
-    const bare = await sh(env);
-    expect(bare.code).toBe(0);
-    expect(bare.stdout).toContain(
-      `${warning} that only reads ~/.bashrc, which some agents start from. Add export PATH="${bin}:$PATH" to ~/.bashrc`,
-    );
-    await writeFile(join(home, ".bashrc"), 'export PATH="$HOME/.local/bin:$PATH"\n');
-    expect((await sh(env)).stdout).not.toContain(warning);
-    await rm(home, { recursive: true, force: true });
+    try {
+      const bare = await sh(env);
+      expect(bare.code).toBe(0);
+      expect(bare.stdout).toContain(
+        `${warning} that only reads ~/.bashrc, which some agents start from. Add export PATH="${bin}:$PATH" to ~/.bashrc`,
+      );
+      await writeFile(join(home, ".bashrc"), 'export PATH="$HOME/.local/bin:$PATH"\n');
+      expect((await sh(env)).stdout).not.toContain(warning);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   },
 );
 
