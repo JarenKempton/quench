@@ -327,6 +327,59 @@ test(
   cliRunsTimeout,
 );
 
+test(
+  "/api/tasks lists each task's verdicts from cached judgments only, with ids and labels but no history text, and writes nothing",
+  async () => {
+    const dir = await fixture();
+    let created = 0;
+    const judge: Provider = {
+      ...provider({ name: "jev", apiKey: "must-not-be-used" }),
+      create: async () => {
+        created++;
+        throw new Error("the UI must not create a judge");
+      },
+    };
+    const running = await startUi(new Home(dir), {
+      days: 36500,
+      cache: true,
+      open: false,
+      hostHistory: false,
+      judge,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const before = await tree(dir);
+      const served = await get(running.port, "/api/tasks");
+      expect(served.status).toBe(200);
+      expect(served.headers["content-security-policy"]).toBe(CSP);
+      expect(served.headers["x-quench-computed-at"]).toBeString();
+      const report = JSON.parse(served.body);
+      expect(report.days).toBe(36500);
+      expect(report.tasks.length).toBeGreaterThan(0);
+      for (const task of report.tasks) {
+        expect(task.taskId).toMatch(/^[0-9a-f]{32}$/);
+        for (const key of ["landed", "spiral", "efficiency"])
+          expect(["pass", "fail", "unknown"]).toContain(task[key].verdict);
+        expect(["kept", "skipped", "unknown"]).toContain(task.guidance);
+        expect(task).not.toHaveProperty("guidanceUnreliableRule");
+      }
+      expect(report.tasks.map((t: { startedAt: string }) => t.startedAt)).toEqual(
+        report.tasks
+          .map((t: { startedAt: string }) => t.startedAt)
+          .sort()
+          .reverse(),
+      );
+      expect(created).toBe(0);
+      for (const text of ["no, wrong", "thanks", "fix it", "Use Bun", "test suite", "done"])
+        expect(served.body).not.toContain(text);
+      expect(await tree(dir)).toEqual(before);
+    } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
 const CANARY = "ghp_" + "QuenchUiCanary0123456789abcdefghijkl";
 
 const git = (cwd: string, ...args: string[]) => {

@@ -5,6 +5,7 @@ import { correctionsJson, shownHistory } from "./corrections.ts";
 import { reportJson } from "./report.ts";
 import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
+import { tasksJson } from "./tasks.ts";
 import { worktreesJson } from "./worktrees.ts";
 
 export const LOOPBACK = "127.0.0.1";
@@ -183,6 +184,7 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
           )
         : NO_JUDGE,
     ),
+    tasks: lastResult(() => tasksJson(home, flags)),
     worktrees: lastResult(() => worktreesJson(home, flags)),
     secrets: lastResult(() => secretsJson(home, flags)),
   };

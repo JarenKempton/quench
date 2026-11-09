@@ -154,7 +154,12 @@ export async function sessionSegments(
 const memberKey = (m: { harness: string; sessionId: string; firstTurn: number }) =>
   JSON.stringify([m.harness, m.sessionId, m.firstTurn]);
 
-const PENDING: SegmentGuidance = { guidance: "pending", unreliableRule: null, turns: 0, tokens: 0 };
+const PENDING: SegmentGuidance = {
+  guidance: "pending",
+  unreliableRule: null,
+  turns: 0,
+  tokens: 0,
+};
 
 const stored = (s: { guidance?: SegmentGuidance }) =>
   s.guidance && Guidance.safeParse(s.guidance.guidance).success ? s.guidance : PENDING;
@@ -167,10 +172,12 @@ const UNJUDGED = {
   seconds: 0,
 } satisfies Partial<TaskResult>;
 
-export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pull[] = []) {
-  const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
+export function taskRows(
+  all: readonly (JudgedSegment & { guidance?: SegmentGuidance })[],
+  pulls: readonly Pull[] = [],
+): TaskResult[] {
   const guidance = new Map(all.map((s) => [memberKey(s), stored(s)]));
-  const rows: TaskResult[] = judgedTasks(all, pulls).map((task) => {
+  return judgedTasks(all, pulls).map((task) => {
     const judged = combine(task.members.map((m) => guidance.get(memberKey(m)) ?? PENDING));
     return {
       ...task,
@@ -184,6 +191,13 @@ export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pu
       analysisVersion: ANALYSIS_VERSION,
     };
   });
+}
+
+export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pull[] = []) {
+  const rows = taskRows(
+    Object.values(shipped).flatMap((entry) => entry.segments ?? []),
+    pulls,
+  );
   const seen = new Set(rows.map((r) => r.taskId));
   const next: Posted = {};
   const due: TaskResult[] = [];
@@ -339,8 +353,13 @@ export async function archiveCycle(
         `${ref.harness}\0${ref.parent}`,
         (children.get(`${ref.harness}\0${ref.parent}`) ?? 0) + 1,
       );
-  const due: { ref: SessionRef; path: string; size: number; mtimeMs: number; retry: boolean }[] =
-    [];
+  const due: {
+    ref: SessionRef;
+    path: string;
+    size: number;
+    mtimeMs: number;
+    retry: boolean;
+  }[] = [];
   for (const ref of refs) {
     const path = relative(home.of(harnessById[ref.harness].home), ref.path).split(sep).join("/");
     if (!TranscriptPath.safeParse(path).success) {
@@ -373,7 +392,11 @@ export async function archiveCycle(
   }
   due.sort((a, b) => Number(a.retry) - Number(b.retry) || a.mtimeMs - b.mtimeMs);
   const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
-  const pending: { key: string; entry: Shipped[string]; result: SessionResult | null }[] = [];
+  const pending: {
+    key: string;
+    entry: Shipped[string];
+    result: SessionResult | null;
+  }[] = [];
   const flush = async () => {
     const results = pending.flatMap((p) => (p.result ? [p.result] : []));
     for (let i = 0; i < results.length; i += MAX_SESSION_ROWS)
