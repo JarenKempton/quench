@@ -23,7 +23,14 @@ import {
   type SessionRef,
 } from "@quench/history";
 import { putTranscript, postSessions, postTasks } from "@quench/hub/client";
-import { behaviour, runs, segments, tasks, type Segment } from "@quench/insights";
+import {
+  behaviour,
+  judgedTasks,
+  runs,
+  segments,
+  segmentSignals,
+  type JudgedSegment,
+} from "@quench/insights";
 import { Jev, judgeReplies, VerdictCache } from "@quench/judge";
 import { replacePrivateFile } from "../private-file.ts";
 
@@ -32,7 +39,7 @@ export const CYCLE_BYTES = 256 * 1024 * 1024;
 
 type Shipped = Record<
   string,
-  { sha256: string; size: number; mtimeMs: number; segments?: Segment[] }
+  { sha256: string; size: number; mtimeMs: number; segments?: JudgedSegment[] }
 >;
 type Posted = Record<string, { hash: string; startedAt: string }>;
 
@@ -80,12 +87,25 @@ export async function sessionSegments(session: Session, verdicts: VerdictCache) 
     verdicts,
     null,
   );
-  const newGoals = new Set(replies.flatMap((r) => (r.kind === "new_request" ? [r.position] : [])));
-  return segments(session, sessionRuns, newGoals);
+  const at = (kind: string, shift: number) =>
+    new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
+  const corrected = at("correction", 1);
+  return segments(session, sessionRuns, at("new_request", 0)).map((segment) => ({
+    ...segment,
+    signals: segmentSignals(sessionRuns, segment, corrected),
+  }));
 }
 
+const UNJUDGED = {
+  landed: { verdict: "unknown", reason: "not-seen", evidence: [] },
+  spiral: { verdict: "unknown", reason: "no-tools", evidence: [] },
+  efficiency: { verdict: "unknown", reason: "no-usage", evidence: [] },
+  tokens: null,
+  seconds: 0,
+} satisfies Partial<TaskResult>;
+
 export function taskResults(shipped: Shipped, posted: Posted) {
-  const current = tasks(Object.values(shipped).flatMap((entry) => entry.segments ?? []));
+  const current = judgedTasks(Object.values(shipped).flatMap((entry) => entry.segments ?? []));
   const rows: TaskResult[] = current.map((task) => ({
     ...task,
     members: task.members.slice(0, MAX_TASK_MEMBERS),
@@ -115,6 +135,7 @@ export function taskResults(shipped: Shipped, posted: Posted) {
         harnesses: [],
         sessions: 0,
         runs: 0,
+        ...UNJUDGED,
         analysisVersion: ANALYSIS_VERSION,
       });
   return { due, next };
@@ -226,7 +247,12 @@ export async function archiveCycle(
       continue;
     }
     const known = shipped[keyOf(ref, path)];
-    if (known?.segments && known.size === info.size && known.mtimeMs === info.mtimeMs) continue;
+    if (
+      known?.segments?.every((s) => s.signals) &&
+      known.size === info.size &&
+      known.mtimeMs === info.mtimeMs
+    )
+      continue;
     if (info.size > MAX_TRANSCRIPT_BYTES) {
       count(status.skipped, "too-large");
       continue;

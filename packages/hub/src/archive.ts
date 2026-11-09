@@ -175,6 +175,20 @@ export function sessionRow(machine: string, s: SessionResult, fallback: string, 
   };
 }
 
+const judgmentColumns = (t: TaskResult) => ({
+  Landed: t.landed.verdict,
+  LandedReason: t.landed.reason,
+  LandedEvidence: t.landed.evidence,
+  Spiral: t.spiral.verdict,
+  SpiralReason: t.spiral.reason,
+  SpiralEvidence: t.spiral.evidence,
+  Efficiency: t.efficiency.verdict,
+  EfficiencyReason: t.efficiency.reason,
+  EfficiencyEvidence: t.efficiency.evidence,
+  Tokens: t.tokens,
+  Seconds: t.seconds,
+});
+
 export function taskRow(machine: string, t: TaskResult, now: Date) {
   return {
     Machine: machine,
@@ -193,6 +207,7 @@ export function taskRow(machine: string, t: TaskResult, now: Date) {
     Harnesses: t.harnesses,
     Sessions: t.sessions,
     Runs: t.runs,
+    ...judgmentColumns(t),
     AnalysisVersion: t.analysisVersion,
     ComputedAt: msTime(now.toISOString()),
     Removed: t.removed ? 1 : 0,
