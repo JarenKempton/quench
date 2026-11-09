@@ -39,6 +39,8 @@ test(
         timedOut("a"),
         bash("b", "model-a", "bun run typecheck"),
         timedOut("b"),
+        bash("l", "model-a", "bun run lint"),
+        result("l", "ok"),
         {
           type: "attachment",
           cwd: project,
@@ -63,7 +65,7 @@ test(
       lines([
         bash("e", "model-b", "git commit -m 'secret words'"),
         timedOut("e"),
-        bash("f", "model-b", "git commit -m 'other words'"),
+        bash("f", "model-b", "git commit -m 'secret words'"),
         result("f", "done"),
       ]),
     );

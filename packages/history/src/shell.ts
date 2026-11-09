@@ -129,13 +129,22 @@ export function commandSignature(command: string): string | null {
 
 export function mainCommandSignature(command: string): string | null {
   if (!isChained(command)) return commandSignature(command);
-  const main = segments(command).flatMap((segment) => {
+  const main = mainSegments(command);
+  if (!main.length) return null;
+  return main.length === 1 ? signatureOf(main[0]!) : "several commands";
+}
+
+export function mainCommandText(command: string): string {
+  const main = mainSegments(command);
+  return main.length === 1 ? main[0]!.map((w) => w.text).join(" ") : command.trim();
+}
+
+const mainSegments = (command: string): Word[][] =>
+  segments(command).flatMap((segment) => {
     const words = wordsOf(segment);
     const name = programName(words);
     return name && (SETUP.has(name) || FILTERS.has(name)) ? [] : [words];
   });
-  return main.length === 1 ? signatureOf(main[0]!) : "several commands";
-}
 
 function signatureOf(words: Word[]): string | null {
   const name = programName(words);
