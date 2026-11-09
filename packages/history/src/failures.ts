@@ -149,7 +149,12 @@ export function recordedBackgrounded(session: Session): SessionBackgrounded[] {
   let model: string | null = null;
   for (const event of session.events) {
     if (event.type === "inference") model = event.model ?? model;
-    if (event.type === "tool_call" && event.id !== null && event.shell?.length) {
+    if (
+      event.type === "tool_call" &&
+      event.id !== null &&
+      event.shell?.length &&
+      !calls.has(event.id)
+    ) {
       calls.set(event.id, { call: event, model });
       started.push({
         call: event,
