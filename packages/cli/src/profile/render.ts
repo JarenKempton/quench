@@ -49,7 +49,10 @@ export type Profile = {
   projects: ProfiledProject[];
   missingDirectories: string[];
   nextSteps: NextStep[];
-  storedCredentials: { path: string; kind: string; credentials: number }[];
+  storedCredentials: {
+    credentials: number;
+    files: { path: string; kind: string; credentials: number }[];
+  };
 };
 
 export const HOME_FLAGS = {

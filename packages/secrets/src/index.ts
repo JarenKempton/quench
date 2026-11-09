@@ -99,11 +99,16 @@ export async function secretsReport(
 
 export async function storedCredentials(home: Home, projects: readonly string[]) {
   const { files } = await scanConfigs(home, projects, masker(randomBytes(32)));
-  return files.map((file) => ({
-    path: file.path,
-    kind: file.kind,
-    credentials: file.secrets.length,
-  }));
+  const found = files
+    .map((file) => ({
+      ...file,
+      tags: new Set(file.secrets.filter((s) => s.confidence === "high").map((s) => s.tag)),
+    }))
+    .filter((file) => file.tags.size);
+  return {
+    credentials: new Set(found.flatMap((file) => [...file.tags])).size,
+    files: found.map((file) => ({ path: file.path, kind: file.kind, credentials: file.tags.size })),
+  };
 }
 
 export type SecretsReport = Awaited<ReturnType<typeof secretsReport>>;

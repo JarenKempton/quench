@@ -61,7 +61,7 @@ import { splitInstructions, splitSkills, type InstructionFile } from "../profile
 export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
-  "Stored credentials are the secrets quench secrets finds in harness and MCP config files of your home and known projects, counted per file; values, prefixes and tags are never shown, and session transcripts and repo git history are not scanned for it.",
+  "Stored credentials are the high-confidence secrets quench secrets finds in harness settings, MCP config and prompt history files of your home and the projects profiled here, each value counted once; values, prefixes and tags are never shown. Session transcripts and repo git history are not scanned for it, and quench secrets may cover other projects.",
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
   "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
   "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",

@@ -96,11 +96,10 @@ function startingLoad(result: Profile, homeDir: string): string[] {
 
 function worthALook(result: Profile, homeDir: string): string[] {
   const items: Item[] = [];
-  const stored = result.storedCredentials;
-  const storedTotal = stored.reduce((n, f) => n + f.credentials, 0);
-  if (storedTotal)
+  const { credentials, files: stored } = result.storedCredentials;
+  if (credentials)
     items.push({
-      headline: `${plural(storedTotal, "credential")} stored in plaintext in ${[...new Set(stored.map((f) => STORED_IN[f.kind] ?? f.kind))].join(" and ")}`,
+      headline: `${plural(credentials, "credential")} stored in plaintext in ${[...new Set(stored.map((f) => STORED_IN[f.kind] ?? f.kind))].join(" and ")}`,
       detail: stored.map((f) => shortPath(f.path, homeDir)).join(" · "),
       command: "quench secrets",
     });

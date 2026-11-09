@@ -344,7 +344,14 @@ test(
       join(home, ".claude.json"),
       line({ mcpServers: { gh: server(FAKE.github), npm: server(FAKE.npm) } }),
     );
-    await Bun.write(join(project, ".mcp.json"), line({ mcpServers: { gh: server(FAKE.mcp) } }));
+    await Bun.write(
+      join(project, ".mcp.json"),
+      line({ mcpServers: { gh: server(FAKE.mcp), again: server(FAKE.github) } }),
+    );
+    await Bun.write(
+      join(project, ".claude/settings.json"),
+      line({ env: { API_SECRET: "FakeQuenchLowConfidence0123456789" } }),
+    );
     await Bun.write(
       join(home, ".codex/sessions/2026/10/20/a.jsonl"),
       line({
@@ -354,27 +361,34 @@ test(
       }) + "\n",
     );
 
-    const { stdout, code } = await quench(home);
-    expect(code).toBe(0);
-    expect(stdout).toContain(
-      [
-        "▍Worth a look",
-        "  1. 3 credentials stored in plaintext in MCP config",
-        "     ~/.claude.json · ~/repo/.mcp.json",
-        "     → quench secrets",
-      ].join("\n"),
-    );
-    for (const value of [FAKE.github, FAKE.npm, FAKE.mcp])
-      expect(stdout).not.toContain(value.slice(4, 12));
-    expect(stdout).not.toContain("ghp_");
-    expect(stdout).not.toContain("npm_");
-    const json = JSON.parse((await quench(home, "--json")).stdout);
-    expect(json.storedCredentials).toEqual([
-      { path: join(home, ".claude.json"), kind: "mcp", credentials: 2 },
-      { path: join(project, ".mcp.json"), kind: "mcp", credentials: 1 },
-    ]);
-    expect(await Bun.file(join(home, ".quench/local/secrets.key")).exists()).toBe(false);
-    await rm(home, { recursive: true, force: true });
+    try {
+      const { stdout, code } = await quench(home);
+      expect(code).toBe(0);
+      expect(stdout).toContain(
+        [
+          "▍Worth a look",
+          "  1. 3 credentials stored in plaintext in MCP config",
+          "     ~/.claude.json · ~/repo/.mcp.json",
+          "     → quench secrets",
+        ].join("\n"),
+      );
+      for (const value of [FAKE.github, FAKE.npm, FAKE.mcp])
+        expect(stdout).not.toContain(value.slice(4, 12));
+      expect(stdout).not.toContain("ghp_");
+      expect(stdout).not.toContain("npm_");
+      const json = JSON.parse((await quench(home, "--json")).stdout);
+      expect(json.storedCredentials).toEqual({
+        credentials: 3,
+        files: [
+          { path: join(home, ".claude.json"), kind: "mcp", credentials: 2 },
+          { path: join(project, ".mcp.json"), kind: "mcp", credentials: 2 },
+        ],
+      });
+      expect(await Bun.file(join(home, ".quench/local/secrets.key")).exists()).toBe(false);
+      expect(stdout).not.toContain("LowConfidence");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   },
   cliRunsTimeout,
 );
