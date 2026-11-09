@@ -27,6 +27,7 @@ export { runRecords, type RunRecord } from "./record.ts";
 export { labelIn, signals, type Bucket, type Sample, type Signal } from "./signals.ts";
 export {
   IDLE_GAP_MS,
+  repoKey,
   segments,
   tasks,
   type Boundary,
@@ -40,10 +41,12 @@ export {
   judgedTasks,
   LANDED_REASONS,
   MIN_BASELINE,
+  pullId,
   segmentSignals,
   SPIRAL_REASONS,
   type JudgedSegment,
   type Judgments,
+  type Pull,
   type SegmentSignals,
   type Verdict,
 } from "./judgments.ts";

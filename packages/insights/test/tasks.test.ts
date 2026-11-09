@@ -121,3 +121,22 @@ test("a run citing many ids joins nothing by them", () => {
   const [only] = cut(session("o", null, [...turn(0, text)]));
   expect(only!.markers).toEqual([]);
 });
+
+test("a bare gh pr number resolves against the session's repo, and one with -R keeps its own", () => {
+  const s = session("s9", "t3/x", turn(0, "go"));
+  const run = {
+    ...runs(s)[0]!,
+    commands: [{ command: "gh pr merge 12 --squash", workdir: null, call: 1 }],
+  };
+  expect(segments(s, [run], new Set(), "Acme/Widget")[0]!.markers).toContain(
+    "github:acme/widget#12",
+  );
+  const pinned = {
+    ...run,
+    commands: [{ command: "gh pr merge 12 -R other/repo", workdir: null, call: 1 }],
+  };
+  expect(segments(s, [pinned], new Set(), "acme/widget")[0]!.markers).toEqual([
+    "branch:t3/x",
+    "github:other/repo#12",
+  ]);
+});

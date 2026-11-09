@@ -343,6 +343,16 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   (#185), each `pass`, `fail` or `unknown` plus a fixed reason and up to 20 evidence ids
   (`harness:session#turn`, or baseline task ids). Landed: a successful `gh pr merge` or
   `gh issue close` with no later `git revert`, nor a correction reply (cached verdicts) to that run or after.
+  When GitHub knows the task's PR, its real state decides instead (#199): merged lands, open is
+  `open`, closed unmerged is `unmerged`, with `github:owner/repo#n` as evidence. A task links to a
+  PR by an `owner/repo#n` marker (a bare `gh pr <verb> <n>` resolves against the session's
+  `origin` remote, or the repo its transcript cites most), by its branch matching the PR's head
+  (Claude Code sessions keep their last branch, so T3's temporary `t3/<hash>` gives way to the
+  real one), or else by worktree: a branch segment with no link of its own takes the first PR
+  linked from the same `cwd` that was still open when it started. `pulls.json` caches each repo's
+  `gh pr list`; a repo is asked again only for new activity or an unsettled PR, and only for PRs
+  updated since. Without `gh` or network, Landed stays on transcript signals and the agent line
+  says how many repos it could not reach.
   Spiral: a retry loop (the same failure three times in a run), three corrections in a row, or
   three runs in a row that hit the same failure while tokens rise. History records no edit paths, so a
   repeated file edit counts only when it fails the same way. Efficiency: tokens and wall time

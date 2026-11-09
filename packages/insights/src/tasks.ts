@@ -18,6 +18,8 @@ export type Segment = {
   runs: number;
   markers: string[];
   boundary: Boundary;
+  repo?: string | null;
+  cwd?: string | null;
 };
 
 export type TaskMember = Pick<Segment, "harness" | "sessionId" | "firstTurn" | "lastTurn">;
@@ -39,9 +41,11 @@ const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "trunk", "HEAD"])
 const GITHUB_URL = /github\.com\/([\w.-]+\/[\w.-]+)\/(?:pull|issues)\/(\d+)/g;
 const GH_COMMAND =
   /\bgh\s+(?:pr|issue)\s+\w+\s+(\d+)\b[^\n|;&]*?(?:-R|--repo)[\s=]+([\w.-]+\/[\w.-]+)/g;
+const GH_BARE = /\bgh\s+pr\s+\w+\s+(\d+)\b/g;
+const HAS_REPO = /\s(?:-R|--repo)[\s=]/;
 const JIRA_IN_BRANCH = /(?:^|\/)([a-z][a-z0-9]{1,9}-\d+)(?=[-_/]|$)/i;
 
-const repoKey = (repo: string) => repo.toLowerCase().replace(/\.git$/, "");
+export const repoKey = (repo: string) => repo.toLowerCase().replace(/\.git$/, "");
 
 export function branchMarkers(branch: string | null): string[] {
   if (!branch || DEFAULT_BRANCHES.has(branch)) return [];
@@ -49,16 +53,30 @@ export function branchMarkers(branch: string | null): string[] {
   return [`branch:${branch}`, ...(jira ? [`jira:${jira.toUpperCase()}`] : [])];
 }
 
-export function runMarkers(run: Run): string[] {
+export function runMarkers(run: Run, repo: string | null = null): string[] {
   const ids = new Set<string>();
-  const texts = [run.prompt, run.assistantSaid, ...run.commands.map((c) => c.command)];
-  for (const text of texts) {
+  const commands = run.commands.map((c) => c.command);
+  for (const text of [run.prompt, run.assistantSaid, ...commands]) {
     if (!text) continue;
     for (const [, repo, n] of text.matchAll(GITHUB_URL)) ids.add(`github:${repoKey(repo!)}#${n}`);
     for (const [, n, repo] of text.matchAll(GH_COMMAND)) ids.add(`github:${repoKey(repo!)}#${n}`);
   }
+  if (repo)
+    for (const command of commands)
+      if (command && !HAS_REPO.test(command))
+        for (const [, n] of command.matchAll(GH_BARE)) ids.add(`github:${repoKey(repo)}#${n}`);
   return ids.size > MAX_RUN_IDS ? [] : [...ids].sort();
 }
+
+const markerRepo = (runs: readonly Run[]) => {
+  const seen = new Map<string, number>();
+  for (const run of runs)
+    for (const id of runMarkers(run)) {
+      const repo = id.slice("github:".length, id.lastIndexOf("#"));
+      seen.set(repo, (seen.get(repo) ?? 0) + 1);
+    }
+  return [...seen].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+};
 
 const iso = (at: Date | null) => at?.toISOString() ?? null;
 
@@ -66,9 +84,11 @@ export function segments(
   session: Session,
   runs: readonly Run[],
   newGoals: ReadonlySet<number>,
+  knownRepo: string | null = null,
   idleMs = IDLE_GAP_MS,
 ): Segment[] {
   if (session.parent) return [];
+  const repo = knownRepo ? repoKey(knownRepo) : markerRepo(runs);
   const branch = branchMarkers(session.branch);
   const out: (Segment & { ids: Set<string> })[] = [];
   let current: (typeof out)[number] | null = null;
@@ -76,7 +96,7 @@ export function segments(
   runs.forEach((run, turn) => {
     const startedAt = iso(run.startedAt);
     const endedAt = iso(run.endedAt) ?? startedAt;
-    const ids = runMarkers(run);
+    const ids = runMarkers(run, repo);
     if (!startedAt || !endedAt) return;
     const at = Date.parse(startedAt);
     const boundary = ((): Boundary | null => {
@@ -99,6 +119,8 @@ export function segments(
         runs: 0,
         markers: [],
         boundary,
+        repo,
+        cwd: session.cwd,
         ids: new Set(branch),
       };
       out.push(current);

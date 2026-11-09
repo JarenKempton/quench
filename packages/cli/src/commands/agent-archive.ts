@@ -30,9 +30,11 @@ import {
   segments,
   segmentSignals,
   type JudgedSegment,
+  type Pull,
 } from "@quench/insights";
 import { Jev, judgeReplies, VerdictCache } from "@quench/judge";
 import { replacePrivateFile } from "../private-file.ts";
+import { githubPulls, repoOf, run, type Run } from "./github-pulls.ts";
 
 export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
@@ -50,6 +52,7 @@ export type ArchiveStatus = {
   bytes: number;
   stored: number;
   waiting: number;
+  offline: number;
   skipped: Record<string, number>;
   error: string | null;
 };
@@ -72,7 +75,7 @@ const count = <K extends string>(map: Partial<Record<K, number>>, key: K) => {
 const unique = (values: (string | null)[]) =>
   [...new Set(values.filter((v): v is string => !!v))].sort();
 
-export async function sessionSegments(session: Session, verdicts: VerdictCache) {
+export async function sessionSegments(session: Session, verdicts: VerdictCache, exec: Run = run) {
   const sessionRuns = runs(session);
   const { replies } = await judgeReplies(
     [
@@ -90,7 +93,8 @@ export async function sessionSegments(session: Session, verdicts: VerdictCache) 
   const at = (kind: string, shift: number) =>
     new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
   const corrected = at("correction", 1);
-  return segments(session, sessionRuns, at("new_request", 0)).map((segment) => ({
+  const repo = await repoOf(session.cwd, exec);
+  return segments(session, sessionRuns, at("new_request", 0), repo).map((segment) => ({
     ...segment,
     signals: segmentSignals(sessionRuns, segment, corrected),
   }));
@@ -104,8 +108,11 @@ const UNJUDGED = {
   seconds: 0,
 } satisfies Partial<TaskResult>;
 
-export function taskResults(shipped: Shipped, posted: Posted) {
-  const current = judgedTasks(Object.values(shipped).flatMap((entry) => entry.segments ?? []));
+export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pull[] = []) {
+  const current = judgedTasks(
+    Object.values(shipped).flatMap((entry) => entry.segments ?? []),
+    pulls,
+  );
   const rows: TaskResult[] = current.map((task) => ({
     ...task,
     members: task.members.slice(0, MAX_TASK_MEMBERS),
@@ -213,6 +220,7 @@ export async function archiveCycle(
   home: Home,
   dir: string,
   now = Date.now(),
+  exec: Run = run,
 ): Promise<ArchiveStatus> {
   const status: ArchiveStatus = {
     uploaded: 0,
@@ -221,6 +229,7 @@ export async function archiveCycle(
     bytes: 0,
     stored: 0,
     waiting: 0,
+    offline: 0,
     skipped: {},
     error: null,
   };
@@ -248,7 +257,7 @@ export async function archiveCycle(
     }
     const known = shipped[keyOf(ref, path)];
     if (
-      known?.segments?.every((s) => s.signals) &&
+      known?.segments?.every((s) => s.signals && s.repo !== undefined) &&
       known.size === info.size &&
       known.mtimeMs === info.mtimeMs
     )
@@ -286,7 +295,7 @@ export async function archiveCycle(
         sha256: digest,
         size: bytes.length,
         mtimeMs: item.mtimeMs,
-        segments: session ? await sessionSegments(session, verdicts) : [],
+        segments: session ? await sessionSegments(session, verdicts, exec) : [],
       };
       if (shipped[key]?.sha256 === digest) {
         segmented += bytes.length;
@@ -326,7 +335,10 @@ export async function archiveCycle(
     }
     await flush();
     const posted: Posted = await readJson<Posted>(tasksFile(dir));
-    const { due: taskRows, next } = taskResults(shipped, posted);
+    const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
+    const github = await githubPulls(dir, all, now, exec);
+    status.offline = github.offline;
+    const { due: taskRows, next } = taskResults(shipped, posted, github.pulls);
     for (let i = 0; i < taskRows.length; i += MAX_TASK_ROWS)
       await postTasks(dir, taskRows.slice(i, i + MAX_TASK_ROWS));
     status.tasks = taskRows.length;
@@ -337,9 +349,14 @@ export async function archiveCycle(
   return status;
 }
 
+const offline = (status: ArchiveStatus) =>
+  status.offline
+    ? `; Landed from transcripts for ${status.offline} repo${status.offline === 1 ? "" : "s"}, gh could not reach GitHub`
+    : "";
+
 export const archiveLine = (status: ArchiveStatus) =>
   status.error
     ? `; archive: ${status.error}`
     : status.uploaded || status.waiting
-      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting`
-      : "";
+      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting${offline(status)}`
+      : offline(status);

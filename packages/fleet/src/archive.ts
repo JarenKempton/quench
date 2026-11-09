@@ -68,7 +68,7 @@ const judgment = <const R extends readonly [string, ...string[]]>(reasons: R) =>
     .strict();
 
 export const TaskJudgments = {
-  landed: judgment(["merged", "closed", "reverted", "corrected", "not-seen"]),
+  landed: judgment(["merged", "closed", "reverted", "corrected", "open", "unmerged", "not-seen"]),
   spiral: judgment(["retry-loop", "repeated-correction", "rising-cost", "none", "no-tools"]),
   efficiency: judgment(["within-baseline", "over-baseline", "no-baseline", "no-usage"]),
   tokens: Tokens,

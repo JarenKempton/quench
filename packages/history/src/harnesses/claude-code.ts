@@ -423,7 +423,7 @@ export const claudeCode: Harness<"claude-code"> = {
     const position = { line: 0 };
     for await (const line of jsonlLines(r.path, Line, diagnostics, position)) {
       cwd ??= line.cwd ?? null;
-      branch ??= line.gitBranch && line.gitBranch !== "HEAD" ? line.gitBranch : null;
+      if (line.gitBranch && line.gitBranch !== "HEAD") branch = line.gitBranch;
       if (line.type === "attachment" && line.uuid) {
         if (attachments.has(line.uuid)) continue;
         attachments.add(line.uuid);
