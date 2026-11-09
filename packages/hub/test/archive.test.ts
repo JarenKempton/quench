@@ -159,6 +159,11 @@ const task = (runs: number, removed = false): TaskResult => ({
   harnesses: ["claude-code", "codex"],
   sessions: 2,
   runs,
+  landed: { verdict: "pass", reason: "merged", evidence: ["claude-code:lane#4"] },
+  spiral: { verdict: "fail", reason: "retry-loop", evidence: ["codex:later#1"] },
+  efficiency: { verdict: "unknown", reason: "no-baseline", evidence: [] },
+  tokens: 1200,
+  seconds: 90,
   analysisVersion: 1,
 });
 
@@ -170,8 +175,8 @@ const postTask = (t: TaskResult) =>
   });
 
 const tasksNow = () =>
-  running.archive!.ch.rows<{ Runs: number; Members: unknown[] }>(
-    "SELECT Runs, Members FROM quench_tasks FINAL WHERE Machine = 'laptop'",
+  running.archive!.ch.rows<{ Runs: number; Members: unknown[]; Verdicts: string[] }>(
+    "SELECT Runs, Members, [Landed, LandedReason, Spiral, SpiralReason, Efficiency, EfficiencyReason, arrayStringConcat(LandedEvidence, ',')] AS Verdicts FROM quench_tasks FINAL WHERE Machine = 'laptop'",
   );
 
 test.skipIf(skip)("a task row replaces itself and a removed task disappears", async () => {
@@ -181,6 +186,15 @@ test.skipIf(skip)("a task row replaces itself and a removed task disappears", as
   expect(rest).toEqual([]);
   expect(row!.Runs).toBe(7);
   expect(row!.Members).toHaveLength(2);
+  expect(row!.Verdicts).toEqual([
+    "pass",
+    "merged",
+    "fail",
+    "retry-loop",
+    "unknown",
+    "no-baseline",
+    "claude-code:lane#4",
+  ]);
   expect((await postTask({ ...task(7), taskId: "nope" })).status).toBe(400);
   expect((await postTask(task(0, true))).status).toBe(200);
   expect(await tasksNow()).toEqual([]);

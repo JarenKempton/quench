@@ -23,7 +23,21 @@ PARTITION BY toYYYYMM(TimeUnix)
 ORDER BY (Machine, ServiceName, MetricName, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS ttl_only_drop_parts = 1`;
 
-export const TABLES: { name: string; ttl: string; ddl: string }[] = [
+const TASK_JUDGMENTS = [
+  "Landed LowCardinality(String) DEFAULT 'unknown'",
+  "LandedReason LowCardinality(String)",
+  "LandedEvidence Array(String)",
+  "Spiral LowCardinality(String) DEFAULT 'unknown'",
+  "SpiralReason LowCardinality(String)",
+  "SpiralEvidence Array(String)",
+  "Efficiency LowCardinality(String) DEFAULT 'unknown'",
+  "EfficiencyReason LowCardinality(String)",
+  "EfficiencyEvidence Array(String)",
+  "Tokens Nullable(UInt64)",
+  "Seconds UInt32",
+];
+
+export const TABLES: { name: string; ttl: string; ddl: string; added?: string[] }[] = [
   {
     name: "otel_logs",
     ttl: "TimestampTime",
@@ -117,6 +131,7 @@ SETTINGS ttl_only_drop_parts = 1`,
   {
     name: "quench_tasks",
     ttl: "toDateTime(StartedAt)",
+    added: TASK_JUDGMENTS,
     ddl: `CREATE TABLE IF NOT EXISTS quench_tasks (
   Machine LowCardinality(String),
   TaskId FixedString(32),
@@ -129,6 +144,7 @@ SETTINGS ttl_only_drop_parts = 1`,
   Harnesses Array(LowCardinality(String)),
   Sessions UInt32,
   Runs UInt32,
+  ${TASK_JUDGMENTS.join(",\n  ")},
   AnalysisVersion UInt32,
   ComputedAt DateTime64(3),
   Removed UInt8,
@@ -165,6 +181,8 @@ export async function migrate(ch: ClickHouse, retention: string) {
   const interval = retentionInterval(retention);
   for (const table of TABLES) {
     await ch.exec(table.ddl);
+    for (const column of table.added ?? [])
+      await ch.exec(`ALTER TABLE ${table.name} ADD COLUMN IF NOT EXISTS ${column}`);
     if (interval)
       await ch.exec(
         `ALTER TABLE ${table.name} MODIFY TTL ${table.ttl} + ${interval}`,
