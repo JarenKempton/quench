@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Session } from "@quench/history";
 import { HarnessJudge, Jev, VerdictCache } from "@quench/judge";
 import { contextOf } from "../src/commands/context.ts";
-import { lines, quench } from "./run.ts";
+import { cliRunsTimeout, lines, quench } from "./run.ts";
 
 const CANARY = "QCANARY7x";
 const leaks = [
@@ -169,36 +169,45 @@ test.each([
     expect(text).toMatch(/work.CLAUDE\.md {2}1\/3 sessions · 1 correction · 2026-10-20/);
     expect(text).toContain("correlation, not a cause");
   },
+  cliRunsTimeout,
 );
 
-test("context renders no reply, error or command text, in text or JSON", async () => {
-  const home = await fixture(
-    leaks.map((reply, i) => ({
-      id: `leak${i}`,
-      reply,
-      skill: `Cookie: sid=${CANARY}g`,
-      failures: 3,
-      error: i % 2 ? `Cookie: sid=${CANARY}b` : `Exit code 1\nCookie: sid=${CANARY}b`,
-    })),
-  );
-  const { json, text } = await context(home);
-  expect(json.recurring.map((r: { behaviour: string }) => r.behaviour)).toEqual([
-    "Same failure 3+ times: Bash · curl",
-  ]);
-  expect(JSON.stringify(json)).not.toContain(CANARY);
-  expect(text).toContain("Same failure 3+ times: Bash · curl");
-  expect(text).not.toContain(CANARY);
-  expect(text).not.toContain("Cookie");
-});
+test(
+  "context renders no reply, error or command text, in text or JSON",
+  async () => {
+    const home = await fixture(
+      leaks.map((reply, i) => ({
+        id: `leak${i}`,
+        reply,
+        skill: `Cookie: sid=${CANARY}g`,
+        failures: 3,
+        error: i % 2 ? `Cookie: sid=${CANARY}b` : `Exit code 1\nCookie: sid=${CANARY}b`,
+      })),
+    );
+    const { json, text } = await context(home);
+    expect(json.recurring.map((r: { behaviour: string }) => r.behaviour)).toEqual([
+      "Same failure 3+ times: Bash · curl",
+    ]);
+    expect(JSON.stringify(json)).not.toContain(CANARY);
+    expect(text).toContain("Same failure 3+ times: Bash · curl");
+    expect(text).not.toContain(CANARY);
+    expect(text).not.toContain("Cookie");
+  },
+  cliRunsTimeout,
+);
 
-test("context counts only corrections inside --days, by the correction's own time", async () => {
-  const home = await fixture(ordinary);
-  const out = JSON.parse(
-    (await quench(home, "corrections", "--context", "--cached-only", "--days", "1", "--json"))
-      .stdout,
-  ).context;
-  expect(out).toMatchObject({ corrections: 0, outsideWindow: 4, recurring: [] });
-});
+test(
+  "context counts only corrections inside --days, by the correction's own time",
+  async () => {
+    const home = await fixture(ordinary);
+    const out = JSON.parse(
+      (await quench(home, "corrections", "--context", "--cached-only", "--days", "1", "--json"))
+        .stdout,
+    ).context;
+    expect(out).toMatchObject({ corrections: 0, outsideWindow: 4, recurring: [] });
+  },
+  cliRunsTimeout,
+);
 
 const listed = (path: string) => ({
   type: "skills",

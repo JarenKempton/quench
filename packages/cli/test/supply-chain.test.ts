@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { chmod, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cliRunsTimeout } from "./run.ts";
 
 const main = join(import.meta.dir, "../src/main.ts");
 const COMMITTED = "ghp_" + "FakeQuenchRepoValue0123456789abcdefgh";
@@ -103,81 +104,95 @@ async function run(home: string, ...args: string[]) {
   return stdout;
 }
 
-test("secrets lists unpinned MCP servers and skill sources with the form to pin to", async () => {
-  const { home } = await sharedHome();
-  const report = JSON.parse(await run(home, "--json"));
-  expect(
-    report.unpinned.map((s: Record<string, string>) => [
-      s.harness,
-      s.kind,
-      s.name,
-      s.reason,
-      s.pinTo,
-    ]),
-  ).toEqual([
-    [
-      "claude-code",
-      "marketplace",
-      "community",
-      "default branch",
-      "github:someone/plugins#<commit-sha>",
-    ],
-    ["claude-code", "mcp", "playwright", "@latest", "@playwright/mcp@0.0.41"],
-    ["codex", "mcp", "fetch", "no version", "mcp-server-fetch==<version>"],
-  ]);
-});
+test(
+  "secrets lists unpinned MCP servers and skill sources with the form to pin to",
+  async () => {
+    const { home } = await sharedHome();
+    const report = JSON.parse(await run(home, "--json"));
+    expect(
+      report.unpinned.map((s: Record<string, string>) => [
+        s.harness,
+        s.kind,
+        s.name,
+        s.reason,
+        s.pinTo,
+      ]),
+    ).toEqual([
+      [
+        "claude-code",
+        "marketplace",
+        "community",
+        "default branch",
+        "github:someone/plugins#<commit-sha>",
+      ],
+      ["claude-code", "mcp", "playwright", "@latest", "@playwright/mcp@0.0.41"],
+      ["codex", "mcp", "fetch", "no version", "mcp-server-fetch==<version>"],
+    ]);
+  },
+  cliRunsTimeout,
+);
 
-test("secrets lists executable git hooks in session repos and flags unknown ones", async () => {
-  const { home, project } = await sharedHome();
-  const report = JSON.parse(await run(home, "--json"));
-  expect(report.hooks.map((h: Record<string, string>) => [h.project, h.hook, h.manager])).toEqual([
-    [project, "commit-msg", "husky"],
-    [project, "pre-commit", null],
-  ]);
-  expect(report.repoHistory).toBeNull();
-  const again = JSON.parse(await run(home, "--json"));
-  const ids = (r: { hooks: { id: string }[]; unpinned: { id: string }[] }) =>
-    [...r.hooks, ...r.unpinned].map((f) => f.id);
-  expect(ids(again)).toEqual(ids(report));
-  expect(new Set(ids(report)).size).toBe(ids(report).length);
-});
+test(
+  "secrets lists executable git hooks in session repos and flags unknown ones",
+  async () => {
+    const { home, project } = await sharedHome();
+    const report = JSON.parse(await run(home, "--json"));
+    expect(report.hooks.map((h: Record<string, string>) => [h.project, h.hook, h.manager])).toEqual(
+      [
+        [project, "commit-msg", "husky"],
+        [project, "pre-commit", null],
+      ],
+    );
+    expect(report.repoHistory).toBeNull();
+    const again = JSON.parse(await run(home, "--json"));
+    const ids = (r: { hooks: { id: string }[]; unpinned: { id: string }[] }) =>
+      [...r.hooks, ...r.unpinned].map((f) => f.id);
+    expect(ids(again)).toEqual(ids(report));
+    expect(new Set(ids(report)).size).toBe(ids(report).length);
+  },
+  cliRunsTimeout,
+);
 
-test("secrets scans repo history only with --repo-history and masks what it finds", async () => {
-  const { home, project } = await sharedHome();
-  const first = Bun.spawnSync(["git", "-C", project, "rev-list", "--max-parents=0", "HEAD"])
-    .stdout.toString()
-    .trim();
-  const report = JSON.parse(await run(home, "--json", "--repo-history"));
-  expect(report.repoHistory).toMatchObject({
-    repos: 1,
-    failed: 0,
-    commits: 4,
-    blobs: 3,
-    skipped: { binary: 1, oversize: 1 },
-  });
-  expect(report.repoHistory.lowConfidence).toEqual([]);
-  expect(
-    report.repoHistory.secrets.map((s: Record<string, unknown>) => [
-      s.provider,
-      s.masked,
-      s.versions,
-      s.introducedIn,
-      s.repos,
-      s.files,
-    ]),
-  ).toEqual([
-    [
-      "github",
-      expect.stringMatching(/^ghp_…[0-9a-f]{8}$/),
-      2,
-      first.slice(0, 12),
-      [project],
-      ["config.js", "copy.js"],
-    ],
-  ]);
-  const text = await run(home, "--repo-history");
-  expect(text).toContain(
-    "Repo git history · 1 secret in 3 file versions from 4 commits across 1 repository · skipped 1 binary and 1 over 10 MB",
-  );
-  expect(text).toContain("lynis, osquery or trufflehog");
-});
+test(
+  "secrets scans repo history only with --repo-history and masks what it finds",
+  async () => {
+    const { home, project } = await sharedHome();
+    const first = Bun.spawnSync(["git", "-C", project, "rev-list", "--max-parents=0", "HEAD"])
+      .stdout.toString()
+      .trim();
+    const report = JSON.parse(await run(home, "--json", "--repo-history"));
+    expect(report.repoHistory).toMatchObject({
+      repos: 1,
+      failed: 0,
+      commits: 4,
+      blobs: 3,
+      skipped: { binary: 1, oversize: 1 },
+    });
+    expect(report.repoHistory.lowConfidence).toEqual([]);
+    expect(
+      report.repoHistory.secrets.map((s: Record<string, unknown>) => [
+        s.provider,
+        s.masked,
+        s.versions,
+        s.introducedIn,
+        s.repos,
+        s.files,
+      ]),
+    ).toEqual([
+      [
+        "github",
+        expect.stringMatching(/^ghp_…[0-9a-f]{8}$/),
+        2,
+        first.slice(0, 12),
+        [project],
+        ["config.js", "copy.js"],
+      ],
+    ]);
+    const text = await run(home, "--repo-history");
+    expect(text).toContain(
+      "Repo git history · 1 secret in 3 file versions from 4 commits across 1 repository · skipped 1 binary and 1 over 10 MB",
+    );
+    expect(text).toContain("lynis, osquery or trufflehog");
+  },
+  cliRunsTimeout,
+);
