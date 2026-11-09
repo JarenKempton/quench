@@ -95,6 +95,10 @@ export const TaskResult = z
     sessions: Count,
     runs: Count,
     ...TaskJudgments,
+    guidance: z.enum(["kept", "unknown", "skipped", "pending"]),
+    guidanceUnreliableRule: z.string().min(1).max(220).nullable(),
+    guidanceTurns: Count,
+    guidanceCost: z.number().finite().nonnegative(),
     analysisVersion: Count,
   })
   .strict();

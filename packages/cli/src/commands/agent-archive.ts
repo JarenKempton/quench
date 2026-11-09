@@ -32,23 +32,49 @@ import {
   type JudgedSegment,
   type Pull,
 } from "@quench/insights";
-import { Jev, judgeReplies, VerdictCache } from "@quench/judge";
+import {
+  combine,
+  Guidance,
+  guidanceBreaks,
+  Jev,
+  JEV_USD_PER_INPUT_TOKEN,
+  JevGuidance,
+  judgeGuidance,
+  judgeReplies,
+  KeyRejected,
+  loadedStandards,
+  ThemeCache,
+  VerdictCache,
+  type GuidanceInput,
+  type GuidanceJudge,
+  type SegmentGuidance,
+} from "@quench/judge";
+import { judgeChoice, readConfig } from "../config.ts";
 import { replacePrivateFile } from "../private-file.ts";
 import { githubPulls, repoOf, run, type Run } from "./github-pulls.ts";
 
 export const IDLE_MS = 30 * 60_000;
 export const CYCLE_BYTES = 256 * 1024 * 1024;
+export const RETRY_MS = 6 * 3_600_000;
 
 type Shipped = Record<
   string,
-  { sha256: string; size: number; mtimeMs: number; segments?: JudgedSegment[] }
+  {
+    sha256: string;
+    size: number;
+    mtimeMs: number;
+    guidedAt?: number;
+    segments?: (JudgedSegment & { guidance?: SegmentGuidance })[];
+  }
 >;
+type Guide = { cache: ThemeCache<GuidanceInput>; judge: GuidanceJudge | null };
 type Posted = Record<string, { hash: string; startedAt: string }>;
 
 export type ArchiveStatus = {
   uploaded: number;
   results: number;
   tasks: number;
+  judgeTokens: number;
   bytes: number;
   stored: number;
   waiting: number;
@@ -75,7 +101,13 @@ const count = <K extends string>(map: Partial<Record<K, number>>, key: K) => {
 const unique = (values: (string | null)[]) =>
   [...new Set(values.filter((v): v is string => !!v))].sort();
 
-export async function sessionSegments(session: Session, verdicts: VerdictCache, exec: Run = run) {
+export async function sessionSegments(
+  session: Session,
+  verdicts: VerdictCache,
+  guide: Guide,
+  skillRoots: readonly string[] = [],
+  exec: Run = run,
+) {
   const sessionRuns = runs(session);
   const { replies } = await judgeReplies(
     [
@@ -93,12 +125,39 @@ export async function sessionSegments(session: Session, verdicts: VerdictCache, 
   const at = (kind: string, shift: number) =>
     new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
   const corrected = at("correction", 1);
+  const standards = await loadedStandards(session, sessionRuns, [
+    ...(session.cwd ? [join(session.cwd, ".claude/skills")] : []),
+    ...skillRoots,
+  ]);
+  const found = [];
   const repo = await repoOf(session.cwd, exec);
-  return segments(session, sessionRuns, at("new_request", 0), repo).map((segment) => ({
-    ...segment,
-    signals: segmentSignals(sessionRuns, segment, corrected),
-  }));
+  for (const segment of segments(session, sessionRuns, at("new_request", 0), repo))
+    found.push({
+      ...segment,
+      signals: segmentSignals(sessionRuns, segment, corrected),
+      guidance: await judgeGuidance(
+        guidanceBreaks(
+          session.id,
+          sessionRuns,
+          replies,
+          segment.firstTurn,
+          segment.lastTurn,
+          standards,
+        ),
+        guide.cache,
+        guide.judge,
+      ),
+    });
+  return found;
 }
+
+const memberKey = (m: { harness: string; sessionId: string; firstTurn: number }) =>
+  JSON.stringify([m.harness, m.sessionId, m.firstTurn]);
+
+const PENDING: SegmentGuidance = { guidance: "pending", unreliableRule: null, turns: 0, tokens: 0 };
+
+const stored = (s: { guidance?: SegmentGuidance }) =>
+  s.guidance && Guidance.safeParse(s.guidance.guidance).success ? s.guidance : PENDING;
 
 const UNJUDGED = {
   landed: { verdict: "unknown", reason: "not-seen", evidence: [] },
@@ -109,17 +168,22 @@ const UNJUDGED = {
 } satisfies Partial<TaskResult>;
 
 export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pull[] = []) {
-  const current = judgedTasks(
-    Object.values(shipped).flatMap((entry) => entry.segments ?? []),
-    pulls,
-  );
-  const rows: TaskResult[] = current.map((task) => ({
-    ...task,
-    members: task.members.slice(0, MAX_TASK_MEMBERS),
-    markers: task.markers.filter((m) => m.length <= MAX_MARKER_CHARS).slice(0, 100),
-    removed: false,
-    analysisVersion: ANALYSIS_VERSION,
-  }));
+  const all = Object.values(shipped).flatMap((entry) => entry.segments ?? []);
+  const guidance = new Map(all.map((s) => [memberKey(s), stored(s)]));
+  const rows: TaskResult[] = judgedTasks(all, pulls).map((task) => {
+    const judged = combine(task.members.map((m) => guidance.get(memberKey(m)) ?? PENDING));
+    return {
+      ...task,
+      members: task.members.slice(0, MAX_TASK_MEMBERS),
+      markers: task.markers.filter((m) => m.length <= MAX_MARKER_CHARS).slice(0, 100),
+      removed: false,
+      guidance: judged.guidance,
+      guidanceUnreliableRule: judged.unreliableRule,
+      guidanceTurns: judged.turns,
+      guidanceCost: judged.tokens * JEV_USD_PER_INPUT_TOKEN,
+      analysisVersion: ANALYSIS_VERSION,
+    };
+  });
   const seen = new Set(rows.map((r) => r.taskId));
   const next: Posted = {};
   const due: TaskResult[] = [];
@@ -143,6 +207,10 @@ export function taskResults(shipped: Shipped, posted: Posted, pulls: readonly Pu
         sessions: 0,
         runs: 0,
         ...UNJUDGED,
+        guidance: "skipped",
+        guidanceUnreliableRule: null,
+        guidanceTurns: 0,
+        guidanceCost: 0,
         analysisVersion: ANALYSIS_VERSION,
       });
   return { due, next };
@@ -226,6 +294,7 @@ export async function archiveCycle(
     uploaded: 0,
     results: 0,
     tasks: 0,
+    judgeTokens: 0,
     bytes: 0,
     stored: 0,
     waiting: 0,
@@ -234,6 +303,34 @@ export async function archiveCycle(
     error: null,
   };
   const shipped: Shipped = await readJson<Shipped>(stateFile(dir));
+  const choice = judgeChoice(await readConfig(home.dir), process.env);
+  const judge =
+    !(choice instanceof Error) && choice.name === "jev" && choice.apiKey
+      ? new JevGuidance(choice.apiKey)
+      : null;
+  let rejected = false;
+  const guide: Guide = {
+    cache: await ThemeCache.open<GuidanceInput>(
+      join(home.dir, ".quench/local/guidance.jsonl"),
+      JevGuidance.id,
+    ),
+    judge: judge && {
+      id: judge.id,
+      guidance: async (input) => {
+        if (rejected) throw new Error("judge key rejected");
+        try {
+          const decision = await judge.guidance(input);
+          status.judgeTokens += decision.tokens ?? 0;
+          return decision;
+        } catch (error) {
+          if (!(error instanceof KeyRejected)) throw error;
+          rejected = true;
+          count(status.skipped, "judge-key-rejected");
+          throw new Error("judge key rejected");
+        }
+      },
+    },
+  };
   const refs = await discoverAll(home);
   const children = new Map<string, number>();
   for (const ref of refs)
@@ -242,7 +339,8 @@ export async function archiveCycle(
         `${ref.harness}\0${ref.parent}`,
         (children.get(`${ref.harness}\0${ref.parent}`) ?? 0) + 1,
       );
-  const due: { ref: SessionRef; path: string; size: number; mtimeMs: number }[] = [];
+  const due: { ref: SessionRef; path: string; size: number; mtimeMs: number; retry: boolean }[] =
+    [];
   for (const ref of refs) {
     const path = relative(home.of(harnessById[ref.harness].home), ref.path).split(sep).join("/");
     if (!TranscriptPath.safeParse(path).success) {
@@ -256,19 +354,24 @@ export async function archiveCycle(
       continue;
     }
     const known = shipped[keyOf(ref, path)];
+    const retry =
+      !!judge &&
+      now - (known?.guidedAt ?? 0) >= RETRY_MS &&
+      !!known?.segments?.some((s) => stored(s).guidance === "pending");
     if (
       known?.segments?.every((s) => s.signals && s.repo !== undefined) &&
       known.size === info.size &&
-      known.mtimeMs === info.mtimeMs
+      known.mtimeMs === info.mtimeMs &&
+      !retry
     )
       continue;
     if (info.size > MAX_TRANSCRIPT_BYTES) {
       count(status.skipped, "too-large");
       continue;
     }
-    due.push({ ref, path, size: info.size, mtimeMs: info.mtimeMs });
+    due.push({ ref, path, size: info.size, mtimeMs: info.mtimeMs, retry });
   }
-  due.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  due.sort((a, b) => Number(a.retry) - Number(b.retry) || a.mtimeMs - b.mtimeMs);
   const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
   const pending: { key: string; entry: Shipped[string]; result: SessionResult | null }[] = [];
   const flush = async () => {
@@ -291,11 +394,21 @@ export async function archiveCycle(
       const digest = sha256(bytes);
       const key = keyOf(item.ref, item.path);
       const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
+      const segments = session
+        ? await sessionSegments(
+            session,
+            verdicts,
+            guide,
+            [join(home.of(harnessById["claude-code"].home), "skills")],
+            exec,
+          )
+        : [];
       const entry = {
         sha256: digest,
         size: bytes.length,
         mtimeMs: item.mtimeMs,
-        segments: session ? await sessionSegments(session, verdicts, exec) : [],
+        ...(judge && !rejected ? { guidedAt: now } : {}),
+        segments,
       };
       if (shipped[key]?.sha256 === digest) {
         segmented += bytes.length;
@@ -358,5 +471,5 @@ export const archiveLine = (status: ArchiveStatus) =>
   status.error
     ? `; archive: ${status.error}`
     : status.uploaded || status.waiting
-      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting${offline(status)}`
+      ? `; archived ${status.uploaded} sessions (${status.results} results, ${status.tasks} tasks), ${status.waiting} waiting${status.judgeTokens ? `, judge $${(status.judgeTokens * JEV_USD_PER_INPUT_TOKEN).toFixed(4)}` : ""}${offline(status)}`
       : offline(status);
