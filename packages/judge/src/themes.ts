@@ -1,10 +1,10 @@
 import { JudgeFailed } from "./failure.ts";
+import { MAX_THEME_LIMIT, THEME_LIMIT } from "./limits.ts";
 import { ThemeCache, ThemeDecision } from "./theme-cache.ts";
 import type { Reply } from "./replies.ts";
 import type { Exchange } from "./verdict.ts";
 
-export const THEME_LIMIT = 20;
-export const MAX_THEME_LIMIT = 50;
+export { MAX_THEME_LIMIT, THEME_LIMIT };
 export type { ThemeDecision } from "./theme-cache.ts";
 
 export type ThemeInput = {

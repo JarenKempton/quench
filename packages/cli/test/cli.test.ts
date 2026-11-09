@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Jev, VerdictCache } from "@quench/judge";
 import { fakeCalls, fakeHarnessPath } from "../../judge/test/fake-path.ts";
+import { cliRunsTimeout } from "./run.ts";
 
 const root = join(import.meta.dir, "../../..");
 const home = join(root, "packages/history/test/fixtures/home");
@@ -35,243 +36,274 @@ async function quenchAtWith(extra: Record<string, string>, home: string, ...args
   return { stdout, stderr, code };
 }
 
-test("report --json totals each harness found in the home", async () => {
-  const { stdout, code } = await quench("report", "--days", "36500", "--json");
-  expect(code).toBe(0);
-  const out = JSON.parse(stdout);
-  expect(
-    out.harnesses.map((h: { harness: string; sessions: number }) => [h.harness, h.sessions]),
-  ).toEqual([
-    ["claude-code", 1],
-    ["codex", 1],
-    ["pi", 1],
-  ]);
-  expect(out.unreadable).toBe(0);
-});
+test(
+  "report --json totals each harness found in the home",
+  async () => {
+    const { stdout, code } = await quench("report", "--days", "36500", "--json");
+    expect(code).toBe(0);
+    const out = JSON.parse(stdout);
+    expect(
+      out.harnesses.map((h: { harness: string; sessions: number }) => [h.harness, h.sessions]),
+    ).toEqual([
+      ["claude-code", 1],
+      ["codex", 1],
+      ["pi", 1],
+    ]);
+    expect(out.unreadable).toBe(0);
+  },
+  cliRunsTimeout,
+);
 
-test("runs shows each prompt, what the agent did, and the reply", async () => {
-  const { stdout, code } = await quench("runs", join(home, ".claude/projects/-work-demo/s1.jsonl"));
-  expect(code).toBe(0);
-  expect(stdout).toContain('#1   "Add a health check endpoint"');
-  expect(stdout).toContain("1 tool error · 1 subagent · 1 compaction");
-  expect(stdout).toContain('→  "/review now"');
-});
+test(
+  "runs shows each prompt, what the agent did, and the reply",
+  async () => {
+    const { stdout, code } = await quench(
+      "runs",
+      join(home, ".claude/projects/-work-demo/s1.jsonl"),
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain('#1   "Add a health check endpoint"');
+    expect(stdout).toContain("1 tool error · 1 subagent · 1 compaction");
+    expect(stdout).toContain('→  "/review now"');
+  },
+  cliRunsTimeout,
+);
 
-test("runs --session finds a session by id in any harness home", async () => {
-  const found = await quench("runs", "--session", "c1", "--json");
-  expect(found.code).toBe(0);
-  expect(JSON.parse(found.stdout).length).toBeGreaterThan(0);
-  const missing = await quench("runs", "--session", "nope");
-  expect(missing.code).toBe(1);
-  expect(missing.stderr).toContain("No session with id nope");
-});
+test(
+  "runs --session finds a session by id in any harness home",
+  async () => {
+    const found = await quench("runs", "--session", "c1", "--json");
+    expect(found.code).toBe(0);
+    expect(JSON.parse(found.stdout).length).toBeGreaterThan(0);
+    const missing = await quench("runs", "--session", "nope");
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain("No session with id nope");
+  },
+  cliRunsTimeout,
+);
 
-test("runs --all reads several machine folders and tags each run with its machine", async () => {
-  const history = await mkdtemp(join(tmpdir(), "quench-history-"));
-  await cp(join(home, ".claude"), join(history, "goliath/.claude"), { recursive: true });
-  await cp(join(home, ".codex"), join(history, "sb1/.codex"), { recursive: true });
-  await cp(join(home, ".claude"), join(history, "sb1/.claude"), { recursive: true });
-  const { stdout, code } = await quench(
-    "runs",
-    "--all",
-    "--json",
-    "--history",
-    join(history, "goliath"),
-    "--history",
-    join(history, "sb1"),
-  );
-  expect(code).toBe(0);
-  const lines = stdout
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-  const top = lines.filter((r) => r.parentSession === null);
-  expect(new Set(top.map((r) => `${r.machine} ${r.harness} ${r.cwd}`))).toEqual(
-    new Set([
-      "goliath claude-code /work/demo",
-      "sb1 claude-code /work/demo",
-      "sb1 codex /work/demo",
-    ]),
-  );
-  expect(new Set(lines.map((r) => r.id)).size).toBe(lines.length);
-  expect(lines.find((r) => r.machine === "sb1" && r.session === "s1")?.id).toStartWith(
-    "sb1:claude-code:s1:",
-  );
-  const parent = lines.find(
-    (r) => r.machine === "goliath" && r.session === "s1" && r.prompt?.includes("health check"),
-  );
-  expect(parent).toMatchObject({ subagents: 1, open: false, parentSession: null });
-  expect(lines.some((r) => r.parentSession === "s1")).toBe(true);
-  expect((await quench("runs", "--all")).code).toBe(1);
-});
+test(
+  "runs --all reads several machine folders and tags each run with its machine",
+  async () => {
+    const history = await mkdtemp(join(tmpdir(), "quench-history-"));
+    await cp(join(home, ".claude"), join(history, "goliath/.claude"), { recursive: true });
+    await cp(join(home, ".codex"), join(history, "sb1/.codex"), { recursive: true });
+    await cp(join(home, ".claude"), join(history, "sb1/.claude"), { recursive: true });
+    const { stdout, code } = await quench(
+      "runs",
+      "--all",
+      "--json",
+      "--history",
+      join(history, "goliath"),
+      "--history",
+      join(history, "sb1"),
+    );
+    expect(code).toBe(0);
+    const lines = stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const top = lines.filter((r) => r.parentSession === null);
+    expect(new Set(top.map((r) => `${r.machine} ${r.harness} ${r.cwd}`))).toEqual(
+      new Set([
+        "goliath claude-code /work/demo",
+        "sb1 claude-code /work/demo",
+        "sb1 codex /work/demo",
+      ]),
+    );
+    expect(new Set(lines.map((r) => r.id)).size).toBe(lines.length);
+    expect(lines.find((r) => r.machine === "sb1" && r.session === "s1")?.id).toStartWith(
+      "sb1:claude-code:s1:",
+    );
+    const parent = lines.find(
+      (r) => r.machine === "goliath" && r.session === "s1" && r.prompt?.includes("health check"),
+    );
+    expect(parent).toMatchObject({ subagents: 1, open: false, parentSession: null });
+    expect(lines.some((r) => r.parentSession === "s1")).toBe(true);
+    expect((await quench("runs", "--all")).code).toBe(1);
+  },
+  cliRunsTimeout,
+);
 
-test("corrections asks for a key before sending anything, and a dry run never counts a slash command", async () => {
-  const noKey = await quench("corrections");
-  expect(noKey.code).toBe(2);
-  expect(noKey.stderr).toContain("Set TYPESAFE_API_KEY to opt in");
+test(
+  "corrections asks for a key before sending anything, and a dry run never counts a slash command",
+  async () => {
+    const noKey = await quench("corrections");
+    expect(noKey.code).toBe(2);
+    expect(noKey.stderr).toContain("Set TYPESAFE_API_KEY to opt in");
 
-  const dry = await quench("corrections", "--days", "36500", "--dry-run", "--json");
-  expect(dry.code).toBe(0);
-  const out = JSON.parse(dry.stdout);
-  expect([out.pending, out.newlyJudged, out.tokens]).toEqual([2, 0, null]);
-  expect([out.senderSources.harness, out.fromPeople.kinds.new_request]).toEqual([1, 1]);
-  expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
-});
+    const dry = await quench("corrections", "--days", "36500", "--dry-run", "--json");
+    expect(dry.code).toBe(0);
+    const out = JSON.parse(dry.stdout);
+    expect([out.pending, out.newlyJudged, out.tokens]).toEqual([2, 0, null]);
+    expect([out.senderSources.harness, out.fromPeople.kinds.new_request]).toEqual([1, 1]);
+    expect(await Bun.file(join(home, ".quench")).exists()).toBe(false);
+  },
+  cliRunsTimeout,
+);
 
-test("corrections uses optional host evidence over a cached sender, and degrades visibly", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "quench-cli-host-"));
-  const sessions = join(dir, ".claude/projects/demo");
-  const hostDir = join(dir, ".t3/userdata");
-  await mkdir(sessions, { recursive: true });
-  await mkdir(hostDir, { recursive: true });
-  await Bun.write(
-    join(sessions, "native.jsonl"),
-    [
-      {
-        type: "user",
-        sessionId: "native",
-        timestamp: "2026-10-20T10:00:00Z",
-        promptSource: "sdk",
-        message: { role: "user", content: "build" },
-      },
-      {
-        type: "assistant",
-        timestamp: "2026-10-20T10:00:01Z",
-        message: {
-          id: "a",
-          model: "model",
-          content: [{ type: "text", text: "done" }],
-          usage: { input_tokens: 1, output_tokens: 1 },
+test(
+  "corrections uses optional host evidence over a cached sender, and degrades visibly",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quench-cli-host-"));
+    const sessions = join(dir, ".claude/projects/demo");
+    const hostDir = join(dir, ".t3/userdata");
+    await mkdir(sessions, { recursive: true });
+    await mkdir(hostDir, { recursive: true });
+    await Bun.write(
+      join(sessions, "native.jsonl"),
+      [
+        {
+          type: "user",
+          sessionId: "native",
+          timestamp: "2026-10-20T10:00:00Z",
+          promptSource: "sdk",
+          message: { role: "user", content: "build" },
         },
-      },
-      {
-        type: "user",
-        timestamp: "2026-10-20T10:00:03Z",
-        promptSource: "sdk",
-        message: { role: "user", content: "no, the other file" },
-      },
-    ]
-      .map((line) => JSON.stringify(line))
-      .join("\n") + "\n",
-  );
-  const cache = await VerdictCache.open(join(dir, ".quench/local"), Jev.id);
-  const cacheFile = cache.path;
-  await cache.remember([
-    [
-      { assistantSaid: "done", reply: "no, the other file" },
-      { kind: "correction", sender: "person", confidence: 1 },
-    ],
-  ]);
-  const cacheBefore = await Bun.file(cacheFile).text();
-  const path = join(hostDir, "statev2.sqlite");
-  const db = new Database(path);
-  db.exec(`CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
+        {
+          type: "assistant",
+          timestamp: "2026-10-20T10:00:01Z",
+          message: {
+            id: "a",
+            model: "model",
+            content: [{ type: "text", text: "done" }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+        {
+          type: "user",
+          timestamp: "2026-10-20T10:00:03Z",
+          promptSource: "sdk",
+          message: { role: "user", content: "no, the other file" },
+        },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n") + "\n",
+    );
+    const cache = await VerdictCache.open(join(dir, ".quench/local"), Jev.id);
+    const cacheFile = cache.path;
+    await cache.remember([
+      [
+        { assistantSaid: "done", reply: "no, the other file" },
+        { kind: "correction", sender: "person", confidence: 1 },
+      ],
+    ]);
+    const cacheBefore = await Bun.file(cacheFile).text();
+    const path = join(hostDir, "statev2.sqlite");
+    const db = new Database(path);
+    db.exec(`CREATE TABLE orchestration_v2_projection_provider_threads (payload_json TEXT);
     CREATE TABLE orchestration_v2_projection_messages (thread_id TEXT, role TEXT, payload_json TEXT);`);
-  db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
-    JSON.stringify({
-      appThreadId: "thread",
-      nativeThreadRef: { driver: "claudeAgent", nativeId: "native", strength: "strong" },
-    }),
-  );
-  db.query("INSERT INTO orchestration_v2_projection_messages VALUES ('thread', 'user', ?)").run(
-    JSON.stringify({
-      id: "message",
-      threadId: "thread",
-      role: "user",
-      text: "no, the other file",
-      createdAt: "2026-10-20T10:00:02Z",
-      createdBy: "agent",
-      creationSource: "mcp",
-    }),
-  );
-  db.close();
-  const hostBefore = await Bun.file(path).bytes();
-  const args = ["corrections", "--days", "36500", "--dry-run", "--json"];
-  const disabled = await quenchAt(dir, ...args, "--no-host-history");
-  expect(JSON.parse(disabled.stdout).fromPeople.kinds.correction).toBe(1);
-  const enriched = await quenchAt(dir, ...args);
-  const out = JSON.parse(enriched.stdout);
-  expect(enriched.code).toBe(0);
-  expect(out.fromPeople.kinds.correction).toBe(0);
-  expect(out.fromAutomation.kinds.correction).toBe(1);
-  expect(out.senderSources).toEqual({ harness: 0, host: 1, judge: 0, unknown: 0 });
-  expect([out.pending, out.newlyJudged, out.failed, out.tokens]).toEqual([0, 0, 0, null]);
-  expect(await Bun.file(path).bytes()).toEqual(hostBefore);
-  expect(await Bun.file(cacheFile).text()).toBe(cacheBefore);
-  const broken = join(dir, "broken.sqlite");
-  await Bun.write(broken, "not sqlite");
-  const fallback = await quenchAt(dir, ...args, "--host-history", broken);
-  expect(fallback.code).toBe(0);
-  expect(JSON.parse(fallback.stdout).senderSources.judge).toBe(1);
-  expect(fallback.stderr).toContain("incompatible");
+    db.query("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?)").run(
+      JSON.stringify({
+        appThreadId: "thread",
+        nativeThreadRef: { driver: "claudeAgent", nativeId: "native", strength: "strong" },
+      }),
+    );
+    db.query("INSERT INTO orchestration_v2_projection_messages VALUES ('thread', 'user', ?)").run(
+      JSON.stringify({
+        id: "message",
+        threadId: "thread",
+        role: "user",
+        text: "no, the other file",
+        createdAt: "2026-10-20T10:00:02Z",
+        createdBy: "agent",
+        creationSource: "mcp",
+      }),
+    );
+    db.close();
+    const hostBefore = await Bun.file(path).bytes();
+    const args = ["corrections", "--days", "36500", "--dry-run", "--json"];
+    const disabled = await quenchAt(dir, ...args, "--no-host-history");
+    expect(JSON.parse(disabled.stdout).fromPeople.kinds.correction).toBe(1);
+    const enriched = await quenchAt(dir, ...args);
+    const out = JSON.parse(enriched.stdout);
+    expect(enriched.code).toBe(0);
+    expect(out.fromPeople.kinds.correction).toBe(0);
+    expect(out.fromAutomation.kinds.correction).toBe(1);
+    expect(out.senderSources).toEqual({ harness: 0, host: 1, judge: 0, unknown: 0 });
+    expect([out.pending, out.newlyJudged, out.failed, out.tokens]).toEqual([0, 0, 0, null]);
+    expect(await Bun.file(path).bytes()).toEqual(hostBefore);
+    expect(await Bun.file(cacheFile).text()).toBe(cacheBefore);
+    const broken = join(dir, "broken.sqlite");
+    await Bun.write(broken, "not sqlite");
+    const fallback = await quenchAt(dir, ...args, "--host-history", broken);
+    expect(fallback.code).toBe(0);
+    expect(JSON.parse(fallback.stdout).senderSources.judge).toBe(1);
+    expect(fallback.stderr).toContain("incompatible");
 
-  const causes = await quenchAt(dir, ...args, "--causes", "--no-host-history");
-  expect(causes.code).toBe(0);
-  const asked = JSON.parse(causes.stdout).causes;
-  expect([asked.corrections, asked.pending, asked.cacheHits, asked.tokens]).toEqual([
-    1,
-    1,
-    0,
-    null,
-  ]);
-  expect(asked.caused.map((c: { cause: string; sender: string }) => [c.cause, c.sender])).toEqual([
-    ["pending", "person"],
-  ]);
-  expect(await Bun.file(join(dir, ".quench/local/causes.jsonl")).exists()).toBe(false);
-  const noKey = await quenchAt(
-    dir,
-    "corrections",
-    "--days",
-    "36500",
-    "--causes",
-    "--no-host-history",
-  );
-  expect(noKey.code).toBe(2);
-  expect(noKey.stdout).toContain("1 pending");
-});
+    const causes = await quenchAt(dir, ...args, "--causes", "--no-host-history");
+    expect(causes.code).toBe(0);
+    const asked = JSON.parse(causes.stdout).causes;
+    expect([asked.corrections, asked.pending, asked.cacheHits, asked.tokens]).toEqual([
+      1,
+      1,
+      0,
+      null,
+    ]);
+    expect(asked.caused.map((c: { cause: string; sender: string }) => [c.cause, c.sender])).toEqual(
+      [["pending", "person"]],
+    );
+    expect(await Bun.file(join(dir, ".quench/local/causes.jsonl")).exists()).toBe(false);
+    const noKey = await quenchAt(
+      dir,
+      "corrections",
+      "--days",
+      "36500",
+      "--causes",
+      "--no-host-history",
+    );
+    expect(noKey.code).toBe(2);
+    expect(noKey.stdout).toContain("1 pending");
+  },
+  cliRunsTimeout,
+);
 
-test("corrections --cached-only never classifies new replies, so it needs no key", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "quench-cli-cached-"));
-  const sessions = join(dir, ".claude/projects/demo");
-  await mkdir(sessions, { recursive: true });
-  await Bun.write(
-    join(sessions, "s.jsonl"),
-    [
-      {
-        type: "user",
-        timestamp: "2026-10-20T10:00:00Z",
-        message: { role: "user", content: "build" },
-      },
-      {
-        type: "assistant",
-        timestamp: "2026-10-20T10:00:01Z",
-        message: {
-          id: "a",
-          model: "model",
-          content: [{ type: "text", text: "done" }],
-          usage: { input_tokens: 1, output_tokens: 1 },
+test(
+  "corrections --cached-only never classifies new replies, so it needs no key",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "quench-cli-cached-"));
+    const sessions = join(dir, ".claude/projects/demo");
+    await mkdir(sessions, { recursive: true });
+    await Bun.write(
+      join(sessions, "s.jsonl"),
+      [
+        {
+          type: "user",
+          timestamp: "2026-10-20T10:00:00Z",
+          message: { role: "user", content: "build" },
         },
-      },
-      {
-        type: "user",
-        timestamp: "2026-10-20T10:00:03Z",
-        message: { role: "user", content: "no, the other file" },
-      },
-    ]
-      .map((line) => JSON.stringify(line))
-      .join("\n") + "\n",
-  );
-  const args = ["corrections", "--days", "36500", "--no-host-history"];
-  expect((await quenchAt(dir, ...args)).code).toBe(2);
-  const cached = await quenchAt(dir, ...args, "--cached-only", "--json");
-  expect(cached.code).toBe(0);
-  const out = JSON.parse(cached.stdout);
-  expect([out.pending, out.newlyJudged]).toEqual([1, 0]);
-  expect(await Bun.file(join(dir, ".quench/local/judgments")).exists()).toBe(false);
-  expect((await quench("report", "--cached-only")).stderr).toContain(
-    "--cached-only is only available for corrections",
-  );
-});
+        {
+          type: "assistant",
+          timestamp: "2026-10-20T10:00:01Z",
+          message: {
+            id: "a",
+            model: "model",
+            content: [{ type: "text", text: "done" }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+        {
+          type: "user",
+          timestamp: "2026-10-20T10:00:03Z",
+          message: { role: "user", content: "no, the other file" },
+        },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n") + "\n",
+    );
+    const args = ["corrections", "--days", "36500", "--no-host-history"];
+    expect((await quenchAt(dir, ...args)).code).toBe(2);
+    const cached = await quenchAt(dir, ...args, "--cached-only", "--json");
+    expect(cached.code).toBe(0);
+    const out = JSON.parse(cached.stdout);
+    expect([out.pending, out.newlyJudged]).toEqual([1, 0]);
+    expect(await Bun.file(join(dir, ".quench/local/judgments")).exists()).toBe(false);
+    expect((await quench("report", "--cached-only")).stderr).toContain(
+      "--cached-only is only available for corrections",
+    );
+  },
+  cliRunsTimeout,
+);
 
 test.skipIf(process.platform === "win32")(
   "corrections --judge claude classifies through the local CLI into its own cache",
@@ -355,6 +387,7 @@ test.skipIf(process.platform === "win32")(
       "--judge must be jev, claude, openai or none",
     );
   },
+  cliRunsTimeout,
 );
 
 test.skipIf(process.platform !== "win32")(
@@ -379,12 +412,36 @@ test.skipIf(process.platform !== "win32")(
     expect(await fakeCalls(fake)).toEqual([]);
     expect(await Bun.file(join(dir, ".quench/local/judgments")).exists()).toBe(false);
   },
+  cliRunsTimeout,
 );
 
-test("unknown commands and bad input fail with a message", async () => {
-  expect((await quench("frobnicate")).code).toBe(1);
-  expect((await quench("report", "--days", "zero")).stderr).toContain(
-    "--days must be a positive number",
-  );
-  expect((await quench("runs", "/nope.jsonl")).stderr).toContain("does not exist");
-});
+test(
+  "--help prints the full usage and an unknown command prints it after the error",
+  async () => {
+    const help = await quench("--help");
+    expect(help.code).toBe(0);
+    expect(help.stderr).toBe("");
+    expect(help.stdout).toStartWith("quench — see what your coding agents load");
+    expect(help.stdout).toContain("steps: agents, summary, judge, hub, ui;");
+    expect(help.stdout).toContain("one section: projects, mcp, instructions, skills, failures");
+    expect(help.stdout).toContain("--theme-limit <1–50>");
+    expect(help.stdout).toContain("(default: 20)");
+    const unknown = await quench("frobnicate");
+    expect(unknown.code).toBe(1);
+    expect(unknown.stdout).toBe("");
+    expect(unknown.stderr).toBe(`unknown command "frobnicate"\n\n${help.stdout}`);
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "unknown commands and bad input fail with a message",
+  async () => {
+    expect((await quench("frobnicate")).code).toBe(1);
+    expect((await quench("report", "--days", "zero")).stderr).toContain(
+      "--days must be a positive number",
+    );
+    expect((await quench("runs", "/nope.jsonl")).stderr).toContain("does not exist");
+  },
+  cliRunsTimeout,
+);

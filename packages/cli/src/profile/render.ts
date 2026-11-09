@@ -1,3 +1,4 @@
+import { HOME_FLAGS, SECTIONS } from "../names.ts";
 import { bold, dim, heading, title } from "../style.ts";
 import {
   harnessById,
@@ -10,6 +11,7 @@ import { count, plural, projectName, shortPath, size, table } from "../format.ts
 import { projectTables } from "./projects.ts";
 import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
+import type { ConfigHome } from "./config-homes.ts";
 import type { McpDuplicate } from "./mcp-duplicates.ts";
 import type { NextStep } from "./next-steps.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
@@ -33,6 +35,7 @@ export type ProfiledProject = Project & {
 export type Profile = {
   days: number;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
+  claudeConfigHomes: ConfigHome[];
   unreadable: number;
   globalInstructions: InstructionFile[];
   globalSkills: Skill[];
@@ -49,15 +52,13 @@ export type Profile = {
   projects: ProfiledProject[];
   missingDirectories: string[];
   nextSteps: NextStep[];
+  storedCredentials: {
+    credentials: number;
+    files: { path: string; kind: string; credentials: number }[];
+  };
 };
 
-export const HOME_FLAGS = {
-  "claude-home": "claude-code",
-  "codex-home": "codex",
-  "pi-home": "pi",
-} as const;
-
-export const SECTIONS = ["projects", "mcp", "instructions", "skills", "failures"] as const;
+export { HOME_FLAGS, SECTIONS };
 
 export type View = "summary" | "full" | (typeof SECTIONS)[number];
 

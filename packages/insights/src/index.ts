@@ -25,3 +25,25 @@ export {
 } from "./run.ts";
 export { runRecords, type RunRecord } from "./record.ts";
 export { labelIn, signals, type Bucket, type Sample, type Signal } from "./signals.ts";
+export {
+  IDLE_GAP_MS,
+  segments,
+  tasks,
+  type Boundary,
+  type Segment,
+  type Split,
+  type Task,
+  type TaskMember,
+} from "./tasks.ts";
+export {
+  EFFICIENCY_REASONS,
+  judgedTasks,
+  LANDED_REASONS,
+  MIN_BASELINE,
+  segmentSignals,
+  SPIRAL_REASONS,
+  type JudgedSegment,
+  type Judgments,
+  type SegmentSignals,
+  type Verdict,
+} from "./judgments.ts";

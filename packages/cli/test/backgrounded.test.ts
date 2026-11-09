@@ -108,3 +108,64 @@ test(
   },
   cliRunsTimeout,
 );
+
+test(
+  "kept running, a bare Claude home and stored credentials share Worth a look",
+  async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "quench-background-")));
+    const project = join(home, "work");
+    await mkdir(project, { recursive: true });
+    const token = "ghp_" + "FakeQuenchTestValue0123456789abcdefg";
+    await Bun.write(
+      join(home, ".claude.json"),
+      JSON.stringify({ mcpServers: { gh: { command: "gh-mcp", env: { GITHUB_TOKEN: token } } } }),
+    );
+    await Bun.write(join(home, ".claude/CLAUDE.md"), "x".repeat(3100));
+    await Bun.write(
+      join(home, ".claude/projects/p/one.jsonl"),
+      lines([
+        {
+          type: "assistant",
+          cwd: project,
+          message: {
+            id: "m",
+            model: "model-a",
+            usage: { input_tokens: 10, output_tokens: 1 },
+            content: [{ type: "tool_use", id: "a", name: "Bash", input: { command: "bun test" } }],
+          },
+        },
+        {
+          type: "user",
+          cwd: project,
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "a",
+                content:
+                  "Command did not complete within its 120s timeout and was moved to the background (ID: ax). Output is being written to: /tmp/ax.output.",
+              },
+            ],
+          },
+        },
+      ]),
+    );
+    for (const id of ["b", "c"])
+      await Bun.write(
+        join(home, ".claude-proxy/projects/p", `${id}.jsonl`),
+        lines([{ type: "user", cwd: project, message: { content: "hi" } }]),
+      );
+
+    const { stdout, code } = await quench(home);
+    expect(code).toBe(0);
+    const worth = stdout.slice(stdout.indexOf("▍Worth a look"));
+    for (const item of [
+      "1 credential stored in plaintext in MCP config",
+      "1 command kept running after a timeout",
+      `.claude-proxy ran 2 sessions with no instructions or hooks`,
+    ])
+      expect(worth).toContain(item);
+    expect(stdout).not.toContain(token);
+  },
+  cliRunsTimeout,
+);

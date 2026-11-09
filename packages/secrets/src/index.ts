@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { repositoryRoot, type Home, type Progress } from "@quench/history";
 import { scanConfigs } from "./configs.ts";
@@ -93,6 +94,20 @@ export async function secretsReport(
       "Out of scope: ports, network and OS hardening, persistence and PATH. Use lynis, osquery or trufflehog for those.",
       "Nothing is changed or redacted.",
     ],
+  };
+}
+
+export async function storedCredentials(home: Home, projects: readonly string[]) {
+  const { files } = await scanConfigs(home, projects, masker(randomBytes(32)));
+  const found = files
+    .map((file) => ({
+      ...file,
+      tags: new Set(file.secrets.filter((s) => s.confidence === "high").map((s) => s.tag)),
+    }))
+    .filter((file) => file.tags.size);
+  return {
+    credentials: new Set(found.flatMap((file) => [...file.tags])).size,
+    files: found.map((file) => ({ path: file.path, kind: file.kind, credentials: file.tags.size })),
   };
 }
 

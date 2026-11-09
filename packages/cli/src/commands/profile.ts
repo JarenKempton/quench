@@ -31,11 +31,13 @@ import {
   ThemeCache,
   type AskInput,
 } from "@quench/judge";
+import { storedCredentials } from "@quench/secrets";
 import { placeCache } from "../cache.ts";
 import { reading } from "../progress.ts";
 import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
+import { claudeConfigHomes } from "../profile/config-homes.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
@@ -61,6 +63,7 @@ export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
   'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with exactly the same text, started before Claude Code recorded a notification that the first finished or the agent stopped it; a session that ended first counts as never finished. A re-run with any change in text is not counted, so this is a lower bound. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands". Codex and Pi record no such result.',
+  "Stored credentials are the high-confidence secrets quench secrets finds in harness settings, MCP config and prompt history files of your home and the projects profiled here, each value counted once; values, prefixes and tags are never shown. Session transcripts and repo git history are not scanned for it, and quench secrets may cover other projects.",
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
   "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
   "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",
@@ -157,6 +160,7 @@ export async function profile(
         sessions: places.filter((p) => p.harness === h.id).length,
       })),
     ),
+    claudeConfigHomes: await claudeConfigHomes(home, since),
     unreadable,
     globalInstructions: [...globalInstructions.values()],
     globalSkills: [...globalSkills.values()],
@@ -181,6 +185,10 @@ export async function profile(
     recordedStart: startSplit(places),
     projects: profiled,
     missingDirectories: found.missing,
+    storedCredentials: await storedCredentials(
+      home,
+      profiled.map((p) => p.root),
+    ),
     limitations: [
       `Projects come from the working directories of sessions modified in the last ${options.days} days, plus --scan; projects with no recent sessions are not found.`,
       ...LIMITATIONS,

@@ -1,8 +1,17 @@
 import { timingSafeEqual } from "node:crypto";
+import { zstdDecompressSync } from "node:zlib";
 import { hostname, networkInterfaces } from "node:os";
 import { z } from "zod";
 import {
+  DEFAULT_RETENTION,
   excluded,
+  LogsRequest,
+  MAX_OTLP_BYTES,
+  MAX_UPLOAD_BYTES,
+  MetricsRequest,
+  SessionResults,
+  TaskResults,
+  TranscriptUpload,
   FleetFile,
   MachineName,
   MAX_PROPOSAL_BYTES,
@@ -15,7 +24,9 @@ import {
 } from "@quench/fleet";
 import { detect, detectInFile } from "@quench/secrets";
 import { FLEET_FILE } from "@quench/fleet/disk";
+import { Archive, Busy, Rejected } from "./archive.ts";
 import { selfSignedCertificate, spkiPin } from "./cert.ts";
+import { ClickHouse, DEFAULT_MEMORY, superviseClickHouse, type Supervised } from "./clickhouse.ts";
 import { GitError, StaleHead } from "./git.ts";
 import type { DataDir } from "./data.ts";
 import { Hub, SHIPPED_SKILL } from "./hub.ts";
@@ -37,6 +48,12 @@ const MAX_FORM_BYTES = 1024 * 1024;
 const MAX_PAIR_BYTES = 4096;
 const MAX_PROPOSAL_BODY = MAX_PROPOSAL_BYTES * 6 + 16 * 1024;
 const COOKIE = "quench_hub";
+const MAX_SESSIONS_BODY = 8 * 1024 * 1024;
+const MAX_ARCHIVE_ROWS = 5000;
+
+export type ArchiveOptions =
+  | { bin: string; dir: string; port?: number; memory?: number; retention?: string }
+  | { url: string; user: string; password: string; retention?: string };
 
 export type ServeOptions = {
   dataDir: string;
@@ -47,6 +64,7 @@ export type ServeOptions = {
   url?: string;
   mirror?: string;
   password?: string;
+  archive?: ArchiveOptions;
   now?: () => number;
   log?: (line: string) => void;
 };
@@ -150,7 +168,67 @@ async function withCsrf(response: Response, token: string) {
 
 type Owned = { now: <T>(action: () => T) => T; guard: () => void };
 
+const ArchiveTime = z.union([z.iso.date(), z.iso.datetime({ offset: true })]);
+
 const PairRequest = z.object({ code: z.string().min(1).max(64) }).strict();
+
+async function clickhousePassword(data: DataDir) {
+  const known = await data.read(["clickhouse-password"]);
+  if (known) return known.toString("utf8").trim();
+  const made = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+  await data.write(["clickhouse-password"], `${made}\n`, 0o600);
+  return made;
+}
+
+async function openArchive(hub: Hub, options: ServeOptions) {
+  const config = options.archive;
+  if (!config) return { archive: null, supervised: null };
+  const retention = config.retention ?? DEFAULT_RETENTION;
+  let supervised: Supervised | null = null;
+  let ch: ClickHouse;
+  if ("bin" in config) {
+    const password = await clickhousePassword(hub.data);
+    supervised = await superviseClickHouse({
+      bin: config.bin,
+      dir: config.dir,
+      port: config.port ?? 8123,
+      password,
+      memory: config.memory ?? DEFAULT_MEMORY,
+      ...(options.log ? { log: options.log } : {}),
+    });
+    ch = new ClickHouse(supervised.url, "quench", password);
+  } else ch = new ClickHouse(config.url.replace(/\/+$/, ""), config.user, config.password);
+  try {
+    return {
+      archive: await Archive.open(ch, hub.data, retention, options.now, options.log),
+      supervised,
+    };
+  } catch (error) {
+    await supervised?.stop();
+    throw error;
+  }
+}
+
+const upload = (req: Request) => {
+  try {
+    return TranscriptUpload.safeParse(
+      JSON.parse(decodeURIComponent(req.headers.get("x-quench-transcript") ?? "")),
+    );
+  } catch {
+    return TranscriptUpload.safeParse(null);
+  }
+};
+
+function decoded(req: Request, body: Uint8Array, max: number) {
+  const encoding = req.headers.get("content-encoding");
+  if (!encoding) return body;
+  if (encoding !== "zstd") return null;
+  try {
+    return zstdDecompressSync(body, { maxOutputLength: max });
+  } catch {
+    return null;
+  }
+}
 
 export async function serveHub(options: ServeOptions) {
   if (options.http && !isLoopback(options.hostname))
@@ -178,6 +256,14 @@ export async function serveHub(options: ServeOptions) {
     hub.close();
     throw error;
   }
+  let opened: Awaited<ReturnType<typeof openArchive>>;
+  try {
+    opened = await openArchive(hub, options);
+  } catch (error) {
+    hub.close();
+    throw error;
+  }
+  const { archive, supervised } = opened;
   const generated = !options.http && !options.tls;
   const tls = options.http
     ? undefined
@@ -222,6 +308,7 @@ export async function serveHub(options: ServeOptions) {
   };
 
   async function api(req: Request, path: string): Promise<Response> {
+    if (path.startsWith("/api/v1/archive/")) return ownerArchive(req, path);
     if (path === "/api/v1/pair" && req.method === "POST") {
       const attempt = hub.store.attempt("pair");
       if (attempt === null) return json({ error: "too many attempts; wait and retry" }, 429);
@@ -277,6 +364,114 @@ export async function serveHub(options: ServeOptions) {
       const state = hub.report(identity, parsed.data);
       if (!state) return revoked();
       return json({ machine, state });
+    }
+    if (
+      (path === "/api/v1/otlp/logs" || path === "/api/v1/otlp/metrics") &&
+      req.method === "POST"
+    ) {
+      if (!archive) return noArchive();
+      const body = await readCapped(req, MAX_OTLP_BYTES);
+      if (!body) return tooLarge();
+      const plain = decoded(req, body, MAX_OTLP_BYTES);
+      if (!plain) return json({ error: "the body must be JSON, optionally zstd-encoded" }, 415);
+      const raw = parseJson(plain);
+      if (path.endsWith("/logs")) {
+        const parsed = LogsRequest.safeParse(raw);
+        if (!parsed.success) return json({ error: "invalid OTLP logs" }, 400);
+        return json({ machine, rows: await archive.logs(machine, parsed.data) });
+      }
+      const parsed = MetricsRequest.safeParse(raw);
+      if (!parsed.success) return json({ error: "invalid OTLP metrics" }, 400);
+      return json({ machine, rows: await archive.metrics(machine, raw, parsed.data) });
+    }
+    if (path === "/api/v1/sessions" && req.method === "POST") {
+      if (!archive) return noArchive();
+      const body = await readCapped(req, MAX_SESSIONS_BODY);
+      if (!body) return tooLarge();
+      const parsed = SessionResults.safeParse(parseJson(body));
+      if (!parsed.success)
+        return json({ error: "invalid session results", issues: parsed.error.issues }, 400);
+      return json({ machine, rows: await archive.sessions(machine, parsed.data.sessions) });
+    }
+    if (path === "/api/v1/tasks" && req.method === "POST") {
+      if (!archive) return noArchive();
+      const body = await readCapped(req, MAX_SESSIONS_BODY);
+      if (!body) return tooLarge();
+      const parsed = TaskResults.safeParse(parseJson(body));
+      if (!parsed.success)
+        return json({ error: "invalid task results", issues: parsed.error.issues }, 400);
+      return json({ machine, rows: await archive.tasks(machine, parsed.data.tasks) });
+    }
+    if (path === "/api/v1/transcripts" && req.method === "PUT") {
+      if (!archive) return noArchive();
+      const meta = upload(req);
+      if (!meta.success)
+        return json(
+          { error: "invalid x-quench-transcript header", issues: meta.error.issues },
+          400,
+        );
+      if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES) return tooLarge();
+      if (!req.body) return json({ error: "no transcript in the body" }, 400);
+      try {
+        return json({
+          machine,
+          ...(await archive.transcript(
+            machine,
+            meta.data,
+            req.body as unknown as AsyncIterable<Uint8Array>,
+          )),
+        });
+      } catch (error) {
+        if (error instanceof Busy)
+          return json({ error: error.message }, 429, { "retry-after": "5" });
+        if (error instanceof Rejected) return json({ error: error.message }, error.status);
+        throw error;
+      }
+    }
+    return json({ error: "not found" }, 404);
+  }
+
+  function noArchive() {
+    return json({ error: "archive not configured on this hub" }, 503);
+  }
+
+  async function ownerArchive(req: Request, path: string): Promise<Response> {
+    if (!owner(req)) return json({ error: "sign in as the hub owner" }, 401);
+    if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
+    if (!archive) return noArchive();
+    const q = new URL(req.url).searchParams;
+    const limit = Number(q.get("limit") ?? 500);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ARCHIVE_ROWS)
+      return json({ error: `limit must be 1–${MAX_ARCHIVE_ROWS}` }, 400);
+    for (const key of ["from", "to"])
+      if (q.has(key) && !ArchiveTime.safeParse(q.get(key)).success)
+        return json({ error: `${key} must be an ISO date or date-time, such as 2026-11-01` }, 400);
+    const filter = {
+      limit,
+      ...Object.fromEntries(
+        (["machine", "harness", "session", "from", "to"] as const).flatMap((k) => {
+          const v = q.get(k);
+          return v ? [[k, v]] : [];
+        }),
+      ),
+    };
+    if (path === "/api/v1/archive/sessions")
+      return json({ sessions: await archive.listSessions(filter) });
+    if (path === "/api/v1/archive/transcripts")
+      return json({ transcripts: await archive.listTranscripts(filter) });
+    if (path === "/api/v1/archive/transcript") {
+      const machine = MachineName.safeParse(q.get("machine"));
+      const meta = TranscriptUpload.pick({ harness: true, path: true }).safeParse({
+        harness: q.get("harness"),
+        path: q.get("path"),
+      });
+      if (!machine.success || !meta.success)
+        return json({ error: "machine, harness and path are required" }, 400);
+      const bytes = await archive.readTranscript(machine.data, meta.data.harness, meta.data.path);
+      if (!bytes) return json({ error: "not archived" }, 404);
+      return new Response(bytes, {
+        headers: { "content-type": "application/zstd", "cache-control": "no-store" },
+      });
     }
     return json({ error: "not found" }, 404);
   }
@@ -633,7 +828,7 @@ export async function serveHub(options: ServeOptions) {
   const server = Bun.serve({
     hostname: options.hostname,
     port: options.port,
-    maxRequestBodySize: 2 * MAX_SNAPSHOT_BYTES,
+    maxRequestBodySize: MAX_UPLOAD_BYTES + MAX_SNAPSHOT_BYTES,
     ...(tls ? { tls } : {}),
     async fetch(req) {
       const path = new URL(req.url).pathname;
@@ -654,10 +849,13 @@ export async function serveHub(options: ServeOptions) {
     pin,
     url: `${tls ? "https" : "http"}://${host}:${server.port}`,
     cert: tls?.cert ?? null,
+    archive,
     async stop() {
       await server.stop(true);
       await hub.mirrored();
       await hub.repo.settled();
+      archive?.close();
+      await supervised?.stop();
       hub.close();
     },
   };

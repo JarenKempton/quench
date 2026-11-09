@@ -1,6 +1,17 @@
-import { harnessById } from "@quench/history";
-import { ago, chars, count, plural, projectName, size, table, tokens } from "../format.ts";
+import { harnessById, quoteArg, shellFor } from "@quench/history";
+import {
+  ago,
+  chars,
+  count,
+  plural,
+  projectName,
+  shortPath,
+  size,
+  table,
+  tokens,
+} from "../format.ts";
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
+import { unconfiguredHomes } from "./config-homes.ts";
 import { fileLabel } from "./recorded-instructions.ts";
 import { renderStartSplit } from "./recorded-start.ts";
 import { neverUsed } from "./skill-cuts.ts";
@@ -8,6 +19,12 @@ import { renderNextSteps } from "./next-steps.ts";
 import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
+
+const STORED_IN: Record<string, string> = {
+  mcp: "MCP config",
+  settings: "harness settings",
+  prompts: "prompt history",
+};
 
 type Item = { headline: string; detail: string | null; command: string };
 
@@ -80,6 +97,13 @@ function startingLoad(result: Profile, homeDir: string): string[] {
 
 function worthALook(result: Profile, homeDir: string): string[] {
   const items: Item[] = [];
+  const { credentials, files: stored } = result.storedCredentials;
+  if (credentials)
+    items.push({
+      headline: `${plural(credentials, "credential")} stored in plaintext in ${[...new Set(stored.map((f) => STORED_IN[f.kind] ?? f.kind))].join(" and ")}`,
+      detail: stored.map((f) => shortPath(f.path, homeDir)).join(" · "),
+      command: "quench secrets",
+    });
   const never = result.recordedSkills
     .filter((u) => u.useRecorded)
     .map((u) => ({
@@ -141,6 +165,13 @@ function worthALook(result: Profile, homeDir: string): string[] {
       headline: `${projectName(heaviest.root, homeDir)} starts with ${chars(heaviest.chars)} of instructions`,
       detail: `${(heaviest.chars / next.chars).toFixed(1)}× your next project`,
       command: "quench profile instructions",
+    });
+  const unconfigured = unconfiguredHomes(result.claudeConfigHomes);
+  for (const bare of unconfigured?.bare ?? [])
+    items.push({
+      headline: `${shortPath(bare.path, homeDir)} ran ${plural(bare.sessions, "session")} with no instructions or hooks`,
+      detail: `${shortPath(unconfigured!.configured.path, homeDir)} has ${size(unconfigured!.configured.instructionBytes)} of instructions and ${plural(unconfigured!.configured.hooks, "hook")}`,
+      command: `quench --claude-home ${quoteArg(bare.path, shellFor())}`,
     });
   const idle = result.projects.reduce((n, p) => n + (p.worktrees?.idle ?? 0), 0);
   if (idle)

@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Home } from "@quench/history";
-import { importInto, serveHub } from "@quench/hub";
+import { DEFAULT_RETENTION, retentionInterval } from "@quench/fleet";
+import { importInto, serveHub, type ArchiveOptions } from "@quench/hub";
 import { clientDir, fetchBundle, pair } from "@quench/hub/client";
 
 export type HubOptions = {
@@ -12,10 +13,49 @@ export type HubOptions = {
   mirror?: string;
   tlsCert?: string;
   tlsKey?: string;
+  retention?: string;
+  clickhouse?: string;
+  clickhouseBin?: string;
+  clickhouseData?: string;
+  clickhousePort?: string;
 };
+
+function archiveOf(options: HubOptions, data: string): ArchiveOptions | undefined {
+  const retention = options.retention ?? DEFAULT_RETENTION;
+  retentionInterval(retention);
+  if (options.clickhouse && options.clickhouseBin)
+    throw new Error(
+      "use --clickhouse-bin to run ClickHouse, or --clickhouse <url> for one already running, not both",
+    );
+  if ((options.clickhouseData || options.clickhousePort) && !options.clickhouseBin)
+    throw new Error("--clickhouse-data and --clickhouse-port go with --clickhouse-bin");
+  if (options.retention && !options.clickhouse && !options.clickhouseBin)
+    throw new Error("--retention needs --clickhouse-bin or --clickhouse");
+  if (options.clickhouseBin) {
+    const port = Number(options.clickhousePort ?? 8123);
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      throw new Error("--clickhouse-port must be a port number");
+    return {
+      bin: options.clickhouseBin,
+      dir: options.clickhouseData ?? `${data.replace(/[\\/]+$/, "")}-clickhouse`,
+      port,
+      retention,
+    };
+  }
+  if (options.clickhouse)
+    return {
+      url: options.clickhouse,
+      user: process.env.QUENCH_CLICKHOUSE_USER || "default",
+      password: process.env.QUENCH_CLICKHOUSE_PASSWORD ?? "",
+      retention,
+    };
+  return undefined;
+}
 
 const USAGE = `usage: quench hub serve [--data <dir>] [--listen <host:port>] [--url <public url>] [--mirror <git remote>]
                          [--tls-cert <pem> --tls-key <pem> | --http]
+                         [--clickhouse-bin <path> [--clickhouse-data <dir>] [--clickhouse-port 8123] | --clickhouse <url>]
+                         [--retention 5y]
        quench hub import <git-url|path> [--data <dir>]
 `;
 
@@ -48,6 +88,7 @@ export async function hub(home: Home, rest: string[], options: HubOptions) {
       if (!!options.tlsCert !== !!options.tlsKey)
         return fail("--tls-cert and --tls-key go together");
       if (options.http && options.tlsCert) return fail("--http cannot be used with --tls-cert");
+      const archive = archiveOf(options, data);
       const listen = listenOn(options.listen ?? (options.http ? "127.0.0.1:8080" : "0.0.0.0:8443"));
       const running = await serveHub({
         dataDir: data,
@@ -63,11 +104,16 @@ export async function hub(home: Home, rest: string[], options: HubOptions) {
           : {}),
         ...(options.url ? { url: options.url } : {}),
         ...(options.mirror ? { mirror: options.mirror } : {}),
+        ...(archive ? { archive } : {}),
         ...(process.env.QUENCH_HUB_PASSWORD ? { password: process.env.QUENCH_HUB_PASSWORD } : {}),
         log: (line) => process.stderr.write(`${line}\n`),
       });
       process.stdout.write(`Quench hub at ${running.url}\n`);
       if (running.pin) process.stdout.write(`Certificate pin ${running.pin}\n`);
+      if (archive)
+        process.stdout.write(
+          `Archive in ClickHouse, kept for ${archive.retention}${"bin" in archive ? ` (data in ${archive.dir})` : ""}\n`,
+        );
       await new Promise<void>((done) => {
         for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => done());
       });
