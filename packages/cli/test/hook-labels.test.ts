@@ -21,8 +21,18 @@ test(
               { matcher: "Bash", hooks: [{ type: "command", command: `${guard} --strict` }] },
             ],
             Stop: [{ hooks: [{ type: "command", command: "bash ~/hooks/gone.sh" }] }],
+            Notification: [{ hooks: [{ type: "command", command: "" }] }],
           },
           statusLine: { type: "command", command: "# ~/bin/status.sh" },
+        }),
+      );
+      const projectHook = 'sh "${CLAUDE_PROJECT_DIR:-.}/scripts/check.sh"';
+      await Bun.write(
+        join(project, ".claude/settings.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: projectHook }] }],
+          },
         }),
       );
       const call = (id: string, command: string) => ({
@@ -52,6 +62,14 @@ test(
               block,
             ),
           ]),
+          {
+            type: "assistant",
+            cwd: project,
+            message: {
+              content: [{ type: "tool_use", id: "e1", name: "Edit", input: { file_path: "a" } }],
+            },
+          },
+          result("e1", `PreToolUse:Edit hook error: [${projectHook}]: no qreasonq`, block),
           ...[1, 2, 3].flatMap((n) => [
             call(`f${n}`, "cd app && bun test --bail qsecretq | tail -5 && git status"),
             result(`f${n}`, "Exit code 1\nqerrorq"),
@@ -76,6 +94,7 @@ test(
       expect(failures.stdout).toContain(
         "  PreToolUse hook (guard.sh)  chained: gh pr, git push       2",
       );
+      expect(failures.stdout).toContain("  PreToolUse hook (check.sh)  Edit ");
       for (const out of [summary.stdout, failures.stdout])
         for (const leak of ["qsecretq", "qreasonq", "qerrorq", "--strict", "--force"])
           expect(out).not.toContain(leak);

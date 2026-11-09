@@ -70,18 +70,29 @@ chmod 755 "$tmp/$asset"
 mv "$tmp/$asset" "$bin_dir/quench"
 echo "Installed quench ($release) to $bin_dir/quench"
 
-case ":$PATH:" in
-  *":$bin_dir:"*) ;;
-  *) echo "Add it to your PATH: export PATH=\"$bin_dir:\$PATH\"" ;;
-esac
+rc_path() {
+  probe=$1
+  shift
+  limit=$(command -v timeout || true)
+  if [ -n "$limit" ]; then
+    env -i HOME="$HOME" PATH=/usr/bin:/bin "$limit" 5 "$probe" "$@" </dev/null 2>/dev/null
+  else
+    env -i HOME="$HOME" PATH=/usr/bin:/bin "$probe" "$@" </dev/null 2>/dev/null
+  fi
+}
 
 shell_name=$(basename "${SHELL:-sh}")
-case $shell_name in
-  bash | zsh)
-    rc_path=$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$SHELL" -ic 'printf %s "$PATH"' </dev/null 2>/dev/null) || rc_path=
-    case ":$rc_path:" in
-      *":$bin_dir:"*) ;;
-      *) echo "$bin_dir is not on PATH in non-login $shell_name shells, which agents run commands in. Add export PATH=\"$bin_dir:\$PATH\" to ~/.${shell_name}rc" ;;
+case ":$PATH:" in
+  *":$bin_dir:"*)
+    case $shell_name in
+      bash | zsh)
+        found=$(rc_path "$SHELL" -ic 'printf "\nPATH=%s\n" "$PATH"' | sed -n 's/^PATH=//p' | tail -n 1) || found=
+        case ":$found:" in
+          :: | *":$bin_dir:"*) ;;
+          *) echo "$bin_dir is on PATH here but not in a new $shell_name shell that only reads ~/.${shell_name}rc, which some agents start from. Add export PATH=\"$bin_dir:\$PATH\" to ~/.${shell_name}rc" ;;
+        esac
+        ;;
     esac
     ;;
+  *) echo "Add it to your PATH: export PATH=\"$bin_dir:\$PATH\"" ;;
 esac

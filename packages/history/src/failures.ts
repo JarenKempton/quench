@@ -1,3 +1,4 @@
+import { win32 } from "node:path";
 import type { Event, Failure, Session } from "./model.ts";
 import {
   errorClassOf,
@@ -38,6 +39,13 @@ type ToolCall = Extract<Event, { type: "tool_call" }>;
 type ToolResult = Extract<Event, { type: "tool_result" }>;
 
 const SCANNED = 4000;
+
+const HOOK_SCRIPT = /^[A-Za-z0-9][\w.-]{0,63}\.(sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl|ps1)$/;
+
+export const hookScriptsIn = (command: string): string[] =>
+  (command.match(/[^\s"']+/g) ?? [])
+    .map((word) => win32.basename(word))
+    .filter((name) => HOOK_SCRIPT.test(name));
 
 export type Denial = { guard: string; hook?: string | null } | "rejected" | null;
 
@@ -119,7 +127,7 @@ export function recordedFailures(session: Session): SessionFailure[] {
 
     const row = rowFor(rows, key, event.failure.kind, keyed);
     row.failures++;
-    if (call) countChained(row.chained, call);
+    if (call && keyed.what === "several commands") countChained(row.chained, call);
     if (keyed.hook) row.hooks[keyed.hook] = (row.hooks[keyed.hook] ?? 0) + 1;
     row.longestRun = Math.max(row.longestRun, runLength);
     row.chars += event.chars;
@@ -193,7 +201,7 @@ export function recordedBackgrounded(session: Session): SessionBackgrounded[] {
     if (!call) continue;
     const row = rowOf(call);
     row.backgrounded++;
-    countChained(row.chained, call);
+    if (row.what === "several commands") countChained(row.chained, call);
     running.push({
       text: commandText(call),
       from: event.line ?? 0,

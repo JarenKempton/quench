@@ -34,7 +34,7 @@ export type ProfiledProject = Project & {
 
 export type Profile = {
   days: number;
-  judge: string | null;
+  unjudged: string | null;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
   claudeConfigHomes: ConfigHome[];
   unreadable: number;

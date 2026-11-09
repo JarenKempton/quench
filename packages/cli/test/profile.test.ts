@@ -1132,10 +1132,29 @@ test(
     expect(stdout).toContain(
       `Claude Code instructions, largest: ${p("~/code/app/CLAUDE.md")} · 600 chars per session · 1.2k chars over 2 sessions`,
     );
-    expect(stdout).not.toContain("No judge set");
-    await Bun.write(join(home, ".quench/config.json"), JSON.stringify({ judge: { name: "none" } }));
-    expect((await quench(home, "--no-cache")).stdout).toContain(
-      "No judge set: quench corrections and one-word skill names in quench profile skills --asks are not measured. → quench setup judge",
+    expect(stdout).not.toContain("No judge key set");
+    const keyless = () =>
+      new Response(
+        Bun.spawn(["bun", main, "--no-cache"], {
+          env: {
+            ...process.env,
+            HOME: home,
+            CLAUDE_CONFIG_DIR: "",
+            CODEX_HOME: "",
+            TYPESAFE_API_KEY: "",
+          },
+          stdout: "pipe",
+        }).stdout,
+      ).text();
+    expect(await keyless()).toContain(
+      "No judge key set: quench corrections and one-word skill names in quench profile skills --asks are not measured. → quench setup judge",
+    );
+    await Bun.write(
+      join(home, ".quench/config.json"),
+      JSON.stringify({ judge: { name: "claude" } }),
+    );
+    expect(await keyless()).toContain(
+      "No judge key set: grouping and causes in quench corrections and one-word skill names in quench profile skills --asks are not measured.",
     );
   },
   cliRunsTimeout,

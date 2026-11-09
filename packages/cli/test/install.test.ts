@@ -1,6 +1,6 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -78,14 +78,15 @@ test.skipIf(!posix || !bash)(
       QUENCH_INSTALL_DIR: bin,
       PATH: `${bin}${delimiter}${process.env.PATH}`,
     };
-    const warning = `${bin} is not on PATH in non-login bash shells`;
+    const warning = `${bin} is on PATH here but not in a new bash shell`;
     const bare = await sh(env);
     expect(bare.code).toBe(0);
     expect(bare.stdout).toContain(
-      `${warning}, which agents run commands in. Add export PATH="${bin}:$PATH" to ~/.bashrc`,
+      `${warning} that only reads ~/.bashrc, which some agents start from. Add export PATH="${bin}:$PATH" to ~/.bashrc`,
     );
     await writeFile(join(home, ".bashrc"), 'export PATH="$HOME/.local/bin:$PATH"\n');
     expect((await sh(env)).stdout).not.toContain(warning);
+    await rm(home, { recursive: true, force: true });
   },
 );
 

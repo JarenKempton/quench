@@ -40,12 +40,12 @@ export function summary(result: Profile, homeDir: string): string[] {
     ...worthALook(result, homeDir),
     ...busiest(result, homeDir),
     ...renderNextSteps(result.nextSteps),
-    ...(result.judge
-      ? []
-      : [
+    ...(result.unjudged
+      ? [
           "",
-          `${dim("No judge set: quench corrections and one-word skill names in quench profile skills --asks are not measured.")} ${accent("→ quench setup judge")}`,
-        ]),
+          `${dim(`No judge key set: ${result.unjudged} are not measured.`)} ${accent("→ quench setup judge")}`,
+        ]
+      : []),
     "",
     dim(
       "More: quench profile [projects|mcp|instructions|skills|failures] · quench sources · quench --help",
