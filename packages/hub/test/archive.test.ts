@@ -164,6 +164,10 @@ const task = (runs: number, removed = false): TaskResult => ({
   efficiency: { verdict: "unknown", reason: "no-baseline", evidence: [] },
   tokens: 1200,
   seconds: 90,
+  guidance: "unknown",
+  guidanceUnreliableRule: "lane#2",
+  guidanceTurns: 1,
+  guidanceCost: 0.00005,
   analysisVersion: 1,
 });
 
@@ -175,8 +179,15 @@ const postTask = (t: TaskResult) =>
   });
 
 const tasksNow = () =>
-  running.archive!.ch.rows<{ Runs: number; Members: unknown[]; Verdicts: string[] }>(
-    "SELECT Runs, Members, [Landed, LandedReason, Spiral, SpiralReason, Efficiency, EfficiencyReason, arrayStringConcat(LandedEvidence, ',')] AS Verdicts FROM quench_tasks FINAL WHERE Machine = 'laptop'",
+  running.archive!.ch.rows<{
+    Runs: number;
+    Members: unknown[];
+    Verdicts: string[];
+    Guidance: string;
+    GuidanceUnreliableRule: string;
+    GuidanceCost: number;
+  }>(
+    "SELECT Runs, Members, [Landed, LandedReason, Spiral, SpiralReason, Efficiency, EfficiencyReason, arrayStringConcat(LandedEvidence, ',')] AS Verdicts, Guidance, GuidanceUnreliableRule, GuidanceCost FROM quench_tasks FINAL WHERE Machine = 'laptop'",
   );
 
 test.skipIf(skip)("a task row replaces itself and a removed task disappears", async () => {
@@ -195,6 +206,11 @@ test.skipIf(skip)("a task row replaces itself and a removed task disappears", as
     "no-baseline",
     "claude-code:lane#4",
   ]);
+  expect(row).toMatchObject({
+    Guidance: "unknown",
+    GuidanceUnreliableRule: "lane#2",
+    GuidanceCost: 0.00005,
+  });
   expect((await postTask({ ...task(7), taskId: "nope" })).status).toBe(400);
   expect((await postTask(task(0, true))).status).toBe(200);
   expect(await tasksNow()).toEqual([]);

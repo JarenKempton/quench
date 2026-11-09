@@ -6,10 +6,12 @@ import {
   choice,
   PermissionDeniedError,
   TypeSafeClient,
+  type EntryType,
   type Fetch,
 } from "@typesafe-ai/sdk";
 import type { AskInput, AskJudge } from "./asks.ts";
 import type { CauseInput, CauseJudge } from "./causes.ts";
+import type { GuidanceInput, GuidanceJudge } from "./guidance.ts";
 import { JudgeFailed, reasonForStatus } from "./failure.ts";
 import { clipped, KIND_QUESTION, SENDER_QUESTION } from "./questions.ts";
 import { jevAnswer } from "./response.ts";
@@ -221,6 +223,41 @@ export class JevAsks implements AskJudge {
       this.tokens.input += answer.input;
       this.tokens.output += answer.output;
       return { choice: answer.choice, model: answer.model };
+    } catch (error) {
+      throw jevFailure(error);
+    }
+  }
+}
+
+export class JevGuidance implements GuidanceJudge {
+  static readonly id = `jev/${MODEL}/guidance-v1`;
+  readonly id = JevGuidance.id;
+  readonly #client: TypeSafeClient;
+
+  constructor(apiKey: string, fetch: Fetch = globalThis.fetch) {
+    this.#client = new TypeSafeClient({
+      apiKey,
+      fetch: withStreamedBody(fetch),
+      defaultModel: MODEL,
+      logLevel: "off",
+      retry: { maxRetries: 0 },
+      timeout: 10_000,
+    });
+  }
+
+  static fromEnv(env: Record<string, string | undefined> = process.env): JevGuidance | null {
+    const key = env.TYPESAFE_API_KEY?.trim();
+    return key ? new JevGuidance(key) : null;
+  }
+
+  async guidance(input: GuidanceInput): Promise<ThemeDecision> {
+    try {
+      const result = await this.#client.systemOne({
+        state: input.state as Record<string, EntryType>,
+        questions: { guidance: choice(input.question, input.choices) },
+      });
+      const answer = jevAnswer(result, "guidance", Object.keys(input.choices), MODEL);
+      return { choice: answer.choice, model: answer.model, tokens: answer.input };
     } catch (error) {
       throw jevFailure(error);
     }

@@ -37,6 +37,13 @@ const TASK_JUDGMENTS = [
   "Seconds UInt32",
 ];
 
+const GUIDANCE = [
+  "Guidance LowCardinality(String) DEFAULT 'pending'",
+  "GuidanceUnreliableRule String DEFAULT ''",
+  "GuidanceTurns UInt32 DEFAULT 0",
+  "GuidanceCost Float64 DEFAULT 0",
+];
+
 export const TABLES: { name: string; ttl: string; ddl: string; added?: string[] }[] = [
   {
     name: "otel_logs",
@@ -131,7 +138,7 @@ SETTINGS ttl_only_drop_parts = 1`,
   {
     name: "quench_tasks",
     ttl: "toDateTime(StartedAt)",
-    added: TASK_JUDGMENTS,
+    added: [...TASK_JUDGMENTS, ...GUIDANCE],
     ddl: `CREATE TABLE IF NOT EXISTS quench_tasks (
   Machine LowCardinality(String),
   TaskId FixedString(32),
@@ -144,7 +151,7 @@ SETTINGS ttl_only_drop_parts = 1`,
   Harnesses Array(LowCardinality(String)),
   Sessions UInt32,
   Runs UInt32,
-  ${TASK_JUDGMENTS.join(",\n  ")},
+  ${[...TASK_JUDGMENTS, ...GUIDANCE].join(",\n  ")},
   AnalysisVersion UInt32,
   ComputedAt DateTime64(3),
   Removed UInt8,
