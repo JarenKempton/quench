@@ -10,7 +10,14 @@ import {
 import { Jev, JevGuidance, ThemeCache, VerdictCache, type GuidanceInput } from "@quench/judge";
 import { replacePrivateFile } from "../private-file.ts";
 import { reading } from "../progress.ts";
-import { archived, sessionKey, sessionSegments, taskRows, type Shipped } from "./agent-archive.ts";
+import {
+  archived,
+  sessionKey,
+  sessionSegments,
+  stored,
+  taskRows,
+  type Shipped,
+} from "./agent-archive.ts";
 import { cachedPulls, githubPulls, run, type Run } from "./github-pulls.ts";
 import { stateDir } from "./skills.ts";
 
@@ -26,14 +33,38 @@ async function readKnown(path: string): Promise<Known> {
   }
 }
 
-const fresh = (entry: Known[string] | undefined, size: number, mtimeMs: number, judged: number) =>
-  !!entry?.segments?.every((s) => s.signals && s.repo !== undefined) &&
-  entry.size === size &&
-  entry.mtimeMs === mtimeMs &&
-  !(
-    judged > (entry.at ?? entry.guidedAt ?? 0) &&
-    entry.segments.some((s) => !s.guidance || s.guidance.guidance === "pending")
+const modified = async (paths: string[]) =>
+  Math.max(
+    0,
+    ...(await Promise.all(
+      paths.map((p) =>
+        stat(p).then(
+          (i) => i.mtimeMs,
+          () => 0,
+        ),
+      ),
+    )),
   );
+
+const fresh = (
+  entry: Known[string],
+  size: number,
+  mtimeMs: number,
+  judged: { replies: number; guidance: number },
+) => {
+  const at = entry.at ?? entry.mtimeMs;
+  return (
+    !!entry.segments?.length &&
+    entry.segments.every((s) => s.signals && s.repo !== undefined) &&
+    entry.size === size &&
+    entry.mtimeMs === mtimeMs &&
+    judged.replies <= at &&
+    !(
+      judged.guidance > (entry.at ?? entry.guidedAt ?? 0) &&
+      entry.segments.some((s) => stored(s).guidance === "pending")
+    )
+  );
+};
 
 export function tasksLoader(
   home: Home,
@@ -45,7 +76,11 @@ export function tasksLoader(
   let fetching: Promise<void> | null = null;
   return async () => {
     const guidanceFile = join(local, "guidance.jsonl");
-    const judged = (await stat(guidanceFile).catch(() => null))?.mtimeMs ?? 0;
+    const verdicts = await VerdictCache.open(local, Jev.id, true);
+    const judged = {
+      replies: await modified([verdicts.path, join(local, "judgments.jsonl")]),
+      guidance: await modified([guidanceFile]),
+    };
     const known: Known =
       options.cache === false
         ? {}
@@ -64,7 +99,6 @@ export function tasksLoader(
       else stale.push({ ref, key, size: info.size, mtimeMs: info.mtimeMs });
     });
     if (stale.length) {
-      const verdicts = await VerdictCache.open(local, Jev.id, true);
       const guide = {
         cache: await ThemeCache.open<GuidanceInput>(guidanceFile, JevGuidance.id),
         judge: null,

@@ -5,6 +5,7 @@ import { correctionsJson, shownHistory } from "./corrections.ts";
 import { reportJson } from "./report.ts";
 import { secretsJson } from "./secrets.ts";
 import { readSkillsSource, skillsJson } from "./skills.ts";
+import type { Run } from "./github-pulls.ts";
 import { tasksLoader } from "./tasks.ts";
 import { worktreesJson } from "./worktrees.ts";
 
@@ -85,6 +86,13 @@ export function lastResult(
     else if (asked.refresh || Date.now() - attemptedAt >= refreshAfterMs) refresh().catch(() => {});
     return new Aged(last!.value, last!.at, running !== null, failure);
   };
+}
+
+export function tasksApi(home: Home, flags: { days: number; cache?: boolean }, exec?: Run): Load {
+  const tasks: Load = lastResult(
+    tasksLoader(home, flags, () => void tasks({ refresh: true }), exec),
+  );
+  return tasks;
 }
 
 export type UiServer = { url: string; port: number; stop: () => Promise<void> };
@@ -169,9 +177,8 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
     return new Error("--port must be a whole number from 0 to 65535");
   const source = await readSkillsSource(flags.source);
   if (source instanceof Error) return source;
-  const tasks: Load = lastResult(tasksLoader(home, flags, () => void tasks({ refresh: true })));
   const api = {
-    tasks,
+    tasks: tasksApi(home, flags),
     report: lastResult(() => reportJson(home, flags.days)),
     skills: lastResult(() => skillsJson(home, { ...flags, source }).then(({ report }) => report)),
     corrections: lastResult(async () =>

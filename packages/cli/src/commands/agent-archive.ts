@@ -162,7 +162,7 @@ const PENDING: SegmentGuidance = {
   tokens: 0,
 };
 
-const stored = (s: { guidance?: SegmentGuidance }) =>
+export const stored = (s: { guidance?: SegmentGuidance }) =>
   s.guidance && Guidance.safeParse(s.guidance.guidance).success ? s.guidance : PENDING;
 
 const UNJUDGED = {
