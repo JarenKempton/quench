@@ -60,6 +60,7 @@ import { splitInstructions, splitSkills, type InstructionFile } from "../profile
 export { HOME_FLAGS, SECTIONS } from "../profile/render.ts";
 
 const LIMITATIONS = [
+  'Kept running after a timeout counts Claude Code Bash results that say the command did not complete within its timeout and was moved to the background. Re-run before done counts a later command with the same text, or the same command key, started before Claude Code recorded a notification that the first finished; a session that ended first counts as never finished. The command key ignores cd, export, echo and output filters such as head, tail and jq around one main command; any other chain is "several commands". Codex and Pi record no such result.',
   "Worktrees and subdirectories of one git repository are grouped under its main checkout.",
   "Instructions are current files in each project's most recently used directory, not proof of what a past session loaded; other worktrees may differ.",
   "Recorded instructions are the text each session's history logged injecting, global files included. Older harness versions recorded none, so a missing record is unknown, not zero. Codex records one combined block per directory without file boundaries.",

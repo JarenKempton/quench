@@ -11,8 +11,15 @@ import {
   missingProgramOf,
 } from "./failure-text.ts";
 import { intern } from "./recorded.ts";
-import { commandSignature, isChained } from "./shell.ts";
+import { commandSignature, isChained, mainCommandSignature } from "./shell.ts";
 import { knownTool } from "./subcommands.ts";
+
+export type SessionBackgrounded = {
+  what: string;
+  model: string | null;
+  backgrounded: number;
+  rerun: number;
+};
 
 export type SessionFailure = {
   kind: Failure["kind"];
@@ -127,6 +134,67 @@ function failureKey(
     guard: blocked ? failure.detail : null,
   };
 }
+
+export function recordedBackgrounded(session: Session): SessionBackgrounded[] {
+  const calls = new Map<string, { call: ToolCall; model: string | null }>();
+  const started: { call: ToolCall; text: string; line: number }[] = [];
+  const running: {
+    text: string;
+    what: string | null;
+    from: number;
+    until: number | null;
+  }[] = [];
+  const rows = new Map<string, SessionBackgrounded>();
+  const rowOf = (call: ToolCall) => {
+    const what = mainCommandOf(call);
+    const model = calls.get(call.id!)!.model;
+    const key = `${what}\0${model}`;
+    return rows.get(key) ?? rows.set(key, { what, model, backgrounded: 0, rerun: 0 }).get(key)!;
+  };
+  let model: string | null = null;
+  for (const event of session.events) {
+    if (event.type === "inference") model = event.model ?? model;
+    if (event.type === "tool_call" && event.id !== null && event.shell?.length) {
+      calls.set(event.id, { call: event, model });
+      started.push({
+        call: event,
+        text: commandText(event),
+        line: event.line ?? 0,
+      });
+    }
+    if (event.type !== "tool_result" || !event.backgrounded || event.callId === null) continue;
+    const call = calls.get(event.callId)?.call;
+    if (!call) continue;
+    rowOf(call).backgrounded++;
+    const what = mainCommandOf(call);
+    running.push({
+      text: commandText(call),
+      what: GENERIC.has(what) || !what.includes(" ") ? null : what,
+      from: event.line ?? 0,
+      until: event.backgrounded.finishedLine,
+    });
+  }
+  const rerun = started.filter(({ call, text, line }) =>
+    running.some(
+      (r) =>
+        line > r.from &&
+        (r.until === null || line < r.until) &&
+        (text === r.text || (r.what !== null && mainCommandOf(call) === r.what)),
+    ),
+  );
+  for (const { call } of rerun) rowOf(call).rerun++;
+  return [...rows.values()];
+}
+
+const GENERIC = new Set(["several commands", "other command"]);
+
+const mainCommandOf = (call: ToolCall) =>
+  (call.shell!.length === 1 && call.shell![0]!.command
+    ? mainCommandSignature(call.shell![0]!.command)
+    : "several commands") ?? "other command";
+
+const commandText = (call: ToolCall) =>
+  call.shell!.map((shell) => shell.command?.trim() ?? "").join("\n");
 
 function alreadyCounted(event: ToolResult, counted: Set<string>): boolean {
   if (event.callId === null) return false;

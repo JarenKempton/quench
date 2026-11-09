@@ -124,9 +124,23 @@ const FILTERS = new Set(["head", "tail", "sort", "uniq", "wc", "cut", "tr", "tee
 
 export function commandSignature(command: string): string | null {
   if (isChained(command)) return null;
-  const name = programName(command);
+  return signatureOf(firstWords(command));
+}
+
+export function mainCommandSignature(command: string): string | null {
+  if (!isChained(command)) return commandSignature(command);
+  const main = segments(command).flatMap((segment) => {
+    const words = wordsOf(segment);
+    const name = programName(words);
+    return name && (SETUP.has(name) || FILTERS.has(name)) ? [] : [words];
+  });
+  return main.length === 1 ? signatureOf(main[0]!) : "several commands";
+}
+
+function signatureOf(words: Word[]): string | null {
+  const name = programName(words);
   if (!name || SETUP.has(name) || FILTERS.has(name)) return null;
-  const { program, subcommand } = commandShape(command);
+  const { program, subcommand } = shapeOf(words);
   return subcommand ? `${program} ${subcommand}` : program;
 }
 
@@ -134,19 +148,27 @@ export type CommandShape = { program: string; subcommand: string | null };
 
 export function commandShape(command: string): CommandShape {
   if (isChained(command)) return { program: "several commands", subcommand: null };
-  const words = firstWords(command);
-  const name = programName(command);
+  return shapeOf(firstWords(command));
+}
+
+function shapeOf(words: Word[]): CommandShape {
+  const name = programName(words);
   const program = name ? knownProgram(name) : "other command";
   const positional = words.slice(1).find((w) => !w.text.startsWith("-"));
   const subcommand = positional?.dynamic ? null : knownSubcommand(program, positional?.text);
   return { program, subcommand };
 }
 
-const firstWords = (command: string): Word[] =>
-  unwrapped((segments(command)[0]?.words ?? []).filter((w) => !ASSIGNMENT.test(w.text)));
+const wordsOf = (segment: Segment): Word[] =>
+  unwrapped(segment.words.filter((w) => !ASSIGNMENT.test(w.text)));
 
-function programName(command: string): string | null {
-  const first = firstWords(command)[0];
+const firstWords = (command: string): Word[] => {
+  const first = segments(command)[0];
+  return first ? wordsOf(first) : [];
+};
+
+function programName(words: Word[]): string | null {
+  const first = words[0];
   return first && !first.dynamic
     ? win32.basename(first.text).replace(/\.(exe|cmd|bat)$/i, "")
     : null;

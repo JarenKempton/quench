@@ -113,6 +113,7 @@ export type EventKind =
       loadedTools?: string[];
       failure?: Failure;
       fileRead?: FileReadResult;
+      backgrounded?: { finishedLine: number | null };
     }
   | { type: "compaction"; trigger: CompactionTrigger; tokensBefore: number | null }
   | { type: "instructions"; files: InjectedInstruction[]; unreadable: number }

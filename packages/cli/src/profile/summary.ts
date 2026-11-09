@@ -104,6 +104,26 @@ function worthALook(result: Profile, homeDir: string): string[] {
         .join(", ")}`,
       command: "quench profile failures",
     });
+  const kept = result.recordedFailures.backgrounded;
+  if (kept.backgrounded)
+    items.push({
+      headline: `${plural(kept.backgrounded, "command")} kept running after a timeout`,
+      detail: [
+        `${count(kept.rerun)} re-run before done`,
+        kept.commands
+          .slice(0, 3)
+          .map((c) => `${c.what} ${count(c.backgrounded)}`)
+          .join(", "),
+        kept.models
+          .slice(0, 3)
+          .map(
+            (m) =>
+              `${m.model ?? "unknown"} on ${harnessById[m.harness].label} ${count(m.backgrounded)}`,
+          )
+          .join(", "),
+      ].join(" · "),
+      command: "quench profile failures",
+    });
   const top = result.recordedFailures.repeated[0];
   if (top)
     items.push({

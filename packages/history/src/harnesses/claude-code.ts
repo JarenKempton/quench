@@ -418,6 +418,7 @@ export const claudeCode: Harness<"claude-code"> = {
     const attachments = new Set<string>();
     const queued = new Map<string, Event[]>();
     const delivered = new Set<Event>();
+    const running = new Map<string, { finishedLine: number | null }>();
     let cwd: string | null = null;
     let branch: string | null = null;
     const position = { line: 0 };
@@ -429,7 +430,12 @@ export const claudeCode: Harness<"claude-code"> = {
         attachments.add(line.uuid);
       }
       const at = date(line.timestamp);
+      const finished = finishedCall(line);
+      const task = finished && running.get(finished);
+      if (task) task.finishedLine = position.line;
       for (const kind of eventsOf(line)) {
+        if (kind.type === "tool_result" && kind.backgrounded && kind.callId)
+          running.set(kind.callId, kind.backgrounded);
         const id = line.message?.id;
         const seen = kind.type === "inference" && id ? inferenceAt.get(id) : undefined;
         if (seen !== undefined) {
@@ -502,6 +508,17 @@ function requestShape(shape: NonNullable<Line["shape"]>): EventKind {
         deferred: tool.defer_loading === true,
       })) ?? null,
   };
+}
+
+const TIMED_OUT_TO_BACKGROUND =
+  /^Command did not complete within its \d+s timeout and was moved to the background \(ID: /;
+
+function finishedCall(line: Line): string | null {
+  const attachment = Attachment.safeParse(line.attachment);
+  const prompt = attachment.success ? attachment.data.prompt : undefined;
+  const text = typeof prompt === "string" ? prompt : textOf(line.message?.content);
+  if (!text.includes("<task-notification>") || !/<status>[a-z]+<\/status>/.test(text)) return null;
+  return /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(text)?.[1] ?? null;
 }
 
 function queuedPrompt(raw: unknown): EventKind[] {
@@ -738,6 +755,7 @@ function user(line: Line): EventKind[] {
         ...referencedTools(b.content),
         ...(failure ? { failure } : {}),
         ...(fileRead ? { fileRead } : {}),
+        ...(TIMED_OUT_TO_BACKGROUND.test(text) ? { backgrounded: { finishedLine: null } } : {}),
       };
     });
   }
