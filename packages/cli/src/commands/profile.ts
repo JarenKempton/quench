@@ -37,6 +37,7 @@ import { reading } from "../progress.ts";
 import { json, median, projectName } from "../format.ts";
 import { repeatedFailures } from "../profile/recorded-failures.ts";
 import { recordedFiles } from "../profile/recorded-instructions.ts";
+import { claudeConfigHomes } from "../profile/config-homes.ts";
 import { mcpDuplicates } from "../profile/mcp-duplicates.ts";
 import { nextSteps } from "../profile/next-steps.ts";
 import { mcpUse } from "../profile/recorded-mcp.ts";
@@ -158,6 +159,7 @@ export async function profile(
         sessions: places.filter((p) => p.harness === h.id).length,
       })),
     ),
+    claudeConfigHomes: await claudeConfigHomes(home, since),
     unreadable,
     globalInstructions: [...globalInstructions.values()],
     globalSkills: [...globalSkills.values()],
