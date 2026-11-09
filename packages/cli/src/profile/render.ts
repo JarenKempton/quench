@@ -52,6 +52,10 @@ export type Profile = {
   projects: ProfiledProject[];
   missingDirectories: string[];
   nextSteps: NextStep[];
+  storedCredentials: {
+    credentials: number;
+    files: { path: string; kind: string; credentials: number }[];
+  };
 };
 
 export { HOME_FLAGS, SECTIONS };

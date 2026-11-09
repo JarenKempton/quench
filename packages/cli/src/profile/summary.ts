@@ -20,6 +20,12 @@ import type { Profile } from "./render.ts";
 
 const BUSIEST = 5;
 
+const STORED_IN: Record<string, string> = {
+  mcp: "MCP config",
+  settings: "harness settings",
+  prompts: "prompt history",
+};
+
 type Item = { headline: string; detail: string | null; command: string };
 
 export function summary(result: Profile, homeDir: string): string[] {
@@ -91,6 +97,13 @@ function startingLoad(result: Profile, homeDir: string): string[] {
 
 function worthALook(result: Profile, homeDir: string): string[] {
   const items: Item[] = [];
+  const { credentials, files: stored } = result.storedCredentials;
+  if (credentials)
+    items.push({
+      headline: `${plural(credentials, "credential")} stored in plaintext in ${[...new Set(stored.map((f) => STORED_IN[f.kind] ?? f.kind))].join(" and ")}`,
+      detail: stored.map((f) => shortPath(f.path, homeDir)).join(" · "),
+      command: "quench secrets",
+    });
   const never = result.recordedSkills
     .filter((u) => u.useRecorded)
     .map((u) => ({
