@@ -10,6 +10,7 @@ import { count, plural, projectName, shortPath, size, table } from "../format.ts
 import { projectTables } from "./projects.ts";
 import { renderFailures, type FailureSummary } from "./recorded-failures.ts";
 import { renderRecordedFiles, type RecordedFile } from "./recorded-instructions.ts";
+import type { ConfigHome } from "./config-homes.ts";
 import type { McpDuplicate } from "./mcp-duplicates.ts";
 import type { NextStep } from "./next-steps.ts";
 import { renderMcpUse, type McpUse } from "./recorded-mcp.ts";
@@ -33,6 +34,7 @@ export type ProfiledProject = Project & {
 export type Profile = {
   days: number;
   homes: { harness: HarnessId; path: string; found: boolean; sessions: number }[];
+  claudeConfigHomes: ConfigHome[];
   unreadable: number;
   globalInstructions: InstructionFile[];
   globalSkills: Skill[];

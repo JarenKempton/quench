@@ -1,6 +1,17 @@
 import { harnessById } from "@quench/history";
-import { ago, chars, count, plural, projectName, size, table, tokens } from "../format.ts";
+import {
+  ago,
+  chars,
+  count,
+  plural,
+  projectName,
+  shortPath,
+  size,
+  table,
+  tokens,
+} from "../format.ts";
 import { accent, badge, bar, bold, dim, good, heading, title } from "../style.ts";
+import { unconfiguredHomes } from "./config-homes.ts";
 import { fileLabel } from "./recorded-instructions.ts";
 import { renderStartSplit } from "./recorded-start.ts";
 import { neverUsed } from "./skill-cuts.ts";
@@ -121,6 +132,13 @@ function worthALook(result: Profile, homeDir: string): string[] {
       headline: `${projectName(heaviest.root, homeDir)} starts with ${chars(heaviest.chars)} of instructions`,
       detail: `${(heaviest.chars / next.chars).toFixed(1)}× your next project`,
       command: "quench profile instructions",
+    });
+  const unconfigured = unconfiguredHomes(result.claudeConfigHomes);
+  for (const bare of unconfigured?.bare ?? [])
+    items.push({
+      headline: `${shortPath(bare.path, homeDir)} ran ${plural(bare.sessions, "session")} with no instructions or hooks`,
+      detail: `${shortPath(unconfigured!.configured.path, homeDir)} has ${size(unconfigured!.configured.instructionBytes)} of instructions and ${plural(unconfigured!.configured.hooks, "hook")}`,
+      command: `quench --claude-home ${shortPath(bare.path, homeDir)}`,
     });
   const idle = result.projects.reduce((n, p) => n + (p.worktrees?.idle ?? 0), 0);
   if (idle)
