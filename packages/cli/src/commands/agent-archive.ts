@@ -363,16 +363,17 @@ export async function archiveCycle(
       const digest = sha256(bytes);
       const key = keyOf(item.ref, item.path);
       const session = await harnessById[item.ref.harness].read(item.ref).catch(() => null);
+      const segments = session
+        ? await sessionSegments(session, verdicts, guide, [
+            join(home.of(harnessById["claude-code"].home), "skills"),
+          ])
+        : [];
       const entry = {
         sha256: digest,
         size: bytes.length,
         mtimeMs: item.mtimeMs,
-        ...(judge ? { guidedAt: now } : {}),
-        segments: session
-          ? await sessionSegments(session, verdicts, guide, [
-              join(home.of(harnessById["claude-code"].home), "skills"),
-            ])
-          : [],
+        ...(judge && !rejected ? { guidedAt: now } : {}),
+        segments,
       };
       if (shipped[key]?.sha256 === digest) {
         segmented += bytes.length;
