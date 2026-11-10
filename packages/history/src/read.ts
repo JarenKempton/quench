@@ -16,7 +16,7 @@ export type ReadOutcome =
 
 const letOthersRun = () => Bun.sleep(0);
 
-const shared = new Map<string, Promise<Session>>();
+const shared = new Map<string, { modified: number | undefined; parsed: Promise<Session> }>();
 let sharing = 0;
 
 export async function sharingReads<T>(work: () => Promise<T>): Promise<T> {
@@ -30,9 +30,12 @@ export async function sharingReads<T>(work: () => Promise<T>): Promise<T> {
 
 const parse = (ref: SessionRef): Promise<Session> => {
   if (!sharing) return harnessById[ref.harness].read(ref);
-  const key = `${ref.harness}:${ref.path}:${ref.modified?.getTime()}`;
-  const parsed = shared.get(key) ?? harnessById[ref.harness].read(ref);
-  shared.set(key, parsed);
+  const key = `${ref.harness}:${ref.path}`;
+  const modified = ref.modified?.getTime();
+  const hit = shared.get(key);
+  if (hit && hit.modified === modified) return hit.parsed;
+  const parsed = harnessById[ref.harness].read(ref);
+  shared.set(key, { modified, parsed });
   return parsed;
 };
 

@@ -268,8 +268,8 @@ test(
       hostHistory: false,
       judge: null,
     });
-    if (running instanceof Error) throw running;
     try {
+      if (running instanceof Error) throw running;
       const opened = await Promise.all(
         ["/api/report", "/api/skills", "/api/tasks"].map((path) => get(running.port, path)),
       );
@@ -284,7 +284,7 @@ test(
       expect(parsed).toEqual([s1, s1]);
     } finally {
       Object.defineProperty(claude, "read", original);
-      await running.stop();
+      if (!(running instanceof Error)) await running.stop();
     }
   },
   cliRunsTimeout,
