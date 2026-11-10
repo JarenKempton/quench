@@ -100,10 +100,13 @@ export async function groupCorrections(
   }
   const spiralTask = options.spiral?.task ?? (() => null);
   const admitted = { spiral: 0, other: 0 };
-  const selected = [...unique.values()].filter((members) => {
+  const selected: Reply[][] = [];
+  for (const members of unique.values()) {
     const budget = members.some((r) => spiralTask(r) !== null) ? "spiral" : "other";
-    return admitted[budget] < options.limit && ++admitted[budget] > 0;
-  });
+    if (admitted[budget] === options.limit) continue;
+    admitted[budget] += 1;
+    selected.push(members);
+  }
   const selectedCorrections = selected.reduce((n, members) => n + members.length, 0);
   const groups: Group[] = [];
   let cacheHits = 0;

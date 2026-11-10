@@ -365,7 +365,9 @@ harness OTLP/HTTP JSON ──▶ agent --otlp (loopback; strip; spool) ──▶
   theme and per sender, the grouped corrections inside a failed-Spiral task and how many such tasks
   they cover. Corrections inside failed-Spiral tasks get their own `--theme-limit` budget beside the
   others. A failed Spiral with no correction has no corrective intent to group, so it is counted under
-  its failure class (`retry-loop`, `rising-cost`) per sender of the task's replies, with no judge call.
+  its failure class (`retry-loop`, `rising-cost`) with no judge call. Its people and agents counts
+  are tasks with any reply from that sender, so they can overlap or both be zero. A task whose only
+  corrections were left ungrouped (limit, period, sender, unclear) is in neither count.
 - **Guidance kept** (#186). Within each segment, the first turn after a compaction or an idle gap
   over 60 minutes (up to three per segment) is judged against standing rules only: corrections,
   always/never or from-now-on sentences in earlier prompts, and the same sentences in instruction
