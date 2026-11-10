@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import type { Home } from "@quench/history";
+import { sharingReads, type Home } from "@quench/history";
 import type { Provider } from "@quench/judge";
 import { correctionsJson, shownHistory } from "./corrections.ts";
 import { reportJson } from "./report.ts";
@@ -66,7 +66,7 @@ export function lastResult(
   let failure: string | null = null;
   let running: Promise<void> | null = null;
   const refresh = () =>
-    (running ??= read()
+    (running ??= sharingReads(read)
       .then(
         (value) => {
           last = { value, at: new Date() };
@@ -199,7 +199,9 @@ export async function startUi(home: Home, flags: UiFlags): Promise<RunningUi | E
   try {
     const server = serveUi({ port, api, assets: await uiAssets() });
     const warm = async () => {
-      for (const load of [api.report, api.skills]) await load({ refresh: false }).catch(() => {});
+      await Promise.all(
+        [api.report, api.skills, api.tasks].map((load) => load({ refresh: false }).catch(() => {})),
+      );
     };
     return { ...server, warm };
   } catch (error) {

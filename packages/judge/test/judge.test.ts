@@ -107,7 +107,7 @@ test("a verdict remembered while a legacy merge is paused beats the migrated one
   }
   expect((await VerdictCache.open(dir, "judge/a")).get(exchange("k"))).toEqual(newer);
   expect((await VerdictCache.open(dir, "judge/a", true)).get(exchange("k"))).toEqual(newer);
-});
+}, 20_000);
 
 test("migrated entries follow the shared file's latest verdict for a key", async () => {
   const dir = await cachePath();

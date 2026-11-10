@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, realpath, stat } from "node:fs/promises";
 import { request } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
-import { Home } from "@quench/history";
+import { harnessById, Home, type SessionRef } from "@quench/history";
 import { provider, type Provider } from "@quench/judge";
 import { CSP, lastResult, serveUi, startUi, uiAssets } from "../src/commands/ui.ts";
 import { day, fixture, session } from "./correction-home.ts";
@@ -243,6 +243,47 @@ test(
       }
       expect(after.sessions).toBe(want.harnesses[0].sessions + 1);
     } finally {
+      await running.stop();
+    }
+  },
+  cliRunsTimeout,
+);
+
+test(
+  "Overview, Skills and Tasks opened at once parse each session once, and a refresh parses it once more",
+  async () => {
+    const dir = await home();
+    const claude = harnessById["claude-code"];
+    const original = Object.getOwnPropertyDescriptor(claude, "read")!;
+    const read = claude.read.bind(claude);
+    const parsed: string[] = [];
+    claude.read = (ref: SessionRef) => {
+      parsed.push(ref.path);
+      return read(ref);
+    };
+    const running = await startUi(new Home(dir), {
+      days: 30,
+      cache: true,
+      open: false,
+      hostHistory: false,
+      judge: null,
+    });
+    if (running instanceof Error) throw running;
+    try {
+      const opened = await Promise.all(
+        ["/api/report", "/api/skills", "/api/tasks"].map((path) => get(running.port, path)),
+      );
+      expect(opened.map((r) => r.status)).toEqual([200, 200, 200]);
+      const s1 = join(dir, ".claude/projects/demo/s1.jsonl");
+      expect(parsed).toEqual([s1]);
+      let after = await get(running.port, "/api/report?refresh=1");
+      while (after.headers["x-quench-refreshing"] === "true") {
+        await Bun.sleep(50);
+        after = await get(running.port, "/api/report");
+      }
+      expect(parsed).toEqual([s1, s1]);
+    } finally {
+      Object.defineProperty(claude, "read", original);
       await running.stop();
     }
   },
