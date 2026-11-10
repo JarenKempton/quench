@@ -365,13 +365,31 @@ test("corrections inside failed-Spiral tasks count per sender and per distinct t
     reply("c", "Relay: stop the retry loop.", { sender: "automation" }),
     reply("d", "Outside any spiral."),
   ];
-  const tasks: Record<string, string> = { a: "t1", b: "t1", c: "t2" };
-  const result = await groupCorrections(list, cache, scripted(["new", "t0", "t0", "t0"]), {
-    ...options,
-    spiral: { failed: 3, task: (r) => tasks[r.sessionId] ?? null },
-  });
+  const tasks: Record<string, string> = { a: "t1", b: "t1", c: "t2", e: "t3", f: "t4" };
+  const quiet = [
+    reply("e", "Looks fine.", { kind: "approval" }),
+    reply("f", "Next.", { kind: "new_request", sender: "automation" }),
+  ];
+  const failed = [
+    { taskId: "t1", reason: "repeated-correction" },
+    { taskId: "t2", reason: "retry-loop" },
+    { taskId: "t3", reason: "retry-loop" },
+    { taskId: "t4", reason: "retry-loop" },
+    { taskId: "t5", reason: "rising-cost" },
+  ];
+  const result = await groupCorrections(
+    [...list, ...quiet],
+    cache,
+    scripted(["new", "t0", "t0", "t0"]),
+    { ...options, spiral: { failed, task: (r) => tasks[r.sessionId] ?? null } },
+  );
   expect(result.spiral).toEqual({
-    failedTasks: 3,
+    failedTasks: 5,
+    selectedInputs: 3,
+    withoutCorrection: [
+      { reason: "retry-loop", tasks: 2, fromPeople: 1, fromAutomation: 1 },
+      { reason: "rising-cost", tasks: 1, fromPeople: 0, fromAutomation: 0 },
+    ],
     corrections: 3,
     tasks: 2,
     fromPeople: { corrections: 2, tasks: 1 },
@@ -383,4 +401,29 @@ test("corrections inside failed-Spiral tasks count per sender and per distinct t
     fromPeople: { corrections: 2, tasks: 1 },
     fromAutomation: { corrections: 1, tasks: 1 },
   });
+});
+
+test("corrections inside failed-Spiral tasks get their own input budget", async () => {
+  const cache = await ThemeCache.open(await path(), JevThemes.id);
+  const list = Array.from({ length: 6 }, (_, i) =>
+    reply(`s${i}`, `Distinct corrective intent ${i}`),
+  );
+  const judge = scripted(Array.from({ length: 4 }, () => "new"));
+  const result = await groupCorrections(list, cache, judge, {
+    ...options,
+    limit: 2,
+    spiral: {
+      failed: [{ taskId: "t", reason: "retry-loop" }],
+      task: (r) => (["s3", "s4", "s5"].includes(r.sessionId) ? "t" : null),
+    },
+  });
+  expect(judge.inputs.map((input) => input.state.correction.reply)).toEqual([
+    "Distinct corrective intent 0",
+    "Distinct corrective intent 1",
+    "Distinct corrective intent 3",
+    "Distinct corrective intent 4",
+  ]);
+  expect([result.selectedInputs, result.spiral.selectedInputs, result.omittedCorrections]).toEqual([
+    4, 2, 2,
+  ]);
 });

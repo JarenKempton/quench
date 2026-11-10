@@ -75,7 +75,7 @@ Usage:
   quench corrections [session-file...] [--session <id>]... [--causes] [--json]
                                        corrections in those sessions only, with transcript line locators
     --themes                          group corrections by intent, retaining sender evidence (opt-in Jev calls)
-    --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first (default: ${THEME_LIMIT})
+    --theme-limit <1–${MAX_THEME_LIMIT}>               unique exchanges to group, oldest first, each for failed-Spiral tasks and the rest (default: ${THEME_LIMIT})
     --causes                          ask what the agent did wrong, for corrections only, beside its behaviour (opt-in Jev calls)
     --context                         recurring corrections, the files in context, their history and skill overlaps (read-only)
     --cached-only                     use cached reply verdicts only; never classify new replies

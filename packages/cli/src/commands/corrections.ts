@@ -419,9 +419,10 @@ function renderThemes(themes: Themes, judged: Judged, days: number, calls: Calls
   const lines = [
     `Last ${days} days · correction themes · ${themes.judge}`,
     `Reply classification by ${calls.judge}: ${judged.newlyJudged} new · ${judged.pending} pending · ${judged.failures.length} failed`,
-    `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first); ${themes.omittedCorrections} omitted by limit.`,
+    `${themes.selectedCorrections} of ${themes.eligibleCorrections} corrections from people and agents / automation selected (${themes.selectedInputs} unique inputs, oldest first; ${themes.spiral.selectedInputs} inside failed-Spiral tasks under their own limit); ${themes.omittedCorrections} omitted by limit.`,
     `${themes.cacheHits} cached decisions · ${themes.newlyGrouped} new · ${themes.pending} pending · ${themes.blocked} blocked by an earlier missing/failed decision · ${themes.failed} failed · ${themes.unclear} unclear corrections`,
     `Failed-Spiral tasks: ${themes.spiral.failedTasks} · ${themes.spiral.tasks} back a group (people ${themes.spiral.fromPeople.tasks} · agents / automation ${themes.spiral.fromAutomation.tasks}) · ${themes.spiral.corrections} grouped corrections inside them`,
+    `Failed-Spiral tasks with no correction, by failure class: ${themes.spiral.withoutCorrection.map((c) => `${c.reason} ${c.tasks} (people ${c.fromPeople} · agents / automation ${c.fromAutomation})`).join(" · ") || "none"}`,
     `Excluded: ${themes.excluded.outsideWindowCorrections} corrections outside the period · ${themes.excluded.unknownTimeCorrections} without reply timestamps · ${themes.excluded.unknownSenderCorrections} unresolved-sender corrections · ${themes.excluded.unclassifiedReplies} unclassified replies (not grouped).`,
     "",
     "Recurring across sessions (representative quotations, not draft rules)",

@@ -505,6 +505,8 @@ test(
       const out = JSON.parse(result.stdout);
       expect(out.themes.spiral).toEqual({
         failedTasks: 1,
+        selectedInputs: 3,
+        withoutCorrection: [],
         corrections: 3,
         tasks: 1,
         fromPeople: { corrections: 3, tasks: 1 },
@@ -513,6 +515,9 @@ test(
       expect(out.themes.themes[0].spiral.fromPeople).toEqual({ corrections: 3, tasks: 1 });
       const text = await run(home, ["corrections", "--themes", "--days", "36500"], env);
       expect(text.stdout).toContain("Failed-Spiral tasks: 1 · 1 back a group");
+      expect(text.stdout).toContain(
+        "Failed-Spiral tasks with no correction, by failure class: none",
+      );
       expect(text.stdout).toContain("representative quotations, not draft rules");
     } finally {
       await server.stop(true);
