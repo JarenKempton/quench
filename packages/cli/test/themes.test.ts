@@ -505,6 +505,8 @@ test(
       const out = JSON.parse(result.stdout);
       expect(out.themes.spiral).toEqual({
         failedTasks: 1,
+        selectedInputs: 3,
+        withoutCorrection: [],
         corrections: 3,
         tasks: 1,
         fromPeople: { corrections: 3, tasks: 1 },

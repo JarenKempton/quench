@@ -79,6 +79,9 @@ retired with it and live in git history.
   llama, ≈17 for qwen3: every day, or 26 of 31), so volume is not the obstacle; agreement is.
   No change is needed for these models; reasoning models such as `gpt-oss-20b` stop at
   Cloudflare's default 256 output tokens unless the judge sends `max_tokens`.
+  Grouping themes (`--themes --theme-limit 50`, uncached, 30 days to 2026-11-10) took 50 calls and
+  190,033 input tokens ($0.008) before failed-Spiral corrections had their own budget, and 100 calls
+  and 530,599 ($0.022) after ([#188](https://github.com/JarenKempton/quench/issues/188)).
 - **One adapter per harness, structure over names.** See
   [architecture.md](architecture.md).
 - **Hosts enrich history; they do not redefine harnesses.** Optional local host adapters add

@@ -28,7 +28,7 @@ export async function spiralTasks(sessions: readonly BranchedRuns[], replies: re
     sessionKey,
   );
   return {
-    failed: failed.length,
+    failed: failed.map((t) => ({ taskId: t.taskId, reason: t.spiral.reason })),
     task: (reply: Reply) =>
       members
         .get(sessionKey(reply))

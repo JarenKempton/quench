@@ -24,7 +24,7 @@ type Options = {
   limit: number;
   examples: number;
   since: Date;
-  spiral?: { failed: number; task: SpiralTask };
+  spiral?: { failed: { taskId: string; reason: string }[]; task: SpiralTask };
 };
 type SpiralTask = (reply: Reply) => string | null;
 
@@ -98,7 +98,12 @@ export async function groupCorrections(
     occurrences.push(reply);
     unique.set(key, occurrences);
   }
-  const selected = [...unique.values()].slice(0, options.limit);
+  const spiralTask = options.spiral?.task ?? (() => null);
+  const admitted = { spiral: 0, other: 0 };
+  const selected = [...unique.values()].filter((members) => {
+    const budget = members.some((r) => spiralTask(r) !== null) ? "spiral" : "other";
+    return admitted[budget] < options.limit && ++admitted[budget] > 0;
+  });
   const selectedCorrections = selected.reduce((n, members) => n + members.length, 0);
   const groups: Group[] = [];
   let cacheHits = 0;
@@ -187,14 +192,16 @@ export async function groupCorrections(
       "Agent corrections are supervision evidence, not confirmed human preferences or rule proposals.",
     ],
     spiral: {
-      failedTasks: options.spiral?.failed ?? 0,
+      failedTasks: options.spiral?.failed.length ?? 0,
+      selectedInputs: admitted.spiral,
+      withoutCorrection: withoutCorrection(replies, options.spiral),
       ...spiralEvidence(
         groups.flatMap((g) => g.members),
-        options.spiral?.task,
+        spiralTask,
       ),
     },
     themes: groups
-      .map((group) => evidence(group, options.examples, options.spiral?.task))
+      .map((group) => evidence(group, options.examples, spiralTask))
       .sort(
         (a, b) =>
           b.sessions - a.sessions ||
@@ -259,6 +266,33 @@ function spiralEvidence(
       spiralTask,
     ),
   };
+}
+
+function withoutCorrection(replies: readonly Reply[], spiral: Options["spiral"]) {
+  if (!spiral) return [];
+  const senders = Map.groupBy(
+    replies.flatMap((r) => {
+      const taskId = spiral.task(r);
+      return taskId === null ? [] : [{ taskId, reply: r }];
+    }),
+    (r) => r.taskId,
+  );
+  const corrected = (id: string) => senders.get(id)?.some((r) => r.reply.kind === "correction");
+  const by = (id: string, sender: Reply["sender"]) =>
+    senders.get(id)?.some((r) => r.reply.sender === sender) ?? false;
+  return [
+    ...Map.groupBy(
+      spiral.failed.filter((t) => !corrected(t.taskId)),
+      (t) => t.reason,
+    ),
+  ]
+    .map(([reason, tasks]) => ({
+      reason,
+      tasks: tasks.length,
+      fromPeople: tasks.filter((t) => by(t.taskId, "person")).length,
+      fromAutomation: tasks.filter((t) => by(t.taskId, "automation")).length,
+    }))
+    .sort((a, b) => b.tasks - a.tasks || compare(a.reason, b.reason));
 }
 
 function evidence(group: Group, examples: number, spiralTask: SpiralTask | undefined): Theme {
