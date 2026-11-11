@@ -16,7 +16,7 @@ export type ReadOutcome =
 
 const letOthersRun = () => Bun.sleep(0);
 
-type Reader = { ahead: number; stopped: boolean };
+type Reader = { ahead: number; stopped: boolean; paced: boolean };
 
 type Shared = {
   modified: number | undefined;
@@ -82,12 +82,12 @@ const settle = (claim: Claim, reader: Reader, parsed: Promise<unknown> | null) =
 };
 
 async function take(claim: Claim, reader: Reader): Promise<Session> {
-  while (!claim.entry.parsed && !reader.stopped && reader.ahead >= AHEAD) {
+  while (!claim.entry.parsed && !reader.stopped && reader.paced && reader.ahead >= AHEAD) {
     const others = await Promise.race([
       released.promise.then(() => true),
       Bun.sleep(WAIT_MS).then(() => false),
     ]);
-    if (!others) break;
+    if (!others) reader.paced = false;
   }
   if (claim.taken) throw new Error("reading stopped");
   const parsed = (claim.entry.parsed ??= harnessById[claim.ref.harness].read(claim.ref));
@@ -106,7 +106,7 @@ export async function* readSessions(
   onRead: Progress = () => {},
 ): AsyncGenerator<ReadOutcome> {
   const claims = sharing ? refs.map(claim) : null;
-  const reader: Reader = { ahead: 0, stopped: false };
+  const reader: Reader = { ahead: 0, stopped: false, paced: true };
   const read = (ref: SessionRef, i: number): Promise<ReadOutcome> =>
     (claims ? take(claims[i]!, reader) : harnessById[ref.harness].read(ref)).then(
       (session) => ({ ok: true, session }),
