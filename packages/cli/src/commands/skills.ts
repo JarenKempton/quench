@@ -11,7 +11,7 @@ import {
   type Skill,
 } from "@quench/history";
 import { openT3History, t3State } from "@quench/history/hosts/t3";
-import { Jev, judgeReplies, VerdictCache, type Reply, type SessionRuns } from "@quench/judge";
+import { Jev, judgeReplies, VerdictCache, type Reply } from "@quench/judge";
 import {
   HARNESSES,
   installations,
@@ -458,23 +458,20 @@ export async function collectSkills(
   options: { days: number; cache: boolean; hostHistory?: string | false; source?: Source | null },
 ) {
   const since = new Date(Date.now() - options.days * 86_400_000);
-  const cache = options.cache ? await placeCache(home.dir) : undefined;
-  const { places } = await sessionPlaces(home, since, reading(), cache);
-  await cache?.save();
+  const host =
+    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
+  const contexts = new Map<string, SessionContext>();
+  const [places, sessions] = await Promise.all([
+    placesOf(home, since, options.cache),
+    discoverAll(home, since)
+      .then((refs) => sessionRuns(refs, home.dir, host?.enrich, contexts))
+      .finally(() => host?.close()),
+  ]);
   const global = new Map<string, Skill>();
   for (const skill of splitSkills((await skillInventory(home, home.dir)).skills).global)
     global.set(skill.realPath, skill);
   const recorded = skillUse(places, await placeOrigins(home, places, global));
   const verdicts = await VerdictCache.open(join(home.dir, ".quench/local"), Jev.id, true);
-  const host =
-    options.hostHistory === false ? null : openT3History(options.hostHistory ?? t3State(home));
-  const contexts = new Map<string, SessionContext>();
-  let sessions: SessionRuns[];
-  try {
-    sessions = await sessionRuns(await discoverAll(home, since), home.dir, host?.enrich, contexts);
-  } finally {
-    host?.close();
-  }
   const { replies } = await judgeReplies(sessions, verdicts, null);
   const { records, unrecognised } = await skillRecords(home, {
     onDisk: [...global.values()],
@@ -497,6 +494,13 @@ export async function collectSkills(
   }
   const evidence: SkillEvidence = { since, started, contexts, replies };
   return { judge: verdicts.judge, records, unrecognised, evidence };
+}
+
+async function placesOf(home: Home, since: Date, cached: boolean) {
+  const cache = cached ? await placeCache(home.dir) : undefined;
+  const { places } = await sessionPlaces(home, since, reading(), cache);
+  await cache?.save();
+  return places;
 }
 
 async function skillRoots(home: Home, places: readonly SessionPlace[]): Promise<string[]> {

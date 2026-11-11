@@ -257,8 +257,9 @@ test(
     const original = Object.getOwnPropertyDescriptor(claude, "read")!;
     const read = claude.read.bind(claude);
     const parsed: string[] = [];
-    claude.read = (ref: SessionRef) => {
+    claude.read = async (ref: SessionRef) => {
       parsed.push(ref.path);
+      await Bun.sleep(300);
       return read(ref);
     };
     const running = await startUi(new Home(dir), {

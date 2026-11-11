@@ -78,8 +78,9 @@ export async function sessionPlaces(
   const stamps = new Map<string, string>();
   const found = new Map<string, SessionPlace>();
   const uncached = [];
-  for (const ref of refs) {
-    const info = cache && (await stat(ref.path).catch(() => null));
+  const infos = cache ? await Promise.all(refs.map((ref) => stat(ref.path).catch(() => null))) : [];
+  for (const [i, ref] of refs.entries()) {
+    const info = infos[i];
     const stamp = info ? `${info.size}:${info.mtimeMs}` : null;
     const hit = stamp ? cache?.get(ref.path, stamp) : undefined;
     const fresh =
