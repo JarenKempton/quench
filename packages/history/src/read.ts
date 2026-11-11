@@ -16,7 +16,7 @@ export type ReadOutcome =
 
 const letOthersRun = () => Bun.sleep(0);
 
-type Reader = { ahead: number };
+type Reader = { ahead: number; stopped: boolean };
 
 type Shared = {
   modified: number | undefined;
@@ -24,6 +24,8 @@ type Shared = {
   waiting: number;
   takers: Reader[];
 };
+
+type Claim = { ref: SessionRef; entry: Shared; taken: boolean };
 
 const AHEAD = 32;
 const RECHECK_MS = 1000;
@@ -43,7 +45,7 @@ export async function sharingReads<T>(work: () => Promise<T>): Promise<T> {
 
 const keyOf = (ref: SessionRef) => `${ref.harness}:${ref.path}`;
 
-const claim = (ref: SessionRef): Shared => {
+const claim = (ref: SessionRef): Claim => {
   const modified = ref.modified?.getTime();
   let entry = shared.get(keyOf(ref));
   if (!entry || entry.modified !== modified) {
@@ -51,30 +53,47 @@ const claim = (ref: SessionRef): Shared => {
     shared.set(keyOf(ref), entry);
   }
   entry.waiting++;
-  return entry;
+  return { ref, entry, taken: false };
 };
 
 const release = (ref: SessionRef, entry: Shared) => {
+  if (entry.waiting > 0) return;
   if (shared.get(keyOf(ref)) === entry) shared.delete(keyOf(ref));
   entry.parsed = null;
   for (const taker of entry.takers) taker.ahead--;
+  entry.takers = [];
   released.resolve();
   released = Promise.withResolvers<void>();
 };
 
-async function take(ref: SessionRef, entry: Shared, reader: Reader): Promise<Session> {
-  while (!entry.parsed && reader.ahead >= AHEAD)
-    await Promise.race([released.promise, Bun.sleep(RECHECK_MS)]);
-  const parsed = (entry.parsed ??= harnessById[ref.harness].read(ref));
+const settle = (claim: Claim, reader: Reader, parsed: Promise<unknown> | null) => {
+  claim.taken = true;
+  const { ref, entry } = claim;
   if (--entry.waiting > 0) {
-    entry.takers.push(reader);
-    reader.ahead++;
-  } else {
-    const done = () => release(ref, entry);
-    parsed.then(done, done);
+    if (parsed) {
+      entry.takers.push(reader);
+      reader.ahead++;
+    }
+    return;
   }
+  const done = () => release(ref, entry);
+  if (parsed) parsed.then(done, done);
+  else done();
+};
+
+async function take(claim: Claim, reader: Reader): Promise<Session> {
+  while (!claim.entry.parsed && !reader.stopped && reader.ahead >= AHEAD)
+    await Promise.race([released.promise, Bun.sleep(RECHECK_MS)]);
+  if (claim.taken) throw new Error("reading stopped");
+  const parsed = (claim.entry.parsed ??= harnessById[claim.ref.harness].read(claim.ref));
+  settle(claim, reader, parsed);
   return parsed;
 }
+
+const stop = (claims: Claim[], reader: Reader) => {
+  reader.stopped = true;
+  for (const claim of claims) if (!claim.taken) settle(claim, reader, claim.entry.parsed);
+};
 
 export async function* readSessions(
   refs: readonly SessionRef[],
@@ -82,22 +101,26 @@ export async function* readSessions(
   onRead: Progress = () => {},
 ): AsyncGenerator<ReadOutcome> {
   const claims = sharing ? refs.map(claim) : null;
-  const reader: Reader = { ahead: 0 };
+  const reader: Reader = { ahead: 0, stopped: false };
   const read = (ref: SessionRef, i: number): Promise<ReadOutcome> =>
-    (claims ? take(ref, claims[i]!, reader) : harnessById[ref.harness].read(ref)).then(
+    (claims ? take(claims[i]!, reader) : harnessById[ref.harness].read(ref)).then(
       (session) => ({ ok: true, session }),
       (error: unknown) => ({ ok: false, ref, error }),
     );
   const pending = refs.slice(0, concurrency).map((ref, i) => read(ref, i));
   let next = pending.length;
   let done = 0;
-  while (pending.length > 0) {
-    const outcome = await pending.shift();
-    const ref = refs[next];
-    if (ref) pending.push(read(ref, next));
-    next++;
-    onRead(++done, refs.length);
-    await letOthersRun();
-    if (outcome) yield outcome;
+  try {
+    while (pending.length > 0) {
+      const outcome = await pending.shift();
+      const ref = refs[next];
+      if (ref) pending.push(read(ref, next));
+      next++;
+      onRead(++done, refs.length);
+      await letOthersRun();
+      if (outcome) yield outcome;
+    }
+  } finally {
+    if (claims) stop(claims, reader);
   }
 }
