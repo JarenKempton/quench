@@ -43,7 +43,6 @@ import {
 } from "@quench/fleet/apply";
 import { placeCache } from "../cache.ts";
 import { json } from "../format.ts";
-import { reading } from "../progress.ts";
 import { skillUse } from "../profile/recorded-skills.ts";
 import { splitSkills } from "../profile/setup.ts";
 import { coOccurrence } from "../skills/co-occurrence.ts";
@@ -498,7 +497,7 @@ export async function collectSkills(
 
 async function placesOf(home: Home, since: Date, cached: boolean) {
   const cache = cached ? await placeCache(home.dir) : undefined;
-  const { places } = await sessionPlaces(home, since, reading(), cache);
+  const { places } = await sessionPlaces(home, since, undefined, cache);
   await cache?.save();
   return places;
 }

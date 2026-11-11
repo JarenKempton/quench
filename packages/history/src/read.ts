@@ -28,7 +28,7 @@ type Shared = {
 type Claim = { ref: SessionRef; entry: Shared; taken: boolean };
 
 const AHEAD = 32;
-const RECHECK_MS = 1000;
+const WAIT_MS = 1000;
 
 const shared = new Map<string, Shared>();
 let sharing = 0;
@@ -82,8 +82,13 @@ const settle = (claim: Claim, reader: Reader, parsed: Promise<unknown> | null) =
 };
 
 async function take(claim: Claim, reader: Reader): Promise<Session> {
-  while (!claim.entry.parsed && !reader.stopped && reader.ahead >= AHEAD)
-    await Promise.race([released.promise, Bun.sleep(RECHECK_MS)]);
+  while (!claim.entry.parsed && !reader.stopped && reader.ahead >= AHEAD) {
+    const others = await Promise.race([
+      released.promise.then(() => true),
+      Bun.sleep(WAIT_MS).then(() => false),
+    ]);
+    if (!others) break;
+  }
   if (claim.taken) throw new Error("reading stopped");
   const parsed = (claim.entry.parsed ??= harnessById[claim.ref.harness].read(claim.ref));
   settle(claim, reader, parsed);

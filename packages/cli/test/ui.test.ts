@@ -277,7 +277,7 @@ test(
       expect(opened.map((r) => r.status)).toEqual([200, 200, 200]);
       const s1 = join(dir, ".claude/projects/demo/s1.jsonl");
       expect(new Set(parsed)).toEqual(new Set([s1]));
-      expect(parsed.length).toBeLessThan(4);
+      expect(parsed.length).toBeLessThanOrEqual(2);
       const first = parsed.length;
       let after = await get(running.port, "/api/report?refresh=1");
       while (after.headers["x-quench-refreshing"] === "true") {
