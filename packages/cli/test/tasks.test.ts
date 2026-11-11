@@ -76,8 +76,10 @@ test("GitHub PR state arrives after the first answer, unchanged sessions come fr
     "task-segments.json",
   ]);
   expect(JSON.stringify(report)).not.toContain("ship the widget");
-  await Bun.sleep(5);
-  await Bun.write(join(dir, ".quench/local/judgments.jsonl"), "");
+  const judgments = join(dir, ".quench/local/judgments.jsonl");
+  await Bun.write(judgments, "");
+  const later = new Date(Date.now() + 60_000);
+  await utimes(judgments, later, later);
   expect((await load()).tasks).toEqual([]);
 });
 
