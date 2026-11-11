@@ -85,3 +85,31 @@ test("readers that read the same sessions in opposite orders both finish", async
     await sharingReads(() => Promise.all([readAll(list), readAll([...list].reverse())])),
   ).toEqual([100, 100]);
 });
+
+test("a fast reader stays near the pacing limit, even after the slow reader stalls once", async () => {
+  fake();
+  const list = refs(300);
+  let fast = 0;
+  let slow = 0;
+  let lead = 0;
+  const watch = () => (lead = Math.max(lead, fast - slow));
+  await sharingReads(() =>
+    Promise.all([
+      (async () => {
+        for await (const _ of readSessions(list)) {
+          fast++;
+          watch();
+        }
+      })(),
+      (async () => {
+        for await (const _ of readSessions(list)) {
+          slow++;
+          watch();
+          await Bun.sleep(slow === 50 ? 1200 : 1);
+        }
+      })(),
+    ]),
+  );
+  expect([fast, slow]).toEqual([300, 300]);
+  expect(lead).toBeLessThanOrEqual(40);
+}, 20_000);
