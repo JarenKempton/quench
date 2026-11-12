@@ -1,18 +1,32 @@
 import { judgedTasks, segments, segmentSignals } from "@quench/insights";
 import type { Reply } from "@quench/judge";
-import { repoOf } from "./github-pulls.ts";
+import { repoOf, run, type Run } from "./github-pulls.ts";
 import type { BranchedRuns } from "./session-runs.ts";
+
+const LOOKUPS = 4;
 
 const sessionKey = (s: { harness: string; sessionId: string }) => `${s.harness}\0${s.sessionId}`;
 
 const turns = (replies: readonly Reply[], kind: Reply["kind"], shift: number) =>
   new Set(replies.flatMap((r) => (r.kind === kind ? [r.position - shift] : [])));
 
-export async function spiralTasks(sessions: readonly BranchedRuns[], replies: readonly Reply[]) {
+export async function spiralTasks(
+  sessions: readonly BranchedRuns[],
+  replies: readonly Reply[],
+  exec: Run = run,
+) {
   const bySession = Map.groupBy(replies, sessionKey);
-  const repos = new Map<string | null, Promise<string | null>>();
-  const repoFor = (cwd: string | null) => repos.get(cwd) ?? repos.set(cwd, repoOf(cwd)).get(cwd)!;
-  const known = await Promise.all(sessions.map((s) => repoFor(s.cwd)));
+  const cwds = [...new Set(sessions.map((s) => s.cwd))];
+  const repos = new Map<string | null, string | null>();
+  let next = 0;
+  const lookup = async () => {
+    while (next < cwds.length) {
+      const cwd = cwds[next++]!;
+      repos.set(cwd, await repoOf(cwd, exec));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LOOKUPS, cwds.length) }, lookup));
+  const known = sessions.map((s) => repos.get(s.cwd) ?? null);
   const judged = judgedTasks(
     sessions.flatMap((s, i) => {
       const own = bySession.get(sessionKey({ harness: s.harness, sessionId: s.id })) ?? [];
