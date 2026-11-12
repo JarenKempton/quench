@@ -29,6 +29,22 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: ClickHouse for the archive test
+        id: clickhouse
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/clickhouse
+          key: clickhouse-26.8.34.13-${{ runner.os }}-${{ runner.arch }}
+      - name: Download ClickHouse 26.8.34.13 LTS
+        if: steps.clickhouse.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/clickhouse" && cd "$RUNNER_TEMP/clickhouse"
+          gh release download -R ClickHouse/ClickHouse v26.8.34.13-lts -p clickhouse-common-static-26.8.34.13-amd64.tgz
+          echo "d64b69ce0a13a1e89960b5ffcc6f07ea471b314ae21348e457dd232c8fa5506e  clickhouse-common-static-26.8.34.13-amd64.tgz" | sha256sum -c
+          tar xzf clickhouse-common-static-26.8.34.13-amd64.tgz --strip-components=3 clickhouse-common-static-26.8.34.13/usr/bin/clickhouse
+          rm clickhouse-common-static-26.8.34.13-amd64.tgz
+          chmod +x clickhouse
+      - run: echo "QUENCH_TEST_CLICKHOUSE=$RUNNER_TEMP/clickhouse/clickhouse" >> "$GITHUB_ENV"
       - run: bunx vp check
       - run: bunx vp run test
       - id: version
