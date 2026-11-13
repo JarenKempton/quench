@@ -230,5 +230,5 @@ export async function ui(home: Home, flags: UiFlags): Promise<number> {
     process.once("SIGTERM", done);
   });
   await server.stop();
-  return 0;
+  process.exit(0);
 }

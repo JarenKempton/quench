@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { cp, mkdtemp, stat } from "node:fs/promises";
+import { copyFile, cp, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CANNED_EXCHANGE } from "@quench/judge";
@@ -330,9 +330,12 @@ test(
 );
 
 test.skipIf(!posix)(
-  "in a terminal, Enter at setup's ui step serves quench ui on 127.0.0.1",
+  "in a terminal, Enter at setup's ui step serves quench ui on 127.0.0.1 and stops at once",
   async () => {
     const home = await freshHome();
+    const sessions = join(home, ".claude/projects/-work-demo");
+    for (let i = 0; i < 3000; i++)
+      await copyFile(join(sessions, "s1.jsonl"), join(sessions, `busy-${i}.jsonl`));
     let screen = "";
     const proc = Bun.spawn(
       [process.execPath, join(root, "packages/cli/src/main.ts"), "setup", "ui"],
@@ -355,26 +358,19 @@ test.skipIf(!posix)(
       },
     );
     try {
-      const t0 = performance.now();
-      const dbg = (m: string) =>
-        console.error(`[DEBUG-a4f2] ${(performance.now() - t0).toFixed(0)}ms ${m}`);
       for (let i = 0; i < 200 && !screen.includes("Open quench ui now?"); i++) await Bun.sleep(25);
-      dbg("prompt seen");
       proc.terminal?.write("\r");
       for (let i = 0; i < 200 && !screen.includes("Ctrl-C"); i++) await Bun.sleep(25);
-      dbg(`ctrl-c seen ${JSON.stringify(screen.slice(-400))}`);
       const url = /quench ui at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(screen)?.[1];
       expect(url).toBeDefined();
-      const r = await fetch(url!);
-      dbg(`fetched ${r.status}`);
-      expect(r.headers.get("x-frame-options")).toBe("DENY");
-    } finally {
-      const t1 = performance.now();
+      expect((await fetch(url!)).headers.get("x-frame-options")).toBe("DENY");
+      const stopping = performance.now();
       proc.kill();
       await proc.exited;
-      console.error(
-        `[DEBUG-a4f2] exited after ${(performance.now() - t1).toFixed(0)}ms code ${proc.exitCode} sig ${proc.signalCode} ${JSON.stringify(screen.slice(-300))}`,
-      );
+      expect(performance.now() - stopping).toBeLessThan(2000);
+    } finally {
+      proc.kill();
+      await proc.exited;
     }
   },
   cliRunsTimeout,
